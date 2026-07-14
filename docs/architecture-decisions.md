@@ -1,0 +1,619 @@
+# Architecture Decisions Log
+
+Short, dated entries recording non-obvious choices made while building
+ODEP. Not a full ADR process — just enough context so a future session
+(human or Claude) doesn't have to re-derive *why* something is the way it
+is.
+
+---
+
+## 2026-07-14 — STORY-001 Project Foundation Setup
+
+**Auth.js v5 (`next-auth@beta`), not v4.** Next.js 16 App Router pairs
+cleanly with Auth.js v5's route-handler-based API (`src/lib/auth.ts`
+exports `handlers`/`auth`/`signIn`/`signOut`; consumed by
+`src/app/api/auth/[...nextauth]/route.ts`). This also means the env var is
+`AUTH_SECRET`, not the v4-era `NEXTAUTH_SECRET` — `NEXTAUTH_URL` is still
+used. `.env.example` reflects this.
+
+**Auth session strategy is `jwt`, not `database`.** The Credentials
+provider requires JWT sessions in Auth.js v5. `PrismaAdapter` is still
+wired in (for `User`/`Account` persistence and so OAuth providers can be
+added later without re-plumbing), but no `Session` rows are written while
+only the Credentials provider is active.
+
+**Minimal Auth.js Prisma models added now, not deferred.** `prisma/schema.prisma`
+has `User`, `Account`, `Session`, `VerificationToken` — the standard
+Auth.js schema — because `PrismaAdapter` cannot compile/run without them.
+Full customer profile fields (addresses, reward wallet, etc.) are
+explicitly out of scope here and belong to STORY-033/034; admin
+roles/permissions belong to STORY-038. Do not bolt product-specific fields
+onto `User` in this story.
+
+**Prisma 7 driver-adapter pattern, not a schema-level `url`.** Prisma 7
+removed `datasource.url` / `shadowDatabaseUrl` from `schema.prisma` for
+the generated client — see the generator's own guidance: pass an
+`adapter` (or `accelerateUrl`) to the `PrismaClient` constructor instead.
+`src/lib/db.ts` uses `@prisma/adapter-pg` (`PrismaPg`) with `pg` as the
+underlying driver, reading `DATABASE_URL` from `process.env` directly.
+**Consequence: `DATABASE_URL` must be a plain `postgresql://` connection
+string — the `prisma+postgres://` Accelerate/local-proxy URL format that
+`npx prisma dev` prints first is NOT compatible with the `pg` driver.**
+`prisma.config.ts` still holds `datasource.url` — that one is only for the
+Prisma CLI/Migrate, and is a separate mechanism from the application
+runtime client.
+
+**Prisma client generator output:** the generated client's actual entry
+point is `src/generated/prisma/client.ts`, not the bare
+`src/generated/prisma` directory (no `index.ts`/`package.json` is
+generated). Import as `@/generated/prisma/client`, not `@/generated/prisma`.
+
+**shadcn UI init used the `base-nova` style / `@base-ui/react`**, not the
+classic Radix-based `new-york`/`default` styles — this is whatever the
+installed `shadcn@4.13.0` CLI currently defaults to. `components.json` has
+`baseColor: "neutral"` as a placeholder; STORY-002 (Design System &
+Theming) will remap the CSS variables to the Oristor palette (Ivory,
+Charcoal, Oristor Gold, Chilli Red, etc.) — this story intentionally left
+shadcn's default theme in place.
+
+**No shadcn `form.tsx` wrapper was generated** (`npx shadcn add form`
+produced nothing under this CLI version/style). The React Hook Form + Zod
+integration pattern (`src/components/storefront/newsletter-signup-form.tsx`)
+wires `useForm` + `zodResolver` directly against the shadcn `Input`/`Label`
+primitives instead of a `Form` wrapper component. Feature teams should
+follow this pattern unless a `form.tsx` primitive is added later.
+
+### Known blocker: local DB connectivity not verified end-to-end
+
+`npx prisma dev` starts a local Prisma Postgres server successfully and
+the port is confirmed listening (`netstat`), but every connection attempt
+from this machine — via `prisma migrate dev`, and via a raw Postgres
+wire-protocol probe from Node — gets **"server has closed the connection"
+(P1017)** / no protocol response, both inside and outside the tool
+sandbox. No Docker or local `psql` was available as an alternative on this
+machine. Likely cause: Windows Firewall or endpoint security silently
+dropping non-HTTP loopback traffic from `node.exe`.
+
+**Decision (with user sign-off):** proceeded without a live DB connection
+for this story. `npx prisma generate` (schema-only, no DB required) was
+used to verify the client compiles. `npx prisma migrate dev --name init`
+has **not** been run successfully against a real database — that
+acceptance criterion is **not met** and is the first thing to unblock
+before any story that needs real data (Product Catalogue, etc.) can start.
+
+**Next steps to unblock (pick one):**
+1. Point `DATABASE_URL` at a free hosted Postgres (Neon, Supabase) and
+   re-run `npx prisma migrate dev --name init`.
+2. Install Docker Desktop and run Postgres in a container.
+3. Diagnose/allow the Windows Firewall or AV rule blocking `node.exe`
+   loopback traffic on non-HTTP ports, then retry `prisma dev`.
+
+---
+
+## 2026-07-14 — STORY-002 Design System & Theming
+
+**Token naming convention.** The ten brand colors from `docs/blueprint.md`
+Section 2 are raw CSS custom properties in `:root` (`--ivory`, `--charcoal`,
+`--gold`, `--chilli`, `--leaf`, `--cream`, `--beige`, `--gold-light`,
+`--stone`, `--border-soft`), remapped in the `@theme inline` block in
+`src/app/globals.css` as `--color-*` so Tailwind v4 generates matching
+utilities automatically: `bg-ivory`, `text-charcoal`, `border-gold`, etc.
+**Use these tokens, never raw hex values, in component code** — that's the
+entire point of this story. The type scale works the same way:
+`text-hero`/`text-h1`/`text-h2`/`text-h3`/`text-h4`/`text-body`/`text-small`/`text-caption`
+(each with a matching line-height baked in via Tailwind v4's
+`--text-{name}--line-height` convention). Headings (`h1`–`h6`) get
+`font-heading` (Cormorant Garamond) automatically via a `@layer base` rule;
+everything else defaults to `font-sans`/`font-body` (Inter). For numeric
+display (prices, quantities, stats), use the `.font-number` utility class
+(Inter SemiBold, tabular figures) — see `src/app/globals.css`.
+
+**Shadcn semantic tokens are remapped onto the brand palette, not left as
+Shadcn defaults.** `--primary` → Chilli Red (primary CTA), `--secondary` →
+Oristor Gold (premium accent), `--background`/`--card`/`--popover` →
+Ivory/Cream, `--muted`/`--accent` → Warm Beige, `--border`/`--input` → Soft
+Border, `--ring` → Gold. This means `<Button>` (default variant),
+`<Card>`, `<Input>`, etc. all inherit the Oristor look with zero
+per-component overrides — verified visually at `/style-guide`.
+
+**No dedicated "error" red exists in the 10-color brand palette** — Chilli
+Red is reused for `--destructive` rather than inventing an 11th brand
+color not specified in `docs/blueprint.md` Section 2. Revisit only if the
+client explicitly wants CTAs and destructive/error states visually
+distinguished by hue.
+
+**WCAG AA contrast findings** (computed against the actual hex values,
+not eyeballed):
+| Pairing | Ratio | AA normal text (≥4.5) | AA large text/UI (≥3.0) |
+|---|---|---|---|
+| Charcoal on Ivory (body text) | 13.1:1 | ✅ | ✅ |
+| Cream on Chilli (primary button) | 6.6:1 | ✅ | ✅ |
+| Charcoal on Gold (secondary button) | 6.6:1 | ✅ | ✅ |
+| **Stone Grey on Warm Beige (muted text)** | **3.2:1** | ❌ | ✅ |
+| **Leaf Green on Ivory (success text)** | **4.0:1** | ❌ (borderline) | ✅ |
+
+**Consequence:** don't use `text-muted-foreground` (Stone Grey) or
+`text-leaf` for small body-sized text on light backgrounds — reserve them
+for large text (H4+/18px+), icons, badges, and UI chrome, where the 3.0
+threshold applies. For small secondary text, use `text-charcoal` at
+reduced visual weight (e.g. a lighter font-weight) instead of a lighter
+color, or pair Leaf/Stone with `text-cream`/`text-ivory` on a **dark**
+surface where the ratio flips favorably. This is a real constraint of the
+fixed 10-color brand palette, not a bug — flag it if a future design
+mock asks for small grey/green body text on a light background.
+
+**Dark mode is explicitly deferred.** The `@custom-variant dark` selector
+is kept in `globals.css` for forward-compatibility, but no `.dark { ... }`
+value block exists and `next-themes` was not installed — there is
+currently no way to trigger dark mode in the app, so there's no risk of a
+silently-broken half-implemented dark theme. To add it later: define a
+`.dark { --background: ...; ... }` block with Oristor-appropriate dark
+values (do not reuse Shadcn's generic zinc/slate dark defaults), install
+`next-themes`, and wire a theme toggle.
+
+**Shadcn `components.json` `baseColor: "neutral"` was left as-is.** This
+field only affects which reference palette the CLI diffs against when
+generating *new* components going forward — it doesn't affect rendering,
+since we override the actual CSS variables directly in `globals.css`.
+Oristor's palette isn't one of Shadcn's stock presets (zinc/slate/stone/
+gray/neutral), so there's no better preset to pick here.
+
+**Radius/spacing:** `docs/blueprint.md` Section 2 defines colors and
+typography but no corner-radius or spacing rhythm. Shadcn's default
+`--radius: 0.625rem` (and derived `--radius-sm/md/lg/xl/2xl/3xl/4xl` scale)
+was kept as-is — deliberate, not an oversight. Revisit if a client mockup
+specifies otherwise.
+
+---
+
+## 2026-07-14 — STORY-003 Global Layout & Responsive Framework
+
+**TanStack Query provider stays at the root layout, not per route-group.**
+STORY-003's AC literally asks for it in `(storefront)/layout.tsx`, but a
+single `QueryClient` instance shared by both `(storefront)` and `(admin)`
+is the correct default — TanStack Query isn't admin-only, and splitting
+it would just fragment the cache for no benefit. `src/app/providers.tsx`
+(added in STORY-001) already does this at the root. Documented as a
+deliberate deviation, not an oversight. When an actual admin-only
+provider shows up (e.g. an RBAC context in STORY-038), that's the point
+to add `(admin)/layout.tsx`-scoped providers.
+
+**No Zustand "hydration boundary".** `useUiStore` is plain client-only
+ephemeral UI state (mobile nav open/closed), not persisted or rehydrated
+from the server, so there's no SSR/client hydration mismatch to guard
+against — a boundary component would be solving a problem that doesn't
+exist yet. Revisit only if a persisted store (`zustand/middleware`
+`persist`) is introduced later.
+
+**Header/footer are composition "slots", not empty rendered elements.**
+`(storefront)/layout.tsx` marks where STORY-004 (header) and STORY-005
+(footer) plug in via comments, rather than rendering empty `<header>`/
+`<footer>` landmarks — an empty landmark region is arguably worse for
+accessibility than no landmark at all. The layout does render the real
+`<main id="main-content">` landmark now, since content exists today and
+`#main-content` is there for a future skip-to-content link.
+
+**`Container` and `Section` primitives** live in
+`src/components/storefront/layout/` (`container.tsx`, `section.tsx`),
+built with `class-variance-authority` to match the existing Shadcn
+component pattern (see `button.tsx`). `Container` sizes: `narrow`
+(max-w-3xl, body copy/forms), `default` (max-w-7xl, most page content),
+`wide` (max-w-[100rem], full-bleed hero/banner sections) — all with a
+`px-4 sm:px-6 lg:px-8` gutter. `Section` wraps children in a `Container`
+by default (pass `containerSize={false}` to opt out) and controls
+vertical rhythm via `spacing`: `sm`/`default`/`lg`/`xl`, each a
+`py-*`/`md:py-*` pair. **Use these instead of hand-picked `max-w-*`/`py-*`
+combinations in page code.**
+
+**Breakpoints: Tailwind v4 defaults kept, not customized.**
+`docs/blueprint.md` doesn't specify a custom breakpoint scale, so `sm`
+(640px)/`md` (768px)/`lg` (1024px)/`xl` (1280px)/`2xl` (1536px) are used
+as-is. The four required test viewports (375/768/1024/1440) sit within or
+at these bands — mobile-first is the primary design target per blueprint
+Section 6.
+
+**Sticky-header offset:** a single `--header-height: 4rem` CSS variable
+in `globals.css` (`:root`) drives `html { scroll-padding-top:
+var(--header-height) }` now, so in-page anchor links don't get hidden
+under the header. STORY-004 must update this variable (not hardcode a
+new offset elsewhere) if the real header's height ends up different from
+the 4rem placeholder.
+
+**`prefers-reduced-motion` / `prefers-color-scheme` exposed at the hook
+level**, not just CSS: `src/hooks/use-media-query.ts` (SSR-safe,
+`useSyncExternalStore`-based) backs `usePrefersReducedMotion()` and
+`usePrefersColorScheme()`. A global CSS `@media (prefers-reduced-motion:
+reduce)` rule in `globals.css` also force-shortens all
+animations/transitions as a safety net independent of any component
+remembering to check the hook. STORY-008 should use the hook rather than
+re-deriving the media query.
+
+**Favicon:** generated `src/app/icon.png` (512×512, via `sharp`) from the
+existing brand asset `src/assets/logo/Logo.png` (the circular "Oristor
+Food Products" badge mark). Next.js's file-based metadata convention
+picks this up automatically — no manual `<link rel="icon">` needed. If
+the brand team supplies a dedicated simplified favicon mark later
+(the circular badge is dense at 16×16), swap this file.
+
+**CLS/Lighthouge caveat — not literally measured.** This story avoided
+the known architectural causes of layout shift (fonts via `next/font`
+with automatic size-adjust metrics, no client-JS-dependent initial paint,
+no unsized images yet), but a full Lighthouse CLS score was not run in
+this environment. Formal Lighthouse auditing (the blueprint's ">95"
+target) is explicitly STORY-066's job (Quality & Security epic) — treat
+this story's CLS acceptance criterion as "architecturally sound," not
+"numerically verified."
+
+**Fixed a real testing-infrastructure bug affecting every future RTL
+test**, not just this story's: `vitest.config.ts` doesn't set
+`test.globals: true`, so Testing Library's automatic `afterEach(cleanup)`
+registration (which checks for a global `afterEach`) was silently never
+firing. Every `render()` call across a test file was accumulating in
+`document.body` instead of being cleaned up between tests, which only
+surfaces once a file has 2+ tests asserting against `screen.getBy*`
+queries with matches that appear more than once. Fixed by adding an
+explicit `afterEach(cleanup)` in `tests/unit/setup.ts`. If a future unit
+test mysteriously fails with "found multiple elements" only when run
+alongside other tests in the same file (but passes in isolation), this is
+already fixed — look elsewhere first.
+
+**Known harness gotcha (not project-specific):** stopping a background
+`npm run dev` task via the task-stop mechanism does **not** kill the
+underlying `next dev` (Turbopack) child process — it stays bound to port
+3000 and has to be killed by PID (`netstat -ano | grep :3000` →
+`taskkill //PID <pid> //F`) or the next `npm run dev`/`playwright test`
+run fails or silently binds a different port. Check for this if a dev
+server or e2e run behaves unexpectedly.
+
+---
+
+## 2026-07-14 — STORY-004 Primary Navigation & Header
+
+**Full desktop nav only from `lg` (1024px), not `md` (768px).** All 13
+blueprint nav items (8 primary + 5 action-cluster icons) plus the logo
+genuinely don't fit in 768px — a real Playwright overflow test caught
+this. Tablet-portrait (768–1023px) keeps the compact `MobileNav` bottom-bar
+pattern instead; only `lg`+ shows the full desktop header. This is a
+common, deliberate pattern (many e-commerce sites do the same), not a
+workaround. If a future design wants a distinct tablet layout, that's a
+new decision to make explicitly — don't just widen the `md:flex` again
+without re-checking for overflow at 768px.
+
+**Header height is `min-h-(--header-height)`, not a fixed `h-*`.** At
+exactly 1024px (the `lg` boundary), "Food Academy" and "Sign In" wrap to
+two lines rather than overflowing horizontally (flexbox reflows text
+instead of growing the row) — correct, expected responsive behavior. A
+fixed header height would have clipped that wrapped second line;
+`min-h` lets the sticky header grow instead. This slightly weakens
+STORY-003's "header height never changes" CLS guarantee, but only in this
+narrow edge case, and growing safely beats clipping content.
+
+**Shadcn's `NavigationMenu`/`DropdownMenu`/`Sheet` (built on
+`@base-ui/react`, not Radix) supply keyboard nav, focus trap, outside-click,
+and Escape-to-close out of the box** — none of that was hand-rolled.
+Two API details worth knowing if you touch this code:
+- `NavigationMenuLink`'s `active` prop sets `data-active` as a bare
+  boolean attribute (present with an empty string value, **not** the
+  string `"true"`) — assert `aria-current="page"` in tests instead, which
+  base-ui also sets automatically and is the semantically correct check.
+- Base UI's focus-trap uses invisible `aria-hidden` "focus guard"
+  sentinel elements (`[data-base-ui-focus-guard]`) just outside the
+  trapped region to redirect focus back in — the same technique
+  Radix/react-focus-lock use. A tab stop landing on one of those for a
+  single frame is correct, not a bug; a real broken trap would land focus
+  on unrelated *perceivable* page content instead. See the focus-trap
+  test in `tests/e2e/header.spec.ts` for the exact assertion shape.
+
+**Real accessibility bug found and fixed via the axe scan, not just
+manually reviewed:** the mobile bottom-nav labels initially used
+`text-stone` (Stone Grey, #8A817C) on the Ivory background at 10px —
+3.56:1 contrast, which fails WCAG AA's 4.5:1 for normal text (this is
+exactly the combination flagged as a caveat in STORY-002's contrast
+table, now caught for real by an automated scan rather than staying
+theoretical). Fixed by splitting icon color (`text-stone` is fine — icons
+only need the 3:1 non-text/UI-component ratio) from label color
+(`text-charcoal`, 13:1, comfortably passes). Active state uses
+`text-primary` (Chilli Red on Ivory = 6.25:1, also passes) for both.
+**Lesson: run the axe scan, don't just trust the STORY-002 contrast table
+in the abstract** — it only documented the *general* pairing risk, not
+every place it would concretely show up.
+
+**Cart/Wishlist stores are intentionally count-only.** `src/lib/stores/
+cart-store.ts` and `wishlist-store.ts` hold nothing but `count` +
+increment/decrement/setCount. STORY-024 and STORY-013 own the real line-
+item data — extend these stores (derive `count` from real items) rather
+than creating parallel ones.
+
+**Search trigger is a wired-but-inert `<button>`**, not a link to a
+`/search` page that doesn't exist yet. STORY-007 owns the actual overlay;
+this story only provides the click target and correct position in the
+header. Don't add search logic to `header-actions.tsx` — extend
+STORY-007's own component instead.
+
+**Account menu uses `next-auth/react`'s client-safe `useSession`/`signOut`**,
+not the server-oriented `auth`/`signOut` re-exported from `src/lib/auth.ts`
+(STORY-001). `SessionProvider` (also `next-auth/react`) was added to
+`src/app/providers.tsx` alongside the existing `QueryClientProvider` so
+`useSession()` works in any Client Component under the root layout.
+
+---
+
+## 2026-07-14 — STORY-005 Footer
+
+**`lucide-react` v1.x ships zero brand/logo icons.** Facebook, Instagram,
+YouTube, Twitter, LinkedIn, GitHub — none of them exist anymore (confirmed
+by enumerating all 5,980 exports). Lucide is now a purely generic UI icon
+set. Rather than pull in a second icon dependency (e.g. `simple-icons`)
+for three glyphs, `src/components/storefront/layout/social-icons.tsx`
+hand-rolls minimal inline SVGs for Facebook/Instagram/YouTube. **If more
+brand icons are needed later, reconsider a dedicated package instead of
+hand-rolling more of these** — three is a reasonable amount to inline,
+a dozen would not be.
+
+**Footer uses an intentional dark variant (Charcoal bg / Ivory text)**,
+per the AC's explicit option to do so. This is the first dark surface in
+the app, and it surfaced a real constraint: the brand's Chilli Red and
+Leaf Green were only ever contrast-checked against **light** backgrounds
+(STORY-002). Chilli-on-Charcoal measures ~2.1:1 and Leaf-on-Charcoal
+~3.3:1 — both fail WCAG AA for text, Chilli badly. Rather than invent
+new "-light" color tokens, the newsletter form's error/success messages
+use plain Ivory text (13:1, always safe) with a `CircleAlert`/`CircleCheck`
+icon to carry the meaning instead of hue — which is also correct per
+WCAG 1.4.1 (don't rely on color alone to convey information), not just a
+contrast workaround. **If a future story needs red/green status text on
+a dark surface, don't reuse raw Chilli/Leaf — either verify a lightened
+variant's contrast first or use the icon+neutral-text pattern from
+`newsletter-form.tsx`.**
+
+**Newsletter form uses TanStack Query's `useMutation`**, not a bare
+`fetch` + local loading state — consistent with the tech stack's existing
+server-state library rather than reinventing pending/error/success
+tracking by hand.
+
+**Route Handler → Service Layer, no direct Prisma.** `src/app/api/
+newsletter/subscribe/route.ts` validates with the shared
+`newsletterSubscribeSchema` (also used client-side by the form) and calls
+`src/services/newsletter.service.ts`, which is a stub (`console.log` +
+resolve) — no real email/CRM integration yet, that's an Enterprise
+Platform / Marketing Console epic story. The seam is already in the right
+place so swapping in a real provider later doesn't touch the route or
+the form.
+
+**Mobile bottom nav overlap:** the footer needs the same `pb-16 lg:pb-0`
+reserved-space treatment as `<main>` (STORY-003/004) — otherwise the
+fixed `MobileNav` bottom bar covers the footer's last section (legal
+row/certification badges) when scrolled to the bottom of the page on
+mobile. Any future full-bleed content placed after `<Footer />` in the
+storefront layout needs the same consideration.
+
+**Certification badges are explicit placeholders.** "ISO Certified" /
+"HACCP Compliant" render as plain text labels (no logo/seal graphics) per
+the AC's "space for ... placeholders" — `docs/blueprint.md` doesn't
+confirm Oristor actually holds these certifications. **Do not add real
+certification seal graphics without verifying the underlying claim first**
+— swap the placeholder text for real logos only once the client confirms
+which certifications are actually held.
+
+**Contact info (address/phone) is placeholder data**, not a real
+registered address — `docs/blueprint.md` doesn't specify one. Flagged in
+`src/lib/footer-config.ts` directly; replace before production launch.
+STORY-054 (System Settings) will eventually make this admin-editable.
+
+**Test scoping gotcha:** once the footer existed, `tests/e2e/header.spec.ts`'s
+previously-unscoped `page.getByRole(...)` lookups started colliding with
+identical link labels in the footer (Products, Recipes, Blog, Contact,
+Wishlist, About all appear in both). Fixed by scoping those assertions to
+`page.locator("header")`. **Exception:** the mega-menu flyout content
+(`NavigationMenuContent`) renders in a portal **outside** the `<header>`
+DOM subtree (base-ui's `NavigationMenuPositioner` portals it), so
+mega-menu-content assertions intentionally stay page-scoped rather than
+header-scoped — scoping those to `header` silently breaks them (looks
+like a locator bug, is actually a portal). If you add more page sections
+with link text that overlaps nav labels, expect to scope new header
+tests the same way.
+
+---
+
+## 2026-07-14 — STORY-008 Animation Framework
+
+**Built out of numeric order, before STORY-006/007.** STORY-006
+(Homepage) lists STORY-008 as a hard dependency ("scroll-reveal
+primitives... consumed by STORY-006"), even though 008 is numbered after
+006/007 in the epic. Building 006 first would have meant hand-rolling
+throwaway `whileInView` code in every homepage section, then refactoring
+all of it once the real primitives existed — so 008 landed first instead.
+If you're wondering why the epic's story numbers don't match build order
+here, this is why.
+
+### Animation conventions — when to use what
+
+- **`ScrollReveal`** (`src/components/motion/scroll-reveal.tsx`): the
+  default for entrance animation on scroll-into-view — homepage sections,
+  card grids, any content below the fold. Wraps Framer Motion's
+  `whileInView`. Takes `variant` (default `fadeInUp`), `delay`, `repeat`
+  (default: animate once), `amount` (visibility fraction to trigger,
+  default 0.2).
+- **Inline `motion.div`**: use directly only for one-off interactions that
+  don't fit the entrance-animation shape (drag, layout animations,
+  gesture-driven UI). Don't hand-roll another scroll-reveal wrapper.
+- **`hoverLift/tapScale`** (spread props): hover/tap micro-interactions
+  for cards and buttons. Spread onto a `motion.*` element:
+  `<motion.div {...hoverLift}>`.
+- **Standard duration/easing**: `DEFAULT_DURATION = 0.5s`,
+  `DEFAULT_EASE = [0.22, 1, 0.36, 1]` (a gentle ease-out) — exported from
+  `variants.ts` so new one-off animations stay visually consistent with
+  the rest of the site instead of picking arbitrary numbers.
+
+**Every primitive's reduced-motion contract:** when
+`useReducedMotion()` is true, `ScrollReveal` and `PageTransition` render
+children in a plain wrapper with **no** Framer Motion involvement at
+all (not even an instant no-op animation) — simplest possible reduced-
+motion path, and it means reduced-motion users pay zero Framer Motion
+runtime cost for these two primitives. Any new primitive added to this
+module must follow the same pattern: check `useReducedMotion()` first,
+bail to a plain render if true.
+
+**`PageTransition` is entrance-only, not full `AnimatePresence` enter/exit.**
+A true exit transition needs to delay unmounting the outgoing page until
+its animation finishes, which fights the App Router's streaming/Suspense
+model — risks blocking or duplicating server-rendered content mid-
+navigation. The entrance-only fade (`key={pathname}` on a `motion.div`)
+gets the "site feels considered" effect without that fragility. Revisit
+only if a specific design explicitly calls for a true exit transition,
+and prototype it against a streaming route (e.g. one with `loading.tsx`)
+before committing to it.
+
+**`useReducedMotion` doesn't duplicate STORY-003's hook.** It's a thin
+re-export of `usePrefersReducedMotion` (`src/hooks/`), scoped under the
+motion module's own name so consumers importing from
+`@/components/motion` don't need to know it's backed by the same
+underlying hook as everywhere else.
+
+### Test infrastructure additions (affect all future tests, not just this story)
+
+**jsdom doesn't implement `matchMedia` or `IntersectionObserver`.**
+`tests/unit/setup.ts` now stubs both globally via `vi.stubGlobal` (not
+direct `window.x = ...` assignment — that trips a TypeScript quirk where
+`"x" in window` narrows to `never` for DOM properties the lib types
+already declare as always-present). The `IntersectionObserver` stub was
+needed the moment any component using Framer Motion's `whileInView`
+(i.e. `ScrollReveal`) got unit-tested — expect to hit this again if
+future components use viewport-based APIs (`ResizeObserver`, etc.) and
+they're not yet stubbed.
+
+**Playwright's `reducedMotion` fixture is nested under `contextOptions`**,
+not a top-level `test.use()` option: `test.use({ contextOptions: {
+reducedMotion: "reduce" } })`, not `test.use({ reducedMotion: "reduce" })`
+(the latter type-errors — it's a `BrowserContextOptions` field, exposed
+indirectly).
+
+**Mega-menu hover flakiness (pre-existing, not introduced by this story):**
+stress-testing `tests/e2e/header.spec.ts`'s "Products mega-menu opens on
+hover" revealed base-ui's `NavigationMenu` hover-intent tracking doesn't
+reliably register from a single synthetic `.hover()` call, and — more
+importantly — re-issuing `.hover()` on the same element without moving
+away first is often a no-op (no fresh `pointerenter` fires). Fixed with a
+retry loop that hovers a neutral element first, then the real target,
+wrapped in `expect(...).toPass()`. **If you add more hover-triggered
+interaction tests against base-ui components, use this same
+neutral-hover-then-target pattern from the start** rather than
+rediscovering the flakiness.
+
+---
+
+## 2026-07-14 — STORY-006 Homepage
+
+**"Newsletter" (blueprint Section 4's 12th homepage section) is satisfied
+by the existing site-wide `<Footer>`, not a second standalone section.**
+STORY-005 already built a fully-functional newsletter form (RHF + Zod +
+real API route) inside the footer, which renders immediately after
+`page.tsx`'s content in `(storefront)/layout.tsx`. Blueprint's list
+technically implies Newsletter and Footer are two separate homepage
+sections, but rendering a *second* newsletter signup form directly above
+the footer's existing one would duplicate the exact same feature on the
+same page — bad UX and a "no duplicate logic" violation. `tests/e2e/
+homepage.spec.ts` verifies the newsletter form is present via the footer
+rather than expecting an 12th/13th in-page section.
+
+**Real product photography, not gray placeholder boxes.** `public/
+images/products/**` already had 43 real Oristor product photos
+(jars, gift boxes, export line) checked into the repo. `src/lib/
+fixtures/home-fixtures.ts` uses these directly (as plain URL strings,
+not `next/image` static imports, since they live in `public/` not
+`src/assets/`) instead of inventing placeholder image paths. Recipe
+card images reuse product photos as a stand-in with the connection made
+explicit ("Chili Paste Deviled Prawns" uses the chili paste jar photo,
+etc.) — real recipe photography is STORY-017's job. **Customer Reviews
+fixtures are deliberately text-only, no avatar photos** — fabricating
+stock headshots for fake testimonials would misrepresent real people;
+swap for STORY-015's real submitted reviews (which may carry a
+customer-uploaded avatar) instead of sourcing fake portrait photos.
+
+**Shared `TeaserSection` primitive** (`src/components/storefront/home/
+teaser-section.tsx`) backs `FoodAcademyTeaser`, `ExportSolutions`, and
+`RewardsClubTeaser` — all three are structurally identical (image +
+eyebrow + headline + description + CTA, using the shared
+`TeaserSectionData` type). Each still gets its own thin wrapper file
+(per this story's "independently composable and testable" AC) rather
+than three near-duplicate implementations. `ExportSolutions` passes
+`reverse` to flip the image/text sides for visual rhythm — that's the
+only thing distinguishing it structurally from the other two.
+
+**Retired the STORY-001 scratch `FadeIn` component.** Its own doc
+comment said "the real animation primitives... belong to STORY-008" —
+STORY-008 landed immediately before this story, so `<HeroBanner>` uses
+the real `ScrollReveal` primitive instead, and the unused scratch
+component was deleted rather than left as dead code.
+
+**Base UI's `Button` needs `nativeButton={false}` when its `render` prop
+points at something other than a real `<button>` element** (e.g.
+`render={<Link href="..." />}`) — otherwise it logs a console error every
+render ("expected a native `<button>` because `nativeButton` is true").
+This bit every CTA button in the homepage (Hero, and all three
+`TeaserSection` instances). **Any future `<Button render={<Link .../>}>`
+usage anywhere in the codebase needs `nativeButton={false}` too** — this
+isn't specific to the homepage, it's a general Base UI Button rule that
+just hadn't come up until this story added CTA buttons that navigate via
+`next/link` instead of submitting a form or opening a menu.
+
+**Full-page Playwright screenshots can show `ScrollReveal` content as
+invisible even though it isn't actually broken.** The very first
+`fullPage` screenshot taken of this homepage showed most section grids
+as empty (only headings visible) — looked like a severe rendering bug.
+It wasn't: Framer Motion's `whileInView` (which `ScrollReveal` uses)
+never fired for below-the-fold content because the full-page screenshot
+mechanism doesn't scroll the way a real user does, so the
+`IntersectionObserver` never triggered and elements stayed at their
+`hidden` (opacity: 0) state. Confirmed by re-screenshotting after
+manually scrolling in increments (`window.scrollTo` + wait, repeated
+down the page) — everything rendered correctly. **When visually
+verifying any `ScrollReveal`-wrapped content, scroll through the page in
+steps before screenshotting** (see the pattern used for the homepage
+screenshots this story), don't rely on a single `fullPage: true` capture
+to reflect real user-visible state.
+
+**Section data contract:** every section component takes typed data as
+a prop (`src/types/home.ts`) sourced from `home-fixtures.ts` in
+`page.tsx` — none of them import fixtures directly themselves. When a
+real epic's data is ready (Product Platform, Recipes, Reviews, Food
+Academy, Rewards, Export), replace the fixture import in `page.tsx` with
+a real query/fetch; the section components themselves shouldn't need to
+change as long as the real data satisfies the existing interface.
+
+---
+
+## 2026-07-14 — Real production domain confirmed: oristor.com
+
+The user shared the real Oristor Instagram bio redirect link, which
+decodes to `https://oristor.com/Shop` — confirming `oristor.com` as the
+real production domain (previously an unverified placeholder).
+
+**Fixed a real conflation bug while wiring this in:** `metadataBase` in
+`src/app/layout.tsx` (STORY-003) was reusing `NEXTAUTH_URL` as its
+fallback. That's wrong on reflection — `NEXTAUTH_URL` is the auth
+callback base and must always track whatever environment is actually
+running (`localhost` in dev), whereas `metadataBase` should resolve to
+the real public domain regardless of environment (so OG/social-share
+image URLs generated from a local dev build still resolve correctly).
+Decoupled them: added `NEXT_PUBLIC_SITE_URL` (defaults to
+`https://oristor.com` in code, documented in `.env.example` and set in
+`.env`), used only for `metadataBase`. `NEXTAUTH_URL` is untouched.
+
+**Still unconfirmed:** the real Instagram/Facebook/YouTube handles
+(`src/lib/footer-config.ts`'s `socialLinks` are still placeholder URLs),
+and the real company address/phone (`contactInfo`). Only the domain and
+existing `hello@oristor.com` email were confirmed by this exchange — the
+other placeholders in `footer-config.ts` need real values from the
+client before launch, same as previously flagged.
+
+### Branch protection (GitHub settings, not repo code)
+
+`.github/workflows/ci.yml` runs lint/typecheck/unit-tests/build on every
+PR to `main`/`develop`, but GitHub does not enforce it as a merge gate
+until branch protection rules are turned on on the GitHub side. Document
+requirement (to be configured in repo Settings once the repo is pushed to
+GitHub, per `docs/blueprint.md` Section 8's Git workflow):
+- `main` and `develop`: require the `build-and-test` CI check to pass
+  before merging, require at least one PR review, disallow force-push.
+- `feature/*`, `release/*`, `hotfix/*`: no protection required, but PRs
+  into `main`/`develop` still go through the same CI gate.

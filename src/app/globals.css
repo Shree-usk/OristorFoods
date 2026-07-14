@@ -1,1 +1,185 @@
 @import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+@custom-variant dark (&:is(.dark *));
+
+/*
+ * Dark mode is intentionally deferred (STORY-002 Out of Scope). The `dark`
+ * variant above is kept so a future story can add a `.dark { ... }` block
+ * and wire up `next-themes` without restructuring anything, but no such
+ * block exists yet — nothing in the app currently applies a `.dark` class.
+ */
+
+@theme inline {
+    /* --- Typography --- */
+    --font-heading: var(--font-heading);
+    --font-body: var(--font-body);
+    --font-sans: var(--font-body);
+
+    /* Type scale — docs/blueprint.md Section 2 */
+    --text-hero: 4rem;           /* 64px */
+    --text-hero--line-height: 1.1;
+    --text-h1: 3rem;             /* 48px */
+    --text-h1--line-height: 1.15;
+    --text-h2: 2.25rem;          /* 36px */
+    --text-h2--line-height: 1.2;
+    --text-h3: 1.875rem;         /* 30px */
+    --text-h3--line-height: 1.25;
+    --text-h4: 1.5rem;           /* 24px */
+    --text-h4--line-height: 1.3;
+    --text-body: 1rem;           /* 16px */
+    --text-body--line-height: 1.5;
+    --text-small: 0.875rem;      /* 14px */
+    --text-small--line-height: 1.5;
+    --text-caption: 0.75rem;     /* 12px */
+    --text-caption--line-height: 1.4;
+
+    /* --- Oristor brand colors — docs/blueprint.md Section 2 --- */
+    --color-ivory: var(--ivory);
+    --color-charcoal: var(--charcoal);
+    --color-gold: var(--gold);
+    --color-chilli: var(--chilli);
+    --color-leaf: var(--leaf);
+    --color-cream: var(--cream);
+    --color-beige: var(--beige);
+    --color-gold-light: var(--gold-light);
+    --color-stone: var(--stone);
+    --color-border-soft: var(--border-soft);
+
+    /* --- Shadcn semantic tokens, remapped to the Oristor palette --- */
+    --color-sidebar-ring: var(--sidebar-ring);
+    --color-sidebar-border: var(--sidebar-border);
+    --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+    --color-sidebar-accent: var(--sidebar-accent);
+    --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+    --color-sidebar-primary: var(--sidebar-primary);
+    --color-sidebar-foreground: var(--sidebar-foreground);
+    --color-sidebar: var(--sidebar);
+    --color-chart-5: var(--chart-5);
+    --color-chart-4: var(--chart-4);
+    --color-chart-3: var(--chart-3);
+    --color-chart-2: var(--chart-2);
+    --color-chart-1: var(--chart-1);
+    --color-ring: var(--ring);
+    --color-input: var(--input);
+    --color-border: var(--border);
+    --color-destructive: var(--destructive);
+    --color-accent-foreground: var(--accent-foreground);
+    --color-accent: var(--accent);
+    --color-muted-foreground: var(--muted-foreground);
+    --color-muted: var(--muted);
+    --color-secondary-foreground: var(--secondary-foreground);
+    --color-secondary: var(--secondary);
+    --color-primary-foreground: var(--primary-foreground);
+    --color-primary: var(--primary);
+    --color-popover-foreground: var(--popover-foreground);
+    --color-popover: var(--popover);
+    --color-card-foreground: var(--card-foreground);
+    --color-card: var(--card);
+    --color-foreground: var(--foreground);
+    --color-background: var(--background);
+
+    /* Radius rhythm — blueprint doesn't specify one, Tailwind/Shadcn
+       defaults kept deliberately. See docs/architecture-decisions.md. */
+    --radius-sm: calc(var(--radius) * 0.6);
+    --radius-md: calc(var(--radius) * 0.8);
+    --radius-lg: var(--radius);
+    --radius-xl: calc(var(--radius) * 1.4);
+    --radius-2xl: calc(var(--radius) * 1.8);
+    --radius-3xl: calc(var(--radius) * 2.2);
+    --radius-4xl: calc(var(--radius) * 2.6);
+}
+
+:root {
+    /* --- Oristor brand palette (raw values) — Section 2 --- */
+    --ivory: #FAF7F2;
+    --charcoal: #2F2B2A;
+    --gold: #CDAF52;
+    --chilli: #B22222;
+    --leaf: #2E8B57;
+    --cream: #FFFDF9;
+    --beige: #F2ECE4;
+    --gold-light: #E8D9A8;
+    --stone: #8A817C;
+    --border-soft: #E5DED5;
+
+    /* --- Shadcn semantic tokens, mapped onto the brand palette --- */
+    --background: var(--ivory);
+    --foreground: var(--charcoal);
+    --card: var(--cream);
+    --card-foreground: var(--charcoal);
+    --popover: var(--cream);
+    --popover-foreground: var(--charcoal);
+    --primary: var(--chilli);
+    --primary-foreground: var(--cream);
+    --secondary: var(--gold);
+    --secondary-foreground: var(--charcoal);
+    --muted: var(--beige);
+    --muted-foreground: var(--stone);
+    --accent: var(--beige);
+    --accent-foreground: var(--charcoal);
+    /* No dedicated "error" red exists in the brand palette — Chilli Red is
+       reused for destructive actions rather than inventing an 11th color.
+       See docs/architecture-decisions.md. */
+    --destructive: var(--chilli);
+    --border: var(--border-soft);
+    --input: var(--border-soft);
+    --ring: var(--gold);
+    --chart-1: var(--gold);
+    --chart-2: var(--leaf);
+    --chart-3: var(--chilli);
+    --chart-4: var(--stone);
+    --chart-5: var(--gold-light);
+    --radius: 0.625rem;
+    --sidebar: var(--cream);
+    --sidebar-foreground: var(--charcoal);
+    --sidebar-primary: var(--chilli);
+    --sidebar-primary-foreground: var(--cream);
+    --sidebar-accent: var(--beige);
+    --sidebar-accent-foreground: var(--charcoal);
+    --sidebar-border: var(--border-soft);
+    --sidebar-ring: var(--gold);
+}
+
+:root {
+  /* Sticky header offset — STORY-004 sets the real header height; kept as
+     a single source of truth so scroll-padding and any fixed-header
+     spacing stay in sync. See docs/architecture-decisions.md. */
+  --header-height: 4rem;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+    }
+  body {
+    @apply bg-background text-foreground font-body;
+    }
+  html {
+    @apply font-sans;
+    scroll-padding-top: var(--header-height);
+    }
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-heading;
+    }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+      }
+    }
+}
+
+@layer utilities {
+  /* Inter SemiBold for numeric display (prices, quantities, stats) —
+     distinct from body text weight per docs/blueprint.md Section 2. */
+  .font-number {
+    font-family: var(--font-body);
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    }
+}

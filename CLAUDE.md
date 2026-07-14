@@ -29,8 +29,12 @@ before starting a new module.
 - Icons: Lucide React
 - Forms: React Hook Form + Zod
 - State: TanStack Query (server state), Zustand (client state)
-- ORM: Prisma → PostgreSQL
-- Auth: NextAuth
+- ORM: Prisma → PostgreSQL, via the `@prisma/adapter-pg` driver adapter
+  (Prisma 7 requires passing an `adapter` to `PrismaClient` — see
+  `src/lib/db.ts` and `docs/architecture-decisions.md`). `DATABASE_URL`
+  must be a plain `postgresql://` string, not `prisma+postgres://`.
+- Auth: NextAuth (Auth.js v5 / `next-auth@beta`) — env var is
+  `AUTH_SECRET`, not the v4-era `NEXTAUTH_SECRET`
 - Testing: Vitest (unit), Playwright (e2e)
 
 **Note on Next.js 16:** this is a newer major than what's in most training
@@ -44,13 +48,20 @@ on remembered Next.js behavior, especially for routing, caching, and config.
 npm run dev          # start local dev server
 npm run build         # production build
 npm run lint           # lint
+npm run test            # unit tests (Vitest)
+npm run test:watch       # unit tests, watch mode
+npm run test:e2e          # e2e tests (Playwright; spins up the dev server)
 npx prisma studio       # inspect the database
 npx prisma migrate dev   # run a new migration
 ```
 
-Vitest and Playwright are in the tech stack but not installed yet — add
-them when the first feature needs a test (`npm run test` / `npm run
-test:e2e` don't exist yet, don't invent output for them).
+Vitest and Playwright are installed and configured as of STORY-001
+(`vitest.config.ts`, `playwright.config.ts`, `tests/unit/`, `tests/e2e/`).
+
+**Known blocker:** local DB connectivity has not been verified end-to-end
+in this environment (`prisma migrate dev` fails to connect to the local
+`prisma dev` server). See `docs/architecture-decisions.md` for details and
+unblock options before starting any story that needs real data.
 
 ## Conventions
 

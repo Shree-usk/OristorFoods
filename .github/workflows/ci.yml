@@ -1,0 +1,43 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main, develop]
+  push:
+    branches: [main, develop]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    env:
+      # Placeholder connection string so `prisma generate` and the Next.js
+      # build can resolve DATABASE_URL at build time. No live DB is required
+      # for lint/typecheck/unit-tests/build — only for `prisma migrate`,
+      # which this workflow does not run.
+      DATABASE_URL: "postgresql://user:password@localhost:5432/oristor_ci"
+      AUTH_SECRET: "ci-placeholder-secret-do-not-use-in-production"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma client
+        run: npx prisma generate
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        run: npx tsc --noEmit
+
+      - name: Unit tests
+        run: npm run test
+
+      - name: Build
+        run: npm run build
