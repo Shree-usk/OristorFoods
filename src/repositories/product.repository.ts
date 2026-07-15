@@ -105,3 +105,18 @@ export function listProductCertifications(productId: string) {
     where: { products: { some: { id: productId } } },
   });
 }
+
+export function createBundle(data: Prisma.ProductBundleCreateInput) {
+  return prisma.productBundle.create({ data });
+}
+
+export function addBundleItem(data: Prisma.BundleItemCreateInput) {
+  return prisma.bundleItem.create({ data });
+}
+
+export function getBundleWithItems(productId: string) {
+  return prisma.productBundle.findUnique({
+    where: { productId },
+    include: { items: { include: { componentProduct: true } } },
+  });
+}
