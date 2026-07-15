@@ -63,7 +63,10 @@ server, which has an upstream bug that breaks `prisma migrate dev` on
 repeated calls (see `docs/architecture-decisions.md` for root cause and
 fix). Use `npx prisma db push` for day-to-day schema iteration; only use
 `migrate dev` (against a freshly restarted server) when deliberately
-producing a migration file to commit.
+producing a migration file to commit. **`npm run test` now requires a
+running `prisma dev` server** — the Vitest global setup runs `db push`
+against it before every test run; start `npx prisma dev` first if tests
+fail with a connection error.
 
 ## Conventions
 

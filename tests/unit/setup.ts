@@ -1,6 +1,15 @@
+import "dotenv/config";
 import "@testing-library/jest-dom/vitest";
 import { cleanup } from "@testing-library/react";
 import { afterEach, vi } from "vitest";
+
+// Vitest doesn't auto-load `.env` the way Next.js does — `src/lib/db.ts`
+// reads `DATABASE_URL` from `process.env` directly (Prisma 7's driver-
+// adapter pattern, see docs/architecture-decisions.md), so any test that
+// touches the Prisma client needs it loaded explicitly. `globalSetup`
+// runs in a separate process and can't set env vars for the test workers,
+// so this has to happen here instead — same `dotenv/config` mechanism
+// `prisma.config.ts` already uses for the CLI.
 
 // vitest.config.ts doesn't set `test.globals: true`, so Testing Library's
 // built-in auto-cleanup (which checks for a global `afterEach`) never

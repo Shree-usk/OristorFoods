@@ -65,3 +65,34 @@ model VerificationToken {
 
   @@unique([identifier, token])
 }
+
+// --- Product Catalogue (STORY-009) ---
+
+enum ContentStatus {
+  Active
+  Inactive
+}
+
+model Category {
+  id          String        @id @default(cuid())
+  name        String
+  slug        String        @unique
+  description String?
+  image       String?
+  sortOrder   Int           @default(0)
+  status      ContentStatus @default(Active)
+
+  parentId String?
+  parent   Category?  @relation("CategoryToParent", fields: [parentId], references: [id], onDelete: SetNull)
+  children Category[] @relation("CategoryToParent")
+
+  metaTitle       String?
+  metaDescription String?
+  canonicalUrl    String?
+  ogImage         String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([parentId])
+}
