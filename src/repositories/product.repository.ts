@@ -26,3 +26,25 @@ export function listProductsByCategory(categoryId: string) {
 export function listProductsByStatus(status: ProductStatus) {
   return prisma.product.findMany({ where: { status } });
 }
+
+export function addProductImage(data: Prisma.ProductImageCreateInput) {
+  return prisma.productImage.create({ data });
+}
+
+export function addProductVideo(data: Prisma.ProductVideoCreateInput) {
+  return prisma.productVideo.create({ data });
+}
+
+export function listProductImages(productId: string) {
+  return prisma.productImage.findMany({
+    where: { productId },
+    orderBy: { sortOrder: "asc" },
+  });
+}
+
+export function listProductVideos(productId: string) {
+  return prisma.productVideo.findMany({
+    where: { productId },
+    orderBy: { sortOrder: "asc" },
+  });
+}
