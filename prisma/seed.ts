@@ -72,6 +72,11 @@ async function main() {
     customerGroup: "PrivateLabel",
     price: "410.00",
   });
+  await pricingRepository.createCustomerGroupPrice({
+    product: { connect: { id: curryPowder.id } },
+    customerGroup: "Retail",
+    price: "550.00",
+  });
   await pricingRepository.createVolumeDiscountTier({
     product: { connect: { id: curryPowder.id } },
     minQuantity: 24,
