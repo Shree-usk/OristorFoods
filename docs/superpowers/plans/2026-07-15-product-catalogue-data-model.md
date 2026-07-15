@@ -17,6 +17,7 @@
 - Repositories are the **only** layer that imports `@/lib/db` / Prisma. Services never import Prisma directly (`src/repositories/README.md`, `src/services/README.md`)
 - One repository/service file per aggregate (`product.repository.ts`, `category.repository.ts`, etc.) — matches existing `src/repositories/`, `src/services/` convention
 - All money fields: `Decimal @db.Decimal(10,2)` in Postgres; every price row carries `currency String @default("LKR")` (design doc decision — forward-compatible single-currency)
+- **In tests, assert `Decimal` values with `.toFixed(2)`, never `.toString()`.** Prisma's `Decimal` (decimal.js) strips trailing zeros in `toString()` — `new Prisma.Decimal("18.00").toString()` returns `"18"`, not `"18.00"` — confirmed directly against this project's generated client during Task 6. Every `.toBe("X.00")`-style assertion in this plan already uses `.toFixed(2)` for this reason.
 - `rewardPoints Int @default(0)` as a plain field on `Product`, not a separate rules model (design doc decision)
 - SEO fields (`metaTitle`, `metaDescription`, `canonicalUrl`, `ogImage`) inline on `Product`, `Category`, `Collection` — no dedicated SEO model (design doc decision)
 - IDs: `String @id @default(cuid())`, matching existing `User`/`Account`/`Session` models in `prisma/schema.prisma`
@@ -1158,7 +1159,7 @@ describe("product nutrition, ingredients, allergens", () => {
     const ingredients = await listProductIngredients(product.id);
     const allergens = await listProductAllergens(product.id);
 
-    expect(nutrition?.calories.toString()).toBe("18.00");
+    expect(nutrition?.calories.toFixed(2)).toBe("18.00");
     expect(ingredients.map((i) => i.name)).toEqual(["Coriander", "Mustard seed"]);
     expect(ingredients[1].isAllergen).toBe(true);
     expect(allergens.map((a) => a.name)).toEqual(["Mustard"]);
@@ -1419,7 +1420,7 @@ describe("product bundles", () => {
 
     const found = await getBundleWithItems(giftSet.id);
 
-    expect(found?.priceOverride?.toString()).toBe("1200.00");
+    expect(found?.priceOverride?.toFixed(2)).toBe("1200.00");
     expect(found?.items).toHaveLength(2);
     expect(found?.items.map((i) => i.quantity).sort()).toEqual([1, 2]);
   });
@@ -1642,7 +1643,7 @@ describe("pricing.repository", () => {
 
     const latest = await getLatestStandardPrice(product.id);
 
-    expect(latest?.price.toString()).toBe("550.00");
+    expect(latest?.price.toFixed(2)).toBe("550.00");
   });
 
   it("only returns sale and campaign prices active on the given date", async () => {
@@ -1678,7 +1679,7 @@ describe("pricing.repository", () => {
     const wholesale = await getCustomerGroupPrice(product.id, "Wholesale");
     const distributor = await getCustomerGroupPrice(product.id, "Distributor");
 
-    expect(wholesale?.price.toString()).toBe("420.00");
+    expect(wholesale?.price.toFixed(2)).toBe("420.00");
     expect(distributor).toBeNull();
   });
 
@@ -1759,7 +1760,7 @@ describe("resolvePrice", () => {
     const resolved = await resolvePrice({ productId: product.id });
 
     expect(resolved?.tier).toBe("standard");
-    expect(resolved?.price.toString()).toBe("500.00");
+    expect(resolved?.price.toFixed(2)).toBe("500.00");
   });
 
   it("returns null when no price tier exists at all", async () => {
@@ -1789,7 +1790,7 @@ describe("resolvePrice", () => {
     const resolved = await resolvePrice({ productId: product.id, date });
 
     expect(resolved?.tier).toBe("campaign");
-    expect(resolved?.price.toString()).toBe("400.00");
+    expect(resolved?.price.toFixed(2)).toBe("400.00");
   });
 
   it("prefers an active sale price over a customer-group price", async () => {
@@ -1815,7 +1816,7 @@ describe("resolvePrice", () => {
     });
 
     expect(resolved?.tier).toBe("sale");
-    expect(resolved?.price.toString()).toBe("450.00");
+    expect(resolved?.price.toFixed(2)).toBe("450.00");
   });
 
   it("gives a wholesale customer group price priority over a volume discount", async () => {
@@ -1839,7 +1840,7 @@ describe("resolvePrice", () => {
     });
 
     expect(resolved?.tier).toBe("customerGroup");
-    expect(resolved?.price.toString()).toBe("420.00");
+    expect(resolved?.price.toFixed(2)).toBe("420.00");
   });
 
   it("applies a qualifying volume discount when no higher tier matches", async () => {
@@ -1854,7 +1855,7 @@ describe("resolvePrice", () => {
     const resolved = await resolvePrice({ productId: product.id, quantity: 15 });
 
     expect(resolved?.tier).toBe("volumeDiscount");
-    expect(resolved?.price.toString()).toBe("410.00");
+    expect(resolved?.price.toFixed(2)).toBe("410.00");
   });
 
   it("computes a percentage volume discount off the standard price", async () => {
@@ -1869,7 +1870,7 @@ describe("resolvePrice", () => {
     const resolved = await resolvePrice({ productId: product.id, quantity: 10 });
 
     expect(resolved?.tier).toBe("volumeDiscount");
-    expect(resolved?.price.toString()).toBe("450");
+    expect(resolved?.price.toFixed(2)).toBe("450.00");
   });
 
   it("does not apply a volume discount below its minimum quantity", async () => {
@@ -1884,7 +1885,7 @@ describe("resolvePrice", () => {
     const resolved = await resolvePrice({ productId: product.id, quantity: 5 });
 
     expect(resolved?.tier).toBe("standard");
-    expect(resolved?.price.toString()).toBe("500.00");
+    expect(resolved?.price.toFixed(2)).toBe("500.00");
   });
 });
 ```
