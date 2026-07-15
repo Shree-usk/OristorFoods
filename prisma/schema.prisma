@@ -179,6 +179,7 @@ model Product {
   nutrition   ProductNutrition?
   ingredients ProductIngredient[]
   allergens   Allergen[]
+  certifications Certification[]
 
   @@index([status])
   @@index([brandId])
@@ -251,4 +252,12 @@ model Allergen {
   name     String    @unique
   icon     String?
   products Product[]
+}
+
+model Certification {
+  id               String    @id @default(cuid())
+  name             String
+  certificateImage String?
+  documentUrl      String?
+  products         Product[]
 }

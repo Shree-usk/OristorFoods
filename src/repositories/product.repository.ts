@@ -88,3 +88,20 @@ export function listProductAllergens(productId: string) {
     where: { products: { some: { id: productId } } },
   });
 }
+
+export function createCertification(data: Prisma.CertificationCreateInput) {
+  return prisma.certification.create({ data });
+}
+
+export function attachCertification(productId: string, certificationId: string) {
+  return prisma.product.update({
+    where: { id: productId },
+    data: { certifications: { connect: { id: certificationId } } },
+  });
+}
+
+export function listProductCertifications(productId: string) {
+  return prisma.certification.findMany({
+    where: { products: { some: { id: productId } } },
+  });
+}
