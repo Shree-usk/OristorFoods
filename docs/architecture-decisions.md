@@ -658,3 +658,60 @@ GitHub, per `docs/blueprint.md` Section 8's Git workflow):
   before merging, require at least one PR review, disallow force-push.
 - `feature/*`, `release/*`, `hotfix/*`: no protection required, but PRs
   into `main`/`develop` still go through the same CI gate.
+
+---
+
+## 2026-07-15 — STORY-009 Product Catalogue Data Model
+
+**Schema summary (21 models):** `User`/`Account`/`Session`/`VerificationToken`
+(Auth.js, STORY-001) plus 17 catalogue models added in this story —
+`Category` (self-referential tree), `Brand`, `Collection` (manual or
+rule-based via a `rules Json?` field), `Product` (the hub — FKs to `Brand`,
+m2m to `Category`/`Collection`/`Allergen`/`Certification`, 1-1 to
+`ProductNutrition`/`ProductBundle`), `ProductImage`/`ProductVideo`
+(ordered gallery), `ProductIngredient`, `ProductBundle`/`BundleItem`, and
+five pricing-tier models — `StandardPrice`, `SalePrice`, `CampaignPrice`,
+`CustomerGroupPrice`, `VolumeDiscountTier`.
+
+**Pricing priority order** (implemented in `src/services/pricing.service.ts`,
+`resolvePrice()`): campaign > sale > customer-group > volume-discount >
+standard — first tier with a currently-active, applicable row wins. Ties
+within a tier (e.g. two overlapping `SalePrice` windows) are broken by
+most-recently-created row. `VolumeDiscountTier` is the one tier with
+additional internal ordering: the highest `minQuantity` that's still `<=`
+the requested quantity wins (deepest applicable discount), falling back to
+most-recently-created only when two tiers share a `minQuantity`. See the
+doc comment directly above `resolvePrice()` for the authoritative
+statement of this algorithm.
+
+**Money representation:** every price field is `Decimal @db.Decimal(10, 2)`
+(avoids floating-point rounding). Every price row also carries
+`currency String @default("LKR")` — a forward-compatible column for the
+multi-currency scope blueprint Section 10 leaves unresolved; no conversion
+logic exists yet.
+
+**Migration history note:** the original STORY-001 migration
+(`20260715034109_init`, auth tables only) was superseded by this story's
+consolidated migration, generated via `prisma migrate diff --from-empty
+--to-schema` (no database connection needed — avoids the PGlite
+shadow-database bug documented in this file's STORY-001 entry above) and
+applied via `db execute` + `migrate resolve --applied`. See Task 14 of
+`docs/superpowers/plans/2026-07-15-product-catalogue-data-model.md` for
+the exact recipe if another consolidated migration is ever needed.
+
+**Blueprint field coverage** (Section 5, Commerce/Catalogue/Pricing
+engine paragraphs): SKU/barcode/slug/images/videos/nutrition/
+ingredients/allergens/certifications/SEO fields/reward points — all
+present on `Product` and its related models, per the acceptance criteria
+in STORY-009. All nine pricing models named in the blueprint (standard,
+sale, campaign, customer-group, wholesale, distributor, export,
+private-label, volume-discount) are covered by the five schema models —
+wholesale/distributor/export/private-label are the four `CustomerGroup`
+enum values on `CustomerGroupPrice`, not four separate tables, per the
+acceptance criteria's own model list.
+
+**Testing infrastructure fixes discovered during this story:**
+- **Prisma's AI-agent safety gate.** Prisma 7's CLI detects when it's invoked by an AI coding agent (via `CLAUDECODE`-style env vars) and refuses `db push --force-reset`/`--accept-data-loss` without live, in-conversation human consent — which an automated test hook can never provide. `tests/unit/global-setup.ts` never actually needed those flags: schema changes in this story were purely additive, so plain `db push` suffices. Don't add `--force-reset`/`--accept-data-loss` to any automated script.
+- **`Decimal.toFixed(2)`, not `.toString()`, for test assertions.** Prisma's `Decimal` (decimal.js) strips trailing zeros in `.toString()` — `new Prisma.Decimal("18.00").toString()` returns `"18"`. Every Decimal assertion in this story's tests uses `.toFixed(2)` instead.
+- **PGlite single-connection limit and sustained-load instability.** The local `prisma dev` server (PGlite-backed) only reliably supports one connection at a time, and independently reproduced to wedge ("Server has closed the connection") after roughly 40-50 seconds of continuous test activity regardless of a fresh data directory — an upstream WASM runtime limitation, not fixable from this codebase. `vitest.config.ts` sets `fileParallelism: false` to avoid concurrent-connection contention within one run. For a full-suite check locally, prefer `npx vitest run <files>` in batches of 5-8 files over a bare `npm run test`, restarting `npx prisma dev` between batches if one wedges.
+- **Test data isolation.** `tests/unit/global-setup.ts` truncates all app tables (via `db execute` running a dynamic `TRUNCATE ... CASCADE` script that queries `pg_tables`, excluding `_prisma_migrations`) after `db push`, before every test run — added after discovering that seed data (`prisma/seed.ts`) and several tests' fixture data shared literal SKU/slug values, causing unique-constraint collisions when seeding and testing back-to-back.

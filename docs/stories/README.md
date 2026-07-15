@@ -32,7 +32,7 @@ Stories are grouped into epics that match the build order in
 ## Epic 03 — Product Platform (`03-product-platform/`)
 | ID | Story | Status |
 |---|---|---|
-| STORY-009 | Product Catalogue Data Model | Draft |
+| STORY-009 | Product Catalogue Data Model | Done |
 | STORY-010 | Product Listing, Categories & Filters | Draft |
 | STORY-011 | Product Detail Page | Draft |
 | STORY-012 | Product Search & Discovery | Draft |
