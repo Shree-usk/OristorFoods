@@ -104,9 +104,9 @@ describe("pricing.repository", () => {
     const tiers = await getApplicableVolumeDiscountTiers(product.id, 25);
 
     expect(tiers).toHaveLength(2);
-    expect(tiers[0].discountPercent.toFixed(2)).toBe("7.00");
+    expect(tiers[0].discountPercent!.toFixed(2)).toBe("7.00");
     expect(tiers[0].id).toBe(secondTier.id);
-    expect(tiers[1].discountPercent.toFixed(2)).toBe("5.00");
+    expect(tiers[1].discountPercent!.toFixed(2)).toBe("5.00");
     expect(tiers[1].id).toBe(firstTier.id);
   });
 });
