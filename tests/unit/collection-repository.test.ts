@@ -43,4 +43,32 @@ describe("collection.repository", () => {
     expect(duringWindow.map((c) => c.slug)).toEqual(["avurudu-2026"]);
     expect(afterWindow.map((c) => c.slug)).toEqual([]);
   });
+
+  it("lists a collection with only a startDate as active from that date onward", async () => {
+    await createCollection({
+      name: "Loyalty Launch",
+      slug: "loyalty-launch",
+      startDate: new Date("2026-01-01"),
+    });
+
+    const onOrAfterStart = await listActiveCollections(new Date("2026-07-15"));
+    const beforeStart = await listActiveCollections(new Date("2025-12-01"));
+
+    expect(onOrAfterStart.map((c) => c.slug)).toEqual(["loyalty-launch"]);
+    expect(beforeStart.map((c) => c.slug)).toEqual([]);
+  });
+
+  it("lists a collection with only an endDate as active up to that date", async () => {
+    await createCollection({
+      name: "Winter Clearance",
+      slug: "winter-clearance",
+      endDate: new Date("2026-12-31"),
+    });
+
+    const onOrBeforeEnd = await listActiveCollections(new Date("2026-07-15"));
+    const afterEnd = await listActiveCollections(new Date("2027-01-01"));
+
+    expect(onOrBeforeEnd.map((c) => c.slug)).toEqual(["winter-clearance"]);
+    expect(afterEnd.map((c) => c.slug)).toEqual([]);
+  });
 });

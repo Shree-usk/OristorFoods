@@ -29,4 +29,52 @@ describe("collection.service", () => {
 
     expect(await getPublishedCollectionBySlug("retired")).toBeNull();
   });
+
+  it("returns a collection with only a past startDate (no upper bound)", async () => {
+    await createCollection({
+      name: "Loyalty Launch",
+      slug: "loyalty-launch",
+      status: "Active",
+      startDate: new Date("2026-01-01"),
+    });
+
+    const found = await getPublishedCollectionBySlug("loyalty-launch", new Date("2026-07-15"));
+
+    expect(found?.slug).toBe("loyalty-launch");
+  });
+
+  it("returns null for a collection with only a future startDate", async () => {
+    await createCollection({
+      name: "Spring Preview",
+      slug: "spring-preview",
+      status: "Active",
+      startDate: new Date("2027-03-01"),
+    });
+
+    expect(await getPublishedCollectionBySlug("spring-preview", new Date("2026-07-15"))).toBeNull();
+  });
+
+  it("returns a collection with only a future endDate (no lower bound)", async () => {
+    await createCollection({
+      name: "Winter Clearance",
+      slug: "winter-clearance",
+      status: "Active",
+      endDate: new Date("2026-12-31"),
+    });
+
+    const found = await getPublishedCollectionBySlug("winter-clearance", new Date("2026-07-15"));
+
+    expect(found?.slug).toBe("winter-clearance");
+  });
+
+  it("returns null for a collection with only a past endDate", async () => {
+    await createCollection({
+      name: "Old Promo",
+      slug: "old-promo",
+      status: "Active",
+      endDate: new Date("2026-01-01"),
+    });
+
+    expect(await getPublishedCollectionBySlug("old-promo", new Date("2026-07-15"))).toBeNull();
+  });
 });

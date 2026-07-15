@@ -15,7 +15,10 @@ export function findCollectionById(id: string) {
 
 /**
  * Active collections currently in their seasonal/limited-time window (or
- * with no window set at all, i.e. always-on collections).
+ * with no window set at all, i.e. always-on collections). One-sided
+ * windows are supported: a collection with only `startDate` set is active
+ * from that date onward with no upper bound, and a collection with only
+ * `endDate` set is active up to that date with no lower bound.
  */
 export function listActiveCollections(date: Date = new Date()) {
   return prisma.collection.findMany({
@@ -24,6 +27,8 @@ export function listActiveCollections(date: Date = new Date()) {
       OR: [
         { startDate: null, endDate: null },
         { startDate: { lte: date }, endDate: { gte: date } },
+        { startDate: { lte: date }, endDate: null },
+        { startDate: null, endDate: { gte: date } },
       ],
     },
     orderBy: { name: "asc" },
