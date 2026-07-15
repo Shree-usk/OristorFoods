@@ -87,4 +87,26 @@ describe("pricing.repository", () => {
     expect(tiers.map((t) => t.minQuantity)).toEqual([50, 10]);
     expect(tiersBelowSecondTier.map((t) => t.minQuantity)).toEqual([10]);
   });
+
+  it("breaks ties on minQuantity by using createdAt descending", async () => {
+    const product = await createProduct({ sku: "SKU-5", slug: "sku-5", name: "E" });
+    const firstTier = await createVolumeDiscountTier({
+      product: { connect: { id: product.id } },
+      minQuantity: 20,
+      discountPercent: "5.00",
+    });
+    const secondTier = await createVolumeDiscountTier({
+      product: { connect: { id: product.id } },
+      minQuantity: 20,
+      discountPercent: "7.00",
+    });
+
+    const tiers = await getApplicableVolumeDiscountTiers(product.id, 25);
+
+    expect(tiers).toHaveLength(2);
+    expect(tiers[0].discountPercent.toFixed(2)).toBe("7.00");
+    expect(tiers[0].id).toBe(secondTier.id);
+    expect(tiers[1].discountPercent.toFixed(2)).toBe("5.00");
+    expect(tiers[1].id).toBe(firstTier.id);
+  });
 });
