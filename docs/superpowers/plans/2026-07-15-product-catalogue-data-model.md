@@ -96,11 +96,30 @@ Create `tests/unit/global-setup.ts`:
 import { execSync } from "node:child_process";
 
 export default function setup() {
-  execSync("npx prisma db push --force-reset --accept-data-loss --skip-generate", {
+  execSync("npx prisma db push", {
     stdio: "inherit",
   });
 }
 ```
+
+**Do not add `--force-reset` or `--accept-data-loss` here.** Prisma 7's CLI
+detects when it's invoked by an AI coding agent and refuses to run any
+command carrying those flags without a fresh, explicit, in-conversation
+human consent message — which a global test hook can never provide, since
+it runs unattended on every `npm run test`. Plain `db push` doesn't need
+them anyway: every schema change in this plan is additive (new
+tables/columns, nothing dropped or narrowed), and each test file already
+cleans up its own rows via `afterEach(() => prisma.X.deleteMany())` —
+global test isolation was never depending on a full reset. If a later,
+genuinely destructive schema change is ever needed, that's exactly the
+case where a human should be asked before resetting, not a case to
+pre-authorize blanket in a hook.
+
+(This project's installed Prisma 7.8.0 `db push` also does not accept
+`--skip-generate` — confirmed via `db push --help`, which lists only
+`-h/--help, --config, --schema, --url, --accept-data-loss,
+--force-reset`. `db push` regenerates the client on every run regardless;
+slightly slower, not incorrect.)
 
 - [ ] **Step 4: Wire the global setup into Vitest**
 
@@ -307,7 +326,7 @@ Expected: `3 passed`. If it fails with a connection error, start `npx prisma dev
 - [ ] **Step 10: Run the full suite to confirm nothing else broke**
 
 Run: `npm run test`
-Expected: all existing test files plus `category-repository.test.ts` pass (the global setup's `db push --force-reset` wipes the dev DB before the run, which is fine — no other test depends on pre-existing data).
+Expected: all existing test files plus `category-repository.test.ts` pass (the global setup's plain `db push` syncs the schema before the run; each test file cleans up its own rows in `afterEach`, so no test depends on a full reset).
 
 - [ ] **Step 11: Commit**
 
@@ -2773,11 +2792,15 @@ export default defineConfig({
 Run: `npm install --save-dev tsx`
 Expected: adds `tsx` to `devDependencies` in `package.json`
 
-- [ ] **Step 4: Push the schema fresh and run the seed**
+- [ ] **Step 4: Push the schema and run the seed**
 
-Run: `npx prisma db push --force-reset`
+Run: `npx prisma db push`
+Expected: `The database is already in sync with the Prisma schema.` (the schema hasn't changed since Task 9; this just confirms it)
+
 Run: `npx prisma db seed`
 Expected: the `console.log("Seed complete:", ...)` output listing the brand, categories, collection, and four product slugs, with no errors
+
+Do not add `--force-reset`/`--accept-data-loss` to the `db push` above — see the note in Task 1 Step 3 (Prisma's AI-agent safety gate blocks those flags without live human consent, and this task doesn't need them: repository tests clean up their own rows, so the DB should already be free of conflicting slugs/SKUs by this point). If `db seed` fails on a unique-constraint error from genuinely leftover data, clear the specific rows via `npx prisma db execute` with a plain `DELETE FROM "Product";` (cascades to child tables) rather than reaching for a reset flag.
 
 - [ ] **Step 5: Verify the seed data manually**
 
@@ -2865,7 +2888,7 @@ Run: `npx prisma db seed`
 Expected: same "Seed complete" output as Task 13
 
 Run: `npm run test`
-Expected: every test file from Tasks 1–13 passes (the global setup's `db push --force-reset` re-syncs before the run, so this also re-validates the schema independent of the manual migration apply)
+Expected: every test file from Tasks 1–13 passes (the global setup's plain `db push` re-syncs the schema before the run, so this also re-validates the schema independent of the manual migration apply)
 
 - [ ] **Step 6: Commit**
 
