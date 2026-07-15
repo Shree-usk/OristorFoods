@@ -63,30 +63,71 @@ wires `useForm` + `zodResolver` directly against the shadcn `Input`/`Label`
 primitives instead of a `Form` wrapper component. Feature teams should
 follow this pattern unless a `form.tsx` primitive is added later.
 
-### Known blocker: local DB connectivity not verified end-to-end
+### RESOLVED (2026-07-15): local DB connectivity blocker
 
-`npx prisma dev` starts a local Prisma Postgres server successfully and
-the port is confirmed listening (`netstat`), but every connection attempt
-from this machine — via `prisma migrate dev`, and via a raw Postgres
-wire-protocol probe from Node — gets **"server has closed the connection"
-(P1017)** / no protocol response, both inside and outside the tool
-sandbox. No Docker or local `psql` was available as an alternative on this
-machine. Likely cause: Windows Firewall or endpoint security silently
-dropping non-HTTP loopback traffic from `node.exe`.
+The original hypothesis in this doc (Windows Firewall/AV blocking
+`node.exe` loopback traffic) was **wrong** — disproven by direct evidence:
+a raw Postgres wire-protocol handshake from Node, and a query via the
+app's actual `pg` driver (the one `@prisma/adapter-pg` uses at runtime),
+both connect and complete successfully against `localhost:51214`. TCP and
+Node's networking were never the problem.
 
-**Decision (with user sign-off):** proceeded without a live DB connection
-for this story. `npx prisma generate` (schema-only, no DB required) was
-used to verify the client compiles. `npx prisma migrate dev --name init`
-has **not** been run successfully against a real database — that
-acceptance criterion is **not met** and is the first thing to unblock
-before any story that needs real data (Product Catalogue, etc.) can start.
+**Actual root cause:** `npx prisma dev` runs a local Postgres-compatible
+server backed by **PGlite** (an embedded/WASM Postgres), not real
+PostgreSQL. On the very first `prisma migrate dev` call, the schema-engine
+runs `SELECT ... FROM "_prisma_migrations"` over Postgres's *extended
+query protocol* as part of its `devDiagnostic` check. Because that table
+doesn't exist yet, PGlite mishandles the resulting error and desyncs the
+wire protocol — the schema-engine's Rust Postgres connector (`quaint`)
+then reads garbage and raises `UnexpectedMessage`, the connection drops,
+and Prisma surfaces this as `P1017` ("server has closed the connection").
+Confirmed via `DEBUG=* npx prisma migrate dev`, a raw TCP/SSL-negotiation
+probe, and cross-referenced with a known upstream report:
+[prisma/prisma#29366](https://github.com/prisma/prisma/issues/29366)
+(open as of this writing; PGlite also only supports one concurrent
+connection, which underlies related reports in that thread).
 
-**Next steps to unblock (pick one):**
-1. Point `DATABASE_URL` at a free hosted Postgres (Neon, Supabase) and
-   re-run `npx prisma migrate dev --name init`.
-2. Install Docker Desktop and run Postgres in a container.
-3. Diagnose/allow the Windows Firewall or AV rule blocking `node.exe`
-   loopback traffic on non-HTTP ports, then retry `prisma dev`.
+**Fix for the first-run case (verified, reproduced twice from a clean
+`prisma dev` data directory):** pre-create an empty `_prisma_migrations`
+table via the *simple* query protocol (`db execute`, which never hits the
+buggy code path) before running `migrate dev` for the first time:
+
+```bash
+npx prisma dev                                                   # start the local server
+npx prisma db execute --file prisma/create_migrations_table.sql  # pre-seed the table
+npx prisma migrate dev --name init                               # now succeeds
+```
+
+`prisma/create_migrations_table.sql` is committed to the repo for this
+purpose.
+
+**Known remaining limitation — do not use `migrate dev` repeatedly:**
+even with the above fix, a *second* `prisma migrate dev` call (with or
+without schema changes, and even against a freshly restarted server)
+reliably fails with `P3006`/`42P07` ("relation already exists") while
+replaying the migration against PGlite's shadow database. This reproduces
+every time and is the same class of PGlite protocol-desync bug, not stale
+state on our side — restarting `prisma dev` does not help. This matches
+workarounds reported by other users in the same upstream issue.
+
+**Recommended local workflow until PGlite/Prisma fix this upstream:**
+- **Iterating on the schema day-to-day:** use `npx prisma db push`
+  (confirmed reliable and idempotent — no shadow database involved, so
+  the bug doesn't trigger).
+- **Producing a real, committed migration file** (needed once a schema
+  change is ready to ship): run `npx prisma migrate dev --name <name>`
+  against a **freshly started** `prisma dev` instance (kill it, clear
+  `%LOCALAPPDATA%\prisma-dev-nodejs\Data`, restart) so it's the *first*
+  `migrate dev` call of that server session — same pre-seed step as
+  above applies only if `_prisma_migrations` doesn't already exist.
+- **CI / production** should point at real hosted Postgres, where none of
+  this applies — `migrate deploy` there is unaffected (no shadow DB, no
+  PGlite).
+
+**Also confirmed as a non-issue:** the 300MB+ `durable-streams.sqlite`
+file PGlite keeps under `%LOCALAPPDATA%\prisma-dev-nodejs\Data\` is safe
+to delete when you want a clean slate — it's local dev-only WAL/stream
+state, not anything checked into the repo or shared with teammates.
 
 ---
 

@@ -16,7 +16,7 @@ Stories are grouped into epics that match the build order in
 ## Epic 01 — Foundation (`01-foundation/`)
 | ID | Story | Status |
 |---|---|---|
-| STORY-001 | Project Foundation Setup | Blocked (DB connectivity only — see story) |
+| STORY-001 | Project Foundation Setup | Done |
 | STORY-002 | Design System & Theming | Done |
 
 ## Epic 02 — Core UI (`02-core-ui/`)

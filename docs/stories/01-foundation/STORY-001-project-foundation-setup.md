@@ -1,6 +1,6 @@
 # STORY-001: Project Foundation Setup
 
-**Status:** Blocked (everything except live DB connectivity is done — see Acceptance Criteria)
+**Status:** Done — DB connectivity blocker resolved 2026-07-15, see `docs/architecture-decisions.md`
 **Epic:** 01 — Foundation
 **Priority:** High
 **Persona(s):** Development Team / Platform (infrastructure story — no direct end-user persona)
@@ -39,15 +39,15 @@ This story covers the base scaffolding for the entire ODEP codebase: framework s
 - [x] `npm run build` completes with zero TypeScript errors and zero ESLint errors — the Section 9 "done" criterion for this story
 - [x] `tsconfig.json` has `strict: true` per the blueprint's mandatory strict TypeScript standard
 
-**Blocked (not done — see `docs/architecture-decisions.md`):**
-- [ ] `prisma/schema.prisma` connects to a real PostgreSQL instance (local or hosted) and `npx prisma migrate dev` runs successfully against it. The local `npx prisma dev` server starts and listens, but every connection attempt fails with P1017 ("server has closed the connection") in this environment — suspected Windows Firewall/AV interference. `npx prisma generate` (schema-only) was verified instead. Needs a hosted dev DB, Docker, or a firewall fix to complete.
+**Done:**
+- [x] `prisma/schema.prisma` connects to a real PostgreSQL-compatible instance (local `prisma dev`, PGlite-backed) and `npx prisma migrate dev --name init` runs successfully against it. Root cause of the earlier P1017 failure and fix are documented in `docs/architecture-decisions.md` — it was a PGlite wire-protocol bug on the first `_prisma_migrations` read, not a firewall issue. Note: `migrate dev` is unreliable on repeated calls against this local server (upstream PGlite bug); day-to-day iteration should use `npx prisma db push` per the recommended workflow in that doc.
 
 ## Tasks
 
-- [ ] **Database:**
-  - [x] Attempted: local `npx prisma dev` Postgres server provisioned; `DATABASE_URL`/`SHADOW_DATABASE_URL` set in `.env`
-  - [ ] Verify `prisma/schema.prisma` connects and `npx prisma migrate dev --name init` runs cleanly — **blocked, P1017, see Acceptance Criteria and `docs/architecture-decisions.md`**
-  - [x] Documented the local DB setup + blocker + unblock options in `docs/architecture-decisions.md`
+- [x] **Database:**
+  - [x] Local `npx prisma dev` Postgres server provisioned; `DATABASE_URL`/`SHADOW_DATABASE_URL` set in `.env`
+  - [x] Verified `prisma/schema.prisma` connects and `npx prisma migrate dev --name init` runs cleanly — root cause found and fixed, see `docs/architecture-decisions.md`
+  - [x] Documented the root cause, fix, and recommended day-to-day workflow (`db push` for iteration) in `docs/architecture-decisions.md`
 
 - [x] **Backend/Service Layer scaffolding:**
   - [x] Created `src/repositories/README.md` enforcing "Prisma is only ever imported here"

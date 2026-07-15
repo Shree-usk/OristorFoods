@@ -58,10 +58,12 @@ npx prisma migrate dev   # run a new migration
 Vitest and Playwright are installed and configured as of STORY-001
 (`vitest.config.ts`, `playwright.config.ts`, `tests/unit/`, `tests/e2e/`).
 
-**Known blocker:** local DB connectivity has not been verified end-to-end
-in this environment (`prisma migrate dev` fails to connect to the local
-`prisma dev` server). See `docs/architecture-decisions.md` for details and
-unblock options before starting any story that needs real data.
+**Local DB workflow:** `npx prisma dev` runs a PGlite-backed local Postgres
+server, which has an upstream bug that breaks `prisma migrate dev` on
+repeated calls (see `docs/architecture-decisions.md` for root cause and
+fix). Use `npx prisma db push` for day-to-day schema iteration; only use
+`migrate dev` (against a freshly restarted server) when deliberately
+producing a migration file to commit.
 
 ## Conventions
 
