@@ -29,3 +29,9 @@ export function listActiveCollections(date: Date = new Date()) {
     orderBy: { name: "asc" },
   });
 }
+
+export function getCollectionProducts(collectionId: string) {
+  return prisma.product.findMany({
+    where: { collections: { some: { id: collectionId } } },
+  });
+}

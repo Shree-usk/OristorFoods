@@ -95,6 +95,7 @@ model Category {
   updatedAt DateTime @updatedAt
 
   @@index([parentId])
+  products Product[]
 }
 
 model Brand {
@@ -106,6 +107,7 @@ model Brand {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  products  Product[]
 }
 
 model Collection {
@@ -125,4 +127,53 @@ model Collection {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  products  Product[]
+}
+
+enum ProductStatus {
+  Draft
+  Review
+  Published
+  Archived
+  Discontinued
+  OutOfSeason
+}
+
+enum ProductType {
+  Standard
+  Bundle
+  GiftPack
+  Seasonal
+  LimitedEdition
+}
+
+model Product {
+  id               String        @id @default(cuid())
+  sku              String        @unique
+  barcode          String?       @unique
+  slug             String        @unique
+  name             String
+  shortDescription String?
+  story            String?
+  status           ProductStatus @default(Draft)
+  productType      ProductType   @default(Standard)
+  publishedAt      DateTime?
+  rewardPoints     Int           @default(0)
+
+  brandId String?
+  brand   Brand?  @relation(fields: [brandId], references: [id], onDelete: SetNull)
+
+  categories  Category[]
+  collections Collection[]
+
+  metaTitle       String?
+  metaDescription String?
+  canonicalUrl    String?
+  ogImage         String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status])
+  @@index([brandId])
 }
