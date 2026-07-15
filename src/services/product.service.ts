@@ -1,10 +1,9 @@
 import * as productRepository from "@/repositories/product.repository";
 
-export function getProductBySlug(slug: string) {
-  return productRepository.findProductBySlug(slug).then((product) => {
-    if (!product || product.status !== "Published") return null;
-    return product;
-  });
+export async function getProductBySlug(slug: string) {
+  const product = await productRepository.findProductBySlug(slug);
+  if (!product || product.status !== "Published") return null;
+  return product;
 }
 
 export function getProductBySlugForAdmin(slug: string) {

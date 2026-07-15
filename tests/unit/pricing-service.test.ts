@@ -137,6 +137,22 @@ describe("resolvePrice", () => {
     expect(resolved?.price.toFixed(2)).toBe("450.00");
   });
 
+  it("rounds a non-clean percentage volume discount half-up to 2 decimal places", async () => {
+    const product = await createProduct({ sku: "SKU-9", slug: "sku-9", name: "I" });
+    await createStandardPrice({ product: { connect: { id: product.id } }, price: "99.99" });
+    await createVolumeDiscountTier({
+      product: { connect: { id: product.id } },
+      minQuantity: 10,
+      discountPercent: "33.00",
+    });
+
+    const resolved = await resolvePrice({ productId: product.id, quantity: 10 });
+
+    // 99.99 * (1 - 0.33) = 99.99 * 0.67 = 66.9933, which rounds half-up to 66.99
+    expect(resolved?.tier).toBe("volumeDiscount");
+    expect(resolved?.price.toFixed(2)).toBe("66.99");
+  });
+
   it("does not apply a volume discount below its minimum quantity", async () => {
     const product = await createProduct({ sku: "SKU-8", slug: "sku-8", name: "H" });
     await createStandardPrice({ product: { connect: { id: product.id } }, price: "500.00" });

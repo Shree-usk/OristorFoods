@@ -81,7 +81,7 @@ function computeVolumeDiscountPrice(
   if (tier.discountPrice) return tier.discountPrice;
   if (tier.discountPercent && standard) {
     const multiplier = new Prisma.Decimal(100).minus(tier.discountPercent).dividedBy(100);
-    return standard.price.times(multiplier);
+    return standard.price.times(multiplier).toDecimalPlaces(2, Prisma.Decimal.ROUND_HALF_UP);
   }
   throw new Error(
     "VolumeDiscountTier has neither a discountPrice nor a standard price to apply discountPercent to",
