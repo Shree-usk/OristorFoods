@@ -183,6 +183,12 @@ model Product {
   bundle            ProductBundle?
   bundleComponentOf BundleItem[]
 
+  standardPrices      StandardPrice[]
+  salePrices          SalePrice[]
+  campaignPrices      CampaignPrice[]
+  customerGroupPrices CustomerGroupPrice[]
+  volumeDiscountTiers VolumeDiscountTier[]
+
   @@index([status])
   @@index([brandId])
 }
@@ -282,4 +288,75 @@ model BundleItem {
 
   @@index([bundleId])
   @@index([componentProductId])
+}
+
+enum CustomerGroup {
+  Retail
+  Wholesale
+  Distributor
+  Export
+  PrivateLabel
+}
+
+model StandardPrice {
+  id        String   @id @default(cuid())
+  productId String
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  price     Decimal  @db.Decimal(10, 2)
+  currency  String   @default("LKR")
+  createdAt DateTime @default(now())
+
+  @@index([productId])
+}
+
+model SalePrice {
+  id        String   @id @default(cuid())
+  productId String
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  price     Decimal  @db.Decimal(10, 2)
+  currency  String   @default("LKR")
+  startDate DateTime
+  endDate   DateTime
+  createdAt DateTime @default(now())
+
+  @@index([productId, startDate, endDate])
+}
+
+model CampaignPrice {
+  id         String   @id @default(cuid())
+  productId  String
+  product    Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  campaignId String
+  price      Decimal  @db.Decimal(10, 2)
+  currency   String   @default("LKR")
+  startDate  DateTime
+  endDate    DateTime
+  createdAt  DateTime @default(now())
+
+  @@index([productId, startDate, endDate])
+}
+
+model CustomerGroupPrice {
+  id            String        @id @default(cuid())
+  productId     String
+  product       Product       @relation(fields: [productId], references: [id], onDelete: Cascade)
+  customerGroup CustomerGroup
+  price         Decimal       @db.Decimal(10, 2)
+  currency      String        @default("LKR")
+  createdAt     DateTime      @default(now())
+
+  @@unique([productId, customerGroup])
+}
+
+model VolumeDiscountTier {
+  id              String   @id @default(cuid())
+  productId       String
+  product         Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  minQuantity     Int
+  discountPrice   Decimal? @db.Decimal(10, 2)
+  discountPercent Decimal? @db.Decimal(5, 2)
+  currency        String   @default("LKR")
+  createdAt       DateTime @default(now())
+
+  @@index([productId, minQuantity])
 }
