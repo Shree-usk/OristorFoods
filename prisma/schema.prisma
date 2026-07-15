@@ -176,6 +176,9 @@ model Product {
 
   images ProductImage[]
   videos ProductVideo[]
+  nutrition   ProductNutrition?
+  ingredients ProductIngredient[]
+  allergens   Allergen[]
 
   @@index([status])
   @@index([brandId])
@@ -215,4 +218,37 @@ model ProductVideo {
   createdAt DateTime @default(now())
 
   @@index([productId])
+}
+
+model ProductNutrition {
+  id            String  @id @default(cuid())
+  productId     String  @unique
+  product       Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  servingSize   String
+  calories      Decimal @db.Decimal(10, 2)
+  protein       Decimal @db.Decimal(10, 2)
+  fat           Decimal @db.Decimal(10, 2)
+  saturatedFat  Decimal @db.Decimal(10, 2)
+  carbohydrates Decimal @db.Decimal(10, 2)
+  sugar         Decimal @db.Decimal(10, 2)
+  fibre         Decimal @db.Decimal(10, 2)
+  sodium        Decimal @db.Decimal(10, 2)
+}
+
+model ProductIngredient {
+  id         String  @id @default(cuid())
+  productId  String
+  product    Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  name       String
+  isAllergen Boolean @default(false)
+  sortOrder  Int     @default(0)
+
+  @@index([productId])
+}
+
+model Allergen {
+  id       String    @id @default(cuid())
+  name     String    @unique
+  icon     String?
+  products Product[]
 }

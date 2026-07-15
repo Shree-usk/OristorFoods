@@ -48,3 +48,43 @@ export function listProductVideos(productId: string) {
     orderBy: { sortOrder: "asc" },
   });
 }
+
+export function setProductNutrition(data: Prisma.ProductNutritionCreateInput) {
+  return prisma.productNutrition.create({ data });
+}
+
+export function getProductNutrition(productId: string) {
+  return prisma.productNutrition.findUnique({ where: { productId } });
+}
+
+export function addProductIngredient(data: Prisma.ProductIngredientCreateInput) {
+  return prisma.productIngredient.create({ data });
+}
+
+export function listProductIngredients(productId: string) {
+  return prisma.productIngredient.findMany({
+    where: { productId },
+    orderBy: { sortOrder: "asc" },
+  });
+}
+
+export function createAllergen(data: Prisma.AllergenCreateInput) {
+  return prisma.allergen.create({ data });
+}
+
+export function findAllergenByName(name: string) {
+  return prisma.allergen.findUnique({ where: { name } });
+}
+
+export function attachAllergen(productId: string, allergenId: string) {
+  return prisma.product.update({
+    where: { id: productId },
+    data: { allergens: { connect: { id: allergenId } } },
+  });
+}
+
+export function listProductAllergens(productId: string) {
+  return prisma.allergen.findMany({
+    where: { products: { some: { id: productId } } },
+  });
+}
