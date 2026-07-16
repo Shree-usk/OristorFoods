@@ -715,3 +715,85 @@ acceptance criteria's own model list.
 - **`Decimal.toFixed(2)`, not `.toString()`, for test assertions.** Prisma's `Decimal` (decimal.js) strips trailing zeros in `.toString()` — `new Prisma.Decimal("18.00").toString()` returns `"18"`. Every Decimal assertion in this story's tests uses `.toFixed(2)` instead.
 - **PGlite single-connection limit and sustained-load instability.** The local `prisma dev` server (PGlite-backed) only reliably supports one connection at a time, and independently reproduced to wedge ("Server has closed the connection") after roughly 40-50 seconds of continuous test activity regardless of a fresh data directory — an upstream WASM runtime limitation, not fixable from this codebase. `vitest.config.ts` sets `fileParallelism: false` to avoid concurrent-connection contention within one run. For a full-suite check locally, prefer `npx vitest run <files>` in batches of 5-8 files over a bare `npm run test`, restarting `npx prisma dev` between batches if one wedges.
 - **Test data isolation.** `tests/unit/global-setup.ts` truncates all app tables (via `db execute` running a dynamic `TRUNCATE ... CASCADE` script that queries `pg_tables`, excluding `_prisma_migrations`) after `db push`, before every test run — added after discovering that seed data (`prisma/seed.ts`) and several tests' fixture data shared literal SKU/slug values, causing unique-constraint collisions when seeding and testing back-to-back.
+
+---
+
+## 2026-07-16 — STORY-010 Product Listing, Categories & Filters
+
+**Listing query-param contract** (shared by `GET /api/products`, the three
+storefront listing pages, and `nuqs`'s client-side URL state —
+`src/lib/product-listing-params.ts` / `src/validation/product-listing.schema.ts`):
+
+| Param | Type | Default | Notes |
+|---|---|---|---|
+| `page` | positive int | `1` | |
+| `pageSize` | positive int, max 60 | `24` | Not exposed in the client UI (the `useProductListingParams()` hook never manages it); the three Server Component pages and `GET /api/products` all still read/forward it from the raw query string via `productListingQuerySchema.pick({ pageSize: true })`, so direct callers/tests can override it. `useProductListing()`'s client-side refetches keep reusing whatever `pageSize` the initial server render used (`initialData.pageSize`), not a hardcoded constant — otherwise the first background refetch after hydration would silently discard a non-default `?pageSize=` override. |
+| `sort` | `price-asc \| price-desc \| newest \| best-selling \| rating` | `newest` | `best-selling`/`rating` currently fall back to `newest` ordering — no Order/Review data exists yet (Commerce Platform epic, STORY-015). |
+| `priceMin`, `priceMax` | number | none | |
+| `allergens` | comma-separated string list | none | Selecting an allergen **excludes** products containing it. |
+| `certifications` | comma-separated string list (certification ids) | none | Multi-select within this facet is a union (OR). |
+| `brands` | comma-separated string list (brand slugs) | none | Multi-select within this facet is a union (OR). |
+| `inStock` | `"true" \| "false"` | none | |
+| `category` | route param (page routes) / query param (API route only) | — | Never reflected in the page's own URL query string — the client `ProductGrid` reads its scope from a prop, not the URL. |
+| `collection` | route param (page routes) / query param (API route only) | — | Same as `category`. |
+
+All malformed/invalid values fall back to their default (via Zod's
+`.catch()`, not `.default()` — `.default()` only fills in a *missing* key,
+`.catch()` also recovers from a present-but-invalid one) rather than
+rejecting the request. STORY-012 (search) is expected to reuse this exact
+result shape (`ProductListingResult`) and the
+`ProductCard`/`ProductGrid`/`Pagination` components rather than rebuilding
+result rendering.
+
+**`resolvePricesForProducts()` bulk pricing.** STORY-009's `resolvePrice()`
+issues 5 queries per product; a listing page showing N products can't do
+that N times without risking PGlite's single-connection limit. The shared
+priority/tie-break logic was extracted into `resolveFromTierData()` so both
+the single-product and bulk (`resolvePricesForProducts`, exactly 5 queries
+total regardless of N) paths use identical resolution logic.
+
+**Listing filter/sort/pagination happens in memory**, after fetching the
+full non-price-filtered candidate set in one query. Deliberate choice given
+this catalogue's realistic scale (not millions of rows) — avoids building
+DB-level filtering/sorting for a price value that isn't a stored column.
+Revisit if the catalogue ever grows enough for this to matter.
+
+**`nuqs` 2.9.0 — import the main package vs. `nuqs/server` carefully.**
+The main `"nuqs"` package bundles the client-only `useQueryState(s)` hooks
+in the same module as the plain parser primitives (`parseAsInteger` etc.).
+Importing that module into a file that ends up in a Server Component's
+module graph breaks the parser primitives at runtime
+(`parseAsInteger.withDefault is not a function`) — reproduced identically
+under both Turbopack and webpack, so this is not a bundler bug. `nuqs/server`
+re-exports the same parser primitives without the hooks and is the correct
+import for any shared parser-definition file (`product-listing-params.ts`)
+that a Server Component might pull in transitively. The client-only
+`useQueryStates` hook itself still comes from the main `"nuqs"` package, in
+a `"use client"` file.
+
+**Turbopack workspace root inside a worktree.** A worktree created under
+`.claude/worktrees/` inside this repo sits next to the main repo's own
+`package-lock.json`. Turbopack's root inference picks that sibling lockfile
+as the workspace root instead of the worktree itself unless `turbopack.root`
+is pinned explicitly in `next.config.ts`, silently bundling from the wrong
+`node_modules` and producing a duplicate React instance ("Invalid hook
+call" / "Cannot read properties of null (reading 'useId')" in every client
+component that calls a hook).
+
+**PGlite wedges under sustained load — also affects e2e, not just Vitest.**
+The instability documented in the STORY-009 entry above (restart
+`npx prisma dev` if `db push`/tests start erroring with connection
+failures) also hits Playwright e2e runs that exercise real DB-backed pages,
+and hits `npx prisma db seed` itself. Additionally: `tests/unit/global-setup.ts`
+truncates all app data on **every** `npm run test`/`npx vitest run`
+invocation — running a unit test between seeding and an e2e run silently
+wipes the seed data. Re-seed immediately before running e2e tests, and
+avoid running unit tests in between.
+
+**Recommendation (logged, not actioned — out of STORY-010 scope):** the
+seed data's product images (`prisma/seed.ts`) reference
+`/images/products/*.jpg` paths that return empty/`null` responses in this
+environment, producing benign but noisy `next/image` console warnings
+during e2e runs. Doesn't affect functional correctness (Playwright
+assertions target text/roles/URLs, not images) — worth a real image asset
+pass in a future story touching product media.

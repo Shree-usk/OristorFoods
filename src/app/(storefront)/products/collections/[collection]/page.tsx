@@ -8,6 +8,7 @@ import { listBrands } from "@/repositories/brand.repository";
 import { listAllergens, listCertifications } from "@/repositories/product.repository";
 import { getPublishedCollectionBySlug } from "@/services/collection.service";
 import { listProducts } from "@/services/product.service";
+import { productListingQuerySchema } from "@/validation/product-listing.schema";
 
 interface CollectionPageProps {
   params: Promise<{ collection: string }>;
@@ -32,12 +33,14 @@ export default async function CollectionPage({ params, searchParams }: Collectio
   if (!collection) notFound();
 
   const listingParams = await loadProductListingParams(searchParams);
+  const { pageSize } = productListingQuerySchema.pick({ pageSize: true }).parse(await searchParams);
 
   const [result, allergens, certifications, brands] = await Promise.all([
     listProducts({
       collectionSlug,
       sort: listingParams.sort,
       page: listingParams.page,
+      pageSize,
       filters: {
         priceMin: listingParams.priceMin ?? undefined,
         priceMax: listingParams.priceMax ?? undefined,

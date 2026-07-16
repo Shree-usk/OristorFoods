@@ -2961,7 +2961,7 @@ test("filter drawer has no automatically detectable accessibility violations (mo
   await page.setViewportSize({ width: 375, height: 812 });
   await page.goto("/products");
 
-  await page.getByRole("button", { name: "Filters" }).click();
+  await page.getByRole("button", { name: "Filters", exact: true }).click();
 
   const results = await new AxeBuilder({ page }).include('[role="dialog"]').analyze();
 

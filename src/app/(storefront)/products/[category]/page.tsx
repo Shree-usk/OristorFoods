@@ -8,6 +8,7 @@ import { listBrands } from "@/repositories/brand.repository";
 import { findCategoryBySlug } from "@/repositories/category.repository";
 import { listAllergens, listCertifications } from "@/repositories/product.repository";
 import { listProducts } from "@/services/product.service";
+import { productListingQuerySchema } from "@/validation/product-listing.schema";
 
 interface CategoryPageProps {
   params: Promise<{ category: string }>;
@@ -32,12 +33,14 @@ export default async function CategoryPage({ params, searchParams }: CategoryPag
   if (!category) notFound();
 
   const listingParams = await loadProductListingParams(searchParams);
+  const { pageSize } = productListingQuerySchema.pick({ pageSize: true }).parse(await searchParams);
 
   const [result, allergens, certifications, brands] = await Promise.all([
     listProducts({
       categorySlug,
       sort: listingParams.sort,
       page: listingParams.page,
+      pageSize,
       filters: {
         priceMin: listingParams.priceMin ?? undefined,
         priceMax: listingParams.priceMax ?? undefined,

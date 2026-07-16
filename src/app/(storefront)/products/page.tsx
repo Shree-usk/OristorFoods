@@ -6,6 +6,7 @@ import { loadProductListingParams } from "@/lib/product-listing-loader";
 import { listBrands } from "@/repositories/brand.repository";
 import { listAllergens, listCertifications } from "@/repositories/product.repository";
 import { listProducts } from "@/services/product.service";
+import { productListingQuerySchema } from "@/validation/product-listing.schema";
 
 export const metadata: Metadata = {
   title: "All Products",
@@ -18,11 +19,18 @@ interface ProductsPageProps {
 
 export default async function ProductsPage({ searchParams }: ProductsPageProps) {
   const params = await loadProductListingParams(searchParams);
+  // pageSize isn't part of nuqs's shared keyMap (the client UI never lets a
+  // visitor change it — see Global Constraints), but the contract still
+  // supports an explicit override for direct callers and tests, so it's
+  // read here straight off the raw query string via the same Zod schema
+  // the API route uses.
+  const { pageSize } = productListingQuerySchema.pick({ pageSize: true }).parse(await searchParams);
 
   const [result, allergens, certifications, brands] = await Promise.all([
     listProducts({
       sort: params.sort,
       page: params.page,
+      pageSize,
       filters: {
         priceMin: params.priceMin ?? undefined,
         priceMax: params.priceMax ?? undefined,
