@@ -1938,7 +1938,9 @@ export function SortSelect({ value, onValueChange }: SortSelectProps) {
   return (
     <Select value={value} onValueChange={(next) => onValueChange(next as ProductSort)}>
       <SelectTrigger aria-label="Sort products">
-        <SelectValue placeholder="Sort by" />
+        <SelectValue placeholder="Sort by">
+          {(selected: ProductSort | null) => (selected ? sortLabels[selected] : "Sort by")}
+        </SelectValue>
       </SelectTrigger>
       <SelectContent>
         {allSorts.map((sort) => (
