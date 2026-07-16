@@ -52,21 +52,81 @@ export async function resolvePrice(params: ResolvePriceParams): Promise<Resolved
     pricingRepository.getLatestStandardPrice(params.productId),
   ]);
 
-  if (campaigns.length > 0) return toResolvedPrice(campaigns[0], "campaign");
-  if (sales.length > 0) return toResolvedPrice(sales[0], "sale");
-  if (customerGroupPrice) return toResolvedPrice(customerGroupPrice, "customerGroup");
+  return resolveFromTierData({ campaigns, sales, customerGroupPrice, volumeTiers, standard });
+}
 
-  if (volumeTiers.length > 0) {
-    const bestTier = volumeTiers[0];
+/**
+ * Bulk variant of `resolvePrice()` for product listings (STORY-010):
+ * fetches all five tiers for every product in exactly 5 queries total
+ * (never per-product — PGlite's single-connection limit makes N-per-product
+ * fetches a real contention risk at listing scale), then applies the
+ * identical priority/tie-break logic per product via `resolveFromTierData`.
+ * Products with no price configured at all are simply absent from the
+ * returned map.
+ */
+export async function resolvePricesForProducts(
+  productIds: string[],
+  params: { customerGroup?: CustomerGroup; quantity?: number; date?: Date } = {},
+): Promise<Map<string, ResolvedPrice>> {
+  const result = new Map<string, ResolvedPrice>();
+  if (productIds.length === 0) return result;
+
+  const date = params.date ?? new Date();
+  const quantity = params.quantity ?? 1;
+
+  const [campaigns, sales, customerGroupPrices, volumeTiers, standards] = await Promise.all([
+    pricingRepository.getActiveCampaignPricesForProducts(productIds, date),
+    pricingRepository.getActiveSalePricesForProducts(productIds, date),
+    params.customerGroup
+      ? pricingRepository.getCustomerGroupPricesForProducts(productIds, params.customerGroup)
+      : Promise.resolve([]),
+    pricingRepository.getApplicableVolumeDiscountTiersForProducts(productIds, quantity),
+    pricingRepository.getLatestStandardPricesForProducts(productIds),
+  ]);
+
+  for (const productId of productIds) {
+    const resolved = resolveFromTierData({
+      campaigns: campaigns.filter((row) => row.productId === productId),
+      sales: sales.filter((row) => row.productId === productId),
+      customerGroupPrice: customerGroupPrices.find((row) => row.productId === productId) ?? null,
+      volumeTiers: volumeTiers.filter((row) => row.productId === productId),
+      standard: standards.find((row) => row.productId === productId) ?? null,
+    });
+    if (resolved) result.set(productId, resolved);
+  }
+
+  return result;
+}
+
+interface TierData {
+  campaigns: PriceRow[];
+  sales: PriceRow[];
+  customerGroupPrice: PriceRow | null;
+  volumeTiers: Array<{
+    id: string;
+    currency: string;
+    discountPrice: Prisma.Decimal | null;
+    discountPercent: Prisma.Decimal | null;
+  }>;
+  standard: PriceRow | null;
+}
+
+function resolveFromTierData(data: TierData): ResolvedPrice | null {
+  if (data.campaigns.length > 0) return toResolvedPrice(data.campaigns[0], "campaign");
+  if (data.sales.length > 0) return toResolvedPrice(data.sales[0], "sale");
+  if (data.customerGroupPrice) return toResolvedPrice(data.customerGroupPrice, "customerGroup");
+
+  if (data.volumeTiers.length > 0) {
+    const bestTier = data.volumeTiers[0];
     return {
-      price: computeVolumeDiscountPrice(bestTier, standard),
+      price: computeVolumeDiscountPrice(bestTier, data.standard),
       currency: bestTier.currency,
       tier: "volumeDiscount",
       sourceId: bestTier.id,
     };
   }
 
-  if (standard) return toResolvedPrice(standard, "standard");
+  if (data.standard) return toResolvedPrice(data.standard, "standard");
   return null;
 }
 

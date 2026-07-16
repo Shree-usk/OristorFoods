@@ -55,3 +55,38 @@ export function getApplicableVolumeDiscountTiers(productId: string, quantity: nu
     orderBy: [{ minQuantity: "desc" }, { createdAt: "desc" }],
   });
 }
+
+export function getLatestStandardPricesForProducts(productIds: string[]) {
+  return prisma.standardPrice.findMany({
+    where: { productId: { in: productIds } },
+    orderBy: { createdAt: "desc" },
+  });
+}
+
+export function getActiveSalePricesForProducts(productIds: string[], date: Date) {
+  return prisma.salePrice.findMany({
+    where: { productId: { in: productIds }, startDate: { lte: date }, endDate: { gte: date } },
+    orderBy: { createdAt: "desc" },
+  });
+}
+
+export function getActiveCampaignPricesForProducts(productIds: string[], date: Date) {
+  return prisma.campaignPrice.findMany({
+    where: { productId: { in: productIds }, startDate: { lte: date }, endDate: { gte: date } },
+    orderBy: { createdAt: "desc" },
+  });
+}
+
+export function getCustomerGroupPricesForProducts(productIds: string[], customerGroup: CustomerGroup) {
+  return prisma.customerGroupPrice.findMany({
+    where: { productId: { in: productIds }, customerGroup },
+    orderBy: { createdAt: "desc" },
+  });
+}
+
+export function getApplicableVolumeDiscountTiersForProducts(productIds: string[], quantity: number) {
+  return prisma.volumeDiscountTier.findMany({
+    where: { productId: { in: productIds }, minQuantity: { lte: quantity } },
+    orderBy: [{ minQuantity: "desc" }, { createdAt: "desc" }],
+  });
+}

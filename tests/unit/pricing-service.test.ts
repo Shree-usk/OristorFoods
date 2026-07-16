@@ -10,7 +10,7 @@ import {
   createStandardPrice,
   createVolumeDiscountTier,
 } from "@/repositories/pricing.repository";
-import { resolvePrice } from "@/services/pricing.service";
+import { resolvePrice, resolvePricesForProducts } from "@/services/pricing.service";
 
 afterEach(async () => {
   await prisma.product.deleteMany();
@@ -166,5 +166,60 @@ describe("resolvePrice", () => {
 
     expect(resolved?.tier).toBe("standard");
     expect(resolved?.price.toFixed(2)).toBe("500.00");
+  });
+});
+
+describe("resolvePricesForProducts", () => {
+  it("resolves independent prices for multiple products in one call", async () => {
+    const productA = await createProduct({ sku: "BULK-A", slug: "bulk-a", name: "A" });
+    const productB = await createProduct({ sku: "BULK-B", slug: "bulk-b", name: "B" });
+    await createStandardPrice({ product: { connect: { id: productA.id } }, price: "500.00" });
+    await createStandardPrice({ product: { connect: { id: productB.id } }, price: "300.00" });
+    await createSalePrice({
+      product: { connect: { id: productB.id } },
+      price: "250.00",
+      startDate: new Date("2026-07-01"),
+      endDate: new Date("2026-07-31"),
+    });
+
+    const resolved = await resolvePricesForProducts([productA.id, productB.id], {
+      date: new Date("2026-07-15"),
+    });
+
+    expect(resolved.get(productA.id)?.tier).toBe("standard");
+    expect(resolved.get(productA.id)?.price.toFixed(2)).toBe("500.00");
+    expect(resolved.get(productB.id)?.tier).toBe("sale");
+    expect(resolved.get(productB.id)?.price.toFixed(2)).toBe("250.00");
+  });
+
+  it("omits a product from the result map when it has no price configured", async () => {
+    const product = await createProduct({ sku: "BULK-C", slug: "bulk-c", name: "C" });
+
+    const resolved = await resolvePricesForProducts([product.id]);
+
+    expect(resolved.has(product.id)).toBe(false);
+  });
+
+  it("returns an empty map for an empty product list", async () => {
+    expect((await resolvePricesForProducts([])).size).toBe(0);
+  });
+
+  it("applies a customer-group price only to products where it was configured", async () => {
+    const wholesaleProduct = await createProduct({ sku: "BULK-D", slug: "bulk-d", name: "D" });
+    const retailOnlyProduct = await createProduct({ sku: "BULK-E", slug: "bulk-e", name: "E" });
+    await createStandardPrice({ product: { connect: { id: wholesaleProduct.id } }, price: "500.00" });
+    await createStandardPrice({ product: { connect: { id: retailOnlyProduct.id } }, price: "300.00" });
+    await createCustomerGroupPrice({
+      product: { connect: { id: wholesaleProduct.id } },
+      customerGroup: "Wholesale",
+      price: "420.00",
+    });
+
+    const resolved = await resolvePricesForProducts([wholesaleProduct.id, retailOnlyProduct.id], {
+      customerGroup: "Wholesale",
+    });
+
+    expect(resolved.get(wholesaleProduct.id)?.tier).toBe("customerGroup");
+    expect(resolved.get(retailOnlyProduct.id)?.tier).toBe("standard");
   });
 });
