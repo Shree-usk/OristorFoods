@@ -49,7 +49,12 @@ Each of the three routes:
 5. Any filter/sort/page change updates the URL via `nuqs` (shallow) and
    triggers a client refetch against `GET /api/products`, which accepts
    `category`/`collection`/filter/sort/page params and itself calls the same
-   `listProducts()`.
+   `listProducts()`. On `[category]`/`collections/[collection]` pages, the
+   route param is not duplicated into the URL query string — the client
+   `ProductGrid` reads its scope from a prop passed down by the Server
+   Component and includes it as a `category`/`collection` param only in the
+   *internal* fetch call to `/api/products`, never reflected back into the
+   page's own URL.
 
 ## Schema Changes
 
@@ -96,10 +101,11 @@ listProducts(params: {
 ## Validation
 
 `src/validation/product-listing.schema.ts` — one Zod schema validating `page`
-(positive int, default 1), `pageSize` (bounded, e.g. max 60), `sort` (enum,
-default `newest`), and every filter field. Shared verbatim by the API route
-handler, the Server Components' `searchParams` parsing, and the client
-`nuqs` parsers, so there is exactly one definition of valid query state.
+(positive int, default 1), `pageSize` (positive int, default 24, max 60),
+`sort` (enum, default `newest`), and every filter field. Shared verbatim by
+the API route handler, the Server Components' `searchParams` parsing, and the
+client `nuqs` parsers, so there is exactly one definition of valid query
+state.
 
 ## Components
 
