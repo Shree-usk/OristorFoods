@@ -120,3 +120,44 @@ export function getBundleWithItems(productId: string) {
     include: { items: { include: { componentProduct: true } } },
   });
 }
+
+export interface ProductListingFilters {
+  categoryIds?: string[];
+  collectionId?: string;
+  allergenNamesToExclude?: string[];
+  certificationIds?: string[];
+  brandSlugs?: string[];
+  inStock?: boolean;
+}
+
+export function findPublishedProductsForListing(filters: ProductListingFilters) {
+  return prisma.product.findMany({
+    where: {
+      status: "Published",
+      ...(filters.categoryIds?.length
+        ? { categories: { some: { id: { in: filters.categoryIds } } } }
+        : {}),
+      ...(filters.collectionId ? { collections: { some: { id: filters.collectionId } } } : {}),
+      ...(filters.allergenNamesToExclude?.length
+        ? { allergens: { none: { name: { in: filters.allergenNamesToExclude } } } }
+        : {}),
+      ...(filters.certificationIds?.length
+        ? { certifications: { some: { id: { in: filters.certificationIds } } } }
+        : {}),
+      ...(filters.brandSlugs?.length ? { brand: { slug: { in: filters.brandSlugs } } } : {}),
+      ...(filters.inStock !== undefined ? { inStock: filters.inStock } : {}),
+    },
+    include: {
+      brand: true,
+      images: { where: { isPrimary: true }, take: 1 },
+    },
+  });
+}
+
+export function listAllergens() {
+  return prisma.allergen.findMany({ orderBy: { name: "asc" } });
+}
+
+export function listCertifications() {
+  return prisma.certification.findMany({ orderBy: { name: "asc" } });
+}
