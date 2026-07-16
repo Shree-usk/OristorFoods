@@ -23,7 +23,8 @@
 - **Certification/brand filter semantics:** multi-select within one facet is a union (OR) — checking "Organic" and "Halal" shows products with either. Different facets combine as an intersection (AND) — matches standard faceted-search convention.
 - **Catalogue-scale assumption:** `listProducts()` fetches the full non-price-filtered candidate set in one repository query, resolves all their prices in bulk (5 fixed queries, not per-product — see Task 5), then filters by price range, sorts, and paginates **in memory**. This is a deliberate YAGNI choice appropriate to a specialty food catalogue's realistic size (dozens to low hundreds of products), not millions — avoids building DB-level price filtering/sorting for a computed (non-column) value.
 - **`pageSize`:** the API/service contract supports an explicit `pageSize` override (bounded 1-60, default 24), but the client UI does not expose a page-size control — the client always requests the fixed default of 24. This keeps the URL clean (only reflecting things a user actually changed).
-- `nuqs` 2.9.0 verified APIs used in this plan (confirmed against the installed package's own type declarations, not assumed from training data): `useQueryStates`/`parseAsInteger`/`parseAsFloat`/`parseAsBoolean`/`parseAsArrayOf`/`parseAsStringLiteral` from `"nuqs"`; `createLoader` from `"nuqs/server"`; `NuqsAdapter` from `"nuqs/adapters/next/app"`; `NuqsTestingAdapter`/`withNuqsTestingAdapter` from `"nuqs/adapters/testing"` (not the top-level `"nuqs/testing"`, which is a different module for parser round-trip testing — corrected during Task 3 after the original verification conflated the two). `parseAsArrayOf` serializes as one comma-separated query value (e.g. `?brands=oristor,mccormick`), **not** repeated keys — the API route's Zod schema parses accordingly.
+- `nuqs` 2.9.0 verified APIs used in this plan (confirmed against the installed package's own type declarations, not assumed from training data): `useQueryStates` from `"nuqs"`; `parseAsInteger`/`parseAsFloat`/`parseAsBoolean`/`parseAsArrayOf`/`parseAsStringLiteral`/`createLoader` from `"nuqs/server"` (not the main `"nuqs"` package — discovered during Task 14 that importing the parser primitives from `"nuqs"` into `product-listing-params.ts`, a file transitively imported by a Server Component page, breaks them at runtime with `parseAsInteger.withDefault is not a function`, reproduced identically under both Turbopack and webpack, because `"nuqs"`'s main module also bundles the client-only `useQueryState`/`useQueryStates` hooks in the same file, and Next's RSC compiler mishandles the whole module once it detects hook usage. `nuqs/server` re-exports the same parser primitives without the hooks and is safe to import from files used by Server Components); `NuqsAdapter` from `"nuqs/adapters/next/app"`; `NuqsTestingAdapter`/`withNuqsTestingAdapter` from `"nuqs/adapters/testing"` (not the top-level `"nuqs/testing"`, which is a different module for parser round-trip testing — corrected during Task 3 after the original verification conflated the two). `parseAsArrayOf` serializes as one comma-separated query value (e.g. `?brands=oristor,mccormick`), **not** repeated keys — the API route's Zod schema parses accordingly.
+- **Turbopack workspace root:** this worktree lives inside the main repo, which has its own sibling `package-lock.json` — Turbopack's root inference picks that as the workspace root instead of the worktree itself unless `turbopack.root` is pinned explicitly in `next.config.ts` (`path.join(__dirname)`), silently bundling from the wrong `node_modules` and producing a duplicate React instance ("Invalid hook call" in every client component using a hook). Fixed in Task 14.
 - Shadcn `select`/`checkbox` primitives for this project's `base-nova` (Base UI, not Radix) style were generated and inspected directly (not assumed) — their real composition (`Select`/`SelectTrigger`/`SelectValue`/`SelectContent`/`SelectItem`, `Checkbox` with `checked`/`onCheckedChange`) is used as-is in this plan.
 - `next/image` was confirmed to render correctly under this project's existing Vitest/jsdom setup (spiked and verified directly) — no additional mocking needed in component tests.
 
@@ -380,7 +381,7 @@ import {
   parseAsInteger,
   parseAsString,
   parseAsStringLiteral,
-} from "nuqs";
+} from "nuqs/server";
 
 export const productSortValues = ["price-asc", "price-desc", "newest", "best-selling", "rating"] as const;
 
@@ -2597,6 +2598,7 @@ git commit -m "feat: add useProductListing hook and ProductGrid composition"
 - Create: `src/app/(storefront)/products/page.tsx`
 - Create: `src/app/(storefront)/products/[category]/page.tsx`
 - Create: `src/app/(storefront)/products/collections/[collection]/page.tsx`
+- Modify: `next.config.ts` (pin `turbopack.root` — see Global Constraints)
 
 **Interfaces:**
 - Consumes: `loadProductListingParams` (Task 3), `listProducts` (Task 7), `listAllergens`/`listCertifications` (Task 6), `listBrands` (STORY-009), `findCategoryBySlug` (STORY-009), `getPublishedCollectionBySlug` (STORY-009), `ProductGrid` (Task 13)

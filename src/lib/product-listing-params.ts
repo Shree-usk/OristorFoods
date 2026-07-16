@@ -5,7 +5,7 @@ import {
   parseAsInteger,
   parseAsString,
   parseAsStringLiteral,
-} from "nuqs";
+} from "nuqs/server";
 
 export const productSortValues = ["price-asc", "price-desc", "newest", "best-selling", "rating"] as const;
 
