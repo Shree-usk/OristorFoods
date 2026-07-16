@@ -2380,7 +2380,7 @@ describe("ProductGrid", () => {
     await waitFor(() => {
       expect(screen.getByText("No products match your filters.")).toBeInTheDocument();
     });
-    expect(screen.getByRole("button", { name: "Clear filters" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Clear all filters" })).toBeInTheDocument();
   });
 
   it("renders pagination reflecting the current result", () => {
@@ -2553,7 +2553,7 @@ export function ProductGrid({
               onClick={clearFilters}
               className="text-small text-chilli hover:underline"
             >
-              Clear filters
+              Clear all filters
             </button>
           </div>
         ) : (
@@ -2937,7 +2937,7 @@ test("shows the zero-result state with a working clear-filters control", async (
 
   await expect(page.getByText("No products match your filters.")).toBeVisible();
 
-  await page.getByRole("button", { name: "Clear filters" }).click();
+  await page.getByRole("button", { name: "Clear all filters" }).click();
 
   await expect(page).not.toHaveURL(/priceMin/);
 });
