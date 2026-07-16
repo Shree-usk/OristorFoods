@@ -23,7 +23,7 @@
 - **Certification/brand filter semantics:** multi-select within one facet is a union (OR) — checking "Organic" and "Halal" shows products with either. Different facets combine as an intersection (AND) — matches standard faceted-search convention.
 - **Catalogue-scale assumption:** `listProducts()` fetches the full non-price-filtered candidate set in one repository query, resolves all their prices in bulk (5 fixed queries, not per-product — see Task 5), then filters by price range, sorts, and paginates **in memory**. This is a deliberate YAGNI choice appropriate to a specialty food catalogue's realistic size (dozens to low hundreds of products), not millions — avoids building DB-level price filtering/sorting for a computed (non-column) value.
 - **`pageSize`:** the API/service contract supports an explicit `pageSize` override (bounded 1-60, default 24), but the client UI does not expose a page-size control — the client always requests the fixed default of 24. This keeps the URL clean (only reflecting things a user actually changed).
-- `nuqs` 2.9.0 verified APIs used in this plan (confirmed against the installed package's own type declarations, not assumed from training data): `useQueryStates`/`parseAsInteger`/`parseAsFloat`/`parseAsBoolean`/`parseAsArrayOf`/`parseAsStringLiteral` from `"nuqs"`; `createLoader` from `"nuqs/server"`; `NuqsAdapter` from `"nuqs/adapters/next/app"`; `NuqsTestingAdapter`/`withNuqsTestingAdapter` from `"nuqs/testing"`. `parseAsArrayOf` serializes as one comma-separated query value (e.g. `?brands=oristor,mccormick`), **not** repeated keys — the API route's Zod schema parses accordingly.
+- `nuqs` 2.9.0 verified APIs used in this plan (confirmed against the installed package's own type declarations, not assumed from training data): `useQueryStates`/`parseAsInteger`/`parseAsFloat`/`parseAsBoolean`/`parseAsArrayOf`/`parseAsStringLiteral` from `"nuqs"`; `createLoader` from `"nuqs/server"`; `NuqsAdapter` from `"nuqs/adapters/next/app"`; `NuqsTestingAdapter`/`withNuqsTestingAdapter` from `"nuqs/adapters/testing"` (not the top-level `"nuqs/testing"`, which is a different module for parser round-trip testing — corrected during Task 3 after the original verification conflated the two). `parseAsArrayOf` serializes as one comma-separated query value (e.g. `?brands=oristor,mccormick`), **not** repeated keys — the API route's Zod schema parses accordingly.
 - Shadcn `select`/`checkbox` primitives for this project's `base-nova` (Base UI, not Radix) style were generated and inspected directly (not assumed) — their real composition (`Select`/`SelectTrigger`/`SelectValue`/`SelectContent`/`SelectItem`, `Checkbox` with `checked`/`onCheckedChange`) is used as-is in this plan.
 - `next/image` was confirmed to render correctly under this project's existing Vitest/jsdom setup (spiked and verified directly) — no additional mocking needed in component tests.
 
@@ -317,7 +317,7 @@ Create `tests/unit/use-product-listing-params.test.tsx`:
 ```tsx
 import { act, renderHook } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import { withNuqsTestingAdapter } from "nuqs/testing";
+import { withNuqsTestingAdapter } from "nuqs/adapters/testing";
 
 import { useProductListingParams } from "@/hooks/use-product-listing-params";
 
@@ -2315,7 +2315,7 @@ Create `tests/unit/product-grid.test.tsx`:
 ```tsx
 import { render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { withNuqsTestingAdapter } from "nuqs/testing";
+import { withNuqsTestingAdapter } from "nuqs/adapters/testing";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ProductGrid } from "@/components/storefront/product/product-grid";
