@@ -6,6 +6,7 @@ import { createBrand } from "@/repositories/brand.repository";
 import { createCategory } from "@/repositories/category.repository";
 import {
   createProduct,
+  findProductById,
   findProductBySku,
   findProductBySlug,
   listProductsByCategory,
@@ -57,5 +58,18 @@ describe("product.repository", () => {
 
     expect(byCategory.map((p) => p.slug)).toEqual(["curry-powder-100g"]);
     expect(byStatus.map((p) => p.slug)).toEqual(["curry-powder-100g"]);
+  });
+
+  it("defaults inStock to true and can be created as out of stock", async () => {
+    const inStockProduct = await createProduct({ sku: "STOCK-1", slug: "stock-1", name: "In Stock" });
+    const outOfStockProduct = await createProduct({
+      sku: "STOCK-2",
+      slug: "stock-2",
+      name: "Out of Stock",
+      inStock: false,
+    });
+
+    expect((await findProductById(inStockProduct.id))?.inStock).toBe(true);
+    expect((await findProductById(outOfStockProduct.id))?.inStock).toBe(false);
   });
 });

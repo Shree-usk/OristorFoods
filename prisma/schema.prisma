@@ -159,6 +159,7 @@ model Product {
   productType      ProductType   @default(Standard)
   publishedAt      DateTime?
   rewardPoints     Int           @default(0)
+  inStock          Boolean       @default(true)
 
   brandId String?
   brand   Brand?  @relation(fields: [brandId], references: [id], onDelete: SetNull)
@@ -190,6 +191,7 @@ model Product {
   volumeDiscountTiers VolumeDiscountTier[]
 
   @@index([status])
+  @@index([status, inStock])
   @@index([brandId])
 }
 
