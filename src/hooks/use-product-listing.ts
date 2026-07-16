@@ -1,7 +1,8 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import type { Values } from "nuqs";
+import { useRef } from "react";
 
 import { productListingParsers } from "@/lib/product-listing-params";
 import type { ProductListingResult } from "@/services/product.service";
@@ -48,6 +49,18 @@ export function useProductListing(
   // refetch after hydration.
   const pageSize = initialData.pageSize;
 
+  // `initialData` seeds whatever queryKey is active on the render it's
+  // evaluated for — passing it as a plain value would re-seed it into
+  // every later filter/sort/page change too, flashing the original
+  // unfiltered page while the real request for the new key is in flight.
+  // Freezing the key this hook first mounted with, and only supplying
+  // `initialData` when the *current* key still matches it, limits the
+  // seed to the one request it actually corresponds to (the SSR render).
+  // Every other transition falls through to `placeholderData:
+  // keepPreviousData`, which keeps the last real results on screen
+  // instead of a stale flash or a skeleton wipe.
+  const initialKey = useRef(JSON.stringify(["products", scope, params, pageSize])).current;
+
   return useQuery({
     queryKey: ["products", scope, params, pageSize],
     queryFn: async () => {
@@ -55,6 +68,8 @@ export function useProductListing(
       if (!response.ok) throw new Error("Failed to load products");
       return (await response.json()) as ProductListingResult;
     },
-    initialData,
+    initialData: () =>
+      JSON.stringify(["products", scope, params, pageSize]) === initialKey ? initialData : undefined,
+    placeholderData: keepPreviousData,
   });
 }

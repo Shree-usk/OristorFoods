@@ -26,7 +26,7 @@ export function ProductGrid({
   brandOptions,
 }: ProductGridProps) {
   const [params, setParams] = useProductListingParams();
-  const { data, isLoading } = useProductListing(scope, params, initialData);
+  const { data, isPending } = useProductListing(scope, params, initialData);
 
   const filterValues: FilterValues = {
     priceMin: params.priceMin ?? undefined,
@@ -81,7 +81,7 @@ export function ProductGrid({
           />
         </div>
 
-        {isLoading ? (
+        {isPending || !data ? (
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
             {Array.from({ length: initialData.pageSize }, (_, i) => (
               <div key={i} className="aspect-square animate-pulse rounded-lg bg-muted" />

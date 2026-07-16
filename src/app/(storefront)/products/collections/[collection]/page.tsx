@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
 import { Section } from "@/components/storefront/layout/section";
+import { ItemListJsonLd } from "@/components/storefront/product/item-list-json-ld";
 import { ProductGrid } from "@/components/storefront/product/product-grid";
 import { loadProductListingParams } from "@/lib/product-listing-loader";
 import { listBrands } from "@/repositories/brand.repository";
@@ -55,23 +56,9 @@ export default async function CollectionPage({ params, searchParams }: Collectio
     listBrands(),
   ]);
 
-  const itemListJsonLd = {
-    "@context": "https://schema.org",
-    "@type": "ItemList",
-    itemListElement: result.items.map((item, index) => ({
-      "@type": "ListItem",
-      position: index + 1,
-      url: item.href,
-      name: item.name,
-    })),
-  };
-
   return (
     <Section>
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(itemListJsonLd) }}
-      />
+      <ItemListJsonLd items={result.items} />
       <h1 className="text-h1 font-heading text-charcoal">{collection.name}</h1>
       <div className="mt-8">
         <ProductGrid
