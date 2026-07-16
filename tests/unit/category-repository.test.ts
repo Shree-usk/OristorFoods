@@ -6,6 +6,7 @@ import {
   createCategory,
   findCategoryBySlug,
   getCategoryTree,
+  listCategoryAndDescendantIds,
   listChildCategories,
   listRootCategories,
 } from "@/repositories/category.repository";
@@ -51,5 +52,34 @@ describe("category.repository", () => {
     expect(roots.map((c) => c.slug)).toEqual(["products"]);
     expect(children.map((c) => c.slug)).toEqual(["spices"]);
     expect(tree[0].children[0].children[0].slug).toBe("curry-powders");
+  });
+
+  it("lists a category's own id plus every descendant id", async () => {
+    const root = await createCategory({ name: "Spices", slug: "spices-2" });
+    const child = await createCategory({
+      name: "Curry Powders",
+      slug: "curry-powders-2",
+      parent: { connect: { id: root.id } },
+    });
+    const grandchild = await createCategory({
+      name: "Roasted Curry Powders",
+      slug: "roasted-curry-powders",
+      parent: { connect: { id: child.id } },
+    });
+    const unrelated = await createCategory({ name: "Snacks", slug: "snacks" });
+
+    const ids = await listCategoryAndDescendantIds(root.id);
+
+    expect(ids).toContain(root.id);
+    expect(ids).toContain(child.id);
+    expect(ids).toContain(grandchild.id);
+    expect(ids).not.toContain(unrelated.id);
+    expect(ids).toHaveLength(3);
+  });
+
+  it("returns just the category's own id when it has no children", async () => {
+    const leaf = await createCategory({ name: "Standalone", slug: "standalone" });
+
+    expect(await listCategoryAndDescendantIds(leaf.id)).toEqual([leaf.id]);
   });
 });

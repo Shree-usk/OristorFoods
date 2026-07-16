@@ -52,3 +52,12 @@ export async function getCategoryTree(): Promise<CategoryTreeNode[]> {
   }
   return build(null);
 }
+
+export async function listCategoryAndDescendantIds(categoryId: string): Promise<string[]> {
+  const ids = [categoryId];
+  const children = await listChildCategories(categoryId);
+  for (const child of children) {
+    ids.push(...(await listCategoryAndDescendantIds(child.id)));
+  }
+  return ids;
+}
