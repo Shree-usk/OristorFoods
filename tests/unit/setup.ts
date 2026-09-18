@@ -50,3 +50,28 @@ class MockIntersectionObserver implements IntersectionObserver {
   takeRecords = vi.fn(() => []);
 }
 vi.stubGlobal("IntersectionObserver", MockIntersectionObserver);
+
+// Set up clipboard handling that allows tests to override via Object.assign.
+// Use a Proxy to intercept clipboard access and use test overrides when available.
+let customClipboard: any = null;
+const navigatorProxy = new Proxy(navigator, {
+  get(target, prop) {
+    if (prop === "clipboard" && customClipboard) {
+      return customClipboard;
+    }
+    return Reflect.get(target, prop);
+  },
+  set(target, prop, value) {
+    if (prop === "clipboard") {
+      customClipboard = value;
+      return true;
+    }
+    return Reflect.set(target, prop, value);
+  },
+});
+Object.defineProperty(window, "navigator", {
+  value: navigatorProxy,
+  writable: false,
+  configurable: true,
+});
+
