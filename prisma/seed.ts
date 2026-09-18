@@ -39,6 +39,8 @@ async function main() {
     productType: "Standard",
     publishedAt: new Date(),
     rewardPoints: 10,
+    benefits: ["Rich in antioxidants", "No artificial preservatives"],
+    servingSuggestions: ["Add to curries and stews", "Sprinkle over roasted vegetables"],
     brand: { connect: { id: brand.id } },
     categories: { connect: [{ id: spices.id }] },
   });
@@ -109,6 +111,13 @@ async function main() {
     url: "/images/products/roasted-curry-powder-100g.jpg",
     isPrimary: true,
     sortOrder: 1,
+  });
+  await productRepository.addProductImage({
+    product: { connect: { id: curryPowder.id } },
+    url: "/images/products/roasted-curry-powder-100g-alt.jpg",
+    altText: "Roasted Curry Powder 100g, alternate angle",
+    isPrimary: false,
+    sortOrder: 2,
   });
 
   const chilliPowder = await productRepository.createProduct({

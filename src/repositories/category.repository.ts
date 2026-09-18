@@ -61,3 +61,19 @@ export async function listCategoryAndDescendantIds(categoryId: string): Promise<
   }
   return ids;
 }
+
+export interface CategoryPathItem {
+  name: string;
+  slug: string;
+}
+
+export async function getCategoryAncestorPath(categoryId: string): Promise<CategoryPathItem[]> {
+  const path: CategoryPathItem[] = [];
+  let current = await findCategoryById(categoryId);
+  while (current) {
+    path.unshift({ name: current.name, slug: current.slug });
+    if (!current.parentId) break;
+    current = await findCategoryById(current.parentId);
+  }
+  return path;
+}

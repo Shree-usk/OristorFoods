@@ -17,6 +17,33 @@ export function findProductById(id: string) {
   return prisma.product.findUnique({ where: { id } });
 }
 
+export function findProductDetailBySlug(slug: string) {
+  return prisma.product.findUnique({
+    where: { slug },
+    include: {
+      brand: true,
+      categories: true,
+      images: { orderBy: [{ isPrimary: "desc" }, { sortOrder: "asc" }] },
+      videos: { orderBy: { sortOrder: "asc" } },
+      nutrition: true,
+      ingredients: { orderBy: { sortOrder: "asc" } },
+      allergens: true,
+      certifications: true,
+      bundle: {
+        include: {
+          items: {
+            include: {
+              componentProduct: {
+                include: { images: { where: { isPrimary: true }, take: 1 } },
+              },
+            },
+          },
+        },
+      },
+    },
+  });
+}
+
 export function listProductsByCategory(categoryId: string) {
   return prisma.product.findMany({
     where: { categories: { some: { id: categoryId } } },
@@ -128,12 +155,14 @@ export interface ProductListingFilters {
   certificationIds?: string[];
   brandSlugs?: string[];
   inStock?: boolean;
+  excludeProductId?: string;
 }
 
 export function findPublishedProductsForListing(filters: ProductListingFilters) {
   return prisma.product.findMany({
     where: {
       status: "Published",
+      ...(filters.excludeProductId ? { id: { not: filters.excludeProductId } } : {}),
       ...(filters.categoryIds?.length
         ? { categories: { some: { id: { in: filters.categoryIds } } } }
         : {}),

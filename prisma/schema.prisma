@@ -160,6 +160,8 @@ model Product {
   publishedAt      DateTime?
   rewardPoints     Int           @default(0)
   inStock          Boolean       @default(true)
+  benefits           String[] @default([])
+  servingSuggestions String[] @default([])
 
   brandId String?
   brand   Brand?  @relation(fields: [brandId], references: [id], onDelete: SetNull)

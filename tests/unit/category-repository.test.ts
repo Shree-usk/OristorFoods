@@ -5,6 +5,7 @@ import { prisma } from "@/lib/db";
 import {
   createCategory,
   findCategoryBySlug,
+  getCategoryAncestorPath,
   getCategoryTree,
   listCategoryAndDescendantIds,
   listChildCategories,
@@ -81,5 +82,31 @@ describe("category.repository", () => {
     const leaf = await createCategory({ name: "Standalone", slug: "standalone" });
 
     expect(await listCategoryAndDescendantIds(leaf.id)).toEqual([leaf.id]);
+  });
+});
+
+describe("getCategoryAncestorPath", () => {
+  it("returns a single-item path for a root category with no parent", async () => {
+    const root = await createCategory({ name: "Root", slug: "path-root" });
+
+    const path = await getCategoryAncestorPath(root.id);
+
+    expect(path).toEqual([{ name: "Root", slug: "path-root" }]);
+  });
+
+  it("returns the full root-to-leaf path for a nested category", async () => {
+    const root = await createCategory({ name: "Spices", slug: "path-spices" });
+    const child = await createCategory({
+      name: "Curry Powders",
+      slug: "path-curry-powders",
+      parent: { connect: { id: root.id } },
+    });
+
+    const path = await getCategoryAncestorPath(child.id);
+
+    expect(path).toEqual([
+      { name: "Spices", slug: "path-spices" },
+      { name: "Curry Powders", slug: "path-curry-powders" },
+    ]);
   });
 });

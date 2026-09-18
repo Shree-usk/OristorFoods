@@ -5,17 +5,21 @@ import { prisma } from "@/lib/db";
 import { createBrand } from "@/repositories/brand.repository";
 import { createCategory } from "@/repositories/category.repository";
 import {
+  addProductImage,
+  addProductIngredient,
   createAllergen,
   createCertification,
   createProduct,
   findProductById,
   findProductBySku,
   findProductBySlug,
+  findProductDetailBySlug,
   findPublishedProductsForListing,
   listAllergens,
   listCertifications,
   listProductsByCategory,
   listProductsByStatus,
+  setProductNutrition,
 } from "@/repositories/product.repository";
 
 afterEach(async () => {
@@ -181,6 +185,62 @@ describe("findPublishedProductsForListing", () => {
     const results = await findPublishedProductsForListing({ inStock: true });
 
     expect(results.map((p) => p.slug)).toEqual(["list-11"]);
+  });
+
+  it("excludes the given product id", async () => {
+    const excluded = await createProduct({
+      sku: "LIST-13",
+      slug: "list-13",
+      name: "Excluded",
+      status: "Published",
+    });
+    await createProduct({ sku: "LIST-14", slug: "list-14", name: "Included", status: "Published" });
+
+    const results = await findPublishedProductsForListing({ excludeProductId: excluded.id });
+
+    expect(results.map((p) => p.slug)).not.toContain("list-13");
+    expect(results.map((p) => p.slug)).toContain("list-14");
+  });
+});
+
+describe("findProductDetailBySlug", () => {
+  it("returns null for an unknown slug", async () => {
+    expect(await findProductDetailBySlug("does-not-exist")).toBeNull();
+  });
+
+  it("includes nutrition, ordered ingredients, allergens, certifications, and images", async () => {
+    const product = await createProduct({
+      sku: "DETAIL-REPO-1",
+      slug: "detail-repo-1",
+      name: "Detail Repo Product",
+      status: "Published",
+      benefits: ["Rich in fibre"],
+      servingSuggestions: ["Add to soups"],
+    });
+    await setProductNutrition({
+      product: { connect: { id: product.id } },
+      servingSize: "1 tsp",
+      calories: "10.00",
+      protein: "1.00",
+      fat: "0.50",
+      saturatedFat: "0.10",
+      carbohydrates: "1.00",
+      sugar: "0.20",
+      fibre: "0.50",
+      sodium: "1.00",
+    });
+    await addProductIngredient({ product: { connect: { id: product.id } }, name: "Second", sortOrder: 2 });
+    await addProductIngredient({ product: { connect: { id: product.id } }, name: "First", sortOrder: 1 });
+    await addProductImage({ product: { connect: { id: product.id } }, url: "/a.jpg", isPrimary: false, sortOrder: 2 });
+    await addProductImage({ product: { connect: { id: product.id } }, url: "/b.jpg", isPrimary: true, sortOrder: 1 });
+
+    const found = await findProductDetailBySlug("detail-repo-1");
+
+    expect(found?.benefits).toEqual(["Rich in fibre"]);
+    expect(found?.servingSuggestions).toEqual(["Add to soups"]);
+    expect(found?.nutrition?.servingSize).toBe("1 tsp");
+    expect(found?.ingredients.map((i) => i.name)).toEqual(["First", "Second"]);
+    expect(found?.images.map((i) => i.url)).toEqual(["/b.jpg", "/a.jpg"]);
   });
 });
 
