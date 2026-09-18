@@ -1,8 +1,16 @@
-import type { CustomerGroup } from "@/generated/prisma/client";
+import type { CustomerGroup, ProductType } from "@/generated/prisma/client";
 import * as categoryRepository from "@/repositories/category.repository";
 import * as collectionService from "@/services/collection.service";
 import * as pricingService from "@/services/pricing.service";
 import * as productRepository from "@/repositories/product.repository";
+import {
+  getQaSummary,
+  getRecipeSummary,
+  getReviewSummary,
+  type QaSummary,
+  type RecipeSummary,
+  type ReviewSummary,
+} from "@/services/product-detail-extensions";
 import type { ProductListItem } from "@/types/product";
 
 export async function getProductBySlug(slug: string) {
@@ -118,19 +126,9 @@ export async function listProducts(params: ProductListingParams): Promise<Produc
   const start = (page - 1) * pageSize;
   const pageCandidates = candidates.slice(start, start + pageSize);
 
-  const items: ProductListItem[] = pageCandidates.map(({ product, price, currency }) => {
-    const primaryImage = product.images[0];
-    return {
-      id: product.id,
-      name: product.name,
-      href: `/products/${product.slug}`,
-      imageSrc: primaryImage?.url ?? "",
-      imageAlt: primaryImage?.altText ?? product.name,
-      price,
-      currency,
-      inStock: product.inStock,
-    };
-  });
+  const items: ProductListItem[] = pageCandidates.map(({ product, price, currency }) =>
+    toProductListItem(product, price, currency),
+  );
 
   return {
     items,
@@ -165,4 +163,212 @@ function sortCandidates<T extends { product: { publishedAt: Date | null }; price
         return bTime - aTime;
       });
   }
+}
+
+function toProductListItem(
+  product: {
+    id: string;
+    name: string;
+    slug: string;
+    images: Array<{ url: string; altText: string | null }>;
+    inStock: boolean;
+  },
+  price: number,
+  currency: string,
+): ProductListItem {
+  const primaryImage = product.images[0];
+  return {
+    id: product.id,
+    name: product.name,
+    href: `/products/${product.slug}`,
+    imageSrc: primaryImage?.url ?? "",
+    imageAlt: primaryImage?.altText ?? product.name,
+    price,
+    currency,
+    inStock: product.inStock,
+  };
+}
+
+export async function listRelatedProducts(params: {
+  productId: string;
+  categoryIds: string[];
+  customerGroup?: CustomerGroup;
+  limit?: number;
+}): Promise<ProductListItem[]> {
+  if (params.categoryIds.length === 0) return [];
+  const limit = params.limit ?? 8;
+
+  const candidates = await productRepository.findPublishedProductsForListing({
+    categoryIds: params.categoryIds,
+    excludeProductId: params.productId,
+  });
+
+  const resolvedPrices = await pricingService.resolvePricesForProducts(
+    candidates.map((candidate) => candidate.id),
+    { customerGroup: params.customerGroup ?? "Retail" },
+  );
+
+  const items: ProductListItem[] = [];
+  for (const candidate of candidates) {
+    const resolved = resolvedPrices.get(candidate.id);
+    if (!resolved) continue;
+    items.push(toProductListItem(candidate, resolved.price.toNumber(), resolved.currency));
+    if (items.length >= limit) break;
+  }
+  return items;
+}
+
+export interface ProductDetailImage {
+  url: string;
+  altText: string;
+  isPrimary: boolean;
+}
+export interface ProductDetailVideo {
+  url: string;
+  altText: string;
+}
+export interface ProductDetailNutrition {
+  servingSize: string;
+  calories: number;
+  protein: number;
+  fat: number;
+  saturatedFat: number;
+  carbohydrates: number;
+  sugar: number;
+  fibre: number;
+  sodium: number;
+}
+export interface ProductDetailIngredient {
+  name: string;
+  isAllergen: boolean;
+}
+export interface ProductDetailBundleItem {
+  productId: string;
+  name: string;
+  slug: string;
+  quantity: number;
+  imageSrc: string;
+  imageAlt: string;
+}
+
+export interface ProductDetail {
+  id: string;
+  sku: string;
+  slug: string;
+  name: string;
+  shortDescription: string | null;
+  story: string | null;
+  benefits: string[];
+  servingSuggestions: string[];
+  productType: ProductType;
+  inStock: boolean;
+  rewardPoints: number;
+  images: ProductDetailImage[];
+  videos: ProductDetailVideo[];
+  nutrition: ProductDetailNutrition | null;
+  ingredients: ProductDetailIngredient[];
+  allergenNames: string[];
+  certificationNames: string[];
+  bundleItems: ProductDetailBundleItem[];
+  price: number;
+  originalPrice: number | null;
+  currency: string;
+  categoryPath: categoryRepository.CategoryPathItem[];
+  relatedProducts: ProductListItem[];
+  reviewSummary: ReviewSummary | null;
+  qaSummary: QaSummary | null;
+  recipeSummary: RecipeSummary | null;
+  metaTitle: string | null;
+  metaDescription: string | null;
+  canonicalUrl: string | null;
+}
+
+export async function getProductDetail(
+  slug: string,
+  opts: { customerGroup?: CustomerGroup } = {},
+): Promise<ProductDetail | null> {
+  const product = await productRepository.findProductDetailBySlug(slug);
+  if (!product || product.status !== "Published") return null;
+
+  const categoryIds = product.categories.map((category) => category.id);
+
+  const [resolvedPrice, relatedProducts, reviewSummary, qaSummary, recipeSummary] = await Promise.all([
+    pricingService.resolvePrice({ productId: product.id, customerGroup: opts.customerGroup ?? "Retail" }),
+    listRelatedProducts({ productId: product.id, categoryIds, customerGroup: opts.customerGroup }),
+    getReviewSummary(product.id),
+    getQaSummary(product.id),
+    getRecipeSummary(product.id),
+  ]);
+
+  if (!resolvedPrice) return null;
+
+  let originalPrice: number | null = null;
+  if (resolvedPrice.tier !== "standard") {
+    const standard = await pricingService.getStandardPrice(product.id);
+    if (standard && standard.price > resolvedPrice.price.toNumber()) {
+      originalPrice = standard.price;
+    }
+  }
+
+  const categoryPath = product.categories[0]
+    ? await categoryRepository.getCategoryAncestorPath(product.categories[0].id)
+    : [];
+
+  return {
+    id: product.id,
+    sku: product.sku,
+    slug: product.slug,
+    name: product.name,
+    shortDescription: product.shortDescription,
+    story: product.story,
+    benefits: product.benefits,
+    servingSuggestions: product.servingSuggestions,
+    productType: product.productType,
+    inStock: product.inStock,
+    rewardPoints: product.rewardPoints,
+    images: product.images.map((image) => ({
+      url: image.url,
+      altText: image.altText ?? product.name,
+      isPrimary: image.isPrimary,
+    })),
+    videos: product.videos.map((video) => ({ url: video.url, altText: video.altText ?? product.name })),
+    nutrition: product.nutrition
+      ? {
+          servingSize: product.nutrition.servingSize,
+          calories: product.nutrition.calories.toNumber(),
+          protein: product.nutrition.protein.toNumber(),
+          fat: product.nutrition.fat.toNumber(),
+          saturatedFat: product.nutrition.saturatedFat.toNumber(),
+          carbohydrates: product.nutrition.carbohydrates.toNumber(),
+          sugar: product.nutrition.sugar.toNumber(),
+          fibre: product.nutrition.fibre.toNumber(),
+          sodium: product.nutrition.sodium.toNumber(),
+        }
+      : null,
+    ingredients: product.ingredients.map((ingredient) => ({
+      name: ingredient.name,
+      isAllergen: ingredient.isAllergen,
+    })),
+    allergenNames: product.allergens.map((allergen) => allergen.name),
+    certificationNames: product.certifications.map((certification) => certification.name),
+    bundleItems: (product.bundle?.items ?? []).map((item) => ({
+      productId: item.componentProductId,
+      name: item.componentProduct.name,
+      slug: item.componentProduct.slug,
+      quantity: item.quantity,
+      imageSrc: item.componentProduct.images[0]?.url ?? "",
+      imageAlt: item.componentProduct.images[0]?.altText ?? item.componentProduct.name,
+    })),
+    price: resolvedPrice.price.toNumber(),
+    originalPrice,
+    currency: resolvedPrice.currency,
+    categoryPath,
+    relatedProducts,
+    reviewSummary,
+    qaSummary,
+    recipeSummary,
+    metaTitle: product.metaTitle,
+    metaDescription: product.metaDescription,
+    canonicalUrl: product.canonicalUrl,
+  };
 }
