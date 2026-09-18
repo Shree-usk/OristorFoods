@@ -10,7 +10,7 @@ import {
   createStandardPrice,
   createVolumeDiscountTier,
 } from "@/repositories/pricing.repository";
-import { resolvePrice, resolvePricesForProducts } from "@/services/pricing.service";
+import { resolvePrice, resolvePricesForProducts, getStandardPrice } from "@/services/pricing.service";
 
 afterEach(async () => {
   await prisma.product.deleteMany();
@@ -221,5 +221,22 @@ describe("resolvePricesForProducts", () => {
 
     expect(resolved.get(wholesaleProduct.id)?.tier).toBe("customerGroup");
     expect(resolved.get(retailOnlyProduct.id)?.tier).toBe("standard");
+  });
+});
+
+describe("getStandardPrice", () => {
+  it("returns the latest standard price as a plain number", async () => {
+    const product = await createProduct({ sku: "STD-1", slug: "std-1", name: "Std", status: "Published" });
+    await createStandardPrice({ product: { connect: { id: product.id } }, price: "300.00" });
+
+    const result = await getStandardPrice(product.id);
+
+    expect(result).toEqual({ price: 300, currency: "LKR" });
+  });
+
+  it("returns null when no standard price is configured", async () => {
+    const product = await createProduct({ sku: "STD-2", slug: "std-2", name: "Std 2", status: "Published" });
+
+    expect(await getStandardPrice(product.id)).toBeNull();
   });
 });

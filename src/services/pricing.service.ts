@@ -147,3 +147,11 @@ function computeVolumeDiscountPrice(
     "VolumeDiscountTier has neither a discountPrice nor a standard price to apply discountPercent to",
   );
 }
+
+export async function getStandardPrice(
+  productId: string,
+): Promise<{ price: number; currency: string } | null> {
+  const standard = await pricingRepository.getLatestStandardPrice(productId);
+  if (!standard) return null;
+  return { price: standard.price.toNumber(), currency: standard.currency };
+}
