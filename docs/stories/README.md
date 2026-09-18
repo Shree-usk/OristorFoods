@@ -33,7 +33,7 @@ Stories are grouped into epics that match the build order in
 | ID | Story | Status |
 |---|---|---|
 | STORY-009 | Product Catalogue Data Model | Done |
-| STORY-010 | Product Listing, Categories & Filters | Draft |
+| STORY-010 | Product Listing, Categories & Filters | Done |
 | STORY-011 | Product Detail Page | Draft |
 | STORY-012 | Product Search & Discovery | Draft |
 | STORY-013 | Wishlist | Draft |
