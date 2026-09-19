@@ -1,3 +1,5 @@
+import { JsonLdScript } from "@/components/storefront/product/json-ld-script";
+
 interface ProductJsonLdProps {
   name: string;
   description: string | null;
@@ -11,12 +13,6 @@ interface ProductJsonLdProps {
   reviewCount?: number;
 }
 
-/**
- * `JSON.stringify` doesn't escape `<`, so a product name or story
- * containing `</script><script>` could break out of this block —
- * replacing `<` with its unicode escape neutralizes that without
- * affecting the parsed JSON. Same technique as ItemListJsonLd (STORY-010).
- */
 export function ProductJsonLd(props: ProductJsonLdProps) {
   const json = {
     "@context": "https://schema.org",
@@ -43,10 +39,5 @@ export function ProductJsonLd(props: ProductJsonLdProps) {
       : {}),
   };
 
-  return (
-    <script
-      type="application/ld+json"
-      dangerouslySetInnerHTML={{ __html: JSON.stringify(json).replace(/</g, "\\u003c") }}
-    />
-  );
+  return <JsonLdScript data={json} />;
 }
