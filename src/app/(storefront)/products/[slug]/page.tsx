@@ -69,7 +69,7 @@ export default async function ProductDetailPage({ params }: ProductDetailPagePro
         items={[
           ...product.categoryPath.map((category) => ({
             name: category.name,
-            href: `/products/${category.slug}`,
+            href: `/products/category/${category.slug}`,
           })),
           { name: product.name, href: `/products/${product.slug}` },
         ]}
@@ -94,7 +94,7 @@ export default async function ProductDetailPage({ params }: ProductDetailPagePro
             Earn {product.rewardPoints} reward points with this purchase
           </p>
           <p className="mt-1 text-small text-charcoal/70">
-            {product.inStock ? "In stock — ships within 2-3 business days" : "Currently out of stock"}
+            {product.inStock ? "In stock" : "Currently out of stock"}
           </p>
 
           <div className="mt-6">
