@@ -117,10 +117,10 @@ export default async function ProductDetailPage({ params }: ProductDetailPagePro
           )}
 
           <div className="mt-6">
-            <BulletList heading="Benefits" items={product.benefits} />
+            <BulletList heading="Benefits" items={product.benefits} headingLevel="h2" />
           </div>
           <div className="mt-6">
-            <BulletList heading="Serving Suggestions" items={product.servingSuggestions} />
+            <BulletList heading="Serving Suggestions" items={product.servingSuggestions} headingLevel="h2" />
           </div>
 
           {product.nutrition && (
