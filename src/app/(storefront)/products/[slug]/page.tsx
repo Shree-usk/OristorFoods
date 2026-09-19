@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { notFound } from "next/navigation";
+import { cache } from "react";
 
 import { Breadcrumbs } from "@/components/storefront/layout/breadcrumbs";
 import { Section } from "@/components/storefront/layout/section";
@@ -16,13 +18,19 @@ import { getProductDetail } from "@/services/product.service";
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://oristor.com";
 
+// getProductDetail() runs the full PDP aggregation (price resolution,
+// listRelatedProducts, 3 extension-point summary calls, an ancestor-path
+// walk) — generateMetadata and the page body both call it, so cache() dedupes
+// the work to one call per request instead of running it twice per page view.
+const getCachedProductDetail = cache(getProductDetail);
+
 interface ProductDetailPageProps {
   params: Promise<{ slug: string }>;
 }
 
 export async function generateMetadata({ params }: ProductDetailPageProps): Promise<Metadata> {
   const { slug } = await params;
-  const product = await getProductDetail(slug);
+  const product = await getCachedProductDetail(slug);
   if (!product) return {};
 
   return {
@@ -34,7 +42,7 @@ export async function generateMetadata({ params }: ProductDetailPageProps): Prom
 
 export default async function ProductDetailPage({ params }: ProductDetailPageProps) {
   const { slug } = await params;
-  const product = await getProductDetail(slug);
+  const product = await getCachedProductDetail(slug);
   if (!product) notFound();
 
   const pageUrl = `${SITE_URL}/products/${product.slug}`;
@@ -152,9 +160,9 @@ export default async function ProductDetailPage({ params }: ProductDetailPagePro
         {product.recipeSummary && product.recipeSummary.recipes.length > 0 ? (
           <div className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
             {product.recipeSummary.recipes.map((recipe) => (
-              <a key={recipe.id} href={`/recipes/${recipe.slug}`} className="block text-small text-charcoal">
+              <Link key={recipe.id} href={`/recipes/${recipe.slug}`} className="block text-small text-charcoal">
                 {recipe.title}
-              </a>
+              </Link>
             ))}
           </div>
         ) : (

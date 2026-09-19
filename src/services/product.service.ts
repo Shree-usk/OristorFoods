@@ -300,7 +300,15 @@ export async function getProductDetail(
     getRecipeSummary(product.id),
   ]);
 
-  if (!resolvedPrice) return null;
+  if (!resolvedPrice) {
+    // Renders identically to a genuinely-missing product (notFound()) from
+    // the outside, so this is the only signal an admin/dev gets that the
+    // product exists and is Published but has no resolvable price.
+    console.warn(
+      `getProductDetail: product ${product.id} (slug "${product.slug}") is Published but has no configured price; rendering as not found.`,
+    );
+    return null;
+  }
 
   let originalPrice: number | null = null;
   if (resolvedPrice.tier !== "standard") {
