@@ -36,40 +36,60 @@ export function ShareButtons({ url, title }: ShareButtonsProps) {
           Copied!
         </span>
       )}
-      <a
-        href={`https://wa.me/?text=${encodedTitle}%20${encodedUrl}`}
-        target="_blank"
-        rel="noopener noreferrer"
+      <Button
+        variant="outline"
+        size="icon-sm"
+        nativeButton={false}
+        role="link"
         aria-label="Share on WhatsApp"
-        className="inline-flex size-7 shrink-0 items-center justify-center rounded-lg border border-border bg-background text-sm font-medium whitespace-nowrap transition-all outline-none select-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 hover:bg-muted dark:border-input dark:bg-input/30 dark:hover:bg-input/50"
+        render={
+          <a href={`https://wa.me/?text=${encodedTitle}%20${encodedUrl}`} target="_blank" rel="noopener noreferrer" />
+        }
       >
-        <MessageCircle className="size-4" />
-      </a>
-      <a
-        href={`https://www.facebook.com/sharer/sharer.php?u=${encodedUrl}`}
-        target="_blank"
-        rel="noopener noreferrer"
+        <MessageCircle />
+      </Button>
+      <Button
+        variant="outline"
+        size="icon-sm"
+        nativeButton={false}
+        role="link"
         aria-label="Share on Facebook"
-        className="inline-flex size-7 shrink-0 items-center justify-center rounded-lg border border-border bg-background text-sm font-medium whitespace-nowrap transition-all outline-none select-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 hover:bg-muted dark:border-input dark:bg-input/30 dark:hover:bg-input/50"
+        render={
+          <a
+            href={`https://www.facebook.com/sharer/sharer.php?u=${encodedUrl}`}
+            target="_blank"
+            rel="noopener noreferrer"
+          />
+        }
       >
         <FacebookIcon />
-      </a>
-      <a
-        href={`https://twitter.com/intent/tweet?url=${encodedUrl}&text=${encodedTitle}`}
-        target="_blank"
-        rel="noopener noreferrer"
+      </Button>
+      <Button
+        variant="outline"
+        size="icon-sm"
+        nativeButton={false}
+        role="link"
         aria-label="Share on X"
-        className="inline-flex size-7 shrink-0 items-center justify-center rounded-lg border border-border bg-background text-sm font-medium whitespace-nowrap transition-all outline-none select-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 hover:bg-muted dark:border-input dark:bg-input/30 dark:hover:bg-input/50"
+        render={
+          <a
+            href={`https://twitter.com/intent/tweet?url=${encodedUrl}&text=${encodedTitle}`}
+            target="_blank"
+            rel="noopener noreferrer"
+          />
+        }
       >
         X
-      </a>
-      <a
-        href={`mailto:?subject=${encodedTitle}&body=${encodedUrl}`}
+      </Button>
+      <Button
+        variant="outline"
+        size="icon-sm"
+        nativeButton={false}
+        role="link"
         aria-label="Share by email"
-        className="inline-flex size-7 shrink-0 items-center justify-center rounded-lg border border-border bg-background text-sm font-medium whitespace-nowrap transition-all outline-none select-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 hover:bg-muted dark:border-input dark:bg-input/30 dark:hover:bg-input/50"
+        render={<a href={`mailto:?subject=${encodedTitle}&body=${encodedUrl}`} />}
       >
-        <Mail className="size-4" />
-      </a>
+        <Mail />
+      </Button>
     </div>
   );
 }
