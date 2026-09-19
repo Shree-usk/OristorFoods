@@ -1874,9 +1874,10 @@ Create `src/components/storefront/product/share-buttons.tsx`:
 "use client";
 
 import { useState } from "react";
-import { Copy, Facebook, Mail, MessageCircle } from "lucide-react";
+import { Copy, Mail, MessageCircle } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { FacebookIcon } from "@/components/storefront/layout/social-icons";
 
 interface ShareButtonsProps {
   url: string;
@@ -1929,7 +1930,7 @@ export function ShareButtons({ url, title }: ShareButtonsProps) {
           />
         }
       >
-        <Facebook />
+        <FacebookIcon className="size-4" />
       </Button>
       <Button
         variant="outline"
