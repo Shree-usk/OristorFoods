@@ -69,8 +69,16 @@ export interface CategoryPathItem {
 
 export async function getCategoryAncestorPath(categoryId: string): Promise<CategoryPathItem[]> {
   const path: CategoryPathItem[] = [];
+  const visited = new Set<string>();
   let current = await findCategoryById(categoryId);
   while (current) {
+    // Defends against a category-tree cycle (e.g. an admin accidentally
+    // setting a category's parentId to one of its own descendants), which
+    // would otherwise loop indefinitely inside a server-rendered PDP
+    // request. Return the partial path built so far rather than throwing —
+    // safer for a render path than a hard failure.
+    if (visited.has(current.id)) break;
+    visited.add(current.id);
     path.unshift({ name: current.name, slug: current.slug });
     if (!current.parentId) break;
     current = await findCategoryById(current.parentId);

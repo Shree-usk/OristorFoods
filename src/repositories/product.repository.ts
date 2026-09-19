@@ -22,7 +22,11 @@ export function findProductDetailBySlug(slug: string) {
     where: { slug },
     include: {
       brand: true,
-      categories: true,
+      // Explicit ordering: Prisma relation includes have no guaranteed
+      // order otherwise, and the PDP picks categories[0] as the "primary"
+      // category for the breadcrumb trail — an unordered result would make
+      // that choice nondeterministic between requests.
+      categories: { orderBy: { sortOrder: "asc" } },
       images: { orderBy: [{ isPrimary: "desc" }, { sortOrder: "asc" }] },
       videos: { orderBy: { sortOrder: "asc" } },
       nutrition: true,
@@ -180,6 +184,12 @@ export function findPublishedProductsForListing(filters: ProductListingFilters) 
       brand: true,
       images: { where: { isPrimary: true }, take: 1 },
     },
+    // Deterministic ordering matches listProducts's "newest" default sort
+    // (see product.service.ts's sortCandidates) — without this, Postgres
+    // returns rows in unspecified order and callers that don't apply their
+    // own sort (e.g. listRelatedProducts) would see results shuffle
+    // between requests.
+    orderBy: { publishedAt: "desc" },
   });
 }
 
