@@ -11,6 +11,11 @@ export function TrackRecentlyViewed({ product }: { product: RecentlyViewedItem }
 
   useEffect(() => {
     add(product);
+    // `product` is intentionally omitted: the caller passes a new object
+    // literal every render, so including it would re-run this effect (and
+    // re-add/reorder the recently-viewed entry) on every parent re-render
+    // instead of only when the viewed product actually changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [add, product.id]);
 
   return null;
