@@ -42,7 +42,7 @@ This story delivers the customer-facing browse experience for the catalogue buil
   - [x] Ensure only `Published` products and in-window collections are returned to storefront callers
 
 - [x] **Frontend:**
-  - [x] Build category landing page (`src/app/(storefront)/products/[category]/page.tsx`) and collection page route
+  - [x] Build category landing page (`src/app/(storefront)/products/category/[category]/page.tsx`) and collection page route
   - [x] Build `ProductCard`, `FilterSidebar`/`FilterDrawer`, `SortSelect`, and `Pagination` components under `src/components/storefront/`
   - [x] Wire URL query-string state (e.g. via `useSearchParams`/`nuqs`-style pattern) to filters, sort, and page
   - [x] Wire TanStack Query hooks (`useProductListing`) with query keys derived from the current filter/sort/page state
