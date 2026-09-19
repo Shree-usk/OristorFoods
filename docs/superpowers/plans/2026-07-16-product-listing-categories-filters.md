@@ -2596,7 +2596,7 @@ git commit -m "feat: add useProductListing hook and ProductGrid composition"
 
 **Files:**
 - Create: `src/app/(storefront)/products/page.tsx`
-- Create: `src/app/(storefront)/products/[category]/page.tsx`
+- Create: `src/app/(storefront)/products/category/[category]/page.tsx`
 - Create: `src/app/(storefront)/products/collections/[collection]/page.tsx`
 - Modify: `next.config.ts` (pin `turbopack.root` — see Global Constraints)
 
@@ -2681,9 +2681,9 @@ export default async function ProductsPage({ searchParams }: ProductsPageProps) 
 }
 ```
 
-- [ ] **Step 2: Build `/products/[category]`**
+- [ ] **Step 2: Build `/products/category/[category]`**
 
-Create `src/app/(storefront)/products/[category]/page.tsx`:
+Create `src/app/(storefront)/products/category/[category]/page.tsx`:
 
 ```tsx
 import type { Metadata } from "next";

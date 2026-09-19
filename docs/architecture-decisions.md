@@ -797,3 +797,35 @@ environment, producing benign but noisy `next/image` console warnings
 during e2e runs. Doesn't affect functional correctness (Playwright
 assertions target text/roles/URLs, not images) — worth a real image asset
 pass in a future story touching product media.
+
+---
+
+## 2026-09-19 — STORY-011 Product Detail Page: category route moved to resolve a route collision
+
+**`products/[category]` (STORY-010) moved to `products/category/[category]`.**
+Next.js's App Router forbids two sibling folders at the same route-tree
+position using different dynamic-segment names — `/products/[category]`
+(STORY-010's category landing page) and this story's new
+`/products/[slug]` (the PDP) could not coexist as siblings under
+`products/`. One of the two had to move.
+
+**Why the category route moved instead of renaming `[slug]`:** at the
+time of this change, the category route had zero inbound `href`
+references anywhere in the shipped app, while `/products/[slug]` was
+already deeply embedded across many components (`ProductCard`,
+`RelatedProducts`, `RecentlyViewed`, breadcrumbs, JSON-LD, etc.) —
+moving the far-less-referenced route was the cheaper, lower-risk change.
+It also made the URL space more consistent with the existing
+`products/collections/[collection]` sibling pattern (both category and
+collection landing pages now sit under a named segment rather than
+directly under `products/`).
+
+**What changed:** `src/app/(storefront)/products/[category]/page.tsx` →
+`src/app/(storefront)/products/category/[category]/page.tsx` (file move
+only, no logic changes). See commit `78e7649`. Two historical
+STORY-010 planning docs
+(`docs/superpowers/specs/2026-07-16-product-listing-design.md` and
+`docs/superpowers/plans/2026-07-16-product-listing-categories-filters.md`)
+still described the old path as of this story and were updated to match
+— if you're reading either of those docs for routing details, trust the
+actual route tree under `src/app/` over the doc if they ever drift again.

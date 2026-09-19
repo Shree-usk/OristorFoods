@@ -29,7 +29,7 @@ These were the genuinely open questions in STORY-010's acceptance criteria
 ## Routing
 
 - `src/app/(storefront)/products/page.tsx` — full catalogue, all categories/collections as nav entry points, no scope filter applied server-side beyond `status: Published`
-- `src/app/(storefront)/products/[category]/page.tsx` — category landing; includes the category's subcategories per STORY-009's nested `Category` model
+- `src/app/(storefront)/products/category/[category]/page.tsx` — category landing; includes the category's subcategories per STORY-009's nested `Category` model
 - `src/app/(storefront)/products/collections/[collection]/page.tsx` — collection landing; 404s if the collection exists but is outside its `startDate`/`endDate` window (treated as not-found, not as an empty page)
 
 Each of the three routes:
