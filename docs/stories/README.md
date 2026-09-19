@@ -34,7 +34,7 @@ Stories are grouped into epics that match the build order in
 |---|---|---|
 | STORY-009 | Product Catalogue Data Model | Done |
 | STORY-010 | Product Listing, Categories & Filters | Done |
-| STORY-011 | Product Detail Page | Draft |
+| STORY-011 | Product Detail Page | Done |
 | STORY-012 | Product Search & Discovery | Draft |
 | STORY-013 | Wishlist | Draft |
 | STORY-014 | Product Compare | Draft |
