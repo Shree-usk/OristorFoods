@@ -78,7 +78,12 @@ export function SearchOverlay() {
       event.preventDefault();
       setActiveIndex((index) => Math.max(index - 1, -1));
     } else if (event.key === "Escape") {
+      // Explicit reset alongside setOpen(false) — belt-and-suspenders so
+      // "close on Escape" doesn't rely solely on Base UI's own
+      // escape-to-dismiss handling also firing onOpenChange(false) (which
+      // calls reset() below).
       setOpen(false);
+      reset();
     }
   }
 

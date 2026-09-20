@@ -105,4 +105,24 @@ describe("SearchOverlay", () => {
     await waitFor(() => expect(mockPush).toHaveBeenCalledWith("/search?q=curry"));
     expect(useRecentSearchesStore.getState().queries).toContain("curry");
   });
+
+  it("clears the query when closed via Escape and reopened", async () => {
+    const user = userEvent.setup();
+    renderOverlay();
+    await user.click(screen.getByRole("button", { name: "Search" }));
+
+    await user.type(within(screen.getByRole("dialog")).getByLabelText("Search"), "curry");
+    await waitFor(() => expect(screen.getByText("Roasted Curry Powder")).toBeVisible());
+
+    await user.keyboard("{Escape}");
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+
+    await user.click(screen.getByRole("button", { name: "Search" }));
+
+    expect(within(screen.getByRole("dialog")).getByLabelText("Search")).toHaveValue("");
+    // The debounced query value takes DEBOUNCE_MS to catch up with the
+    // reset raw query, so the hint only reappears once that settles.
+    await waitFor(() => expect(screen.getByText(/Try:/)).toBeVisible());
+    expect(screen.queryByText("Roasted Curry Powder")).not.toBeInTheDocument();
+  });
 });
