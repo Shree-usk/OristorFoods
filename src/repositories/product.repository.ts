@@ -195,6 +195,28 @@ export function findPublishedProductsForListing(filters: ProductListingFilters) 
   });
 }
 
+export function searchPublishedProducts(query: string, opts: { take?: number; skip?: number } = {}) {
+  return prisma.product.findMany({
+    where: {
+      status: "Published",
+      OR: [
+        { name: { contains: query, mode: "insensitive" } },
+        { sku: { contains: query, mode: "insensitive" } },
+      ],
+    },
+    include: {
+      brand: true,
+      images: { where: { isPrimary: true }, take: 1 },
+    },
+    // Deterministic ordering — same rationale as findPublishedProductsForListing
+    // just above: without this, Postgres returns rows in unspecified order
+    // and results would shuffle between identical searches.
+    orderBy: { publishedAt: "desc" },
+    take: opts.take,
+    skip: opts.skip,
+  });
+}
+
 export function listAllergens() {
   return prisma.allergen.findMany({ orderBy: { name: "asc" } });
 }
