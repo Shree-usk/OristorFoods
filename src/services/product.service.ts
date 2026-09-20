@@ -139,7 +139,7 @@ export async function listProducts(params: ProductListingParams): Promise<Produc
   };
 }
 
-function sortCandidates<T extends { product: { publishedAt: Date | null }; price: number }>(
+export function sortCandidates<T extends { product: { publishedAt: Date | null }; price: number }>(
   candidates: T[],
   sort: ProductSort,
 ): T[] {
