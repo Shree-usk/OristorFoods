@@ -26,7 +26,7 @@ Stories are grouped into epics that match the build order in
 | STORY-004 | Primary Navigation & Header | Done |
 | STORY-005 | Footer | Done |
 | STORY-006 | Homepage | Done |
-| STORY-007 | Global Search | Draft |
+| STORY-007 | Global Search | Done |
 | STORY-008 | Animation Framework | Done |
 
 ## Epic 03 — Product Platform (`03-product-platform/`)

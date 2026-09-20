@@ -829,3 +829,20 @@ STORY-010 planning docs
 still described the old path as of this story and were updated to match
 — if you're reading either of those docs for routing details, trust the
 actual route tree under `src/app/` over the doc if they ever drift again.
+
+---
+
+## 2026-09-20 — STORY-007 Global Search
+
+**Matching logic seam for STORY-061.** `search.service.ts`'s
+`searchCatalogue()` does plain case-insensitive substring matching
+(`contains`/`mode: "insensitive"`) against product name/SKU — intentional
+per this story's scope (no AI/semantic ranking). STORY-061 (AI Smart
+Search) replaces the matching logic *inside* `searchCatalogue()` (or the
+repository call it makes) with an AI-backed implementation; the storefront
+UI (`search-overlay.tsx`, `/search/page.tsx`) and the `SearchResultsPage`
+contract do not change. Recipes use the same registered-extension-point
+pattern STORY-011 established for PDP reviews/Q&A/recipes
+(`search-extensions.ts`'s `registerRecipeSearchProvider`) — Epic 04
+registers a real provider when the Recipe data model ships; until then the
+Recipes group is simply absent from suggestions/results.
