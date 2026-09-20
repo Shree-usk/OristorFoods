@@ -165,7 +165,7 @@ function sortCandidates<T extends { product: { publishedAt: Date | null }; price
   }
 }
 
-function toProductListItem(
+export function toProductListItem(
   product: {
     id: string;
     name: string;
