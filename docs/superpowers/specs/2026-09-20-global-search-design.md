@@ -27,12 +27,6 @@ export interface SearchSuggestionItem {
   imageSrc?: string;
   type: "Product" | "Recipe";
 }
-export interface SearchSuggestions {
-  products: SearchSuggestionItem[];
-  recipes: SearchSuggestionItem[];
-}
-
-export async function getSearchSuggestions(query: string): Promise<SearchSuggestions>
 
 export interface SearchResultsPage {
   query: string;
@@ -49,15 +43,17 @@ export async function searchCatalogue(
 ): Promise<SearchResultsPage>
 ```
 
-Both short-circuit to an empty result for a blank/whitespace-only `query`
-(no DB call). `getSearchSuggestions` caps at 5 products + 3 recipes (8
-total, matching the AC's "5-8" range) and does no pagination.
-`searchCatalogue` paginates products only (`pageSize` default 12);
+A single function serves both the overlay's live suggestions and the
+`/search` results page — an earlier draft of this design split them into
+`getSearchSuggestions`/`searchCatalogue`, but that duplicates the same
+matching/pagination logic for no real difference in behavior (CLAUDE.md's
+"no duplicate logic" rule). The suggestions hook calls it with a small
+`pageSize` (5); the results page uses the default. Short-circuits to an
+empty result for a blank/whitespace-only `query` (no DB call).
 `hasNextPage` is computed by fetching `pageSize + 1` rows and checking
 whether the extra row came back (then slicing it off), rather than a
-separate `COUNT(*)` query — a full running total isn't required by any
-AC and the story explicitly defers full filtering/pagination UX to
-STORY-012.
+separate `COUNT(*)` query — a full running total isn't required by any AC
+and the story explicitly defers full filtering/pagination UX to STORY-012.
 
 ## Repository Change
 
