@@ -38,7 +38,6 @@ export interface SearchResultsPage {
   query: string;
   products: ProductListItem[]; // reuses product.service.ts's existing type
   recipes: SearchSuggestionItem[]; // always [] until Epic 04 registers
-  total: number;
   page: number;
   pageSize: number;
   hasNextPage: boolean;
@@ -53,7 +52,12 @@ export async function searchCatalogue(
 Both short-circuit to an empty result for a blank/whitespace-only `query`
 (no DB call). `getSearchSuggestions` caps at 5 products + 3 recipes (8
 total, matching the AC's "5-8" range) and does no pagination.
-`searchCatalogue` paginates products only (`pageSize` default 12).
+`searchCatalogue` paginates products only (`pageSize` default 12);
+`hasNextPage` is computed by fetching `pageSize + 1` rows and checking
+whether the extra row came back (then slicing it off), rather than a
+separate `COUNT(*)` query — a full running total isn't required by any
+AC and the story explicitly defers full filtering/pagination UX to
+STORY-012.
 
 ## Repository Change
 
