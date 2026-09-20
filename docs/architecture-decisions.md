@@ -846,3 +846,21 @@ pattern STORY-011 established for PDP reviews/Q&A/recipes
 (`search-extensions.ts`'s `registerRecipeSearchProvider`) — Epic 04
 registers a real provider when the Recipe data model ships; until then the
 Recipes group is simply absent from suggestions/results.
+
+**`pageSize` is load-bearing, not incidental.** The `pageSize` field on
+`searchQuerySchema`/`SearchResultsPage` exists specifically so
+`useSearchSuggestions` can request a smaller page (5) than the `/search`
+results page's default (12) — the same endpoint and contract serve both
+the overlay's live suggestions and the full results page, just with a
+different page size per caller. It isn't spelled out as a distinct concern
+in the original design spec, but removing it would break the overlay's
+suggestion count.
+
+**Untested `activeIndex` path into the second suggestion group.** When
+Epic 04 (Recipes) registers a real `registerRecipeSearchProvider`, it
+should add a test covering `SearchSuggestionsDropdown`/`SearchOverlay`'s
+`activeIndex` correctly targeting an item in the *second* rendered group
+(Recipes), since the Recipes group is currently always `[]`. That
+arrow-key-into-the-second-group code path is unreachable today and so has
+no test coverage — expected for now, but worth closing once a real
+provider exists.

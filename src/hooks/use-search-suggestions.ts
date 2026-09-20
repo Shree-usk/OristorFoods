@@ -1,6 +1,6 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 
 import type { SearchResultsPage } from "@/services/search.service";
 
@@ -17,5 +17,11 @@ export function useSearchSuggestions(query: string) {
       return (await response.json()) as SearchResultsPage;
     },
     enabled: query.length > 0,
+    // Keep the previous keystroke's results on screen while the new
+    // debounced query is in flight, instead of falling back to `undefined`
+    // — otherwise every keystroke briefly renders "No matches yet" and the
+    // aria-live region announces a false "0 results found" before the real
+    // results arrive.
+    placeholderData: keepPreviousData,
   });
 }

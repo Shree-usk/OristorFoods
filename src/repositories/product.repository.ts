@@ -205,7 +205,6 @@ export function searchPublishedProducts(query: string, opts: { take?: number; sk
       ],
     },
     include: {
-      brand: true,
       images: { where: { isPrimary: true }, take: 1 },
     },
     // Deterministic ordering — same rationale as findPublishedProductsForListing

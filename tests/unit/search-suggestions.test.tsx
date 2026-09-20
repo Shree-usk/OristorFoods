@@ -59,7 +59,7 @@ describe("SearchSuggestionsDropdown", () => {
     expect(screen.queryByText("Recipes")).not.toBeInTheDocument();
   });
 
-  it("marks the item at activeIndex as selected", () => {
+  it("highlights the item at activeIndex", () => {
     render(
       <SearchSuggestionsDropdown
         hasQuery
@@ -71,11 +71,8 @@ describe("SearchSuggestionsDropdown", () => {
       />,
     );
 
-    expect(screen.getByRole("option", { name: "Chilli Powder" })).toHaveAttribute("aria-selected", "true");
-    expect(screen.getByRole("option", { name: "Roasted Curry Powder" })).toHaveAttribute(
-      "aria-selected",
-      "false",
-    );
+    expect(screen.getByRole("link", { name: "Chilli Powder" })).toHaveAttribute("data-active", "true");
+    expect(screen.getByRole("link", { name: "Roasted Curry Powder" })).not.toHaveAttribute("data-active");
   });
 
   it("calls onSelectItem when a suggestion is clicked", async () => {

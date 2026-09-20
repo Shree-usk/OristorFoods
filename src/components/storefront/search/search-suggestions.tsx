@@ -59,11 +59,9 @@ export function SearchSuggestionsDropdown({
   const recipes = items.filter((item) => item.type === "Recipe");
 
   return (
-    <ul role="listbox" aria-label="Search suggestions" className="mt-4 flex flex-col gap-1">
+    <ul aria-label="Search suggestions" className="mt-4 flex flex-col gap-1">
       {products.length > 0 && (
-        <li role="presentation" className="px-2 py-1 text-caption font-medium text-charcoal/70">
-          Products
-        </li>
+        <li className="px-2 py-1 text-caption font-medium text-charcoal/70">Products</li>
       )}
       {products.map((item) => (
         <SuggestionRow
@@ -74,9 +72,7 @@ export function SearchSuggestionsDropdown({
         />
       ))}
       {recipes.length > 0 && (
-        <li role="presentation" className="px-2 py-1 text-caption font-medium text-charcoal/70">
-          Recipes
-        </li>
+        <li className="px-2 py-1 text-caption font-medium text-charcoal/70">Recipes</li>
       )}
       {recipes.map((item) => (
         <SuggestionRow
@@ -100,10 +96,11 @@ function SuggestionRow({
   onSelect: (item: SearchSuggestionItem) => void;
 }) {
   return (
-    <li role="option" aria-selected={isActive}>
+    <li>
       <Link
         href={item.href}
         onClick={() => onSelect(item)}
+        data-active={isActive || undefined}
         className={
           isActive
             ? "flex items-center gap-3 rounded-md bg-muted px-2 py-1.5 text-small text-charcoal"

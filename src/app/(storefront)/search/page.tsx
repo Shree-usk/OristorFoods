@@ -14,7 +14,14 @@ interface SearchPageProps {
 
 export async function generateMetadata({ searchParams }: SearchPageProps): Promise<Metadata> {
   const { q } = searchQuerySchema.parse(await searchParams);
-  return { title: q ? `Search results for "${q}"` : "Search" };
+  return {
+    title: q ? `Search results for "${q}"` : "Search",
+    // An internal site-search results page with a user-input-reflected
+    // <title> is a crawl-budget/thin-content problem — keep it out of the
+    // index, but its own links to products/recipes are still fine to
+    // follow.
+    robots: { index: false, follow: true },
+  };
 }
 
 export default async function SearchPage({ searchParams }: SearchPageProps) {
@@ -41,7 +48,7 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
         </div>
       )}
 
-      {q && results.products.length === 0 ? (
+      {q && results.products.length === 0 && page === 1 ? (
         <div className="mt-8 text-body text-charcoal/70">
           <p>No results found for &quot;{q}&quot;.</p>
           <p className="mt-2">
@@ -56,6 +63,17 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
             instead.
           </p>
         </div>
+      ) : q && results.products.length === 0 && page > 1 ? (
+        <div className="mt-8 text-body text-charcoal/70">
+          <p>No more results.</p>
+          <p className="mt-2">
+            Back to{" "}
+            <Link href={`/search?q=${encodeURIComponent(q)}&page=1`} className="text-chilli hover:underline">
+              the first page
+            </Link>
+            .
+          </p>
+        </div>
       ) : (
         <div className="mt-8 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
           {results.products.map((product) => (
@@ -64,14 +82,24 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
         </div>
       )}
 
-      {results.hasNextPage && (
-        <div className="mt-8 flex justify-center">
-          <Link
-            href={`/search?q=${encodeURIComponent(q)}&page=${page + 1}`}
-            className="text-small text-chilli hover:underline"
-          >
-            Load more results
-          </Link>
+      {(page > 1 || results.hasNextPage) && (
+        <div className="mt-8 flex justify-center gap-6">
+          {page > 1 && (
+            <Link
+              href={`/search?q=${encodeURIComponent(q)}&page=${page - 1}`}
+              className="text-small text-chilli hover:underline"
+            >
+              Previous page
+            </Link>
+          )}
+          {results.hasNextPage && (
+            <Link
+              href={`/search?q=${encodeURIComponent(q)}&page=${page + 1}`}
+              className="text-small text-chilli hover:underline"
+            >
+              Next page
+            </Link>
+          )}
         </div>
       )}
     </Section>
