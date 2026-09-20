@@ -143,5 +143,62 @@ export async function searchProducts(
     toProductListItem(product, price, currency),
   );
 
+  if (trimmed) logProductSearch({ query: trimmed, resultCount: total });
+
   return { items, total, page, pageSize, hasNextPage: start + pageSize < total };
+}
+
+const DEFAULT_SUGGESTION_LIMIT = 8;
+const SUGGESTION_MIN_TIER = 2; // exclude tier-1 (description/ingredient-only) matches — a suggestion dropdown should look obviously relevant
+
+export interface SearchSuggestion {
+  id: string;
+  label: string;
+  href: string;
+  type: "Product";
+}
+
+export async function getSearchSuggestions(
+  query: string,
+  limit: number = DEFAULT_SUGGESTION_LIMIT,
+): Promise<SearchSuggestion[]> {
+  const trimmed = query.trim();
+  if (!trimmed) return [];
+
+  const matches = await searchRepository.findRankedProductMatches(trimmed);
+  const relevant = matches.filter((match) => match.rankTier >= SUGGESTION_MIN_TIER).slice(0, limit);
+  if (relevant.length === 0) return [];
+
+  const rankOrder = new Map(relevant.map((match, index) => [match.productId, index]));
+  const products = await productRepository.findProductsByIdsWithFilters(
+    relevant.map((match) => match.productId),
+    {},
+  );
+  const sorted = [...products].sort(
+    (a, b) => (rankOrder.get(a.id) ?? 0) - (rankOrder.get(b.id) ?? 0),
+  );
+
+  return sorted.map((product) => ({
+    id: product.id,
+    label: product.name,
+    href: `/products/${product.slug}`,
+    type: "Product" as const,
+  }));
+}
+
+export function findDidYouMeanSuggestion(query: string): Promise<string | null> {
+  return searchRepository.findClosestNameSuggestion(query);
+}
+
+/**
+ * Typed hook point for future analytics/AI consumption (STORY-061 AI
+ * Smart Search, STORY-064 AI Business Insights) — no UI, no queue, just a
+ * call site those stories can redirect to a real sink. Logs outside
+ * production only, matching src/lib/db.ts's existing
+ * NODE_ENV-gated-logging convention — there's no real sink yet.
+ */
+export function logProductSearch(event: { query: string; resultCount: number }): void {
+  if (process.env.NODE_ENV !== "production") {
+    console.debug("[search] product search logged", event);
+  }
 }
