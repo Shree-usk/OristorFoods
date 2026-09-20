@@ -70,4 +70,27 @@ describe("ProductGrid", () => {
     renderProductGrid({ ...initialData, total: 50, pageSize: 24 });
     expect(screen.getByRole("navigation", { name: "Pagination" })).toBeInTheDocument();
   });
+
+  it("fetches from the search endpoint when scope.query is set", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve(initialData) });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <ProductGrid
+          scope={{ query: "curry" }}
+          initialData={initialData}
+          allergenOptions={[]}
+          certificationOptions={[]}
+          brandOptions={[]}
+        />
+      </QueryClientProvider>,
+      { wrapper: withNuqsTestingAdapter() },
+    );
+
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining("/api/products/search?")),
+    );
+    expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining("q=curry"));
+  });
 });

@@ -10,6 +10,8 @@ import type { ProductListingResult } from "@/services/product.service";
 export interface ProductListingScope {
   category?: string;
   collection?: string;
+  /** When set, useProductListing fetches /api/products/search instead of /api/products (STORY-012). */
+  query?: string;
 }
 
 export type ProductListingQueryParams = Values<typeof productListingParsers>;
@@ -22,6 +24,7 @@ function buildSearchParams(
   const search = new URLSearchParams();
   if (scope.category) search.set("category", scope.category);
   if (scope.collection) search.set("collection", scope.collection);
+  if (scope.query) search.set("q", scope.query);
   search.set("page", String(params.page));
   search.set("sort", params.sort);
   search.set("pageSize", String(pageSize));
@@ -64,7 +67,8 @@ export function useProductListing(
   return useQuery({
     queryKey: ["products", scope, params, pageSize],
     queryFn: async () => {
-      const response = await fetch(`/api/products?${buildSearchParams(scope, params, pageSize)}`);
+      const endpoint = scope.query ? "/api/products/search" : "/api/products";
+      const response = await fetch(`${endpoint}?${buildSearchParams(scope, params, pageSize)}`);
       if (!response.ok) throw new Error("Failed to load products");
       return (await response.json()) as ProductListingResult;
     },
