@@ -16,6 +16,18 @@ describe("ShareButtons", () => {
     await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("Copied!"));
   });
 
+  it("does not throw when the Clipboard API is unavailable", async () => {
+    const user = userEvent.setup();
+    const originalClipboard = navigator.clipboard;
+    Object.defineProperty(navigator, "clipboard", { value: undefined, configurable: true });
+
+    render(<ShareButtons url="https://oristor.com/products/curry-powder" title="Curry Powder" />);
+    await user.click(screen.getByRole("button", { name: "Copy link" }));
+
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+    Object.defineProperty(navigator, "clipboard", { value: originalClipboard, configurable: true });
+  });
+
   it("builds correct share links for WhatsApp, Facebook, X, and email", () => {
     render(<ShareButtons url="https://oristor.com/products/curry-powder" title="Curry Powder" />);
 

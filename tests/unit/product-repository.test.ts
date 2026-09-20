@@ -201,6 +201,16 @@ describe("findPublishedProductsForListing", () => {
     expect(results.map((p) => p.slug)).not.toContain("list-13");
     expect(results.map((p) => p.slug)).toContain("list-14");
   });
+
+  it("bounds the result count when take is given", async () => {
+    await createProduct({ sku: "LIST-15", slug: "list-15", name: "A", status: "Published" });
+    await createProduct({ sku: "LIST-16", slug: "list-16", name: "B", status: "Published" });
+    await createProduct({ sku: "LIST-17", slug: "list-17", name: "C", status: "Published" });
+
+    const results = await findPublishedProductsForListing({ take: 2 });
+
+    expect(results).toHaveLength(2);
+  });
 });
 
 describe("findProductDetailBySlug", () => {

@@ -15,6 +15,7 @@ export function ShareButtons({ url, title }: ShareButtonsProps) {
   const [copied, setCopied] = useState(false);
 
   function handleCopy() {
+    if (!navigator.clipboard) return;
     navigator.clipboard.writeText(url).then(() => {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);

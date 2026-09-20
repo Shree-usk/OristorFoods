@@ -160,10 +160,12 @@ export interface ProductListingFilters {
   brandSlugs?: string[];
   inStock?: boolean;
   excludeProductId?: string;
+  take?: number;
 }
 
 export function findPublishedProductsForListing(filters: ProductListingFilters) {
   return prisma.product.findMany({
+    take: filters.take,
     where: {
       status: "Published",
       ...(filters.excludeProductId ? { id: { not: filters.excludeProductId } } : {}),

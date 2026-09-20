@@ -198,9 +198,13 @@ export async function listRelatedProducts(params: {
   if (params.categoryIds.length === 0) return [];
   const limit = params.limit ?? 8;
 
+  // Buffer past `limit` since some candidates get dropped below for lacking
+  // a resolved price — bounds the query instead of scanning the whole
+  // category (which could be hundreds of products) on every PDP view.
   const candidates = await productRepository.findPublishedProductsForListing({
     categoryIds: params.categoryIds,
     excludeProductId: params.productId,
+    take: limit * 3,
   });
 
   const resolvedPrices = await pricingService.resolvePricesForProducts(
