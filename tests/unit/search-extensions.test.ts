@@ -17,7 +17,7 @@ describe("search-extensions", () => {
 
   it("returns the registered provider's result", async () => {
     registerRecipeSearchProvider(async (query, limit) => [
-      { id: "r1", label: `Recipe for ${query}`, href: "/recipes/r1", type: "Recipe" },
+      { id: "r1", label: `Recipe for ${query}`, href: "/recipes/r1", type: "Recipe" as const },
     ].slice(0, limit));
 
     const result = await searchRecipes("curry", 3);
