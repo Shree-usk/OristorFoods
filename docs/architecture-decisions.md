@@ -864,3 +864,61 @@ should add a test covering `SearchSuggestionsDropdown`/`SearchOverlay`'s
 arrow-key-into-the-second-group code path is unreachable today and so has
 no test coverage — expected for now, but worth closing once a real
 provider exists.
+
+---
+
+## 2026-09-20 — STORY-012 Product Search & Discovery
+
+**pg_trgm confirmed working on PGlite.** Verified directly before
+committing to trigram search as the approach (`CREATE EXTENSION IF NOT
+EXISTS pg_trgm` + `similarity()` both succeed against the local `prisma
+dev` database) — this project's PGlite compatibility has been a recurring
+source of surprises (see the STORY-001 entry above), so this was checked
+first rather than assumed.
+
+**Migration applied via the offline file-to-file diff recipe, not
+`migrate diff --from-empty` or `migrate dev`.** `migrate diff
+--from-migrations` requires a shadow database connection (the exact class
+of bug already documented above) — this migration instead diffed the
+schema file at the previous commit against the modified schema.prisma
+directly (`migrate diff --from-schema <old-file> --to-schema
+<new-file> --script`), which needs no database connection at all, then
+applied the result by hand-appending the trigram GIN indexes (not
+expressible in Prisma's schema language) and using `db execute` +
+`migrate resolve --applied` — never `migrate dev`. See Task 1 of
+`docs/superpowers/plans/2026-09-20-product-search-discovery.md`.
+
+**The shared `%LOCALAPPDATA%\prisma-dev-nodejs\Data` directory is not
+project-local.** It contains a `production-app`-named server's data
+alongside this project's `default`-named server on this machine — any
+future "reset local dev DB" step must scope deletion to `Data\default\`
+and `Data\durable-streams\default\` only, never wipe the whole `Data`
+directory.
+
+**`searchCatalogue()` (STORY-007) now delegates its product-matching to
+this story's `searchProducts()`** instead of the plain substring match it
+shipped with (`searchPublishedProducts`, now deleted) — same external
+`SearchResultsPage` contract, better relevance and typo-tolerance.
+`SearchOverlay`, `use-search-suggestions.ts`, and `/api/search/route.ts`
+were deliberately left untouched (confirmed with the user during this
+story's design) — a future story can wire the header overlay's
+suggestions to this story's dedicated `/api/products/search/suggestions`
+endpoint and `use-product-search-suggestions.ts` hook if the two
+suggestion experiences ever need to diverge, but nothing requires that
+today.
+
+**Did-you-mean is currently only reachable via category-name typos, not
+product-name typos.** `findRankedProductMatches` and
+`findClosestNameSuggestion` (`src/repositories/search.repository.ts`)
+both use the identical `similarity(name, query) > 0.3` threshold against
+product names — so any query close enough to earn a did-you-mean
+suggestion for a product name is, by that same threshold, already close
+enough to directly match it via rank tier 2, meaning `result.items.length`
+is never 0 for that case. Did-you-mean only fires today when a query is a
+near-miss on a *category* name (categories are matched only by literal
+substring in the ranked-match query, not by similarity) while missing
+every product-name/description/ingredient tier. Confirmed live:
+`?q=chili+powder` matches `Chilli Powder 100g` directly; `?q=curyy+powderr`
+(a category-name typo) triggers did-you-mean. Not fixed in this story —
+flagged here as a known characteristic for whoever next tunes the ranking
+thresholds.
