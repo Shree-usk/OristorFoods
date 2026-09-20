@@ -35,7 +35,7 @@ test.describe("desktop header", () => {
     for (const label of desktopActionLinkLabels) {
       await expect(header.getByRole("link", { name: label, exact: true })).toBeVisible();
     }
-    // Search is a wired-but-inert <button> (STORY-007 owns the real UX).
+    // Search opens the STORY-007 overlay; this smoke test only checks the trigger's presence.
     await expect(header.getByRole("button", { name: "Search", exact: true })).toBeVisible();
 
     // Mobile-only bottom nav must not render at desktop width.

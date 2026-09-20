@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { Gift, Search } from "lucide-react";
+import { Gift } from "lucide-react";
 
+import { SearchOverlay } from "@/components/storefront/search/search-overlay";
 import { AccountMenu } from "./account-menu";
 import { CartBadge } from "./cart-badge";
 import { WishlistBadge } from "./wishlist-badge";
@@ -14,7 +15,7 @@ import { WishlistBadge } from "./wishlist-badge";
 export function HeaderActions() {
   return (
     <div className="flex items-center gap-1">
-      <SearchTrigger />
+      <SearchOverlay />
       <WishlistBadge />
       <Link
         href="/account/rewards"
@@ -26,26 +27,5 @@ export function HeaderActions() {
       <AccountMenu />
       <CartBadge />
     </div>
-  );
-}
-
-/**
- * STORY-007 (Global Search) owns the actual search overlay/UX — this
- * button is the wired-but-inert trigger point described in this story's
- * scope. Replace the `onClick` body with opening STORY-007's overlay
- * once it lands; do not add search logic here in the meantime.
- */
-function SearchTrigger() {
-  return (
-    <button
-      type="button"
-      aria-label="Search"
-      onClick={() => {
-        // Intentionally inert placeholder — see STORY-007.
-      }}
-      className="inline-flex size-9 items-center justify-center rounded-lg hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
-    >
-      <Search className="size-5" aria-hidden="true" />
-    </button>
   );
 }
