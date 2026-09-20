@@ -59,6 +59,41 @@ export async function findRankedProductMatches(query: string): Promise<RankedPro
   `;
 }
 
+export interface RankedCategoryMatch {
+  categoryId: string;
+  name: string;
+  slug: string;
+  similarity: number;
+}
+
+/**
+ * Category-name matches for the suggestions dropdown (STORY-012). Mirrors
+ * findRankedProductMatches's tier-2 threshold (substring or similarity >
+ * 0.3) but scoped to Category — categories are only matched at tier 1
+ * (description-adjacent) inside findRankedProductMatches, so suggestions
+ * needs its own direct lookup to surface them at all.
+ */
+export async function findRankedCategoryMatches(query: string, limit: number): Promise<RankedCategoryMatch[]> {
+  const trimmed = query.trim();
+  if (!trimmed) return [];
+
+  return prisma.$queryRaw<RankedCategoryMatch[]>`
+    SELECT
+      c.id AS "categoryId",
+      c.name,
+      c.slug,
+      similarity(c.name, ${trimmed}) AS similarity
+    FROM "Category" c
+    WHERE c.status = 'Active'
+      AND (
+        lower(c.name) LIKE '%' || lower(${trimmed}) || '%'
+        OR similarity(c.name, ${trimmed}) > 0.3
+      )
+    ORDER BY similarity DESC, c.name ASC
+    LIMIT ${limit}
+  `;
+}
+
 /**
  * Trigram similarity lookup against Published product names and Active
  * category names, for the "did you mean" empty-search-result state

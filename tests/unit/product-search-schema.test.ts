@@ -3,12 +3,12 @@ import { describe, expect, it } from "vitest";
 import { productSearchQuerySchema } from "@/validation/product-search.schema";
 
 describe("productSearchQuerySchema", () => {
-  it("trims q and defaults page/sort like the base listing schema", () => {
+  it("trims q and defaults page to 1 / sort to relevance", () => {
     const result = productSearchQuerySchema.parse({ q: "  curry  " });
 
     expect(result.q).toBe("curry");
     expect(result.page).toBe(1);
-    expect(result.sort).toBe("newest");
+    expect(result.sort).toBe("relevance");
   });
 
   it("accepts sort: relevance", () => {

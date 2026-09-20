@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { prisma } from "@/lib/db";
 import { createProduct } from "@/repositories/product.repository";
+import { createCategory } from "@/repositories/category.repository";
 import {
   findDidYouMeanSuggestion,
   getSearchSuggestions,
@@ -12,6 +13,7 @@ import {
 
 afterEach(async () => {
   await prisma.product.deleteMany();
+  await prisma.category.deleteMany();
 });
 
 describe("getSearchSuggestions", () => {
@@ -61,6 +63,22 @@ describe("getSearchSuggestions", () => {
     const suggestions = await getSearchSuggestions("curry");
 
     expect(suggestions).toEqual([]);
+  });
+
+  it("includes category-name matches, typed as Category", async () => {
+    const category = await createCategory({
+      name: "Spices & Curry Powders",
+      slug: "spices-curry-powders",
+    });
+
+    const suggestions = await getSearchSuggestions("Spices");
+
+    expect(suggestions).toContainEqual({
+      id: category.id,
+      label: "Spices & Curry Powders",
+      href: "/products?category=spices-curry-powders",
+      type: "Category",
+    });
   });
 
   it("caps results at the given limit", async () => {

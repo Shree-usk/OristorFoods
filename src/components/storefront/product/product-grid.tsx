@@ -25,7 +25,7 @@ export function ProductGrid({
   certificationOptions,
   brandOptions,
 }: ProductGridProps) {
-  const [params, setParams] = useProductListingParams();
+  const [params, setParams] = useProductListingParams(scope.query !== undefined ? "relevance" : "newest");
   const { data, isPending } = useProductListing(scope, params, initialData);
 
   const filterValues: FilterValues = {

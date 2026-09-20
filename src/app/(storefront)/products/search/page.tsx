@@ -51,41 +51,27 @@ export default async function ProductSearchPage({ searchParams }: ProductSearchP
       <h1 className="text-h1 font-heading text-charcoal">{q ? `Results for "${q}"` : "Search Products"}</h1>
 
       {q ? (
-        result.items.length === 0 ? (
-          <div className="mt-8 text-body text-charcoal/70">
-            {didYouMean ? (
-              <p>
-                No results found for &quot;{q}&quot;. Did you mean{" "}
-                <Link
-                  href={`/products/search?q=${encodeURIComponent(didYouMean)}`}
-                  className="text-chilli hover:underline"
-                >
-                  {didYouMean}
-                </Link>
-                ?
-              </p>
-            ) : (
-              <p>No products match &quot;{q}&quot;.</p>
-            )}
-            <p className="mt-2">
-              Browse{" "}
-              <Link href="/products" className="text-chilli hover:underline">
-                all products
-              </Link>{" "}
-              instead.
+        <div className="mt-8">
+          {result.items.length === 0 && didYouMean ? (
+            <p className="mb-6 text-body text-charcoal/70">
+              No results found for &quot;{q}&quot;. Did you mean{" "}
+              <Link
+                href={`/products/search?q=${encodeURIComponent(didYouMean)}`}
+                className="text-chilli hover:underline"
+              >
+                {didYouMean}
+              </Link>
+              ?
             </p>
-          </div>
-        ) : (
-          <div className="mt-8">
-            <ProductGrid
-              scope={{ query: q }}
-              initialData={result}
-              allergenOptions={allergens.map((a) => ({ value: a.name, label: a.name }))}
-              certificationOptions={certifications.map((c) => ({ value: c.id, label: c.name }))}
-              brandOptions={brands.map((b) => ({ value: b.slug, label: b.name }))}
-            />
-          </div>
-        )
+          ) : null}
+          <ProductGrid
+            scope={{ query: q }}
+            initialData={result}
+            allergenOptions={allergens.map((a) => ({ value: a.name, label: a.name }))}
+            certificationOptions={certifications.map((c) => ({ value: c.id, label: c.name }))}
+            brandOptions={brands.map((b) => ({ value: b.slug, label: b.name }))}
+          />
+        </div>
       ) : null}
     </Section>
   );

@@ -147,8 +147,10 @@ export interface SearchSuggestion {
   id: string;
   label: string;
   href: string;
-  type: "Product";
+  type: "Product" | "Category";
 }
+
+const CATEGORY_SUGGESTION_CAP = 2; // categories shouldn't crowd out product results
 
 export async function getSearchSuggestions(
   query: string,
@@ -159,23 +161,39 @@ export async function getSearchSuggestions(
 
   const matches = await searchRepository.findRankedProductMatches(trimmed);
   const relevant = matches.filter((match) => match.rankTier >= SUGGESTION_MIN_TIER).slice(0, limit);
-  if (relevant.length === 0) return [];
 
-  const rankOrder = new Map(relevant.map((match, index) => [match.productId, index]));
-  const products = await productRepository.findProductsByIdsWithFilters(
-    relevant.map((match) => match.productId),
-    {},
-  );
-  const sorted = [...products].sort(
-    (a, b) => (rankOrder.get(a.id) ?? 0) - (rankOrder.get(b.id) ?? 0),
-  );
+  const categoryBudget = Math.min(CATEGORY_SUGGESTION_CAP, limit);
+  const categoryMatches =
+    categoryBudget > 0 ? await searchRepository.findRankedCategoryMatches(trimmed, categoryBudget) : [];
 
-  return sorted.map((product) => ({
-    id: product.id,
-    label: product.name,
-    href: `/products/${product.slug}`,
-    type: "Product" as const,
+  const productSuggestions: SearchSuggestion[] = [];
+  if (relevant.length > 0) {
+    const rankOrder = new Map(relevant.map((match, index) => [match.productId, index]));
+    const products = await productRepository.findProductsByIdsWithFilters(
+      relevant.map((match) => match.productId),
+      {},
+    );
+    const sorted = [...products].sort(
+      (a, b) => (rankOrder.get(a.id) ?? 0) - (rankOrder.get(b.id) ?? 0),
+    );
+    productSuggestions.push(
+      ...sorted.map((product) => ({
+        id: product.id,
+        label: product.name,
+        href: `/products/${product.slug}`,
+        type: "Product" as const,
+      })),
+    );
+  }
+
+  const categorySuggestions: SearchSuggestion[] = categoryMatches.map((category) => ({
+    id: category.categoryId,
+    label: category.name,
+    href: `/products?category=${category.slug}`,
+    type: "Category" as const,
   }));
+
+  return [...productSuggestions, ...categorySuggestions].slice(0, limit);
 }
 
 export function findDidYouMeanSuggestion(query: string): Promise<string | null> {
