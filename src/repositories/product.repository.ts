@@ -163,25 +163,29 @@ export interface ProductListingFilters {
   take?: number;
 }
 
+function buildProductListingWhere(filters: ProductListingFilters): Prisma.ProductWhereInput {
+  return {
+    status: "Published",
+    ...(filters.excludeProductId ? { id: { not: filters.excludeProductId } } : {}),
+    ...(filters.categoryIds?.length
+      ? { categories: { some: { id: { in: filters.categoryIds } } } }
+      : {}),
+    ...(filters.collectionId ? { collections: { some: { id: filters.collectionId } } } : {}),
+    ...(filters.allergenNamesToExclude?.length
+      ? { allergens: { none: { name: { in: filters.allergenNamesToExclude } } } }
+      : {}),
+    ...(filters.certificationIds?.length
+      ? { certifications: { some: { id: { in: filters.certificationIds } } } }
+      : {}),
+    ...(filters.brandSlugs?.length ? { brand: { slug: { in: filters.brandSlugs } } } : {}),
+    ...(filters.inStock !== undefined ? { inStock: filters.inStock } : {}),
+  };
+}
+
 export function findPublishedProductsForListing(filters: ProductListingFilters) {
   return prisma.product.findMany({
     take: filters.take,
-    where: {
-      status: "Published",
-      ...(filters.excludeProductId ? { id: { not: filters.excludeProductId } } : {}),
-      ...(filters.categoryIds?.length
-        ? { categories: { some: { id: { in: filters.categoryIds } } } }
-        : {}),
-      ...(filters.collectionId ? { collections: { some: { id: filters.collectionId } } } : {}),
-      ...(filters.allergenNamesToExclude?.length
-        ? { allergens: { none: { name: { in: filters.allergenNamesToExclude } } } }
-        : {}),
-      ...(filters.certificationIds?.length
-        ? { certifications: { some: { id: { in: filters.certificationIds } } } }
-        : {}),
-      ...(filters.brandSlugs?.length ? { brand: { slug: { in: filters.brandSlugs } } } : {}),
-      ...(filters.inStock !== undefined ? { inStock: filters.inStock } : {}),
-    },
+    where: buildProductListingWhere(filters),
     include: {
       brand: true,
       images: { where: { isPrimary: true }, take: 1 },
@@ -192,6 +196,25 @@ export function findPublishedProductsForListing(filters: ProductListingFilters) 
     // own sort (e.g. listRelatedProducts) would see results shuffle
     // between requests.
     orderBy: { publishedAt: "desc" },
+  });
+}
+
+// Same relational filter shape as findPublishedProductsForListing, applied
+// to a pre-computed id set instead of a fresh catalogue-wide query — used
+// by search.service.ts's searchProducts()/getSearchSuggestions() (STORY-012)
+// after search.repository.ts's raw-SQL ranking query has already narrowed
+// down candidate ids. No orderBy: callers re-sort by rank order themselves.
+export function findProductsByIdsWithFilters(
+  ids: string[],
+  filters: Pick<ProductListingFilters, "allergenNamesToExclude" | "certificationIds" | "brandSlugs" | "inStock">,
+) {
+  if (ids.length === 0) return Promise.resolve([]);
+  return prisma.product.findMany({
+    where: { ...buildProductListingWhere(filters), id: { in: ids } },
+    include: {
+      brand: true,
+      images: { where: { isPrimary: true }, take: 1 },
+    },
   });
 }
 

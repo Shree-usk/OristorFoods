@@ -14,6 +14,7 @@ import {
   findProductBySku,
   findProductBySlug,
   findProductDetailBySlug,
+  findProductsByIdsWithFilters,
   findPublishedProductsForListing,
   listAllergens,
   listCertifications,
@@ -210,6 +211,67 @@ describe("findPublishedProductsForListing", () => {
     const results = await findPublishedProductsForListing({ take: 2 });
 
     expect(results).toHaveLength(2);
+  });
+});
+
+describe("findProductsByIdsWithFilters", () => {
+  it("returns only the given ids that match the filters", async () => {
+    const peanuts = await createAllergen({ name: "Peanuts-FPIWF" });
+    const included = await createProduct({
+      sku: "FPIWF-1",
+      slug: "fpiwf-1",
+      name: "Included",
+      status: "Published",
+    });
+    const excludedByAllergen = await createProduct({
+      sku: "FPIWF-2",
+      slug: "fpiwf-2",
+      name: "Has Peanuts",
+      status: "Published",
+      allergens: { connect: [{ id: peanuts.id }] },
+    });
+    const notInIdList = await createProduct({
+      sku: "FPIWF-3",
+      slug: "fpiwf-3",
+      name: "Not Requested",
+      status: "Published",
+    });
+
+    const results = await findProductsByIdsWithFilters(
+      [included.id, excludedByAllergen.id, notInIdList.id].slice(0, 2),
+      { allergenNamesToExclude: ["Peanuts-FPIWF"] },
+    );
+
+    expect(results.map((p) => p.slug)).toEqual(["fpiwf-1"]);
+  });
+
+  it("returns an empty array immediately for an empty id list", async () => {
+    const results = await findProductsByIdsWithFilters([], {});
+
+    expect(results).toEqual([]);
+  });
+
+  it("still enforces the relational filters findPublishedProductsForListing already tests (brands)", async () => {
+    const brand = await createBrand({ name: "Oristor FPIWF", slug: "oristor-fpiwf" });
+    const branded = await createProduct({
+      sku: "FPIWF-4",
+      slug: "fpiwf-4",
+      name: "Branded",
+      status: "Published",
+      brand: { connect: { id: brand.id } },
+    });
+    const unbranded = await createProduct({
+      sku: "FPIWF-5",
+      slug: "fpiwf-5",
+      name: "Unbranded",
+      status: "Published",
+    });
+
+    const results = await findProductsByIdsWithFilters([branded.id, unbranded.id], {
+      brandSlugs: ["oristor-fpiwf"],
+    });
+
+    expect(results.map((p) => p.slug)).toEqual(["fpiwf-4"]);
   });
 });
 
