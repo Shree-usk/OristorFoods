@@ -87,4 +87,22 @@ describe("searchCatalogue", () => {
     expect(result.products).toHaveLength(2);
     expect(result.hasNextPage).toBe(true);
   });
+
+  it("now finds a typo-matched product that the old plain substring match would have missed", async () => {
+    const product = await createProduct({
+      sku: "SC-TYPO-1",
+      slug: "sc-typo-1",
+      name: "Chilli Powder",
+      status: "Published",
+    });
+    await createStandardPrice({ product: { connect: { id: product.id } }, price: "300.00" });
+
+    // "chili" (one L) never appears as a substring of "Chilli Powder" — a
+    // plain `contains` match (STORY-007's original searchPublishedProducts)
+    // would return nothing here. The trigram-ranked searchProducts() this
+    // task switches searchCatalogue() to use internally still finds it.
+    const result = await searchCatalogue("chili powder");
+
+    expect(result.products.map((p) => p.name)).toContain("Chilli Powder");
+  });
 });

@@ -38,30 +38,22 @@ export async function searchCatalogue(
   const trimmed = query.trim();
   if (!trimmed) return emptyResult(page, pageSize);
 
-  const skip = (page - 1) * pageSize;
-  // Fetch one extra row to detect a next page without a separate COUNT
-  // query — no AC requires an exact running total, and the story
-  // explicitly defers full pagination UX to STORY-012.
-  const [candidates, recipes] = await Promise.all([
-    productRepository.searchPublishedProducts(trimmed, { take: pageSize + 1, skip }),
+  // STORY-012's searchProducts() now provides the ranked, typo-tolerant
+  // product matching that used to be a plain substring search here —
+  // same external SearchResultsPage shape, better internals.
+  const [productResults, recipes] = await Promise.all([
+    searchProducts(trimmed, { page, pageSize }),
     searchRecipes(trimmed, pageSize),
   ]);
 
-  const hasNextPage = candidates.length > pageSize;
-  const pageCandidates = candidates.slice(0, pageSize);
-
-  const resolvedPrices = await pricingService.resolvePricesForProducts(
-    pageCandidates.map((candidate) => candidate.id),
-  );
-
-  const products: ProductListItem[] = [];
-  for (const candidate of pageCandidates) {
-    const resolved = resolvedPrices.get(candidate.id);
-    if (!resolved) continue; // no price configured — never shown on the storefront
-    products.push(toProductListItem(candidate, resolved.price.toNumber(), resolved.currency));
-  }
-
-  return { query: trimmed, products, recipes, page, pageSize, hasNextPage };
+  return {
+    query: trimmed,
+    products: productResults.items,
+    recipes,
+    page,
+    pageSize,
+    hasNextPage: productResults.hasNextPage,
+  };
 }
 
 const DEFAULT_LISTING_PAGE_SIZE = 24;
