@@ -78,6 +78,7 @@ export function ProductGrid({
           <SortSelect
             value={params.sort}
             onValueChange={(sort: ProductSort) => void setParams({ sort, page: 1 })}
+            showRelevance={scope.query !== undefined}
           />
         </div>
 
