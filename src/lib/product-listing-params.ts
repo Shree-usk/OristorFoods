@@ -7,7 +7,7 @@ import {
   parseAsStringLiteral,
 } from "nuqs/server";
 
-export const productSortValues = ["price-asc", "price-desc", "newest", "best-selling", "rating"] as const;
+export const productSortValues = ["relevance", "price-asc", "price-desc", "newest", "best-selling", "rating"] as const;
 
 /**
  * Single source of truth for the product-listing URL query state — shared

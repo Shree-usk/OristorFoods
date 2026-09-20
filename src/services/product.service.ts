@@ -28,7 +28,7 @@ export async function listPublishedProductsByCategory(categoryId: string) {
   return products.filter((product) => product.status === "Published");
 }
 
-export type ProductSort = "price-asc" | "price-desc" | "newest" | "best-selling" | "rating";
+export type ProductSort = "relevance" | "price-asc" | "price-desc" | "newest" | "best-selling" | "rating";
 
 export interface ProductListingFiltersInput {
   priceMin?: number;

@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const productSortValues = ["price-asc", "price-desc", "newest", "best-selling", "rating"] as const;
+export const productSortValues = ["relevance", "price-asc", "price-desc", "newest", "best-selling", "rating"] as const;
 
 /**
  * A comma-separated query value (matches `nuqs`'s `parseAsArrayOf` client-side

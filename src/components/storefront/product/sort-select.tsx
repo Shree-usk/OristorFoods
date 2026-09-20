@@ -4,6 +4,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import type { ProductSort } from "@/services/product.service";
 
 const sortLabels: Record<ProductSort, string> = {
+  relevance: "Relevance",
   "price-asc": "Price: Low to High",
   "price-desc": "Price: High to Low",
   newest: "Newest",
@@ -15,14 +16,21 @@ const sortLabels: Record<ProductSort, string> = {
 // there's no real data to sort "best-selling"/"rating" by — disabled for
 // now, see docs/superpowers/specs/2026-07-16-product-listing-design.md.
 const disabledSorts: ProductSort[] = ["best-selling", "rating"];
-const allSorts = Object.keys(sortLabels) as ProductSort[];
+
+// "Relevance" only means something with a search query behind it (STORY-012)
+// — every other listing page (category/collection browsing) defaults to
+// "newest" and would show a confusing, non-functional option otherwise.
+const baseSorts = (Object.keys(sortLabels) as ProductSort[]).filter((sort) => sort !== "relevance");
 
 interface SortSelectProps {
   value: ProductSort;
   onValueChange: (value: ProductSort) => void;
+  showRelevance?: boolean;
 }
 
-export function SortSelect({ value, onValueChange }: SortSelectProps) {
+export function SortSelect({ value, onValueChange, showRelevance = false }: SortSelectProps) {
+  const allSorts = showRelevance ? (["relevance", ...baseSorts] as ProductSort[]) : baseSorts;
+
   return (
     <Select value={value} onValueChange={(next) => onValueChange(next as ProductSort)}>
       <SelectTrigger aria-label="Sort products">
