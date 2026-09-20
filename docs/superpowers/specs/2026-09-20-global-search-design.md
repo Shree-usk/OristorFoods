@@ -160,17 +160,21 @@ early.
 
 ## Validation
 
-`src/validation/search.schema.ts`:
+`src/validation/search.schema.ts`, following `product-listing.schema.ts`'s
+established convention of `.catch()` (never a hard validation error) so a
+malformed/missing query degrades to an empty result instead of a 400:
 
 ```ts
 export const searchQuerySchema = z.object({
-  q: z.string().trim().min(1),
-  page: z.coerce.number().int().positive().optional(),
+  q: z.string().trim().catch(""),
+  page: z.coerce.number().int().positive().catch(1),
 });
 ```
 
-Shared between the route handler and any client-side construction of the
-query string (mirrors `product-listing-params` conventions).
+`search.service.ts`'s existing blank-query short-circuit (see Data Flow)
+turns an empty/missing `q` into a 200 with empty results — the same
+"a broken link elsewhere shouldn't break this page" rationale
+`product-listing.schema.ts` documents.
 
 ## Error Handling
 
@@ -178,7 +182,9 @@ query string (mirrors `product-listing-params` conventions).
 - No recipe provider registered → recipes array is `[]`, no error, section
   omitted from UI (not an empty-state message — matches PDP's precedent
   for not-yet-built modules).
-- API validation failure (missing `q`) → 400 with a Zod-derived message.
+- Malformed/missing `q` or `page` → schema `.catch()` degrades to `""`/`1`,
+  which resolves through the same blank-query empty-result path, never a
+  400 (matches `product-listing.schema.ts`'s convention).
 - Suggestions fetch failure → dropdown shows nothing extra (no error toast
   inside a transient overlay); results-page fetch failure → inline retry
   message (this page is the durable destination, worth a visible error).
