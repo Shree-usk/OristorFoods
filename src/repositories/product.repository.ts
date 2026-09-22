@@ -218,6 +218,21 @@ export function findProductsByIdsWithFilters(
   });
 }
 
+export function findProductsForCompareByIds(ids: string[]) {
+  if (ids.length === 0) return Promise.resolve([]);
+  return prisma.product.findMany({
+    where: { id: { in: ids }, status: "Published" },
+    include: {
+      brand: true,
+      nutrition: true,
+      ingredients: { orderBy: { sortOrder: "asc" } },
+      allergens: true,
+      certifications: true,
+      images: { orderBy: [{ isPrimary: "desc" }, { sortOrder: "asc" }] },
+    },
+  });
+}
+
 export function listAllergens() {
   return prisma.allergen.findMany({ orderBy: { name: "asc" } });
 }

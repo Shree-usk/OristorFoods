@@ -14,6 +14,7 @@ import {
   findProductBySku,
   findProductBySlug,
   findProductDetailBySlug,
+  findProductsForCompareByIds,
   findProductsByIdsWithFilters,
   findPublishedProductsForListing,
   listAllergens,
@@ -333,5 +334,57 @@ describe("listAllergens and listCertifications", () => {
     const results = await listCertifications();
 
     expect(results.map((c) => c.name)).toEqual(["Organic", "SLS"]);
+  });
+});
+
+describe("findProductsForCompareByIds", () => {
+  it("returns only Published products among the given ids, with full comparison data", async () => {
+    const brand = await createBrand({ name: "Oristor FPFCBI", slug: "oristor-fpfcbi" });
+    const peanuts = await createAllergen({ name: "Peanuts-FPFCBI" });
+    const organic = await createCertification({ name: "Organic-FPFCBI" });
+    const published = await createProduct({
+      sku: "FPFCBI-1",
+      slug: "fpfcbi-1",
+      name: "Published Product",
+      status: "Published",
+      brand: { connect: { id: brand.id } },
+      allergens: { connect: [{ id: peanuts.id }] },
+      certifications: { connect: [{ id: organic.id }] },
+    });
+    await setProductNutrition({
+      product: { connect: { id: published.id } },
+      servingSize: "1 tsp",
+      calories: "10.00",
+      protein: "1.00",
+      fat: "0.50",
+      saturatedFat: "0.10",
+      carbohydrates: "1.00",
+      sugar: "0.20",
+      fibre: "0.50",
+      sodium: "1.00",
+    });
+    await addProductIngredient({ product: { connect: { id: published.id } }, name: "Salt", sortOrder: 1 });
+    await addProductImage({ product: { connect: { id: published.id } }, url: "/fpfcbi-1.jpg", isPrimary: true, sortOrder: 1 });
+    const draft = await createProduct({
+      sku: "FPFCBI-2",
+      slug: "fpfcbi-2",
+      name: "Draft Product",
+      status: "Draft",
+    });
+
+    const results = await findProductsForCompareByIds([published.id, draft.id]);
+
+    expect(results).toHaveLength(1);
+    expect(results[0]?.slug).toBe("fpfcbi-1");
+    expect(results[0]?.brand?.name).toBe("Oristor FPFCBI");
+    expect(results[0]?.nutrition?.servingSize).toBe("1 tsp");
+    expect(results[0]?.ingredients.map((i) => i.name)).toEqual(["Salt"]);
+    expect(results[0]?.allergens.map((a) => a.name)).toEqual(["Peanuts-FPFCBI"]);
+    expect(results[0]?.certifications.map((c) => c.name)).toEqual(["Organic-FPFCBI"]);
+    expect(results[0]?.images.map((i) => i.url)).toEqual(["/fpfcbi-1.jpg"]);
+  });
+
+  it("returns an empty array immediately for an empty id list", async () => {
+    expect(await findProductsForCompareByIds([])).toEqual([]);
   });
 });
