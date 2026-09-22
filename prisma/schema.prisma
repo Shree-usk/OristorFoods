@@ -29,6 +29,7 @@ model User {
   passwordHash  String?
   accounts      Account[]
   sessions      Session[]
+  wishlist      Wishlist?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 }
@@ -193,10 +194,32 @@ model Product {
   campaignPrices      CampaignPrice[]
   customerGroupPrices CustomerGroupPrice[]
   volumeDiscountTiers VolumeDiscountTier[]
+  wishlistItems       WishlistItem[]
 
   @@index([status])
   @@index([status, inStock])
   @@index([brandId])
+}
+
+model Wishlist {
+  id        String         @id @default(cuid())
+  userId    String         @unique
+  user      User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  items     WishlistItem[]
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+}
+
+model WishlistItem {
+  id         String   @id @default(cuid())
+  wishlistId String
+  wishlist   Wishlist @relation(fields: [wishlistId], references: [id], onDelete: Cascade)
+  productId  String
+  product    Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  addedAt    DateTime @default(now())
+
+  @@unique([wishlistId, productId])
+  @@index([productId])
 }
 
 enum MediaRole {
