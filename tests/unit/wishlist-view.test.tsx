@@ -39,11 +39,11 @@ beforeEach(() => {
 describe("WishlistView — guest", () => {
   beforeEach(() => mockUseSession.mockReturnValue({ status: "unauthenticated" }));
 
-  it("shows an empty state with no guest items", () => {
+  it("shows an empty state with no guest items", async () => {
     renderView();
 
-    expect(screen.getByText(/wishlist is empty/i)).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /browse products/i })).toHaveAttribute("href", "/products");
+    await waitFor(() => expect(screen.getByText(/wishlist is empty/i)).toBeInTheDocument());
+    expect(screen.getByRole("button", { name: /browse products/i })).toHaveAttribute("href", "/products");
   });
 
   it("fetches and renders guest items by id", async () => {

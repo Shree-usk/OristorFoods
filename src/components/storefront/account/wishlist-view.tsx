@@ -58,6 +58,8 @@ export function WishlistView() {
     setAnnouncement("Removed from wishlist.");
   }
 
+  if (isLoading) return null;
+
   if (items.length === 0) {
     return (
       <div className="mx-auto max-w-2xl px-4 py-16 text-center">
@@ -65,14 +67,12 @@ export function WishlistView() {
         <p className="mt-2 text-body text-charcoal/80">
           Save products you're interested in and they'll show up here.
         </p>
-        <Link href="/products" className="mt-6 inline-block rounded-lg bg-primary px-4 py-2 font-medium text-primary-foreground hover:bg-primary/80">
+        <Button className="mt-6" nativeButton={false} render={<Link href="/products" />}>
           Browse Products
-        </Link>
+        </Button>
       </div>
     );
   }
-
-  if (isLoading) return null;
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-10">
