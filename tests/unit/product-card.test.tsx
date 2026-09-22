@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("next-auth/react", () => ({
@@ -10,6 +10,7 @@ import type { ProductListItem } from "@/types/product";
 
 const { ProductCard } = await import("@/components/storefront/product/product-card");
 const { useWishlistStore } = await import("@/lib/stores/wishlist-store");
+const { useCompareStore } = await import("@/lib/stores/compare-store");
 
 const baseProduct: ProductListItem = {
   id: "1",
@@ -33,6 +34,7 @@ function renderCard(product: ProductListItem = baseProduct) {
 beforeEach(() => {
   localStorage.clear();
   useWishlistStore.setState({ items: [] });
+  useCompareStore.setState({ items: [] });
 });
 
 describe("ProductCard", () => {
@@ -74,5 +76,35 @@ describe("ProductCard", () => {
     const prevented = !button.dispatchEvent(clickEvent);
 
     expect(prevented).toBe(true);
+  });
+
+  it("renders a compare toggle that adds the product to the compare store", () => {
+    renderCard();
+
+    screen.getByRole("button", { name: "Add to compare" }).click();
+
+    expect(useCompareStore.getState().items).toEqual(["1"]);
+  });
+
+  it("does not navigate when the compare toggle is clicked", () => {
+    renderCard();
+
+    const button = screen.getByRole("button", { name: "Add to compare" });
+    const clickEvent = new MouseEvent("click", { bubbles: true, cancelable: true });
+    const prevented = !button.dispatchEvent(clickEvent);
+
+    expect(prevented).toBe(true);
+  });
+
+  it("shows an inline message and does not add a 5th product when the tray is full", async () => {
+    useCompareStore.setState({ items: ["a", "b", "c", "d"] });
+    renderCard();
+
+    screen.getByRole("button", { name: "Add to compare" }).click();
+
+    await waitFor(() => {
+      expect(screen.getByText(/compare is full/i)).toBeInTheDocument();
+    });
+    expect(useCompareStore.getState().items).toEqual(["a", "b", "c", "d"]);
   });
 });

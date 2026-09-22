@@ -6,6 +6,7 @@ import { Heart, Star } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { CompareToggle } from "@/components/storefront/product/compare-toggle";
 import { useWishlist } from "@/hooks/use-wishlist";
 import type { ProductListItem } from "@/types/product";
 
@@ -20,6 +21,10 @@ export function ProductCard({ product }: { product: ProductListItem }) {
     <Link href={product.href} className="group block">
       <div className="relative aspect-square overflow-hidden rounded-lg bg-cream">
         {product.badge && <Badge className="absolute top-2 left-2 z-10">{product.badge}</Badge>}
+        <CompareToggle
+          productId={product.id}
+          className="absolute top-2 right-10 z-10 rounded-full bg-background/80 backdrop-blur-sm hover:bg-background"
+        />
         <Button
           type="button"
           variant="ghost"
