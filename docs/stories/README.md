@@ -36,7 +36,7 @@ Stories are grouped into epics that match the build order in
 | STORY-010 | Product Listing, Categories & Filters | Done |
 | STORY-011 | Product Detail Page | Done |
 | STORY-012 | Product Search & Discovery | Done |
-| STORY-013 | Wishlist | Draft |
+| STORY-013 | Wishlist | Done |
 | STORY-014 | Product Compare | Draft |
 | STORY-015 | Product Reviews & Ratings | Draft |
 | STORY-016 | Product Q&A | Draft |
