@@ -1,21 +1,34 @@
 import { create } from "zustand";
+import { persist } from "zustand/middleware";
 
-/**
- * Count-only client state for the header's wishlist badge. The full
- * wishlist (saved products, guest/logged-in merge) is owned by
- * STORY-013 (Wishlist) — extend or replace this store there rather than
- * introducing a second wishlist store.
- */
 interface WishlistState {
-  count: number;
-  setCount: (count: number) => void;
-  increment: (by?: number) => void;
-  decrement: (by?: number) => void;
+  items: string[];
+  add: (productId: string) => void;
+  remove: (productId: string) => void;
+  has: (productId: string) => boolean;
+  clear: () => void;
 }
 
-export const useWishlistStore = create<WishlistState>((set) => ({
-  count: 0,
-  setCount: (count) => set({ count: Math.max(0, count) }),
-  increment: (by = 1) => set((state) => ({ count: state.count + by })),
-  decrement: (by = 1) => set((state) => ({ count: Math.max(0, state.count - by) })),
-}));
+/**
+ * Guest (unauthenticated) wishlist, persisted to localStorage — STORY-013.
+ * Logged-in users' wishlist lives server-side (see wishlist.service.ts)
+ * and is fetched via useWishlist's TanStack Query branch instead; this
+ * store is only the guest path. Same persist-without-a-hydration-boundary
+ * pattern as recently-viewed-store.ts (see docs/architecture-decisions.md
+ * for why that's safe here).
+ */
+export const useWishlistStore = create<WishlistState>()(
+  persist(
+    (set, get) => ({
+      items: [],
+      add: (productId) => {
+        if (get().items.includes(productId)) return;
+        set({ items: [...get().items, productId] });
+      },
+      remove: (productId) => set({ items: get().items.filter((id) => id !== productId) }),
+      has: (productId) => get().items.includes(productId),
+      clear: () => set({ items: [] }),
+    }),
+    { name: "oristor-wishlist" },
+  ),
+);
