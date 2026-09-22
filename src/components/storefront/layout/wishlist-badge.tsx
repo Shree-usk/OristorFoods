@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { useWishlistStore } from "@/lib/stores/wishlist-store";
 
 export function WishlistBadge() {
-  const count = useWishlistStore((state) => state.count);
+  const count = useWishlistStore((state) => state.items.length);
 
   return (
     <Link

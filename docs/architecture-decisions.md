@@ -922,3 +922,36 @@ every product-name/description/ingredient tier. Confirmed live:
 (a category-name typo) triggers did-you-mean. Not fixed in this story —
 flagged here as a known characteristic for whoever next tunes the ranking
 thresholds.
+
+---
+
+## 2026-09-21 — STORY-013 Wishlist
+
+**Guest→account merge contract:** `POST /api/wishlist/merge` accepts
+`{ productIds: string[] }` (max 200), de-dupes against the user's existing
+wishlist, and silently drops ids that no longer resolve to a `Published`
+product — never a partial-failure response. Triggered automatically by
+`WishlistMergeSync` (mounted in `src/app/providers.tsx`) on the
+unauthenticated→authenticated session transition, not by a login page's
+submit handler — no login page exists yet in this codebase.
+
+**Header wishlist-count integration point (for STORY-004):**
+`WishlistBadge` (`src/components/storefront/layout/wishlist-badge.tsx`)
+already renders in `HeaderActions` and reads `useWishlistStore`'s
+`items.length` directly — no further wiring needed from STORY-004's side.
+
+**Cart wiring is intentionally still the STORY-024 stub.** Wishlist's
+move-to-cart/move-all-to-cart buttons call the existing `useAddToCart`
+hook (`src/hooks/use-add-to-cart.ts`), which remains permanently
+unavailable until STORY-024 replaces it — confirmed with the user as the
+scope for this story rather than building any real cart logic here.
+
+**First authenticated API routes in this codebase.** `/api/wishlist`,
+`/api/wishlist/[productId]`, and `/api/wishlist/merge` are the first
+routes to call `auth()` and require a session — this also required adding
+`src/types/next-auth.d.ts` to type `session.user.id` (previously untyped;
+`src/lib/auth.ts`'s `session` callback already set it at runtime).
+
+**The repo is now ESM** (`"type": "module"` in package.json, added so
+Playwright can load specs that import the Prisma 7 client). Any new
+root-level `.js` file is therefore ESM — use `.cjs` if CommonJS is needed.
