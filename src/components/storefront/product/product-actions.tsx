@@ -3,6 +3,7 @@
 import { Heart, ShoppingCart } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { CompareToggle } from "@/components/storefront/product/compare-toggle";
 import { useAddToCart } from "@/hooks/use-add-to-cart";
 import { useWishlist } from "@/hooks/use-wishlist";
 
@@ -36,6 +37,7 @@ export function ProductActions({ productId, inStock }: ProductActionsProps) {
       >
         <Heart className={wishlist.isWishlisted ? "fill-current" : undefined} />
       </Button>
+      <CompareToggle productId={productId} className="shrink-0" />
     </div>
   );
 }

@@ -8,6 +8,7 @@ vi.mock("next-auth/react", () => ({
 
 const { ProductActions } = await import("@/components/storefront/product/product-actions");
 const { useWishlistStore } = await import("@/lib/stores/wishlist-store");
+const { useCompareStore } = await import("@/lib/stores/compare-store");
 
 function renderWithProviders(ui: React.ReactElement) {
   return render(<QueryClientProvider client={new QueryClient()}>{ui}</QueryClientProvider>);
@@ -16,6 +17,7 @@ function renderWithProviders(ui: React.ReactElement) {
 beforeEach(() => {
   localStorage.clear();
   useWishlistStore.setState({ items: [] });
+  useCompareStore.setState({ items: [] });
 });
 
 describe("ProductActions", () => {
@@ -49,5 +51,13 @@ describe("ProductActions", () => {
     renderWithProviders(<ProductActions productId="p1" inStock={true} />);
 
     expect(screen.getByRole("button", { name: "Add to Cart" })).toBeDisabled();
+  });
+
+  it("renders a compare toggle that adds the product to the compare store", () => {
+    renderWithProviders(<ProductActions productId="p1" inStock={true} />);
+
+    screen.getByRole("button", { name: "Add to compare" }).click();
+
+    expect(useCompareStore.getState().items).toEqual(["p1"]);
   });
 });
