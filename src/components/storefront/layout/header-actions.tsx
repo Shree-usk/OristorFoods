@@ -6,6 +6,7 @@ import { Gift } from "lucide-react";
 import { SearchOverlay } from "@/components/storefront/search/search-overlay";
 import { AccountMenu } from "./account-menu";
 import { CartBadge } from "./cart-badge";
+import { CompareTrayIndicator } from "./compare-tray-indicator";
 import { WishlistBadge } from "./wishlist-badge";
 
 /**
@@ -17,6 +18,7 @@ export function HeaderActions() {
     <div className="flex items-center gap-1">
       <SearchOverlay />
       <WishlistBadge />
+      <CompareTrayIndicator />
       <Link
         href="/account/rewards"
         aria-label="Rewards"
