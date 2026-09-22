@@ -222,6 +222,24 @@ export async function listRelatedProducts(params: {
   return items;
 }
 
+export async function getProductsByIds(ids: string[]): Promise<ProductListItem[]> {
+  if (ids.length === 0) return [];
+
+  const candidates = await productRepository.findProductsByIdsWithFilters(ids, {});
+  const resolvedPrices = await pricingService.resolvePricesForProducts(
+    candidates.map((candidate) => candidate.id),
+    { customerGroup: "Retail" },
+  );
+
+  const items: ProductListItem[] = [];
+  for (const candidate of candidates) {
+    const resolved = resolvedPrices.get(candidate.id);
+    if (!resolved) continue;
+    items.push(toProductListItem(candidate, resolved.price.toNumber(), resolved.currency));
+  }
+  return items;
+}
+
 export interface ProductDetailImage {
   url: string;
   altText: string;
