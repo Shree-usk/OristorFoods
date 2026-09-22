@@ -1,7 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { useCartStore } from "@/lib/stores/cart-store";
-import { useWishlistStore } from "@/lib/stores/wishlist-store";
 
 describe("useCartStore", () => {
   beforeEach(() => {

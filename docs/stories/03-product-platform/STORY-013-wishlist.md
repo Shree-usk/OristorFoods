@@ -58,7 +58,7 @@ This story implements the Wishlist feature listed in `docs/blueprint.md` Section
 - [x] **Testing:**
   - [x] Unit test the merge logic (dedup, unpublished/deleted product handling)
   - [x] Playwright e2e test: guest adds items, logs in, confirms items persisted and merged into account wishlist
-  - [x] Playwright e2e test: move-to-cart and move-all-to-cart flows, including an out-of-stock item in the batch (asserts the disabled state and in-stock count given the STORY-024 cart stub — see note above)
+  - [x] Playwright e2e test: move-all-to-cart flow with an out-of-stock item in the batch — `tests/e2e/wishlist.spec.ts` asserts the "Move all to cart" disabled state and the in-stock count given the STORY-024 cart stub (see note above). The per-row move-to-cart button is covered by unit tests only, not by the e2e spec.
 
 - [x] **Documentation:**
   - [x] Document the guest-to-account merge contract and the header wishlist-count integration point for STORY-004

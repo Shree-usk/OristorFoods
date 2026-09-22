@@ -1,5 +1,6 @@
 // @vitest-environment node
 import { afterEach, describe, expect, it, vi } from "vitest";
+import type { Mock } from "vitest";
 import type { Session } from "next-auth";
 
 import { prisma } from "@/lib/db";
@@ -10,7 +11,7 @@ vi.mock("@/lib/auth", () => ({ auth: vi.fn() }));
 
 const { auth } = await import("@/lib/auth");
 const { GET, POST } = await import("@/app/api/wishlist/route");
-const mockAuth = vi.mocked(auth) as any;
+const mockAuth = auth as unknown as Mock<() => Promise<Session | null>>;
 
 function sessionFor(userId: string): Session {
   return { user: { id: userId, name: null, email: null, image: null }, expires: "2099-01-01T00:00:00.000Z" };

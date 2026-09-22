@@ -951,3 +951,7 @@ scope for this story rather than building any real cart logic here.
 routes to call `auth()` and require a session — this also required adding
 `src/types/next-auth.d.ts` to type `session.user.id` (previously untyped;
 `src/lib/auth.ts`'s `session` callback already set it at runtime).
+
+**The repo is now ESM** (`"type": "module"` in package.json, added so
+Playwright can load specs that import the Prisma 7 client). Any new
+root-level `.js` file is therefore ESM — use `.cjs` if CommonJS is needed.

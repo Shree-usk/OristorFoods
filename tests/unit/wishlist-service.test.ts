@@ -67,6 +67,33 @@ describe("addToWishlist / getWishlist / removeFromWishlist", () => {
     expect(items).toHaveLength(0);
   });
 
+  it("silently no-ops for a product id that doesn't exist", async () => {
+    const user = await createUser("wishlist-svc-11@test.com");
+
+    await expect(addToWishlist(user.id, "does-not-exist")).resolves.not.toThrow();
+    expect(await getWishlist(user.id)).toHaveLength(0);
+  });
+
+  it("silently no-ops for an unpublished product id", async () => {
+    const user = await createUser("wishlist-svc-12@test.com");
+    const draft = await createProduct({
+      sku: "WISH-SVC-11",
+      slug: "wish-svc-11",
+      name: "Draft Product",
+      status: "Draft",
+    });
+    await createStandardPrice({ product: { connect: { id: draft.id } }, price: "125.00" });
+
+    await addToWishlist(user.id, draft.id);
+
+    expect(await getWishlist(user.id)).toHaveLength(0);
+    const wishlist = await prisma.wishlist.findUnique({
+      where: { userId: user.id },
+      include: { items: true },
+    });
+    expect(wishlist?.items ?? []).toHaveLength(0);
+  });
+
   it("removes a product", async () => {
     const user = await createUser("wishlist-svc-4@test.com");
     const product = await publishedProductWithPrice("WISH-SVC-4", "wish-svc-4", "Ginger Powder", "200.00");

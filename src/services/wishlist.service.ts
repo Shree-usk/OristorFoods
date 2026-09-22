@@ -26,7 +26,18 @@ export async function getWishlist(userId: string): Promise<ProductListItem[]> {
   return result;
 }
 
+/**
+ * Adds a product to the user's wishlist. The product is validated first —
+ * same rule mergeGuestWishlist applies — because the request schema only
+ * checks that productId is a non-empty string. Without this, an unknown id
+ * raises a Prisma P2003 foreign-key error that escapes as a 500, and a
+ * Draft/Discontinued id would create a row getWishlist always filters out.
+ * Both cases are silent no-ops instead.
+ */
 export async function addToWishlist(userId: string, productId: string): Promise<void> {
+  const product = await findProductById(productId);
+  if (!product || product.status !== "Published") return;
+
   const wishlist = await wishlistRepository.findOrCreateWishlist(userId);
   try {
     await wishlistRepository.addItem(wishlist.id, productId);

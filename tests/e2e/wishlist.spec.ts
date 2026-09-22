@@ -25,6 +25,12 @@ const TEST_SKUS = ["E2E-WISH-1", "E2E-WISH-2", "E2E-WISH-3"];
 const TEST_EMAILS = ["e2e-wishlist@test.com", "e2e-wishlist-2@test.com"];
 
 test.describe("Wishlist", () => {
+  // playwright.config.ts sets `fullyParallel: true`, and both tests'
+  // `beforeEach` deletes rows across an overlapping SKU/email set — running
+  // them in parallel lets one test's cleanup wipe the other's seeded data
+  // mid-run. Serial mode is the cheap fix.
+  test.describe.configure({ mode: "serial" });
+
   // Scoped (not a blanket `deleteMany()`, unlike the unit-test pattern) so
   // this doesn't wipe catalogue/user data other e2e specs rely on when the
   // full suite runs together. `beforeEach` (not `afterEach`) so a previous

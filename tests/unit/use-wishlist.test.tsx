@@ -94,4 +94,59 @@ describe("useWishlist — authenticated", () => {
       expect(fetchMock).toHaveBeenCalledWith("/api/wishlist/p1", expect.objectContaining({ method: "DELETE" })),
     );
   });
+
+  it("flips isWishlisted optimistically, before the POST resolves", async () => {
+    let releasePost: () => void = () => {};
+    const postGate = new Promise<void>((resolve) => {
+      releasePost = resolve;
+    });
+    const fetchMock = vi.fn().mockImplementation(async (_url: string, init?: RequestInit) => {
+      if (init?.method === "POST") {
+        await postGate;
+        return { ok: true, status: 200, json: () => Promise.resolve({}) };
+      }
+      return { ok: true, status: 200, json: () => Promise.resolve({ items: [] }) };
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { result } = renderHook(() => useWishlist("p1"), { wrapper });
+    await waitFor(() => expect(result.current.isWishlisted).toBe(false));
+
+    act(() => result.current.toggle());
+
+    // The POST is still in flight (its gate is unresolved) — if this passes,
+    // the cache was updated optimistically rather than after the round-trip.
+    await waitFor(() => expect(result.current.isWishlisted).toBe(true));
+
+    await act(async () => {
+      releasePost();
+    });
+  });
+
+  it("rolls back the optimistic change when the request fails", async () => {
+    let releaseDelete: () => void = () => {};
+    const deleteGate = new Promise<void>((resolve) => {
+      releaseDelete = resolve;
+    });
+    const fetchMock = vi.fn().mockImplementation(async (_url: string, init?: RequestInit) => {
+      if (init?.method === "DELETE") {
+        await deleteGate;
+        return { ok: false, status: 500, json: () => Promise.resolve({}) };
+      }
+      return { ok: true, status: 200, json: () => Promise.resolve({ items: [{ id: "p1" }] }) };
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { result } = renderHook(() => useWishlist("p1"), { wrapper });
+    await waitFor(() => expect(result.current.isWishlisted).toBe(true));
+
+    act(() => result.current.toggle());
+    await waitFor(() => expect(result.current.isWishlisted).toBe(false));
+
+    await act(async () => {
+      releaseDelete();
+    });
+
+    await waitFor(() => expect(result.current.isWishlisted).toBe(true));
+  });
 });
