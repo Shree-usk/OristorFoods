@@ -21,7 +21,7 @@ This story implements the Wishlist feature listed in `docs/blueprint.md` Section
 - [x] Logged-in users' wishlist items persist server-side via `Wishlist`/`WishlistItem` Prisma models, one wishlist per user, unique constraint on `(userId, productId)`
 - [x] On login, an existing guest wishlist is merged into the user's server-side wishlist (union of items, no duplicates), and the client-side copy is cleared afterward
 - [x] `/account/wishlist` (or `/wishlist`) lists all wishlist items with image, name, current resolved price (via `pricing.service.ts`), and availability
-- [x] Each wishlist item can be removed individually, or moved to cart individually
+- [x] Each wishlist item can be removed individually, or moved to cart individually (individual move-to-cart wired to the shared `useAddToCart` stub; real cart execution lands with STORY-024)
 - [x] A "move all to cart" action exists, skipping/flagging any out-of-stock items rather than failing the whole action (wired to the shared `useAddToCart` stub — see `docs/architecture-decisions.md`'s STORY-013 entry; it correctly disables and shows the in-stock count rather than partially failing, real cart execution lands with STORY-024)
 - [x] An empty wishlist state is shown with a prompt to browse products
 - [x] Adding/removing an item shows a toast or inline confirmation (toggle buttons update `aria-pressed`/label/icon immediately; the account page removal announces via an `aria-live` region)
