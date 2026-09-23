@@ -1066,9 +1066,13 @@ state) through the same `advanceReviewToPublished()` helper.
 **Local database pool cap (`DATABASE_POOL_MAX`).** The local `prisma dev`
 server is PGlite, which supports only one connection at a time. The pg
 pool defaults to 10, so any concurrent queries (the PDP's `Promise.all`
-now makes real review queries) opened several connections and crashed it,
-which is the underlying cause of the "PGlite wedges under sustained load"
-behaviour recorded in earlier entries. `src/lib/db.ts` now caps the pool
-when `DATABASE_POOL_MAX` is set. **Set `DATABASE_POOL_MAX=1` in every local
+now makes real review queries) opened several connections and crashed it
+deterministically. `src/lib/db.ts` now caps the pool when
+`DATABASE_POOL_MAX` is set. This fixes the concurrency crash only: the
+separate "PGlite wedges after ~40-50s of continuous test activity"
+problem recorded in earlier entries still happens (reconfirmed 2026-09-23:
+a full `npm run test` still wedges partway). Run the suite in batches, e.g.
+`npx vitest run --shard=N/15`, restarting `prisma dev` when a shard fails
+with P1001 / "Connection terminated unexpectedly". **Set `DATABASE_POOL_MAX=1` in every local
 `.env` (each git worktree has its own).** CI's real Postgres leaves it
 unset and keeps pg's default pool size.
