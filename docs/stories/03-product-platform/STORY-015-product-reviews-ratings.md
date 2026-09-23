@@ -38,7 +38,7 @@ This story implements the customer-facing submit/view review and rating flow ref
 - [x] **API:**
   - [x] `POST /api/products/[slug]/reviews` — submit a review (authenticated)
   - [x] `GET /api/products/[slug]/reviews` — list `Published` reviews with pagination, sort, and rating-filter params
-  - [x] `DELETE /api/products/[slug]/reviews/[reviewId]` — withdraw own `Pending` review _(withdraw implemented as DELETE on the same path)_
+  - [x] `PATCH /api/products/[slug]/reviews/[reviewId]` — edit/withdraw own `Pending` review _(withdraw implemented as DELETE on the same path)_
 
 - [x] **Service/Backend:**
   - [x] Implement `review.service.ts` (submit, edit own pending, list published, compute aggregate rating) calling a new `review.repository.ts`
