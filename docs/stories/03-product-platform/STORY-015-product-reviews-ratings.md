@@ -51,7 +51,7 @@ This story implements the customer-facing submit/view review and rating flow ref
   - [x] Build the aggregate rating summary (average + histogram by star count) for the PDP
 
 - [x] **Validation:**
-  - [x] Zod schema for review submission (rating 1–5 integer required, title/body length bounds, max photo count)
+  - [x] Zod schema for review submission (rating 1–5 integer required, title/body length bounds, max photo count) _(photo count deferred with photos)_
 
 - [x] **Testing:**
   - [x] Unit test the one-review-per-customer-per-product constraint and the aggregate-rating recalculation logic

@@ -1024,7 +1024,16 @@ change into or out of `Published` (`updateStatusAndRecalculate` in
 `review.repository.ts`, the only transaction in the codebase so far,
 because services can't import Prisma). No row means no Published reviews,
 and callers show "No reviews yet", never a 0.0 rating. Future listing-card
-ratings and sort-by-rating should read this table.
+ratings and sort-by-rating should read this table. The rebuild locks the
+product row (`SELECT ... FOR UPDATE`) and the status update is conditional
+on the expected from-status, so two concurrent moderation actions on the
+same product can't lose one another's summary update; customer edit and
+withdraw writes are likewise conditional on `status = Pending`, so a review
+published mid-request can't have its content overwritten or be deleted out
+from under the moderator. Deleting users or reviews outside
+`review.service.ts` (for example a future account-deletion feature relying
+on the `onDelete: Cascade`) skips summary recalculation entirely — such
+features must recalculate affected products' summaries through the service.
 
 **PDP wiring and the provider registry.** `registerReviewProviders()` runs
 from `src/instrumentation.ts` at server startup (Node runtime only).
@@ -1036,7 +1045,8 @@ Epic 04 (recipes) should register their providers the same way.
 **Verified purchase.** `purchase-verification.ts` defaults to `false`
 until STORY-028 (Order Management) calls `registerPurchaseVerifier()`. The
 flag is captured once, at submission; purchases made after a review was
-written don't update it (known gap).
+written don't update it (known gap). The verifier is kept on `globalThis`,
+for the same reason as the product-detail providers above.
 
 **Withdraw = delete.** Withdrawing a Pending review deletes it, freeing the
 `(productId, userId)` unique slot, so the status enum stays exactly the
