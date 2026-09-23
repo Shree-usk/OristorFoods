@@ -4,21 +4,29 @@
  * Management) registers the real check at startup, the same way
  * product-detail-extensions.ts providers work, so review code never imports
  * order code. The flag is evaluated once, when a review is submitted.
+ *
+ * Kept on globalThis, not in module scope, for the same reason as
+ * product-detail-extensions.ts: registration happens from
+ * src/instrumentation.ts, which Next.js bundles separately from the route
+ * code that calls hasPurchasedProduct, so module-scoped state wouldn't be
+ * shared between the two.
  */
 export type PurchaseVerifier = (userId: string, productId: string) => Promise<boolean>;
 
 const defaultVerifier: PurchaseVerifier = async () => false;
-let verifier: PurchaseVerifier = defaultVerifier;
+
+const globalForVerifier = globalThis as unknown as { __oristorPurchaseVerifier?: { verify: PurchaseVerifier } };
+const holder = (globalForVerifier.__oristorPurchaseVerifier ??= { verify: defaultVerifier });
 
 export function registerPurchaseVerifier(next: PurchaseVerifier): void {
-  verifier = next;
+  holder.verify = next;
 }
 
 export function hasPurchasedProduct(userId: string, productId: string): Promise<boolean> {
-  return verifier(userId, productId);
+  return holder.verify(userId, productId);
 }
 
 /** Test-only: restores the default verifier. */
 export function resetPurchaseVerifierForTesting(): void {
-  verifier = defaultVerifier;
+  holder.verify = defaultVerifier;
 }
