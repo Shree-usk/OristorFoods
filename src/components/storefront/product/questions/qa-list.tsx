@@ -25,7 +25,8 @@ export function QaList({ productSlug, initialPage, query, onPageChange }: QaList
     staleTime: 60_000,
     placeholderData: keepPreviousData,
   });
-  const page = data ?? initialPage;
+  const emptyPage: QuestionPage = { items: [], total: 0, page: query.page, pageSize: query.pageSize };
+  const page = data ?? (query.q ? emptyPage : initialPage);
 
   const from = page.total === 0 ? 0 : (page.page - 1) * page.pageSize + 1;
   const to = Math.min(page.page * page.pageSize, page.total);
