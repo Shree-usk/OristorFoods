@@ -151,7 +151,9 @@ describe("ReviewForm", () => {
     await user.click(screen.getByRole("button", { name: "Save changes" }));
 
     expect(await screen.findByText("Thanks! Your review is pending approval.")).toBeInTheDocument();
-    expect(fetchMock.mock.calls.some(([, init]) => init?.method === "PATCH")).toBe(true);
+    const patch = fetchMock.mock.calls.find(([, init]) => init?.method === "PATCH");
+    expect(String(patch?.[0])).toMatch(/\/api\/products\/curry\/reviews\/r1$/);
+    expect(JSON.parse(String(patch?.[1]?.body))).toEqual({ rating: 4, title: "Even better", body: "Toasted notes come through nicely." });
   });
 
   it("withdraws after an inline confirmation, then shows the empty form", async () => {
