@@ -23,16 +23,24 @@ export function findQuestionById(id: string) {
   return prisma.question.findUnique({ where: { id } });
 }
 
+/** `contains` becomes ILIKE; escape its wildcards so search words match literally. */
+function escapeLikePattern(word: string): string {
+  return word.replace(/[\\%_]/g, (character) => `\\${character}`);
+}
+
 function publishedWhere(productId: string, words: string[]): Prisma.QuestionWhereInput {
   return {
     productId,
     status: "Published",
-    AND: words.map((word) => ({
-      OR: [
-        { text: { contains: word, mode: "insensitive" } },
-        { answerText: { contains: word, mode: "insensitive" } },
-      ],
-    })),
+    AND: words.map((word) => {
+      const escaped = escapeLikePattern(word);
+      return {
+        OR: [
+          { text: { contains: escaped, mode: "insensitive" } },
+          { answerText: { contains: escaped, mode: "insensitive" } },
+        ],
+      };
+    }),
   };
 }
 

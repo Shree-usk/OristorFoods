@@ -114,6 +114,48 @@ describe("listPublishedQuestions", () => {
     expect(secondPage.total).toBe(3);
     expect(secondPage.items).toHaveLength(1);
   });
+
+  it("treats % in a search word as a literal character, not a wildcard", async () => {
+    const product = await makeProduct();
+    const user = await makeUser();
+    const pure = await makeQuestion(product.id, user.id, {
+      status: "Published",
+      text: "Is the 100% pure version available?",
+      answerText: "Yes.",
+      publishedAt: new Date(),
+    });
+    await makeQuestion(product.id, user.id, {
+      status: "Published",
+      text: "Is the 1000 pack available?",
+      answerText: "Yes.",
+      publishedAt: new Date(),
+    });
+
+    const result = await listPublishedQuestions(product.id, { words: ["100%"], skip: 0, take: 10 });
+
+    expect(result.items.map((item) => item.id)).toEqual([pure.id]);
+  });
+
+  it("treats _ in a search word as a literal character, not a single-char wildcard", async () => {
+    const product = await makeProduct();
+    const user = await makeUser();
+    const underscore = await makeQuestion(product.id, user.id, {
+      status: "Published",
+      text: "Size a_b please?",
+      answerText: "Yes.",
+      publishedAt: new Date(),
+    });
+    await makeQuestion(product.id, user.id, {
+      status: "Published",
+      text: "Size axb please?",
+      answerText: "Yes.",
+      publishedAt: new Date(),
+    });
+
+    const result = await listPublishedQuestions(product.id, { words: ["a_b"], skip: 0, take: 10 });
+
+    expect(result.items.map((item) => item.id)).toEqual([underscore.id]);
+  });
 });
 
 describe("listOpenQuestionsByUser", () => {
