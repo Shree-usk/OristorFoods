@@ -146,6 +146,14 @@ describe("GET /api/products/[slug]/reviews/mine", () => {
     const review = await submitReview(user.id, product.slug, input);
     expect(await (await mineRoute.GET(new Request("http://localhost/x"), slugParams(product.slug))).json()).toEqual({ review });
   });
+
+  it("returns 404 for a non-existent product slug", async () => {
+    const user = await makeUser();
+    mockAuth.mockResolvedValue(sessionFor(user.id));
+
+    const response = await mineRoute.GET(new Request("http://localhost/x"), slugParams("nope"));
+    expect(response.status).toBe(404);
+  });
 });
 
 describe("PATCH and DELETE /api/products/[slug]/reviews/[reviewId]", () => {
@@ -203,5 +211,24 @@ describe("PATCH and DELETE /api/products/[slug]/reviews/[reviewId]", () => {
     const again = await submitReview(owner.id, product.slug, input);
     await changeReviewStatus(again.id, "Approved");
     expect((await itemRoute.DELETE(request(), reviewParams(product.slug, again.id))).status).toBe(409);
+  });
+
+  it("returns 404 for PATCH with non-existent review ID", async () => {
+    const product = await makeProduct();
+    const owner = await makeUser();
+    mockAuth.mockResolvedValue(sessionFor(owner.id));
+
+    const response = await itemRoute.PATCH(jsonRequest("http://localhost/x", "PATCH", input), reviewParams(product.slug, "missing-review-id"));
+    expect(response.status).toBe(404);
+  });
+
+  it("returns 404 for DELETE with non-existent review ID", async () => {
+    const product = await makeProduct();
+    const owner = await makeUser();
+    mockAuth.mockResolvedValue(sessionFor(owner.id));
+    const request = () => new Request("http://localhost/x", { method: "DELETE" });
+
+    const response = await itemRoute.DELETE(request(), reviewParams(product.slug, "missing-review-id"));
+    expect(response.status).toBe(404);
   });
 });
