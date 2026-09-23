@@ -97,7 +97,7 @@ export function ReviewList({ productSlug, initialPage, query, onSortChange, onPa
                   {review.title}
                 </h3>
                 <p className="mt-1 text-small whitespace-pre-line text-charcoal">{review.body}</p>
-                <p className="mt-2 flex flex-wrap items-center gap-2 text-caption text-charcoal/60">
+                <p className="mt-2 flex flex-wrap items-center gap-2 text-caption text-charcoal/70">
                   <span>{review.authorName}</span>
                   <span aria-hidden="true">·</span>
                   <time dateTime={review.publishedAt}>{dateFormatter.format(new Date(review.publishedAt))}</time>
