@@ -5,12 +5,12 @@ import { prisma } from "@/lib/db";
 import { createProduct } from "@/repositories/product.repository";
 import {
   createReview,
-  deleteReview,
+  deleteOwnPendingReview,
   findRatingSummary,
   findReviewById,
   findReviewByProductAndUser,
   listPublishedReviews,
-  updateReviewContent,
+  updateOwnPendingReviewContent,
   updateStatusAndRecalculate,
 } from "@/repositories/review.repository";
 
@@ -39,7 +39,9 @@ async function makeReview(productId: string, rating = 4, name: string | null = "
 
 async function makePublishedReview(productId: string, rating: number, publishedAt: Date, name = "Test Reviewer") {
   const review = await makeReview(productId, rating, name);
-  return updateStatusAndRecalculate(review.id, productId, { status: "Published", publishedAt }, true);
+  const updated = await updateStatusAndRecalculate(review.id, productId, "Pending", { status: "Published", publishedAt }, true);
+  if (!updated) throw new Error("expected a freshly created Pending review to publish");
+  return updated;
 }
 
 afterEach(async () => {
@@ -68,15 +70,45 @@ describe("review CRUD", () => {
     ).rejects.toMatchObject({ code: "P2002" });
   });
 
-  it("updates content and deletes", async () => {
+  it("updates content and deletes when Pending and owned by the caller", async () => {
     const product = await makeProduct();
     const review = await makeReview(product.id);
 
-    const updated = await updateReviewContent(review.id, { rating: 5, title: "Changed", body: "A changed and longer review body." });
+    const updated = await updateOwnPendingReviewContent(review.id, review.userId, {
+      rating: 5,
+      title: "Changed",
+      body: "A changed and longer review body.",
+    });
     expect(updated).toMatchObject({ rating: 5, title: "Changed" });
 
-    await deleteReview(review.id);
+    expect(await deleteOwnPendingReview(review.id, review.userId)).toBe(true);
     expect(await findReviewById(review.id)).toBeNull();
+  });
+
+  it("does nothing when the review is no longer Pending, even for its own author", async () => {
+    const product = await makeProduct();
+    const review = await makeReview(product.id);
+    await updateStatusAndRecalculate(review.id, product.id, "Pending", { status: "Approved" }, false);
+
+    expect(
+      await updateOwnPendingReviewContent(review.id, review.userId, { rating: 5, title: "x", body: "Not Pending anymore, so this must not apply." }),
+    ).toBeNull();
+    expect(await deleteOwnPendingReview(review.id, review.userId)).toBe(false);
+
+    expect(await findReviewById(review.id)).toMatchObject({ status: "Approved", rating: 4, title: "Rated 4" });
+  });
+
+  it("does nothing when the userId doesn't match, even while the review is Pending", async () => {
+    const product = await makeProduct();
+    const review = await makeReview(product.id);
+    const other = await makeUser("Someone Else");
+
+    expect(
+      await updateOwnPendingReviewContent(review.id, other.id, { rating: 5, title: "x", body: "Wrong user, so this must not apply either." }),
+    ).toBeNull();
+    expect(await deleteOwnPendingReview(review.id, other.id)).toBe(false);
+
+    expect(await findReviewById(review.id)).toMatchObject({ status: "Pending", rating: 4, title: "Rated 4" });
   });
 });
 
@@ -85,7 +117,7 @@ describe("listPublishedReviews", () => {
     const product = await makeProduct();
     await makeReview(product.id, 5); // stays Pending
     const rejected = await makeReview(product.id, 1);
-    await updateStatusAndRecalculate(rejected.id, product.id, { status: "Rejected" }, false);
+    await updateStatusAndRecalculate(rejected.id, product.id, "Pending", { status: "Rejected" }, false);
     await makePublishedReview(product.id, 3, new Date("2026-09-01"), "Nadeesha");
 
     const result = await listPublishedReviews(product.id, { sort: "recent", skip: 0, take: 10 });
@@ -156,10 +188,21 @@ describe("updateStatusAndRecalculate", () => {
     const five = await makePublishedReview(product.id, 5, new Date());
     const three = await makePublishedReview(product.id, 3, new Date());
 
-    await updateStatusAndRecalculate(five.id, product.id, { status: "Archived" }, true);
+    await updateStatusAndRecalculate(five.id, product.id, "Published", { status: "Archived" }, true);
     expect(await findRatingSummary(product.id)).toMatchObject({ reviewCount: 1, count3: 1, count5: 0 });
 
-    await updateStatusAndRecalculate(three.id, product.id, { status: "Archived" }, true);
+    await updateStatusAndRecalculate(three.id, product.id, "Published", { status: "Archived" }, true);
+    expect(await findRatingSummary(product.id)).toBeNull();
+  });
+
+  it("returns null and changes nothing when fromStatus doesn't match the review's current status", async () => {
+    const product = await makeProduct();
+    const review = await makeReview(product.id, 4); // status is Pending
+
+    const result = await updateStatusAndRecalculate(review.id, product.id, "Approved", { status: "Published", publishedAt: new Date() }, true);
+
+    expect(result).toBeNull();
+    expect(await findReviewById(review.id)).toMatchObject({ status: "Pending" });
     expect(await findRatingSummary(product.id)).toBeNull();
   });
 
@@ -168,7 +211,7 @@ describe("updateStatusAndRecalculate", () => {
     await makePublishedReview(product.id, 5, new Date());
     const pending = await makeReview(product.id, 1);
 
-    await updateStatusAndRecalculate(pending.id, product.id, { status: "Approved" }, false);
+    await updateStatusAndRecalculate(pending.id, product.id, "Pending", { status: "Approved" }, false);
 
     expect(await findRatingSummary(product.id)).toMatchObject({ reviewCount: 1, count5: 1 });
   });

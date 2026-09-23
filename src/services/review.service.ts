@@ -59,7 +59,15 @@ export async function changeReviewStatus(
   if (options.note !== undefined) data.moderatorNote = options.note;
 
   const touchesPublished = review.status === "Published" || nextStatus === "Published";
-  return reviewRepository.updateStatusAndRecalculate(review.id, review.productId, data, touchesPublished);
+  const updated = await reviewRepository.updateStatusAndRecalculate(
+    review.id,
+    review.productId,
+    review.status,
+    data,
+    touchesPublished,
+  );
+  if (!updated) throw new InvalidReviewTransitionError(review.status, nextStatus);
+  return updated;
 }
 
 export async function getRatingSummary(productId: string): Promise<RatingSummaryData | null> {
@@ -147,14 +155,21 @@ export async function editOwnPendingReview(
   input: ReviewInput,
 ): Promise<OwnReview> {
   const review = await requireOwnPendingReview(userId, productSlug, reviewId);
-  const updated = await reviewRepository.updateReviewContent(review.id, parseReviewInput(input));
+  // Conditional on `status = Pending`: if a moderator published this review
+  // between the read above and this write, the write affects 0 rows and we
+  // throw the same error requireOwnPendingReview would have thrown from a
+  // fresh read, instead of overwriting a Published review's content.
+  const updated = await reviewRepository.updateOwnPendingReviewContent(review.id, userId, parseReviewInput(input));
+  if (!updated) throw new ReviewNotEditableError();
   return toOwnReview(updated);
 }
 
 /** Withdrawing deletes the review: it was never public, and this frees the one-per-product slot. */
 export async function withdrawOwnPendingReview(userId: string, productSlug: string, reviewId: string): Promise<void> {
   const review = await requireOwnPendingReview(userId, productSlug, reviewId);
-  await reviewRepository.deleteReview(review.id);
+  // Conditional delete: see the comment in editOwnPendingReview above.
+  const deleted = await reviewRepository.deleteOwnPendingReview(review.id, userId);
+  if (!deleted) throw new ReviewNotEditableError();
 }
 
 export async function listPublishedReviewsForProduct(productId: string, query: ReviewListQuery): Promise<ReviewPage> {

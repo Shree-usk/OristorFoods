@@ -41,12 +41,31 @@ export function findReviewByProductAndUser(productId: string, userId: string) {
   return prisma.review.findUnique({ where: { productId_userId: { productId, userId } } });
 }
 
-export function updateReviewContent(id: string, data: { rating: number; title: string; body: string }) {
-  return prisma.review.update({ where: { id }, data });
+/**
+ * Writes are conditional on the review still being the caller's own Pending
+ * review, so a moderator publishing the review concurrently can't have its
+ * content overwritten (which would also leave `ProductRatingSummary` stale,
+ * since a content edit never recalculates it). Returns `null` when no row
+ * matched (already left Pending, or wrong user) instead of throwing, so the
+ * service can tell that apart from a real not-found.
+ */
+export async function updateOwnPendingReviewContent(
+  id: string,
+  userId: string,
+  data: { rating: number; title: string; body: string },
+) {
+  const { count } = await prisma.review.updateMany({
+    where: { id, userId, status: "Pending" },
+    data,
+  });
+  if (count === 0) return null;
+  return prisma.review.findUnique({ where: { id } });
 }
 
-export function deleteReview(id: string) {
-  return prisma.review.delete({ where: { id } });
+/** Same conditional guard as `updateOwnPendingReviewContent`; see its comment. */
+export async function deleteOwnPendingReview(id: string, userId: string): Promise<boolean> {
+  const { count } = await prisma.review.deleteMany({ where: { id, userId, status: "Pending" } });
+  return count > 0;
 }
 
 export async function listPublishedReviews(
@@ -104,16 +123,32 @@ async function recalculateRatingSummary(tx: Prisma.TransactionClient, productId:
  * product's rating summary in the same transaction, so the summary can never
  * disagree with the Published reviews. review.service.ts decides whether a
  * recalculation is needed (only when the review enters or leaves Published).
+ *
+ * Two concurrent transactions recalculating the same product's summary would
+ * otherwise both read the pre-change `groupBy` under READ COMMITTED and each
+ * overwrite the other's upsert. `SELECT ... FOR UPDATE` on the product row
+ * serialises them: the second transaction blocks until the first commits, so
+ * its own `groupBy` sees the first transaction's status change. The status
+ * write itself is conditional on `fromStatus` (`updateMany`, not `update`),
+ * so a status change that raced ahead of the caller's stale read is detected
+ * (`count === 0`) instead of silently overwritten; the caller re-reads and
+ * retries via a fresh `changeReviewStatus` call rather than this function
+ * looping.
  */
 export function updateStatusAndRecalculate(
   reviewId: string,
   productId: string,
+  fromStatus: ReviewStatus,
   data: ReviewStatusUpdate,
   recalculate: boolean,
 ) {
   return prisma.$transaction(async (tx) => {
-    const review = await tx.review.update({ where: { id: reviewId }, data });
+    if (recalculate) {
+      await tx.$queryRaw`SELECT 1 FROM "Product" WHERE "id" = ${productId} FOR UPDATE`;
+    }
+    const { count } = await tx.review.updateMany({ where: { id: reviewId, status: fromStatus }, data });
+    if (count === 0) return null;
     if (recalculate) await recalculateRatingSummary(tx, productId);
-    return review;
+    return tx.review.findUnique({ where: { id: reviewId } });
   });
 }
