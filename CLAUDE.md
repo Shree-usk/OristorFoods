@@ -66,7 +66,7 @@ fix). Use `npx prisma db push` for day-to-day schema iteration; only use
 producing a migration file to commit. **`npm run test` now requires a
 running `prisma dev` server** — the Vitest global setup runs `db push`
 against it before every test run; start `npx prisma dev` first if tests
-fail with a connection error.
+fail with a connection error. Set `DATABASE_POOL_MAX=1` in your local `.env`: PGlite supports only one connection, and without the cap concurrent queries crash it (see `docs/architecture-decisions.md`, STORY-015 entry).
 
 ## Conventions
 

@@ -149,9 +149,9 @@ export function sortCandidates<T extends { product: { publishedAt: Date | null }
       return sorted.sort((a, b) => a.price - b.price);
     case "price-desc":
       return sorted.sort((a, b) => b.price - a.price);
-    // "best-selling" and "rating" fall back to "newest" ordering — no Order
-    // model (Commerce Platform epic) or reviews/ratings data (STORY-015)
-    // exists yet to sort by. See
+    // "best-selling" and "rating" fall back to "newest" ordering: there's no
+    // Order model yet (Commerce Platform epic), and sorting by
+    // ProductRatingSummary (STORY-015) isn't wired into listings yet. See
     // docs/superpowers/specs/2026-07-16-product-listing-design.md.
     case "best-selling":
     case "rating":
