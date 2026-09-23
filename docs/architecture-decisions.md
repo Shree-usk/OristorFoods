@@ -955,3 +955,52 @@ routes to call `auth()` and require a session — this also required adding
 **The repo is now ESM** (`"type": "module"` in package.json, added so
 Playwright can load specs that import the Prisma 7 client). Any new
 root-level `.js` file is therefore ESM — use `.cjs` if CommonJS is needed.
+
+---
+
+## 2026-09-22 — STORY-014 Product Compare
+
+**No schema change.** Compare reads existing catalogue tables via a new
+batch query (`findProductsForCompareByIds`) reusing the exact include
+shape `findProductDetailBySlug` (the PDP) already uses, just batched by id
+instead of singular by slug.
+
+**Session-only, no persistence, no auth.** `useCompareStore`
+(`src/lib/stores/compare-store.ts`) deliberately has no `persist`
+middleware, unlike `wishlist-store.ts` — the compare tray clears on
+browser restart by design, per the story's acceptance criteria.
+
+**Tray drawer reuses STORY-013's `GET /api/products/by-ids`** for its
+thumbnails rather than a second batch-lookup endpoint — no new "public
+lightweight product list" route was needed.
+
+**Page-vs-route validation split:** `GET /api/products/compare` strictly
+rejects (400) more than 4 or zero ids via `compareIdsSchema`, but
+`/products/compare` (the page) uses the same schema and gracefully falls
+back to its own empty state on a parse failure rather than erroring —
+matching this codebase's established page-degrades/route-rejects
+convention.
+
+**Rating gracefully degrades automatically.** `getProductsForCompare`
+reuses the existing `getReviewSummary` provider-hook from
+`product-detail-extensions.ts` (already defaults to `null` until
+STORY-015 registers a real provider) — no special-casing needed for
+"STORY-015 not shipped yet."
+
+**Header dropdowns must close themselves on navigation.** The header
+stays mounted across client-side navigation, so a Base UI
+`DropdownMenu` containing a link stays open after the link is followed —
+and its inert overlay then blocks every click on the new page.
+`CompareTrayIndicator` is therefore a controlled menu (`open`/
+`onOpenChange`) whose Compare link calls `setIsOpen(false)`, the same
+pattern `MobileMenuDrawer` uses. Any future header menu with links needs
+the same treatment (menus built from `DropdownMenuItem` close on select
+and are unaffected).
+
+**Recommendation (logged, not actioned — for STORY-067):** the codebase's
+link-styled-as-button pattern, `<Button nativeButton={false}
+render={<Link/>}>` (7 call sites, incl. the compare tray, hero banner,
+teaser section, wishlist empty state, share buttons), makes Base UI add
+`role="button"` to what is really a navigation link, so screen readers
+announce it as a button. `buttonVariants()` on a plain `<Link>` (as
+`compare-view.tsx`'s empty state already does) keeps link semantics.
