@@ -1,10 +1,22 @@
-import type { QuestionStatus } from "@/generated/prisma/client";
-import { findProductById } from "@/repositories/product.repository";
+import type { Question, QuestionStatus } from "@/generated/prisma/client";
+import { findProductById, findProductBySlug } from "@/repositories/product.repository";
 import * as qaRepository from "@/repositories/qa.repository";
 import type { QuestionStatusUpdate } from "@/repositories/qa.repository";
-import { notifyQuestionPublished } from "@/services/qa-notifications";
-import { InvalidQuestionInputError, InvalidQuestionTransitionError, QuestionNotFoundError } from "@/services/qa.errors";
-import { answerTextSchema } from "@/validation/question.schema";
+import { registerQaSummaryProvider, type QaSummary } from "@/services/product-detail-extensions";
+import { notifyQuestionPublished, notifyQuestionSubmitted } from "@/services/qa-notifications";
+import {
+  InvalidQuestionInputError,
+  InvalidQuestionTransitionError,
+  QaProductNotFoundError,
+  QuestionNotFoundError,
+} from "@/services/qa.errors";
+import { QUESTION_PAGE_SIZE, type OwnQuestion, type PublicQuestion, type QuestionPage } from "@/types/question";
+import {
+  answerTextSchema,
+  questionInputSchema,
+  type QuestionInput,
+  type QuestionListQuery,
+} from "@/validation/question.schema";
 
 // ---------------------------------------------------------------------------
 // Status lifecycle (blueprint Section 7: submit → answer → approve → publish).
@@ -73,4 +85,85 @@ export async function changeQuestionStatus(questionId: string, nextStatus: Quest
     });
   }
   return updated;
+}
+
+// ---------------------------------------------------------------------------
+// Customer actions and public listing
+// ---------------------------------------------------------------------------
+
+function toOwnQuestion(question: Question): OwnQuestion {
+  return { id: question.id, text: question.text, status: question.status, createdAt: question.createdAt.toISOString() };
+}
+
+function toPublicQuestion(question: Question): PublicQuestion {
+  return {
+    id: question.id,
+    question: question.text,
+    answer: question.answerText ?? "",
+    publishedAt: (question.publishedAt ?? question.updatedAt).toISOString(),
+  };
+}
+
+async function requirePublishedProduct(productSlug: string) {
+  const product = await findProductBySlug(productSlug);
+  if (!product || product.status !== "Published") throw new QaProductNotFoundError();
+  return product;
+}
+
+export async function submitQuestion(userId: string, productSlug: string, input: QuestionInput): Promise<OwnQuestion> {
+  const product = await requirePublishedProduct(productSlug);
+  // Routes validate with the same schema; this protects non-API callers too.
+  const parsed = questionInputSchema.safeParse(input);
+  if (!parsed.success) throw new InvalidQuestionInputError(parsed.error.issues[0]?.message ?? "Invalid question");
+
+  const question = await qaRepository.createQuestion({ productId: product.id, userId, text: parsed.data.text });
+  await notifyQuestionSubmitted({
+    questionId: question.id,
+    productId: product.id,
+    productSlug: product.slug,
+    productName: product.name,
+    text: question.text,
+    askedByUserId: userId,
+    submittedAt: question.createdAt,
+  });
+  return toOwnQuestion(question);
+}
+
+export function splitSearchWords(q?: string): string[] {
+  return q ? q.trim().split(/\s+/).filter(Boolean) : [];
+}
+
+export async function listPublishedQuestionsForProduct(productId: string, query: QuestionListQuery): Promise<QuestionPage> {
+  const { items, total } = await qaRepository.listPublishedQuestions(productId, {
+    words: splitSearchWords(query.q),
+    skip: (query.page - 1) * query.pageSize,
+    take: query.pageSize,
+  });
+  return { items: items.map(toPublicQuestion), total, page: query.page, pageSize: query.pageSize };
+}
+
+export async function listPublishedQuestions(productSlug: string, query: QuestionListQuery): Promise<QuestionPage> {
+  const product = await requirePublishedProduct(productSlug);
+  return listPublishedQuestionsForProduct(product.id, query);
+}
+
+export async function listMyOpenQuestions(userId: string, productSlug: string): Promise<OwnQuestion[]> {
+  const product = await requirePublishedProduct(productSlug);
+  const questions = await qaRepository.listOpenQuestionsByUser(product.id, userId);
+  return questions.map(toOwnQuestion);
+}
+
+// ---------------------------------------------------------------------------
+// PDP integration (STORY-011 extension point)
+// ---------------------------------------------------------------------------
+
+export async function getQaSummaryForProduct(productId: string): Promise<QaSummary | null> {
+  const firstPage = await listPublishedQuestionsForProduct(productId, { page: 1, pageSize: QUESTION_PAGE_SIZE });
+  if (firstPage.total === 0) return null;
+  return { previewItems: firstPage.items, totalCount: firstPage.total };
+}
+
+/** Called once at server startup from src/instrumentation.ts. */
+export function registerQaProviders(): void {
+  registerQaSummaryProvider(getQaSummaryForProduct);
 }

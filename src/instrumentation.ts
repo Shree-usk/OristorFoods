@@ -5,7 +5,11 @@
  */
 export async function register() {
   if (process.env.NEXT_RUNTIME === "nodejs") {
-    const { registerReviewProviders } = await import("@/services/review.service");
+    const [{ registerReviewProviders }, { registerQaProviders }] = await Promise.all([
+      import("@/services/review.service"),
+      import("@/services/qa.service"),
+    ]);
     registerReviewProviders();
+    registerQaProviders();
   }
 }

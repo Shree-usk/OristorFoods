@@ -27,8 +27,8 @@ export const questionListQuerySchema = z.object({
     .string()
     .trim()
     .max(100, "Search must be 100 characters or fewer")
-    .optional()
-    .transform((value) => value || undefined),
+    .transform((value) => value || undefined)
+    .optional(),
 });
 
 export type QuestionListQuery = z.infer<typeof questionListQuerySchema>;
