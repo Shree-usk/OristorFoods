@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { Scale, X } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
@@ -25,6 +26,10 @@ async function fetchTrayItems(ids: string[]): Promise<ProductListItem[]> {
 export function CompareTrayIndicator() {
   const items = useCompareStore((state) => state.items);
   const remove = useCompareStore((state) => state.remove);
+  // Controlled so the Compare link can close the menu: the header stays
+  // mounted across client-side navigation, so an open menu would otherwise
+  // leave its inert overlay blocking the compare page.
+  const [isOpen, setIsOpen] = useState(false);
 
   const { data: trayItems = [] } = useQuery({
     queryKey: ["compare-tray", items],
@@ -32,7 +37,7 @@ export function CompareTrayIndicator() {
   });
 
   return (
-    <DropdownMenu>
+    <DropdownMenu open={isOpen} onOpenChange={setIsOpen}>
       <DropdownMenuTrigger
         aria-label={items.length > 0 ? `Compare, ${items.length} item${items.length === 1 ? "" : "s"}` : "Compare"}
         className="relative inline-flex size-9 items-center justify-center rounded-lg hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
@@ -69,6 +74,7 @@ export function CompareTrayIndicator() {
               className="mt-2 w-full"
               nativeButton={false}
               render={<Link href={`/products/compare?ids=${items.join(",")}`} />}
+              onClick={() => setIsOpen(false)}
             >
               Compare
             </Button>
