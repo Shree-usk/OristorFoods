@@ -1128,3 +1128,13 @@ still has its own `ReviewApiError`, and could migrate to `ApiError` later.
 `NODE_ENV=production`). The seed publishes three demo Q&A pairs on chilli
 powder and the gift set (not curry powder, whose PDP e2e test expects the
 empty state) through `advanceQuestionToPublished()`.
+
+**Follow-ups for later stories.** (1) STORY-032 / STORY-065: question
+submission has no rate limit, and every submission fires notify-admin —
+harmless while the notifier only logs, but add a per-user submission
+limit (or batched admin notifications) before real email/SMS delivery is
+wired, or a single account can flood admins. (2) STORY-046: unlike
+`changeReviewStatus`, `changeQuestionStatus` records no approver/publisher
+(`Question` only stores who answered); the moderation console's audit
+logging needs either an optional `moderatorId` parameter (non-breaking) or
+an audit-log table.
