@@ -1,4 +1,4 @@
-﻿-- CreateEnum
+-- CreateEnum
 CREATE TYPE "QuestionStatus" AS ENUM ('Pending', 'Answered', 'Approved', 'Published', 'Rejected');
 
 -- CreateTable
