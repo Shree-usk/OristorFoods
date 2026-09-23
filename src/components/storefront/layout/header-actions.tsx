@@ -10,12 +10,12 @@ import { CompareTrayIndicator } from "./compare-tray-indicator";
 import { WishlistBadge } from "./wishlist-badge";
 
 /**
- * Right-aligned desktop action cluster: Search, Wishlist, Rewards,
- * Account, Cart — per docs/blueprint.md Section 4.
+ * Right-aligned desktop action cluster: Search, Wishlist, Compare,
+ * Rewards, Account, Cart — per docs/blueprint.md Section 4.
  */
 export function HeaderActions() {
   return (
-    <div className="flex items-center gap-1">
+    <div className="flex items-center xl:gap-1">
       <SearchOverlay />
       <WishlistBadge />
       <CompareTrayIndicator />

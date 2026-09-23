@@ -32,7 +32,7 @@ export function NavLinks() {
           if (item.megaMenu) {
             return (
               <NavigationMenuItem key={item.href}>
-                <NavigationMenuTrigger>{item.label}</NavigationMenuTrigger>
+                <NavigationMenuTrigger className="px-1.5 xl:px-2.5">{item.label}</NavigationMenuTrigger>
                 <NavigationMenuContent>
                   <MegaMenuPanel sections={item.megaMenu} />
                 </NavigationMenuContent>
@@ -42,7 +42,11 @@ export function NavLinks() {
 
           return (
             <NavigationMenuItem key={item.href}>
-              <NavigationMenuLink active={isActive} render={<Link href={item.href} />}>
+              <NavigationMenuLink
+                active={isActive}
+                className="px-1.5 xl:px-2"
+                render={<Link href={item.href} />}
+              >
                 {item.label}
               </NavigationMenuLink>
             </NavigationMenuItem>
