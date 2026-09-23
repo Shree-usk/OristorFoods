@@ -6,7 +6,7 @@ import { prisma } from "@/lib/db";
 import { createProduct } from "@/repositories/product.repository";
 import { createReview, findReviewById } from "@/repositories/review.repository";
 import { InvalidReviewTransitionError, ReviewNotFoundError } from "@/services/review.errors";
-import { canTransitionReview, changeReviewStatus, getRatingSummary } from "@/services/review.service";
+import { advanceReviewToPublished, canTransitionReview, changeReviewStatus, getRatingSummary } from "@/services/review.service";
 
 let sequence = 0;
 
@@ -100,5 +100,32 @@ describe("changeReviewStatus", () => {
     expect(rejected.reviewedById).toBe(moderator.id);
     expect(rejected.reviewedAt).toBeInstanceOf(Date);
     expect(rejected.moderatorNote).toBe("Off-topic");
+  });
+});
+
+describe("advanceReviewToPublished", () => {
+  it("walks a Pending review through Approved to Published", async () => {
+    const review = await makePendingReview(5);
+
+    const published = await advanceReviewToPublished(review.id);
+
+    expect(published.status).toBe("Published");
+    expect((await getRatingSummary(review.productId))?.reviewCount).toBe(1);
+  });
+
+  it("republishes an Archived review and leaves a Published one as it is", async () => {
+    const review = await makePendingReview();
+    await advanceReviewToPublished(review.id);
+    await changeReviewStatus(review.id, "Archived");
+
+    expect((await advanceReviewToPublished(review.id)).status).toBe("Published");
+    expect((await advanceReviewToPublished(review.id)).status).toBe("Published");
+  });
+
+  it("refuses a Rejected review", async () => {
+    const review = await makePendingReview();
+    await changeReviewStatus(review.id, "Rejected");
+
+    await expect(advanceReviewToPublished(review.id)).rejects.toBeInstanceOf(InvalidReviewTransitionError);
   });
 });

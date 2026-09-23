@@ -187,3 +187,29 @@ export async function getReviewSummaryForProduct(productId: string): Promise<Rev
 export function registerReviewProviders(): void {
   registerReviewSummaryProvider(getReviewSummaryForProduct);
 }
+
+// ---------------------------------------------------------------------------
+// Dev tooling
+// ---------------------------------------------------------------------------
+
+/**
+ * Walks a review to Published through the real workflow (Pending → Approved →
+ * Published, or Archived → Published), so the rating summary is maintained
+ * exactly as in production. For the seed, the review:publish script and e2e
+ * tests only. In production, reviews are published from the moderation
+ * console (STORY-045).
+ */
+export async function advanceReviewToPublished(reviewId: string) {
+  const review = await reviewRepository.findReviewById(reviewId);
+  if (!review) throw new ReviewNotFoundError();
+  if (review.status === "Published") return review;
+
+  let status: Exclude<ReviewStatus, "Published"> = review.status as Exclude<ReviewStatus, "Published">;
+  if (status === "Pending") {
+    status = (await changeReviewStatus(reviewId, "Approved")).status as Exclude<ReviewStatus, "Published">;
+  }
+  if (status === "Approved" || status === "Archived") {
+    return changeReviewStatus(reviewId, "Published");
+  }
+  throw new InvalidReviewTransitionError(status, "Published");
+}

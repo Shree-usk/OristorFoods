@@ -4,6 +4,7 @@ import * as categoryRepository from "../src/repositories/category.repository";
 import * as collectionRepository from "../src/repositories/collection.repository";
 import * as productRepository from "../src/repositories/product.repository";
 import * as pricingRepository from "../src/repositories/pricing.repository";
+import { advanceReviewToPublished, submitReview } from "../src/services/review.service";
 
 async function main() {
   const brand = await brandRepository.createBrand({
@@ -188,6 +189,34 @@ async function main() {
     startDate: new Date("2026-04-01"),
     endDate: new Date("2026-04-15"),
   });
+
+  // Demo reviews (STORY-015), published through the real review workflow so
+  // ProductRatingSummary is maintained exactly as in production. Kept off
+  // the curry powder: tests/e2e/product-detail.spec.ts expects that PDP to
+  // show the empty "No reviews yet." state.
+  const nadeesha = await prisma.user.create({ data: { email: "nadeesha.demo@oristor.test", name: "Nadeesha P." } });
+  const kamal = await prisma.user.create({ data: { email: "kamal.demo@oristor.test", name: "Kamal R." } });
+  const demoReviews = [
+    {
+      userId: nadeesha.id,
+      slug: chilliPowder.slug,
+      input: { rating: 5, title: "Proper heat, great colour", body: "Bright red, fragrant and properly hot. Makes a fantastic seeni sambol." },
+    },
+    {
+      userId: kamal.id,
+      slug: chilliPowder.slug,
+      input: { rating: 4, title: "Hot but balanced", body: "Good everyday chilli powder. A little goes a long way in a fish curry." },
+    },
+    {
+      userId: nadeesha.id,
+      slug: giftSet.slug,
+      input: { rating: 5, title: "A lovely gift", body: "Beautifully packed and the spices were very fresh. My family loved it." },
+    },
+  ];
+  for (const demo of demoReviews) {
+    const review = await submitReview(demo.userId, demo.slug, demo.input);
+    await advanceReviewToPublished(review.id);
+  }
 
   console.log("Seed complete:", {
     brand: brand.slug,
