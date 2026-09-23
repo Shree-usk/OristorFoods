@@ -1,0 +1,11 @@
+/**
+ * Next.js calls register() once when the server starts. It runs in both the
+ * Node.js and Edge runtimes; Prisma only loads on Node.js, so the service is
+ * imported only there.
+ */
+export async function register() {
+  if (process.env.NEXT_RUNTIME === "nodejs") {
+    const { registerReviewProviders } = await import("@/services/review.service");
+    registerReviewProviders();
+  }
+}

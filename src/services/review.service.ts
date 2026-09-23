@@ -2,6 +2,7 @@ import { Prisma, type ReviewStatus } from "@/generated/prisma/client";
 import { findProductBySlug } from "@/repositories/product.repository";
 import * as reviewRepository from "@/repositories/review.repository";
 import type { ReviewStatusUpdate, ReviewWithAuthor } from "@/repositories/review.repository";
+import { registerReviewSummaryProvider, type ReviewSummary } from "@/services/product-detail-extensions";
 import { hasPurchasedProduct } from "@/services/purchase-verification";
 import {
   DuplicateReviewError,
@@ -12,7 +13,7 @@ import {
   ReviewNotEditableError,
   ReviewNotFoundError,
 } from "@/services/review.errors";
-import type { OwnReview, PublicReview, RatingSummaryData, ReviewPage } from "@/types/review";
+import { REVIEW_PAGE_SIZE, type OwnReview, type PublicReview, type RatingSummaryData, type ReviewPage } from "@/types/review";
 import { reviewInputSchema, type ReviewInput, type ReviewListQuery } from "@/validation/review.schema";
 
 // ---------------------------------------------------------------------------
@@ -169,4 +170,20 @@ export async function listPublishedReviewsForProduct(productId: string, query: R
 export async function listPublishedReviews(productSlug: string, query: ReviewListQuery): Promise<ReviewPage> {
   const product = await requirePublishedProduct(productSlug);
   return listPublishedReviewsForProduct(product.id, query);
+}
+
+// ---------------------------------------------------------------------------
+// PDP integration (STORY-011 extension point)
+// ---------------------------------------------------------------------------
+
+export async function getReviewSummaryForProduct(productId: string): Promise<ReviewSummary | null> {
+  const summary = await getRatingSummary(productId);
+  if (!summary) return null;
+  const firstPage = await listPublishedReviewsForProduct(productId, { page: 1, pageSize: REVIEW_PAGE_SIZE, sort: "recent" });
+  return { ...summary, previewReviews: firstPage.items };
+}
+
+/** Called once at server startup from src/instrumentation.ts. */
+export function registerReviewProviders(): void {
+  registerReviewSummaryProvider(getReviewSummaryForProduct);
 }

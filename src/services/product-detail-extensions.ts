@@ -1,14 +1,12 @@
-export interface ReviewPreview {
-  id: string;
-  authorName: string;
-  rating: number;
-  title: string;
-  body: string;
-  createdAt: Date;
-}
+import type { PublicReview, RatingHistogram } from "@/types/review";
+
+/** A Published review as shown on the PDP. Same shape the reviews API returns. */
+export type ReviewPreview = PublicReview;
 export interface ReviewSummary {
   averageRating: number;
   reviewCount: number;
+  histogram: RatingHistogram;
+  /** The first page of Published reviews, most recent first. */
   previewReviews: ReviewPreview[];
 }
 export type GetReviewSummary = (productId: string) => Promise<ReviewSummary | null>;
@@ -36,41 +34,53 @@ export interface RecipeSummary {
 }
 export type GetRecipeSummary = (productId: string) => Promise<RecipeSummary | null>;
 
-let reviewSummaryProvider: GetReviewSummary = async () => null;
-let qaSummaryProvider: GetQaSummary = async () => null;
-let recipeSummaryProvider: GetRecipeSummary = async () => null;
+interface ProductDetailProviders {
+  review: GetReviewSummary;
+  qa: GetQaSummary;
+  recipe: GetRecipeSummary;
+}
+
+function defaultProviders(): ProductDetailProviders {
+  return { review: async () => null, qa: async () => null, recipe: async () => null };
+}
+
+// Kept on globalThis, not in module scope. Providers register at server
+// startup from src/instrumentation.ts, which Next.js bundles separately from
+// the route code that reads them, so each bundle gets its own copy of this
+// module. globalThis is shared by both within the server process (the same
+// reason src/lib/db.ts keeps the Prisma client there).
+const globalForExtensions = globalThis as unknown as { __oristorProductDetailProviders?: ProductDetailProviders };
+const providers = (globalForExtensions.__oristorProductDetailProviders ??= defaultProviders());
 
 /**
- * STORY-015 (Product Reviews & Ratings) calls this from its own service
- * module's init to plug real review data into the Product Detail Page,
- * without product.service.ts importing a module that doesn't exist yet.
+ * STORY-015 (Product Reviews & Ratings) registers this through
+ * registerReviewProviders() in src/instrumentation.ts, so product.service.ts
+ * never imports review code.
  */
 export function registerReviewSummaryProvider(provider: GetReviewSummary) {
-  reviewSummaryProvider = provider;
+  providers.review = provider;
 }
 export function getReviewSummary(productId: string) {
-  return reviewSummaryProvider(productId);
+  return providers.review(productId);
 }
 
 /** STORY-016 (Product Q&A) — same contract as registerReviewSummaryProvider. */
 export function registerQaSummaryProvider(provider: GetQaSummary) {
-  qaSummaryProvider = provider;
+  providers.qa = provider;
 }
 export function getQaSummary(productId: string) {
-  return qaSummaryProvider(productId);
+  return providers.qa(productId);
 }
 
 /** Epic 04 (Recipes & Food Academy) — same contract as registerReviewSummaryProvider. */
 export function registerRecipeSummaryProvider(provider: GetRecipeSummary) {
-  recipeSummaryProvider = provider;
+  providers.recipe = provider;
 }
 export function getRecipeSummary(productId: string) {
-  return recipeSummaryProvider(productId);
+  return providers.recipe(productId);
 }
 
 /** Test-only: restores every provider to its default stub. */
 export function resetProductDetailExtensionsForTesting() {
-  reviewSummaryProvider = async () => null;
-  qaSummaryProvider = async () => null;
-  recipeSummaryProvider = async () => null;
+  Object.assign(providers, defaultProviders());
 }
