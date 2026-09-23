@@ -21,19 +21,19 @@ datasource db {
 // STORY-038. Do not extend this beyond auth's requirements here.
 
 model User {
-  id            String    @id @default(cuid())
-  name          String?
-  email         String?   @unique
-  emailVerified DateTime?
-  image         String?
-  passwordHash  String?
-  accounts      Account[]
-  sessions      Session[]
-  wishlist      Wishlist?
-  reviews          Review[] @relation("ReviewAuthor")
-  moderatedReviews Review[] @relation("ReviewModerator")
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  id               String    @id @default(cuid())
+  name             String?
+  email            String?   @unique
+  emailVerified    DateTime?
+  image            String?
+  passwordHash     String?
+  accounts         Account[]
+  sessions         Session[]
+  wishlist         Wishlist?
+  reviews          Review[]  @relation("ReviewAuthor")
+  moderatedReviews Review[]  @relation("ReviewModerator")
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
 }
 
 model Account {
