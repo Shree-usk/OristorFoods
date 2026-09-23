@@ -6,6 +6,8 @@ import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import type { QaSummary } from "@/services/product-detail-extensions";
 import { QUESTION_PAGE_SIZE, type QuestionPage, type QuestionPageQuery } from "@/types/question";
 
+import { AskQuestionForm } from "./ask-question-form";
+import { MyOpenQuestions } from "./my-open-questions";
 import { QaList } from "./qa-list";
 import { QaSearch } from "./qa-search";
 
@@ -45,6 +47,8 @@ export function QuestionsSection({ productSlug, summary }: QuestionsSectionProps
         }}
       />
       <QaList productSlug={productSlug} initialPage={initialPage} query={query} onPageChange={setPage} />
+      <MyOpenQuestions productSlug={productSlug} />
+      <AskQuestionForm productSlug={productSlug} />
     </section>
   );
 }

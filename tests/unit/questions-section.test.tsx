@@ -3,6 +3,8 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+vi.mock("next-auth/react", () => ({ useSession: () => ({ status: "unauthenticated", data: null }) }));
+
 import { QuestionsSection } from "@/components/storefront/product/questions/questions-section";
 import type { QaSummary } from "@/services/product-detail-extensions";
 import type { PublicQuestion } from "@/types/question";
