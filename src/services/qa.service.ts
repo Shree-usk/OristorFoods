@@ -73,7 +73,7 @@ export async function changeQuestionStatus(questionId: string, nextStatus: Quest
   const updated = await qaRepository.updateQuestionStatus(question.id, question.status, data);
   if (!updated) throw new InvalidQuestionTransitionError(question.status, nextStatus);
 
-  if (updated.status === "Published") {
+  if (nextStatus === "Published") {
     const product = await findProductById(updated.productId);
     await notifyQuestionPublished({
       questionId: updated.id,
