@@ -6,6 +6,7 @@ import type { ReviewSummary } from "@/services/product-detail-extensions";
 import { REVIEW_PAGE_SIZE, type ReviewPage, type ReviewPageQuery } from "@/types/review";
 
 import { RatingSummary } from "./rating-summary";
+import { ReviewForm } from "./review-form";
 import { ReviewList } from "./review-list";
 
 interface ReviewsSectionProps {
@@ -48,6 +49,7 @@ export function ReviewsSection({ productSlug, summary }: ReviewsSectionProps) {
           onClearRating={() => setQuery((current) => ({ ...current, rating: undefined, page: 1 }))}
         />
       )}
+      <ReviewForm productSlug={productSlug} />
     </section>
   );
 }
