@@ -3,6 +3,11 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { withNuqsTestingAdapter } from "nuqs/adapters/testing";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+// ProductCard's wishlist toggle calls useSession (STORY-013).
+vi.mock("next-auth/react", () => ({
+  useSession: () => ({ status: "unauthenticated" }),
+}));
+
 import { ProductGrid } from "@/components/storefront/product/product-grid";
 import type { ProductListingResult } from "@/services/product.service";
 

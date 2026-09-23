@@ -1,5 +1,11 @@
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen } from "@testing-library/react";
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+// ProductCard's wishlist toggle calls useSession (STORY-013).
+vi.mock("next-auth/react", () => ({
+  useSession: () => ({ status: "unauthenticated" }),
+}));
 
 import { RecentlyViewed, TrackRecentlyViewed } from "@/components/storefront/product/recently-viewed";
 import { useRecentlyViewedStore } from "@/lib/stores/recently-viewed-store";
@@ -45,7 +51,11 @@ describe("RecentlyViewed", () => {
   it("renders recently viewed products, excluding the current product", () => {
     useRecentlyViewedStore.setState({ items: [item("1"), item("2")] });
 
-    render(<RecentlyViewed excludeProductId="1" />);
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <RecentlyViewed excludeProductId="1" />
+      </QueryClientProvider>,
+    );
 
     expect(screen.getByText("Product 2")).toBeInTheDocument();
     expect(screen.queryByText("Product 1")).not.toBeInTheDocument();
