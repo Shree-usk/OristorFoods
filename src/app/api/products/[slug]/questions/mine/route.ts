@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
 
 import { auth } from "@/lib/auth";
-import { reviewErrorResponse } from "@/lib/api/review-responses";
+import { qaErrorResponse } from "@/lib/api/qa-responses";
 import { unauthorizedResponse } from "@/lib/api/responses";
-import { getMyReview } from "@/services/review.service";
+import { listMyOpenQuestions } from "@/services/qa.service";
 
 export async function GET(_request: Request, { params }: { params: Promise<{ slug: string }> }) {
   const session = await auth();
@@ -11,8 +11,8 @@ export async function GET(_request: Request, { params }: { params: Promise<{ slu
 
   const { slug } = await params;
   try {
-    return NextResponse.json({ review: await getMyReview(session.user.id, slug) }, { status: 200 });
+    return NextResponse.json({ questions: await listMyOpenQuestions(session.user.id, slug) }, { status: 200 });
   } catch (error) {
-    return reviewErrorResponse(error);
+    return qaErrorResponse(error);
   }
 }

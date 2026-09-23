@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 
 import { auth } from "@/lib/auth";
-import { reviewErrorResponse, unauthorizedResponse, validationErrorResponse } from "@/lib/api/review-responses";
+import { reviewErrorResponse } from "@/lib/api/review-responses";
+import { unauthorizedResponse, validationErrorResponse } from "@/lib/api/responses";
 import { editOwnPendingReview, withdrawOwnPendingReview } from "@/services/review.service";
 import { reviewInputSchema } from "@/validation/review.schema";
 
