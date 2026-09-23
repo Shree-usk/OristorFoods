@@ -11,7 +11,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
-    "review:publish": "tsx scripts/publish-review.ts"
+    "review:publish": "tsx scripts/publish-review.ts",
+    "qa:publish": "tsx scripts/publish-question.ts"
   },
   "dependencies": {
     "@auth/prisma-adapter": "^2.11.2",

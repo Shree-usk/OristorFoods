@@ -167,3 +167,25 @@ export async function getQaSummaryForProduct(productId: string): Promise<QaSumma
 export function registerQaProviders(): void {
   registerQaSummaryProvider(getQaSummaryForProduct);
 }
+
+// ---------------------------------------------------------------------------
+// Dev tooling
+// ---------------------------------------------------------------------------
+
+/**
+ * Walks a question to Published through the real workflow (answer → approve
+ * → publish), so the notify-customer hook fires exactly as in production.
+ * For the seed, the qa:publish script and e2e tests only. In production,
+ * staff publish from the moderation console (STORY-046).
+ */
+export async function advanceQuestionToPublished(questionId: string, answerText: string) {
+  const question = await qaRepository.findQuestionById(questionId);
+  if (!question) throw new QuestionNotFoundError();
+  if (question.status === "Published") return question;
+
+  let status: QuestionStatus = question.status;
+  if (status === "Pending") status = (await answerQuestion(questionId, answerText)).status;
+  if (status === "Answered") status = (await changeQuestionStatus(questionId, "Approved")).status;
+  if (status === "Approved") return changeQuestionStatus(questionId, "Published");
+  throw new InvalidQuestionTransitionError(status, "Published");
+}

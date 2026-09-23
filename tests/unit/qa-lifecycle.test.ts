@@ -7,7 +7,7 @@ import { createProduct } from "@/repositories/product.repository";
 import { createQuestion, findQuestionById } from "@/repositories/qa.repository";
 import { registerQaNotifier, resetQaNotifierForTesting } from "@/services/qa-notifications";
 import { InvalidQuestionInputError, InvalidQuestionTransitionError, QuestionNotFoundError } from "@/services/qa.errors";
-import { answerQuestion, canTransitionQuestion, changeQuestionStatus } from "@/services/qa.service";
+import { advanceQuestionToPublished, answerQuestion, canTransitionQuestion, changeQuestionStatus } from "@/services/qa.service";
 
 let sequence = 0;
 const onQuestionSubmitted = vi.fn(async () => {});
@@ -131,5 +131,31 @@ describe("changeQuestionStatus", () => {
     expect(rejected.status).toBe("Rejected");
     expect(onQuestionPublished).not.toHaveBeenCalled();
     expect(onQuestionSubmitted).not.toHaveBeenCalled();
+  });
+});
+
+describe("advanceQuestionToPublished", () => {
+  it("answers, approves and publishes a Pending question, notifying once", async () => {
+    const question = await makePendingQuestion();
+
+    const published = await advanceQuestionToPublished(question.id, "Medium heat.");
+
+    expect(published).toMatchObject({ status: "Published", answerText: "Medium heat." });
+    expect(onQuestionPublished).toHaveBeenCalledOnce();
+  });
+
+  it("leaves a Published question as it is", async () => {
+    const question = await makePendingQuestion();
+    await advanceQuestionToPublished(question.id, "Medium heat.");
+
+    expect((await advanceQuestionToPublished(question.id, "Ignored")).answerText).toBe("Medium heat.");
+    expect(onQuestionPublished).toHaveBeenCalledOnce();
+  });
+
+  it("refuses a Rejected question", async () => {
+    const question = await makePendingQuestion();
+    await changeQuestionStatus(question.id, "Rejected");
+
+    await expect(advanceQuestionToPublished(question.id, "Answer.")).rejects.toBeInstanceOf(InvalidQuestionTransitionError);
   });
 });
