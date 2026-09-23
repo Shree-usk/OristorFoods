@@ -1076,3 +1076,55 @@ a full `npm run test` still wedges partway). Run the suite in batches, e.g.
 with P1001 / "Connection terminated unexpectedly". **Set `DATABASE_POOL_MAX=1` in every local
 `.env` (each git worktree has its own).** CI's real Postgres leaves it
 unset and keeps pg's default pool size.
+
+---
+
+## 2026-09-23 — STORY-016 Product Q&A
+
+**Status lifecycle.** `Question.status` is one of `Pending`, `Answered`,
+`Approved`, `Published`, `Rejected`. Allowed moves: Pending→Answered,
+Pending→Rejected, Answered→Approved, Answered→Rejected, Approved→Published,
+Approved→Rejected, Published→Rejected (take down). `Rejected` is terminal.
+**`answerQuestion(questionId, answerText, moderatorId)` is the only way into
+`Answered`** (it sets `answerText`/`answeredById`/`answeredAt` in the same
+write), and **`changeQuestionStatus(questionId, next)` handles every other
+move** and refuses `Answered`. Both write conditionally on the status they
+read, so concurrent moderation gets a clean 409. The STORY-046 console must
+use these two functions and pass `moderatorId`. It is optional only so the
+dev tooling can answer without a staff account.
+
+**Answer stored on the question.** One official staff answer per question
+(blueprint flow), so the answer is three nullable columns on `Question`
+rather than a separate `Answer` table. A future community-answers feature
+would add a table.
+
+**Notification hooks (for STORY-032).** `src/services/qa-notifications.ts`
+defines `QuestionSubmittedEvent` (notify admin) and `QuestionPublishedEvent`
+(notify customer), and `registerQaNotifier({ onQuestionSubmitted,
+onQuestionPublished })`. Contract: `qa.service.ts` calls them only after
+the database write succeeds, and `notify*()` catches and logs notifier
+errors, so delivery problems never fail a submission or a publish. The
+registry lives on `globalThis` (register from `src/instrumentation.ts`,
+same as the product-detail providers). The default notifier logs a
+`[qa-notify]` line. That is the temporary fallback until STORY-032.
+
+**Customer-facing behaviour.** Customers may have any number of open
+questions per product. `GET /questions/mine` returns the asker's own
+Pending/Answered/Approved questions (never Rejected), shown as "Your
+questions awaiting an answer". The public list is Published only, with a
+`q` keyword filter: every whitespace-separated word must appear,
+case-insensitively, in the question or its answer. (Zod note: `q` is
+`.transform(...).optional()`, not `.optional().transform(...)`, so the
+inferred query type keeps `q` optional.)
+
+**Shared response helpers.** `unauthorizedResponse` and
+`validationErrorResponse` moved from `review-responses.ts` to
+`src/lib/api/responses.ts`, and the browser clients' error type is the
+generic `ApiError<F>` in `src/lib/api/api-error.ts`. `review-client.ts`
+still has its own `ReviewApiError`, and could migrate to `ApiError` later.
+
+**Publishing Q&A without the moderation console.** Locally:
+`npm run qa:publish -- <questionId> "<answer text>"` (refuses to run with
+`NODE_ENV=production`). The seed publishes three demo Q&A pairs on chilli
+powder and the gift set (not curry powder, whose PDP e2e test expects the
+empty state) through `advanceQuestionToPublished()`.
