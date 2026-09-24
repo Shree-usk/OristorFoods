@@ -238,9 +238,12 @@ describe("findPublishedRecipeBySlug", () => {
 describe("findRelatedRecipes", () => {
   it("excludes the recipe itself and returns only Published recipes sharing category or cuisine", async () => {
     const category = await makeCategory();
+    const otherCategory = await makeCategory();
     const target = await makeRecipe(category.id, { status: "Published", slug: "target", cuisine: "Sri Lankan" });
     await makeRecipe(category.id, { status: "Published", slug: "same-category" });
     await makeRecipe(category.id, { status: "Draft", slug: "draft-same-category" });
+    await makeRecipe(otherCategory.id, { status: "Published", slug: "same-cuisine", cuisine: "Sri Lankan" });
+    await makeRecipe(otherCategory.id, { status: "Published", slug: "unrelated", cuisine: "Italian" });
 
     const related = await findRelatedRecipes(
       { id: target.id, categoryId: target.categoryId, cuisine: target.cuisine },
@@ -248,8 +251,10 @@ describe("findRelatedRecipes", () => {
     );
 
     expect(related.map((r) => r.slug)).toContain("same-category");
+    expect(related.map((r) => r.slug)).toContain("same-cuisine");
     expect(related.map((r) => r.slug)).not.toContain("target");
     expect(related.map((r) => r.slug)).not.toContain("draft-same-category");
+    expect(related.map((r) => r.slug)).not.toContain("unrelated");
   });
 });
 
