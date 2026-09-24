@@ -39,7 +39,7 @@ Stories are grouped into epics that match the build order in
 | STORY-013 | Wishlist | Done |
 | STORY-014 | Product Compare | Done |
 | STORY-015 | Product Reviews & Ratings | Done |
-| STORY-016 | Product Q&A | Draft |
+| STORY-016 | Product Q&A | Done |
 
 ## Epic 04 — Recipes & Food Academy (`04-recipes-food-academy/`)
 | ID | Story | Status |

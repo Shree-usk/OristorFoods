@@ -1,5 +1,4 @@
 import { NextResponse } from "next/server";
-import { z } from "zod";
 
 import { ReviewServiceError, type ReviewErrorCode } from "@/services/review.errors";
 
@@ -12,17 +11,6 @@ const statusByCode: Record<ReviewErrorCode, number> = {
   not_editable: 409,
   invalid_transition: 409,
 };
-
-export function unauthorizedResponse() {
-  return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-}
-
-export function validationErrorResponse(error: z.ZodError) {
-  return NextResponse.json(
-    { error: error.issues[0]?.message ?? "Invalid input", fieldErrors: z.flattenError(error).fieldErrors },
-    { status: 400 },
-  );
-}
 
 /** Maps a review service error to its HTTP response; anything else is rethrown (500). */
 export function reviewErrorResponse(error: unknown) {

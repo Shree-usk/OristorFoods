@@ -5,6 +5,7 @@ import * as collectionRepository from "../src/repositories/collection.repository
 import * as productRepository from "../src/repositories/product.repository";
 import * as pricingRepository from "../src/repositories/pricing.repository";
 import { advanceReviewToPublished, submitReview } from "../src/services/review.service";
+import { advanceQuestionToPublished, submitQuestion } from "../src/services/qa.service";
 
 async function main() {
   const brand = await brandRepository.createBrand({
@@ -216,6 +217,34 @@ async function main() {
   for (const demo of demoReviews) {
     const review = await submitReview(demo.userId, demo.slug, demo.input);
     await advanceReviewToPublished(review.id);
+  }
+
+  // Demo Q&A (STORY-016), published through the real Q&A workflow. Kept off
+  // the curry powder: tests/e2e/product-detail.spec.ts expects that PDP to
+  // show "No questions yet.".
+  const demoQuestions = [
+    {
+      userId: kamal.id,
+      slug: chilliPowder.slug,
+      text: "Is this chilli powder very hot, or suitable for children's dishes?",
+      answer: "It's a medium-hot blend. For children's dishes, start with a pinch and add coconut milk to mellow it.",
+    },
+    {
+      userId: nadeesha.id,
+      slug: chilliPowder.slug,
+      text: "How should I store it once the pack is opened?",
+      answer: "Keep it in an airtight container away from light and moisture. It stays fresh for about six months.",
+    },
+    {
+      userId: kamal.id,
+      slug: giftSet.slug,
+      text: "Can I add a personal message to the gift set?",
+      answer: "Yes. Add a note at checkout and we'll include a handwritten card.",
+    },
+  ];
+  for (const demo of demoQuestions) {
+    const question = await submitQuestion(demo.userId, demo.slug, { text: demo.text });
+    await advanceQuestionToPublished(question.id, demo.answer);
   }
 
   console.log("Seed complete:", {

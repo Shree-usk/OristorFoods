@@ -13,6 +13,7 @@ import { ProductGallery } from "@/components/storefront/product/product-gallery"
 import { ProductJsonLd } from "@/components/storefront/product/product-json-ld";
 import { RecentlyViewed, TrackRecentlyViewed } from "@/components/storefront/product/recently-viewed";
 import { RelatedProducts } from "@/components/storefront/product/related-products";
+import { QuestionsSection } from "@/components/storefront/product/questions/questions-section";
 import { ReviewsSection } from "@/components/storefront/product/reviews/reviews-section";
 import { ShareButtons } from "@/components/storefront/product/share-buttons";
 import { getProductDetail } from "@/services/product.service";
@@ -176,19 +177,7 @@ export default async function ProductDetailPage({ params }: ProductDetailPagePro
       </div>
 
       <div className="mt-12">
-        <h2 className="text-h3 font-heading text-charcoal">Questions & Answers</h2>
-        {product.qaSummary && product.qaSummary.previewItems.length > 0 ? (
-          <ul className="mt-4 space-y-4">
-            {product.qaSummary.previewItems.map((qa) => (
-              <li key={qa.id} className="border-b border-charcoal/10 pb-4">
-                <p className="font-medium text-charcoal">{qa.question}</p>
-                <p className="text-small text-charcoal/70">{qa.answer}</p>
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p className="mt-2 text-small text-charcoal/70">No questions yet.</p>
-        )}
+        <QuestionsSection productSlug={product.slug} summary={product.qaSummary} />
       </div>
 
       <div className="mt-12">

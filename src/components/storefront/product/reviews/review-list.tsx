@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { fetchReviewPage } from "@/lib/api/review-client";
+import { formatDisplayDate } from "@/lib/format-date";
 import { cn } from "@/lib/utils";
 import { REVIEW_SORTS, type ReviewPage, type ReviewPageQuery, type ReviewSort } from "@/types/review";
 
@@ -16,15 +17,6 @@ const sortLabels: Record<ReviewSort, string> = {
   highest: "Highest rating",
   lowest: "Lowest rating",
 };
-
-// Fixed locale and time zone so the server render and the browser hydrate
-// to the same string.
-const dateFormatter = new Intl.DateTimeFormat("en-GB", {
-  day: "numeric",
-  month: "short",
-  year: "numeric",
-  timeZone: "Asia/Colombo",
-});
 
 interface ReviewListProps {
   productSlug: string;
@@ -100,7 +92,7 @@ export function ReviewList({ productSlug, initialPage, query, onSortChange, onPa
                 <p className="mt-2 flex flex-wrap items-center gap-2 text-caption text-charcoal/70">
                   <span>{review.authorName}</span>
                   <span aria-hidden="true">·</span>
-                  <time dateTime={review.publishedAt}>{dateFormatter.format(new Date(review.publishedAt))}</time>
+                  <time dateTime={review.publishedAt}>{formatDisplayDate(review.publishedAt)}</time>
                   {review.isVerifiedPurchase && <Badge variant="secondary">Verified Purchase</Badge>}
                 </p>
               </article>

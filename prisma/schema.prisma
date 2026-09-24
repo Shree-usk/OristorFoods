@@ -21,19 +21,21 @@ datasource db {
 // STORY-038. Do not extend this beyond auth's requirements here.
 
 model User {
-  id               String    @id @default(cuid())
-  name             String?
-  email            String?   @unique
-  emailVerified    DateTime?
-  image            String?
-  passwordHash     String?
-  accounts         Account[]
-  sessions         Session[]
-  wishlist         Wishlist?
-  reviews          Review[]  @relation("ReviewAuthor")
-  moderatedReviews Review[]  @relation("ReviewModerator")
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @updatedAt
+  id                String    @id @default(cuid())
+  name              String?
+  email             String?   @unique
+  emailVerified     DateTime?
+  image             String?
+  passwordHash      String?
+  accounts          Account[]
+  sessions          Session[]
+  wishlist          Wishlist?
+  reviews           Review[]  @relation("ReviewAuthor")
+  moderatedReviews  Review[]  @relation("ReviewModerator")
+  questions         Question[] @relation("QuestionAsker")
+  answeredQuestions Question[] @relation("QuestionAnswerer")
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
 }
 
 model Account {
@@ -199,6 +201,7 @@ model Product {
   wishlistItems       WishlistItem[]
   reviews             Review[]
   ratingSummary       ProductRatingSummary?
+  questions           Question[]
 
   @@index([status])
   @@index([status, inStock])
@@ -460,4 +463,39 @@ model ProductRatingSummary {
   count4        Int
   count5        Int
   updatedAt     DateTime @updatedAt
+}
+
+// STORY-016. Lifecycle and transitions: see
+// docs/superpowers/specs/2026-09-23-product-qa-design.md. Status only changes
+// through qa.service.ts's answerQuestion() / changeQuestionStatus().
+enum QuestionStatus {
+  Pending
+  Answered
+  Approved
+  Published
+  Rejected
+}
+
+model Question {
+  id        String         @id @default(cuid())
+  productId String
+  product   Product        @relation(fields: [productId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User           @relation("QuestionAsker", fields: [userId], references: [id], onDelete: Cascade)
+  text      String
+  status    QuestionStatus @default(Pending)
+
+  // The official answer. Reserved for STORY-046, which sets all three
+  // together through answerQuestion() on Pending → Answered.
+  answerText   String?
+  answeredById String?
+  answeredBy   User?     @relation("QuestionAnswerer", fields: [answeredById], references: [id], onDelete: SetNull)
+  answeredAt   DateTime?
+
+  publishedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([productId, status, publishedAt])
+  @@index([productId, userId, status])
 }

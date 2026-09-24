@@ -1,6 +1,6 @@
 # STORY-016: Product Q&A
 
-**Status:** Draft
+**Status:** Done
 **Epic:** 03 — Product Platform
 **Priority:** Medium
 **Persona(s):** Home Cook, Sri Lankan Expat
@@ -14,48 +14,48 @@ As a Sri Lankan Expat, I want to see questions other customers have already aske
 This story implements the customer-facing ask/view Q&A flow described in `docs/blueprint.md` Section 4's Product Detail Page requirements ("Q&A") and Section 7's Questions & Answers module, which specifies a `submit → notify admin → answer → approve → publish → notify customer` flow. This story covers the customer-facing submission and viewing UI plus the underlying data model and API for that entire flow; the admin-side answer/approve/publish actions belong to the **Q&A Moderation Console** (STORY-046, Epic 07), and this story only defines the data contract and notification hooks that console will act on.
 
 ## Acceptance Criteria
-- [ ] A logged-in customer can submit a question on a product's Q&A section from the Product Detail Page
-- [ ] A `Question` Prisma model exists with a status enum (`Pending`/`Answered`/`Approved`/`Published`/`Rejected`) matching the blueprint Section 7 flow, and an `Answer` model (or embedded answer fields) storing the response text, `answeredBy`, and `answeredAt`, reserved for STORY-046 to populate
-- [ ] Submitting a question creates it with status `Pending` and triggers a "notify admin" event/hook; if the Notifications module (STORY-032, Epic 05) is not yet built, this falls back to a logged/dev-visible event rather than failing the submission
-- [ ] Only `Published` questions (with their published answer) are ever returned to public/storefront read endpoints
-- [ ] The Product Detail Page (STORY-011's integration point) displays a paginated list of `Published` Q&A pairs
-- [ ] Before submitting a new question, the customer sees a basic keyword filter/search over existing `Published` questions on that product, to reduce duplicate submissions
-- [ ] A customer can have multiple open (`Pending`) questions on the same product; submitting a new one is never blocked by an existing unanswered one
-- [ ] When a customer's question transitions to `Published`, a "notify customer" event/hook fires (same fallback behavior as above if STORY-032 isn't available yet)
-- [ ] The question submission form validates required fields (non-empty question text, reasonable length bounds) client-side and server-side
-- [ ] Because there is no admin answer/approve/publish UI yet (STORY-046 not built), a documented seed/dev-only path exists to create a `Published` question+answer pair for local testing and demoing the storefront display
+- [x] A logged-in customer can submit a question on a product's Q&A section from the Product Detail Page
+- [x] A `Question` Prisma model exists with a status enum (`Pending`/`Answered`/`Approved`/`Published`/`Rejected`) matching the blueprint Section 7 flow, and an `Answer` model (or embedded answer fields) storing the response text, `answeredBy`, and `answeredAt`, reserved for STORY-046 to populate _(implemented as answer fields on Question, see docs/architecture-decisions.md 2026-09-23)_
+- [x] Submitting a question creates it with status `Pending` and triggers a "notify admin" event/hook; if the Notifications module (STORY-032, Epic 05) is not yet built, this falls back to a logged/dev-visible event rather than failing the submission
+- [x] Only `Published` questions (with their published answer) are ever returned to public/storefront read endpoints
+- [x] The Product Detail Page (STORY-011's integration point) displays a paginated list of `Published` Q&A pairs
+- [x] Before submitting a new question, the customer sees a basic keyword filter/search over existing `Published` questions on that product, to reduce duplicate submissions
+- [x] A customer can have multiple open (`Pending`) questions on the same product; submitting a new one is never blocked by an existing unanswered one
+- [x] When a customer's question transitions to `Published`, a "notify customer" event/hook fires (same fallback behavior as above if STORY-032 isn't available yet)
+- [x] The question submission form validates required fields (non-empty question text, reasonable length bounds) client-side and server-side
+- [x] Because there is no admin answer/approve/publish UI yet (STORY-046 not built), a documented seed/dev-only path exists to create a `Published` question+answer pair for local testing and demoing the storefront display
 
 ## Tasks
 
-- [ ] **Database:**
-  - [ ] Add `Question` model (question text, status enum, `productId`, `userId` (submitter), timestamps) to `prisma/schema.prisma`
-  - [ ] Add `Answer` model (or fields) linked to `Question` (answer text, `answeredBy`, `answeredAt`), reserved for STORY-046
-  - [ ] Run and verify the migration
+- [x] **Database:**
+  - [x] Add `Question` model (question text, status enum, `productId`, `userId` (submitter), timestamps) to `prisma/schema.prisma`
+  - [x] Add `Answer` model (or fields) linked to `Question` (answer text, `answeredBy`, `answeredAt`), reserved for STORY-046 _(implemented as answer fields on Question, see docs/architecture-decisions.md 2026-09-23)_
+  - [x] Run and verify the migration
 
-- [ ] **API:**
-  - [ ] `POST /api/products/[slug]/questions` — submit a question (authenticated)
-  - [ ] `GET /api/products/[slug]/questions` — list `Published` question+answer pairs with pagination and keyword filter param
+- [x] **API:**
+  - [x] `POST /api/products/[slug]/questions` — submit a question (authenticated)
+  - [x] `GET /api/products/[slug]/questions` — list `Published` question+answer pairs with pagination and keyword filter param
 
-- [ ] **Service/Backend:**
-  - [ ] Implement `qa.service.ts` (submit question, list published Q&A, keyword-filter existing questions) calling a new `qa.repository.ts`
-  - [ ] Implement the notify-admin event hook fired on submission and the notify-customer event hook fired on publish, both as typed function calls that STORY-032 can wire to real delivery later, with a console/log fallback documented as temporary
+- [x] **Service/Backend:**
+  - [x] Implement `qa.service.ts` (submit question, list published Q&A, keyword-filter existing questions) calling a new `qa.repository.ts`
+  - [x] Implement the notify-admin event hook fired on submission and the notify-customer event hook fired on publish, both as typed function calls that STORY-032 can wire to real delivery later, with a console/log fallback documented as temporary
 
-- [ ] **Frontend:**
-  - [ ] Build the "Ask a question" form component, including the pre-submit keyword filter against existing published questions
-  - [ ] Build the Q&A list component (pagination) for PDP integration per STORY-011's contract
-  - [ ] Build a "your question was submitted and is pending review" confirmation state
+- [x] **Frontend:**
+  - [x] Build the "Ask a question" form component, including the pre-submit keyword filter against existing published questions
+  - [x] Build the Q&A list component (pagination) for PDP integration per STORY-011's contract
+  - [x] Build a "your question was submitted and is pending review" confirmation state
 
-- [ ] **Validation:**
-  - [ ] Zod schema for question submission (text length bounds, required field)
+- [x] **Validation:**
+  - [x] Zod schema for question submission (text length bounds, required field)
 
-- [ ] **Testing:**
-  - [ ] Unit test the keyword-filter matching against existing published questions
-  - [ ] Unit test that the notify-admin/notify-customer hooks fire on the correct status transitions
-  - [ ] Playwright e2e test: submit a question, confirm it does not appear publicly; seed a `Published` question+answer, confirm it renders correctly on the PDP
+- [x] **Testing:**
+  - [x] Unit test the keyword-filter matching against existing published questions
+  - [x] Unit test that the notify-admin/notify-customer hooks fire on the correct status transitions
+  - [x] Playwright e2e test: submit a question, confirm it does not appear publicly; seed a `Published` question+answer, confirm it renders correctly on the PDP
 
-- [ ] **Documentation:**
-  - [ ] Document the dev/seed workaround for publishing a Q&A pair without the moderation console
-  - [ ] Document the `Question` status lifecycle and the notify-admin/notify-customer hook contracts so STORY-046 and STORY-032 implementers know what to plug into
+- [x] **Documentation:**
+  - [x] Document the dev/seed workaround for publishing a Q&A pair without the moderation console
+  - [x] Document the `Question` status lifecycle and the notify-admin/notify-customer hook contracts so STORY-046 and STORY-032 implementers know what to plug into
 
 ## Dependencies
 - STORY-001, STORY-002, STORY-003 (Foundation + Global Layout)

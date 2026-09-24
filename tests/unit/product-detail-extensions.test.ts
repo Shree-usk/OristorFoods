@@ -44,7 +44,7 @@ describe("product-detail-extensions", () => {
 
   it("returns the registered QA summary provider's result", async () => {
     registerQaSummaryProvider(async () => ({
-      previewItems: [{ id: "q1", question: "Is it spicy?", answer: "Mildly", createdAt: new Date() }],
+      previewItems: [{ id: "q1", question: "Is it spicy?", answer: "Mildly", publishedAt: "2026-09-01T00:00:00.000Z" }],
       totalCount: 1,
     }));
 

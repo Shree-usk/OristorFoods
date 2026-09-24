@@ -1,3 +1,4 @@
+import type { PublicQuestion } from "@/types/question";
 import type { PublicReview, RatingHistogram } from "@/types/review";
 
 /** A Published review as shown on the PDP. Same shape the reviews API returns. */
@@ -11,12 +12,8 @@ export interface ReviewSummary {
 }
 export type GetReviewSummary = (productId: string) => Promise<ReviewSummary | null>;
 
-export interface QaPreview {
-  id: string;
-  question: string;
-  answer: string;
-  createdAt: Date;
-}
+/** A Published question with its answer. Same shape the questions API returns. */
+export type QaPreview = PublicQuestion;
 export interface QaSummary {
   previewItems: QaPreview[];
   totalCount: number;
