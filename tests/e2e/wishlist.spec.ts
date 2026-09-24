@@ -1,25 +1,10 @@
 import { test, expect } from "@playwright/test";
-import { encode } from "next-auth/jwt";
 
 import { prisma } from "@/lib/db";
 import { createProduct } from "@/repositories/product.repository";
 import { createStandardPrice } from "@/repositories/pricing.repository";
 
-async function signInAs(page: import("@playwright/test").Page, userId: string) {
-  const token = await encode({
-    token: { sub: userId },
-    secret: process.env.AUTH_SECRET!,
-    salt: "authjs.session-token",
-  });
-  await page.context().addCookies([
-    {
-      name: "authjs.session-token",
-      value: token,
-      domain: "localhost",
-      path: "/",
-    },
-  ]);
-}
+import { signInAs } from "./helpers/auth";
 
 const TEST_SKUS = ["E2E-WISH-1", "E2E-WISH-2", "E2E-WISH-3"];
 const TEST_EMAILS = ["e2e-wishlist@test.com", "e2e-wishlist-2@test.com"];

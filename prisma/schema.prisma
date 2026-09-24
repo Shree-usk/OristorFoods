@@ -21,17 +21,19 @@ datasource db {
 // STORY-038. Do not extend this beyond auth's requirements here.
 
 model User {
-  id            String    @id @default(cuid())
-  name          String?
-  email         String?   @unique
-  emailVerified DateTime?
-  image         String?
-  passwordHash  String?
-  accounts      Account[]
-  sessions      Session[]
-  wishlist      Wishlist?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  id               String    @id @default(cuid())
+  name             String?
+  email            String?   @unique
+  emailVerified    DateTime?
+  image            String?
+  passwordHash     String?
+  accounts         Account[]
+  sessions         Session[]
+  wishlist         Wishlist?
+  reviews          Review[]  @relation("ReviewAuthor")
+  moderatedReviews Review[]  @relation("ReviewModerator")
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
 }
 
 model Account {
@@ -195,6 +197,8 @@ model Product {
   customerGroupPrices CustomerGroupPrice[]
   volumeDiscountTiers VolumeDiscountTier[]
   wishlistItems       WishlistItem[]
+  reviews             Review[]
+  ratingSummary       ProductRatingSummary?
 
   @@index([status])
   @@index([status, inStock])
@@ -388,4 +392,72 @@ model VolumeDiscountTier {
   createdAt       DateTime @default(now())
 
   @@index([productId, minQuantity])
+}
+
+// STORY-015. Status lifecycle and transitions: see
+// docs/superpowers/specs/2026-09-23-product-reviews-design.md. Status is only
+// ever changed through review.service.ts's changeReviewStatus().
+enum ReviewStatus {
+  Pending
+  Approved
+  Published
+  Rejected
+  Archived
+}
+
+model Review {
+  id                 String       @id @default(cuid())
+  productId          String
+  product            Product      @relation(fields: [productId], references: [id], onDelete: Cascade)
+  userId             String
+  user               User         @relation("ReviewAuthor", fields: [userId], references: [id], onDelete: Cascade)
+  rating             Int
+  title              String
+  body               String
+  status             ReviewStatus @default(Pending)
+  isVerifiedPurchase Boolean      @default(false)
+
+  // Reserved for the STORY-045 moderation console; STORY-015 never writes them.
+  reviewedById  String?
+  reviewedBy    User?     @relation("ReviewModerator", fields: [reviewedById], references: [id], onDelete: SetNull)
+  reviewedAt    DateTime?
+  moderatorNote String?
+
+  publishedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  images ReviewImage[]
+
+  @@unique([productId, userId])
+  @@index([productId, status, publishedAt])
+}
+
+// Created now so photo upload can be added later without a schema change.
+// Unused until a storage provider is chosen (docs/blueprint.md Section 10).
+model ReviewImage {
+  id        String   @id @default(cuid())
+  reviewId  String
+  review    Review   @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+  url       String
+  altText   String?
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+
+  @@index([reviewId])
+}
+
+// One row per product that has at least one Published review. Recalculated
+// inside the same transaction as any status change into or out of Published.
+model ProductRatingSummary {
+  productId     String   @id
+  product       Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  averageRating Decimal  @db.Decimal(3, 2)
+  reviewCount   Int
+  count1        Int
+  count2        Int
+  count3        Int
+  count4        Int
+  count5        Int
+  updatedAt     DateTime @updatedAt
 }

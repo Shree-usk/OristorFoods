@@ -109,7 +109,12 @@ describe("getProductDetail", () => {
   it("uses a registered review summary provider once one exists", async () => {
     const product = await createProduct({ sku: "PD-6", slug: "pd-reviews", name: "Reviewed", status: "Published" });
     await createStandardPrice({ product: { connect: { id: product.id } }, price: "100.00" });
-    registerReviewSummaryProvider(async () => ({ averageRating: 4.5, reviewCount: 3, previewReviews: [] }));
+    registerReviewSummaryProvider(async () => ({
+      averageRating: 4.5,
+      reviewCount: 3,
+      histogram: { 1: 0, 2: 0, 3: 0, 4: 1, 5: 2 },
+      previewReviews: [],
+    }));
 
     const detail = await getProductDetail("pd-reviews");
 
@@ -242,7 +247,12 @@ describe("getProductsForCompare", () => {
   });
 
   it("uses a registered review summary provider once one exists", async () => {
-    registerReviewSummaryProvider(async () => ({ averageRating: 4.5, reviewCount: 3, previewReviews: [] }));
+    registerReviewSummaryProvider(async () => ({
+      averageRating: 4.5,
+      reviewCount: 3,
+      histogram: { 1: 0, 2: 0, 3: 0, 4: 1, 5: 2 },
+      previewReviews: [],
+    }));
     const product = await createProduct({ sku: "GPFC-6", slug: "gpfc-6", name: "Rated", status: "Published" });
     await createStandardPrice({ product: { connect: { id: product.id } }, price: "100.00" });
 

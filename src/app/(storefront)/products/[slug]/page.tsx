@@ -13,6 +13,7 @@ import { ProductGallery } from "@/components/storefront/product/product-gallery"
 import { ProductJsonLd } from "@/components/storefront/product/product-json-ld";
 import { RecentlyViewed, TrackRecentlyViewed } from "@/components/storefront/product/recently-viewed";
 import { RelatedProducts } from "@/components/storefront/product/related-products";
+import { ReviewsSection } from "@/components/storefront/product/reviews/reviews-section";
 import { ShareButtons } from "@/components/storefront/product/share-buttons";
 import { getProductDetail } from "@/services/product.service";
 
@@ -171,25 +172,7 @@ export default async function ProductDetailPage({ params }: ProductDetailPagePro
       </div>
 
       <div className="mt-12">
-        <h2 className="text-h3 font-heading text-charcoal">Customer Reviews</h2>
-        {product.reviewSummary ? (
-          <div className="mt-4">
-            <p className="font-number text-body text-charcoal">
-              {product.reviewSummary.averageRating.toFixed(1)} / 5 ({product.reviewSummary.reviewCount} reviews)
-            </p>
-            <ul className="mt-4 space-y-4">
-              {product.reviewSummary.previewReviews.map((review) => (
-                <li key={review.id} className="border-b border-charcoal/10 pb-4">
-                  <p className="font-medium text-charcoal">{review.title}</p>
-                  <p className="text-small text-charcoal/70">{review.body}</p>
-                  <p className="mt-1 text-caption text-charcoal/50">— {review.authorName}</p>
-                </li>
-              ))}
-            </ul>
-          </div>
-        ) : (
-          <p className="mt-2 text-small text-charcoal/70">No reviews yet.</p>
-        )}
+        <ReviewsSection productSlug={product.slug} summary={product.reviewSummary} />
       </div>
 
       <div className="mt-12">

@@ -12,9 +12,9 @@ const sortLabels: Record<ProductSort, string> = {
   rating: "Average Rating",
 };
 
-// STORY-015 (Reviews) and the Commerce Platform epic haven't landed yet, so
-// there's no real data to sort "best-selling"/"rating" by — disabled for
-// now, see docs/superpowers/specs/2026-07-16-product-listing-design.md.
+// No sales data yet (Commerce Platform epic) for "best-selling". "rating"
+// could now read ProductRatingSummary (STORY-015), but the listing query
+// doesn't support it yet — both stay disabled until they're built.
 const disabledSorts: ProductSort[] = ["best-selling", "rating"];
 
 // "Relevance" only means something with a search query behind it (STORY-012)

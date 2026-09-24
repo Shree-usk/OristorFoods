@@ -1004,3 +1004,75 @@ teaser section, wishlist empty state, share buttons), makes Base UI add
 `role="button"` to what is really a navigation link, so screen readers
 announce it as a button. `buttonVariants()` on a plain `<Link>` (as
 `compare-view.tsx`'s empty state already does) keeps link semantics.
+
+---
+
+## 2026-09-23 — STORY-015 Product Reviews & Ratings
+
+**Status lifecycle.** `Review.status` is one of `Pending`, `Approved`,
+`Published`, `Rejected`, `Archived`. Allowed moves: Pending→Approved,
+Pending→Rejected, Approved→Published, Approved→Rejected,
+Published→Archived, Archived→Published. `Rejected` is terminal for now.
+**`changeReviewStatus()` in `review.service.ts` is the only way a status
+changes.** The STORY-045 moderation console must call it (passing
+`{ moderatorId, note }` to fill the reserved `reviewedById`/`reviewedAt`/
+`moderatorNote` columns) and must not update `Review.status` directly.
+
+**Stored rating summary.** `ProductRatingSummary` (average, count, and
+`count1`–`count5`) is rebuilt inside the same transaction as any status
+change into or out of `Published` (`updateStatusAndRecalculate` in
+`review.repository.ts`, the only transaction in the codebase so far,
+because services can't import Prisma). No row means no Published reviews,
+and callers show "No reviews yet", never a 0.0 rating. Future listing-card
+ratings and sort-by-rating should read this table. The rebuild locks the
+product row (`SELECT ... FOR UPDATE`) and the status update is conditional
+on the expected from-status, so two concurrent moderation actions on the
+same product can't lose one another's summary update; customer edit and
+withdraw writes are likewise conditional on `status = Pending`, so a review
+published mid-request can't have its content overwritten or be deleted out
+from under the moderator. Deleting users or reviews outside
+`review.service.ts` (for example a future account-deletion feature relying
+on the `onDelete: Cascade`) skips summary recalculation entirely — such
+features must recalculate affected products' summaries through the service.
+
+**PDP wiring and the provider registry.** `registerReviewProviders()` runs
+from `src/instrumentation.ts` at server startup (Node runtime only).
+`product-detail-extensions.ts` now keeps its providers on `globalThis`,
+because Next.js bundles `instrumentation.ts` separately from route code and
+module-scoped state wasn't shared between the two. STORY-016 (Q&A) and
+Epic 04 (recipes) should register their providers the same way.
+
+**Verified purchase.** `purchase-verification.ts` defaults to `false`
+until STORY-028 (Order Management) calls `registerPurchaseVerifier()`. The
+flag is captured once, at submission; purchases made after a review was
+written don't update it (known gap). The verifier is kept on `globalThis`,
+for the same reason as the product-detail providers above.
+
+**Withdraw = delete.** Withdrawing a Pending review deletes it, freeing the
+`(productId, userId)` unique slot, so the status enum stays exactly the
+blueprint's five values. The API uses `DELETE` for withdraw (the story
+listed it under `PATCH`).
+
+**Review photos deferred.** `ReviewImage` exists in the schema but nothing
+writes it. Upload waits on a storage provider (blueprint Section 10, open)
+and should reuse the Media Library pipeline (STORY-041).
+
+**Publishing reviews without the moderation console.** Locally:
+`npm run review:publish -- <reviewId>` (refuses to run with
+`NODE_ENV=production`). The seed publishes three demo reviews (chilli
+powder and gift set, not curry powder, whose PDP e2e test expects the empty
+state) through the same `advanceReviewToPublished()` helper.
+
+**Local database pool cap (`DATABASE_POOL_MAX`).** The local `prisma dev`
+server is PGlite, which supports only one connection at a time. The pg
+pool defaults to 10, so any concurrent queries (the PDP's `Promise.all`
+now makes real review queries) opened several connections and crashed it
+deterministically. `src/lib/db.ts` now caps the pool when
+`DATABASE_POOL_MAX` is set. This fixes the concurrency crash only: the
+separate "PGlite wedges after ~40-50s of continuous test activity"
+problem recorded in earlier entries still happens (reconfirmed 2026-09-23:
+a full `npm run test` still wedges partway). Run the suite in batches, e.g.
+`npx vitest run --shard=N/15`, restarting `prisma dev` when a shard fails
+with P1001 / "Connection terminated unexpectedly". **Set `DATABASE_POOL_MAX=1` in every local
+`.env` (each git worktree has its own).** CI's real Postgres leaves it
+unset and keeps pg's default pool size.

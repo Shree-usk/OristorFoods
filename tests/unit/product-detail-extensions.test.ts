@@ -25,8 +25,17 @@ describe("product-detail-extensions", () => {
     registerReviewSummaryProvider(async () => ({
       averageRating: 4.2,
       reviewCount: 10,
+      histogram: { 1: 0, 2: 0, 3: 1, 4: 6, 5: 3 },
       previewReviews: [
-        { id: "r1", authorName: "Kasun", rating: 5, title: "Great", body: "Loved it", createdAt: new Date() },
+        {
+          id: "r1",
+          authorName: "Kasun",
+          rating: 5,
+          title: "Great",
+          body: "Loved it",
+          isVerifiedPurchase: false,
+          publishedAt: "2026-09-01T00:00:00.000Z",
+        },
       ],
     }));
 
