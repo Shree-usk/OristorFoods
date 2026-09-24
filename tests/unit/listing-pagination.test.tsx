@@ -2,7 +2,7 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
-import { Pagination } from "@/components/storefront/product/pagination";
+import { Pagination } from "@/components/storefront/listing/pagination";
 
 describe("Pagination", () => {
   it("renders one button per page and marks the current page", () => {

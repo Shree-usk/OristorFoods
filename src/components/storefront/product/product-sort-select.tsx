@@ -1,6 +1,6 @@
 "use client";
 
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { SortSelect, type SortOption } from "@/components/storefront/listing/sort-select";
 import type { ProductSort } from "@/services/product.service";
 
 const sortLabels: Record<ProductSort, string> = {
@@ -22,29 +22,19 @@ const disabledSorts: ProductSort[] = ["best-selling", "rating"];
 // "newest" and would show a confusing, non-functional option otherwise.
 const baseSorts = (Object.keys(sortLabels) as ProductSort[]).filter((sort) => sort !== "relevance");
 
-interface SortSelectProps {
+interface ProductSortSelectProps {
   value: ProductSort;
   onValueChange: (value: ProductSort) => void;
   showRelevance?: boolean;
 }
 
-export function SortSelect({ value, onValueChange, showRelevance = false }: SortSelectProps) {
-  const allSorts = showRelevance ? (["relevance", ...baseSorts] as ProductSort[]) : baseSorts;
+export function ProductSortSelect({ value, onValueChange, showRelevance = false }: ProductSortSelectProps) {
+  const sorts: ProductSort[] = showRelevance ? ["relevance", ...baseSorts] : baseSorts;
+  const options: SortOption<ProductSort>[] = sorts.map((sort) => ({
+    value: sort,
+    label: sortLabels[sort],
+    disabled: disabledSorts.includes(sort),
+  }));
 
-  return (
-    <Select value={value} onValueChange={(next) => onValueChange(next as ProductSort)}>
-      <SelectTrigger aria-label="Sort products">
-        <SelectValue placeholder="Sort by">
-          {(selected: ProductSort | null) => (selected ? sortLabels[selected] : "Sort by")}
-        </SelectValue>
-      </SelectTrigger>
-      <SelectContent>
-        {allSorts.map((sort) => (
-          <SelectItem key={sort} value={sort} disabled={disabledSorts.includes(sort)}>
-            {disabledSorts.includes(sort) ? `${sortLabels[sort]} (coming soon)` : sortLabels[sort]}
-          </SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
-  );
+  return <SortSelect value={value} options={options} onValueChange={onValueChange} ariaLabel="Sort products" />;
 }

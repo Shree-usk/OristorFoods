@@ -3,12 +3,12 @@
 import { useProductListingParams } from "@/hooks/use-product-listing-params";
 import { useProductListing, type ProductListingScope } from "@/hooks/use-product-listing";
 import type { ProductListingResult, ProductSort } from "@/services/product.service";
-import type { FilterOptionGroup, FilterValues } from "./filter-controls";
-import { FilterSidebar } from "./filter-sidebar";
-import { FilterDrawer } from "./filter-drawer";
-import { SortSelect } from "./sort-select";
+import { FilterDrawer } from "@/components/storefront/listing/filter-drawer";
+import { FilterSidebar } from "@/components/storefront/listing/filter-sidebar";
+import { Pagination } from "@/components/storefront/listing/pagination";
+import { FilterControls, type FilterOptionGroup, type FilterValues } from "./filter-controls";
+import { ProductSortSelect } from "./product-sort-select";
 import { ProductCard } from "./product-card";
-import { Pagination } from "./pagination";
 
 interface ProductGridProps {
   scope: ProductListingScope;
@@ -71,11 +71,15 @@ export function ProductGrid({
 
   return (
     <div className="flex flex-col gap-6 lg:flex-row lg:items-start">
-      <FilterSidebar {...filterProps} />
+      <FilterSidebar label="Filter products">
+        <FilterControls {...filterProps} />
+      </FilterSidebar>
       <div className="flex-1">
         <div className="mb-4 flex items-center justify-between gap-4">
-          <FilterDrawer {...filterProps} />
-          <SortSelect
+          <FilterDrawer>
+            <FilterControls {...filterProps} />
+          </FilterDrawer>
+          <ProductSortSelect
             value={params.sort}
             onValueChange={(sort: ProductSort) => void setParams({ sort, page: 1 })}
             showRelevance={scope.query !== undefined}
