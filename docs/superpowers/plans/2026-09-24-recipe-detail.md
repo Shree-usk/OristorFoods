@@ -1084,8 +1084,13 @@ interface IngredientLinkProps {
 }
 
 export function IngredientLink({ ingredient, scaledQuantity }: IngredientLinkProps) {
+  // Always displayText, never product.name — displayText is the
+  // recipe-authored ingredient name; the linked product's catalog name can
+  // legitimately differ (e.g. "Oristor chilli powder" vs. the product's
+  // "Chilli Powder 100g") and substituting it here would silently rewrite
+  // what the recipe author wrote.
   const label = scaledQuantity !== null && ingredient.unit
-    ? `${scaledQuantity} ${ingredient.unit} ${ingredient.product?.name ?? ingredient.displayText}`
+    ? `${scaledQuantity} ${ingredient.unit} ${ingredient.displayText}`
     : ingredient.displayText;
 
   if (!ingredient.product) return <span>{label}</span>;
