@@ -18,4 +18,15 @@ describe("IngredientLink", () => {
     expect(screen.queryByRole("link")).not.toBeInTheDocument();
     expect(screen.getByText("Salt, to taste")).toBeInTheDocument();
   });
+
+  it("uses the ingredient's own displayText, not the linked product's catalog name, even when they differ", () => {
+    render(
+      <IngredientLink
+        ingredient={{ id: "i3", quantity: 2, unit: "tbsp", displayText: "Oristor chilli powder", product: { id: "p3", slug: "chilli-powder-100g", name: "Chilli Powder 100g" } }}
+        scaledQuantity={2}
+      />,
+    );
+    expect(screen.getByRole("link")).toHaveTextContent("2 tbsp Oristor chilli powder");
+    expect(screen.getByRole("link")).not.toHaveTextContent("Chilli Powder 100g");
+  });
 });

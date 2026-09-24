@@ -9,7 +9,7 @@ interface IngredientLinkProps {
 
 export function IngredientLink({ ingredient, scaledQuantity }: IngredientLinkProps) {
   const label = scaledQuantity !== null && ingredient.unit
-    ? `${scaledQuantity} ${ingredient.unit} ${ingredient.product?.name ?? ingredient.displayText}`
+    ? `${scaledQuantity} ${ingredient.unit} ${ingredient.displayText}`
     : ingredient.displayText;
 
   if (!ingredient.product) return <span>{label}</span>;
