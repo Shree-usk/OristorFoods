@@ -1,13 +1,18 @@
 "use client";
 
-import { useState, type ComponentProps } from "react";
+import { useState, type ReactNode } from "react";
 import { SlidersHorizontal } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import { FilterControls } from "./filter-controls";
 
-export function FilterDrawer(props: ComponentProps<typeof FilterControls>) {
+interface FilterDrawerProps {
+  children: ReactNode;
+  title?: string;
+}
+
+/** Mobile (below lg) filter sheet. Pairs with FilterSidebar, which shows the same controls on desktop. */
+export function FilterDrawer({ children, title = "Filters" }: FilterDrawerProps) {
   const [open, setOpen] = useState(false);
 
   return (
@@ -19,11 +24,9 @@ export function FilterDrawer(props: ComponentProps<typeof FilterControls>) {
       <Sheet open={open} onOpenChange={setOpen}>
         <SheetContent side="right">
           <SheetHeader>
-            <SheetTitle>Filters</SheetTitle>
+            <SheetTitle>{title}</SheetTitle>
           </SheetHeader>
-          <div className="px-4 pb-4">
-            <FilterControls {...props} />
-          </div>
+          <div className="px-4 pb-4">{children}</div>
           <Button type="button" className="mx-4 mb-4" onClick={() => setOpen(false)}>
             Apply
           </Button>

@@ -48,16 +48,6 @@ export interface ProductCardData {
   badge?: string;
 }
 
-export interface RecipeCardData {
-  id: string;
-  title: string;
-  href: string;
-  imageSrc: ImageSource;
-  imageAlt: string;
-  cookTimeMinutes: number;
-  difficulty: "Easy" | "Medium" | "Hard";
-}
-
 export interface CollectionCardData {
   id: string;
   name: string;

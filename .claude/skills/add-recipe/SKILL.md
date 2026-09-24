@@ -30,7 +30,11 @@ description: Create or update a recipe, including the recipe database model, adm
 - Recipe Detail Page: ingredients list, step-by-step instructions, chef
   tips, nutrition, video, linked products with add-to-cart, reviews, Q&A,
   bookmark/save action.
-- Recipe Centre listing page: filter by category, difficulty, prep time.
+- Recipe Centre listing page (built in STORY-017): filter by category,
+  difficulty, total time (prep + cook) and dietary tags; see the URL
+  contract in docs/architecture-decisions.md (STORY-017). New recipes must
+  set totalTimeMinutes via computeTotalTimeMinutes() and choose tags from
+  the DietaryTag table.
 
 ## 5. SEO
 - Recipe schema (JSON-LD) is required — this is a specific structured data

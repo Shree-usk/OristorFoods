@@ -1138,3 +1138,63 @@ wired, or a single account can flood admins. (2) STORY-046: unlike
 (`Question` only stores who answered); the moderation console's audit
 logging needs either an optional `moderatorId` parameter (non-breaking) or
 an audit-log table.
+
+## 2026-09-24 — STORY-017 Recipe Centre Listing
+
+**Content model.** `Recipe` (listing fields only; STORY-018 adds
+ingredients, steps, tips, nutrition and product links), `RecipeCategory`,
+and dietary tags as a lookup table (`DietaryTag` + `RecipeDietaryTag`), so
+admins add tags without a migration. `RecipeStatus` is
+`Draft → Review → Approved → Published → Archived` (STORY-043 owns the
+transitions). The storefront shows Published recipes only:
+`buildRecipeWhere()` always starts with `status: "Published"`. A category
+or tag appears on the storefront only if it is Active and has at least one
+Published recipe.
+
+Seeded taxonomy: categories Curries, Rice & Grains, Sweets & Desserts,
+Beverages, Snacks, Sambols & Condiments; dietary tags Vegetarian, Vegan,
+Gluten-Free, Dairy-Free, Nut-Free, Spicy. `cuisine` is a free-text label
+on the card, not a filter.
+
+**URL contract** (for STORY-018 related recipes and STORY-022 bookmarks):
+`/recipes?category=<slug>&difficulty=easy,medium,hard&time=under-15,15-30,30-60,60-plus&diet=<slug>,<slug>&q=<text>&sort=newest|popular|rating|time&page=<n>`.
+`difficulty` and `time` are OR within the list, `diet` is AND (every tag),
+and different params AND together. Time ranges are half-open (`15-30` is
+15 ≤ t < 30). `GET /api/recipes` takes the same params plus `pageSize`
+(default 12, max 48). A malformed or stale query never errors
+(`recipeListingQuerySchema` uses `.catch()` everywhere). The story's
+`cookTimeMax` / `dietaryTags[]` became `time` / `diet`.
+
+**Total time, not cook time.** Filtering, the "Cook Time" sort and the
+card all use `totalTimeMinutes` (prep + cook), which is what a weeknight
+cook actually waits for. It's stored for indexing and always derived by
+`computeTotalTimeMinutes()` (`src/lib/recipe-time.ts`). STORY-043's
+builder must write it through that function.
+
+**Views and ratings.** `viewCount`, `avgRating` and `ratingCount` are
+placeholders written only by the seed. STORY-018 increments views on the
+detail page. STORY-022 maintains the rating pair, the way
+`ProductRatingSummary` works for products.
+
+**Featured recipes.** `Recipe.isFeatured` drives the homepage section
+(newest four Published). The section calls `connection()` so it renders
+per request, not at build time, and it disappears when nothing is
+featured.
+
+**Client caching.** `useRecipeListing` sets `staleTime: 60_000` (matching
+review-list/qa-list), so the server-provided first page isn't refetched
+immediately after hydration.
+
+**Shared listing components.** `CheckboxOption`, `Pagination`,
+`FilterDrawer` (now children-based), `FilterSidebar` (children + label) and
+a generic `SortSelect` live in `src/components/storefront/listing/`.
+Products use them through `ProductSortSelect`. `toggleValue` and
+`escapeLikePattern` moved to `src/lib/`.
+
+**Search registry on globalThis.** `search-extensions.ts` now keeps its
+provider on `globalThis` (as `product-detail-extensions.ts` does), because
+`src/instrumentation.ts` and route code load separate module copies. The
+recipe provider is registered there and feeds header search suggestions.
+
+**Nav.** "Quick & Easy" is `/recipes?difficulty=easy&time=under-15,15-30`.
+"Video Recipes" is removed until STORY-019.

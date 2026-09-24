@@ -499,3 +499,95 @@ model Question {
   @@index([productId, status, publishedAt])
   @@index([productId, userId, status])
 }
+
+// --- Recipes (STORY-017) ---
+// Listing fields only. STORY-018 adds ingredients, steps, tips, nutrition and
+// product links. Design: docs/superpowers/specs/2026-09-24-recipe-centre-design.md
+
+// Publishing workflow (add-recipe skill). Only Published is ever shown on the
+// storefront; STORY-043 owns the transitions.
+enum RecipeStatus {
+  Draft
+  Review
+  Approved
+  Published
+  Archived
+}
+
+enum RecipeDifficulty {
+  Easy
+  Medium
+  Hard
+}
+
+model RecipeCategory {
+  id              String        @id @default(cuid())
+  name            String
+  slug            String        @unique
+  description     String?
+  image           String?
+  sortOrder       Int           @default(0)
+  status          ContentStatus @default(Active)
+  metaTitle       String?
+  metaDescription String?
+  recipes         Recipe[]
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+}
+
+model DietaryTag {
+  id        String             @id @default(cuid())
+  name      String             @unique
+  slug      String             @unique
+  icon      String?
+  sortOrder Int                @default(0)
+  status    ContentStatus      @default(Active)
+  recipes   RecipeDietaryTag[]
+}
+
+model RecipeDietaryTag {
+  recipeId     String
+  recipe       Recipe     @relation(fields: [recipeId], references: [id], onDelete: Cascade)
+  dietaryTagId String
+  dietaryTag   DietaryTag @relation(fields: [dietaryTagId], references: [id], onDelete: Cascade)
+
+  @@id([recipeId, dietaryTagId])
+  @@index([dietaryTagId])
+}
+
+model Recipe {
+  id               String             @id @default(cuid())
+  slug             String             @unique
+  title            String
+  shortDescription String
+  heroImage        String
+  heroImageAlt     String
+  categoryId       String
+  category         RecipeCategory     @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  cuisine          String?
+  difficulty       RecipeDifficulty
+  prepTimeMinutes  Int
+  cookTimeMinutes  Int
+  // Always prep + cook, via computeTotalTimeMinutes() (src/lib/recipe-time.ts).
+  // Stored so the time filter and sort can use an index.
+  totalTimeMinutes Int
+  servings         Int
+  status           RecipeStatus       @default(Draft)
+  isFeatured       Boolean            @default(false)
+  // Written by STORY-018 (views) and STORY-022 (ratings); seed values until then.
+  viewCount        Int                @default(0)
+  avgRating        Decimal?           @db.Decimal(2, 1)
+  ratingCount      Int                @default(0)
+  metaTitle        String?
+  metaDescription  String?
+  dietaryTags      RecipeDietaryTag[]
+  publishedAt      DateTime?
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+
+  @@index([status, publishedAt])
+  @@index([status, categoryId])
+  @@index([status, totalTimeMinutes])
+  @@index([status, viewCount])
+  @@index([status, isFeatured])
+}

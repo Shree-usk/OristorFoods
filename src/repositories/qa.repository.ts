@@ -1,5 +1,6 @@
 import type { Prisma, QuestionStatus } from "@/generated/prisma/client";
 import { prisma } from "@/lib/db";
+import { escapeLikePattern } from "@/lib/escape-like-pattern";
 
 export interface PublishedQuestionQuery {
   /** Every word must match the question text or answer text (case-insensitive). */
@@ -21,11 +22,6 @@ export function createQuestion(data: { productId: string; userId: string; text: 
 
 export function findQuestionById(id: string) {
   return prisma.question.findUnique({ where: { id } });
-}
-
-/** `contains` becomes ILIKE; escape its wildcards so search words match literally. */
-function escapeLikePattern(word: string): string {
-  return word.replace(/[\\%_]/g, (character) => `\\${character}`);
 }
 
 function publishedWhere(productId: string, words: string[]): Prisma.QuestionWhereInput {

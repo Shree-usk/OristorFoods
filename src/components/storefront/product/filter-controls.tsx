@@ -1,11 +1,10 @@
 "use client";
 
-import { useId } from "react";
-
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { CheckboxOption } from "@/components/storefront/listing/checkbox-option";
+import { toggleValue } from "@/lib/toggle-value";
 
 export interface FilterOptionGroup {
   label: string;
@@ -29,33 +28,6 @@ const emptyFilterValues: FilterValues = {
   brands: [],
   inStock: false,
 };
-
-function toggleValue(list: string[], value: string): string[] {
-  return list.includes(value) ? list.filter((item) => item !== value) : [...list, value];
-}
-
-interface CheckboxOptionProps {
-  label: string;
-  checked: boolean;
-  onCheckedChange: (checked: boolean) => void;
-}
-
-/**
- * Checkbox + visible label. aria-labelledby points at the text span, not the
- * wrapping <label>: Base UI otherwise falls back to the enclosing label, which
- * contains the checkbox itself, and that self-reference resolves to an empty
- * accessible name (axe aria-toggle-field-name). The <label> wrapper stays so
- * clicking the text still toggles the checkbox.
- */
-function CheckboxOption({ label, checked, onCheckedChange }: CheckboxOptionProps) {
-  const labelId = useId();
-  return (
-    <label className="flex items-center gap-2 text-small text-charcoal">
-      <Checkbox checked={checked} onCheckedChange={onCheckedChange} aria-labelledby={labelId} />
-      <span id={labelId}>{label}</span>
-    </label>
-  );
-}
 
 interface FilterControlsProps {
   values: FilterValues;

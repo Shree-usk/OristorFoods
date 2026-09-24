@@ -6,7 +6,6 @@ import type {
   HeroBannerData,
   InstagramPostData,
   ProductCardData,
-  RecipeCardData,
   ReviewData,
   TeaserSectionData,
   WhyChooseFeatureData,
@@ -165,36 +164,6 @@ export const bestSellingProducts: ProductCardData[] = [
     currency: "LKR",
     rating: 4.5,
     reviewCount: 87,
-  },
-];
-
-export const featuredRecipes: RecipeCardData[] = [
-  {
-    id: "deviled-prawns",
-    title: "Chili Paste Deviled Prawns",
-    href: "/recipes/chili-paste-deviled-prawns",
-    imageSrc: "/images/products/best-sellers/Chili-Paste-Large.png",
-    imageAlt: "Oristor stemless chili paste, used in this recipe",
-    cookTimeMinutes: 25,
-    difficulty: "Easy",
-  },
-  {
-    id: "mango-pickle-rice",
-    title: "Spiced Mango Pickle Rice",
-    href: "/recipes/spiced-mango-pickle-rice",
-    imageSrc: "/images/products/best-sellers/Mango-Pickle-Large.webp",
-    imageAlt: "Oristor mango pickle, used in this recipe",
-    cookTimeMinutes: 35,
-    difficulty: "Medium",
-  },
-  {
-    id: "coconut-sambol",
-    title: "Coconut Sambol with Maldive Fish",
-    href: "/recipes/coconut-sambol-maldive-fish",
-    imageSrc: "/images/products/best-sellers/Maldives-Large.webp",
-    imageAlt: "Oristor Maldives fish flakes, used in this recipe",
-    cookTimeMinutes: 15,
-    difficulty: "Easy",
   },
 ];
 

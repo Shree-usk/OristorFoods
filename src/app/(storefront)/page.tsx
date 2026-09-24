@@ -14,7 +14,6 @@ import {
   customerReviews,
   exportSolutions,
   featuredCategories,
-  featuredRecipes,
   foodAcademyTeaser,
   heroBanner,
   instagramPosts,
@@ -25,9 +24,10 @@ import {
 
 /**
  * Homepage — every section in the exact order from docs/blueprint.md
- * Section 4. All content below Hero is typed fixture data (see
- * src/lib/fixtures/home-fixtures.ts) pending the Product Platform,
- * Recipes, Reviews, Food Academy, Export, and Rewards epics.
+ * Section 4. Content below Hero is typed fixture data (see
+ * src/lib/fixtures/home-fixtures.ts), except Featured Recipes (real
+ * recipes since STORY-017), pending the Product Platform, Reviews,
+ * Food Academy, Export, and Rewards epics.
  *
  * Blueprint's homepage section list ends "... Newsletter → Footer" — the
  * Newsletter form already lives inside the site-wide `<Footer>`
@@ -43,7 +43,7 @@ export default function Home() {
       <FeaturedCategories categories={featuredCategories} />
       <WhyChooseOristor features={whyChooseFeatures} />
       <BestSellingProducts products={bestSellingProducts} />
-      <FeaturedRecipes recipes={featuredRecipes} />
+      <FeaturedRecipes />
       <ProductCollections collections={productCollections} />
       <FoodAcademyTeaser data={foodAcademyTeaser} />
       <CustomerReviews reviews={customerReviews} />
