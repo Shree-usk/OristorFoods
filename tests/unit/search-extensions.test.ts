@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   registerRecipeSearchProvider,
@@ -32,5 +32,15 @@ describe("search-extensions", () => {
     resetSearchExtensionsForTesting();
 
     expect(await searchRecipes("curry", 3)).toEqual([]);
+  });
+
+  it("keeps the provider on globalThis so a separately bundled copy of the module sees it", async () => {
+    const item = { id: "r1", label: "Dhal Curry", href: "/recipes/dhal-curry", type: "Recipe" as const };
+    registerRecipeSearchProvider(async () => [item]);
+
+    vi.resetModules();
+    const freshCopy = await import("@/services/search-extensions");
+
+    expect(await freshCopy.searchRecipes("dhal", 3)).toEqual([item]);
   });
 });

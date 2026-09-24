@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { toggleValue } from "@/lib/toggle-value";
 
 export interface FilterOptionGroup {
   label: string;
@@ -29,10 +30,6 @@ const emptyFilterValues: FilterValues = {
   brands: [],
   inStock: false,
 };
-
-function toggleValue(list: string[], value: string): string[] {
-  return list.includes(value) ? list.filter((item) => item !== value) : [...list, value];
-}
 
 interface CheckboxOptionProps {
   label: string;
