@@ -1,5 +1,7 @@
 "use client";
 
+import { useState } from "react";
+
 import { FilterDrawer } from "@/components/storefront/listing/filter-drawer";
 import { FilterSidebar } from "@/components/storefront/listing/filter-sidebar";
 import { Pagination } from "@/components/storefront/listing/pagination";
@@ -29,6 +31,12 @@ export function RecipeListing({ initialData, facets }: RecipeListingProps) {
   const [params, setParams] = useRecipeListingParams();
   const { result, isError, isFetching, retry } = useRecipeListing(params, initialData);
 
+  // Bound to local state, not `params.q` directly: nuqs syncs the URL
+  // asynchronously, and a controlled input reading that async value can
+  // revert mid-keystroke and drop characters during fast typing. Same
+  // approach as search-overlay.tsx's `rawQuery`.
+  const [searchInput, setSearchInput] = useState(params.q ?? "");
+
   const filterValues: RecipeFilterValues = {
     difficulty: params.difficulty ?? [],
     time: params.time ?? [],
@@ -45,6 +53,7 @@ export function RecipeListing({ initialData, facets }: RecipeListingProps) {
   }
 
   function clearFilters() {
+    setSearchInput("");
     void setParams({ page: null, category: null, difficulty: null, time: null, diet: null, q: null });
   }
 
@@ -62,8 +71,11 @@ export function RecipeListing({ initialData, facets }: RecipeListingProps) {
   return (
     <div className="flex flex-col gap-6">
       <RecipeSearchBox
-        value={params.q ?? ""}
-        onChange={(q) => void setParams({ q: q === "" ? null : q, page: null }, { history: "replace" })}
+        value={searchInput}
+        onChange={(q) => {
+          setSearchInput(q);
+          void setParams({ q: q === "" ? null : q, page: null }, { history: "replace" });
+        }}
       />
       <RecipeCategoryChips
         categories={facets.categories}
