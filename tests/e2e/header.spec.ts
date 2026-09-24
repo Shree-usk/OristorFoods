@@ -56,8 +56,9 @@ test.describe("desktop header", () => {
     // The mega-menu popup renders in a portal outside <header> in the DOM
     // (positioned via base-ui's NavigationMenuPositioner), so these two
     // tests intentionally query the whole page, not a header-scoped
-    // locator — "All Products"/"All Recipes" don't collide with any
-    // footer link text anyway.
+    // locator. "All Recipes" needs `exact: true` below because the
+    // homepage's Featured Recipes section has a "View all recipes" link
+    // whose accessible name fuzzy-matches "All Recipes" as a substring.
     const header = page.locator("header");
     const neutralHoverTarget = header.getByRole("link", { name: "Home", exact: true });
     const productsTrigger = header.getByRole("button", { name: "Products" });
@@ -81,7 +82,7 @@ test.describe("desktop header", () => {
   test("mega-menu closes when a link inside it is selected", async ({ page }) => {
     await page.goto("/");
     await page.locator("header").getByRole("button", { name: "Recipes" }).click();
-    const allRecipesLink = page.getByRole("link", { name: "All Recipes" });
+    const allRecipesLink = page.getByRole("link", { name: "All Recipes", exact: true });
     await expect(allRecipesLink).toBeVisible();
     await allRecipesLink.click();
     await expect(page).toHaveURL(/\/recipes/);
