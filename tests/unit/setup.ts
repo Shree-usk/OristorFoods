@@ -39,7 +39,13 @@ vi.stubGlobal(
 );
 
 // jsdom also doesn't implement IntersectionObserver — needed by Framer
-// Motion's `whileInView` (used by ScrollReveal, src/components/motion/).
+// Motion's `whileInView` (used by ScrollReveal, src/components/motion/) and
+// by next/link's viewport-prefetch (node_modules/next/src/client/use-intersection.tsx).
+// Assigned directly (not via vi.stubGlobal) because this is a permanent
+// environment polyfill, not a per-test stub: a test file that calls
+// vi.unstubAllGlobals() in its own afterEach (e.g. recipe-listing.test.tsx,
+// which stubs/unstubs `fetch` per test) would otherwise strip this global
+// after its first test and break every next/link render after that.
 class MockIntersectionObserver implements IntersectionObserver {
   readonly root = null;
   readonly rootMargin = "";
@@ -49,5 +55,5 @@ class MockIntersectionObserver implements IntersectionObserver {
   disconnect = vi.fn();
   takeRecords = vi.fn(() => []);
 }
-vi.stubGlobal("IntersectionObserver", MockIntersectionObserver);
+globalThis.IntersectionObserver = MockIntersectionObserver;
 
