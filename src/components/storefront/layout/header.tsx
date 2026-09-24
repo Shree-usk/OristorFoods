@@ -19,7 +19,9 @@ import { StickyHeaderShell } from "./sticky-header-shell";
 export function Header() {
   return (
     <StickyHeaderShell>
-      <Container size="wide" className="flex h-full items-center justify-between gap-4">
+      {/* Tighter gaps below `xl`: at 1024px the 13 nav links plus 7 action
+          icons only just fit (tests/e2e/layout.spec.ts checks for overflow). */}
+      <Container size="wide" className="flex h-full items-center justify-between gap-2 xl:gap-4">
         <Logo />
         <div className="hidden lg:flex">
           <NavLinks />

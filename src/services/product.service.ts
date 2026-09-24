@@ -305,6 +305,23 @@ export interface ProductDetail {
   canonicalUrl: string | null;
 }
 
+export interface CompareItem {
+  id: string;
+  slug: string;
+  name: string;
+  imageSrc: string;
+  imageAlt: string;
+  brandName: string | null;
+  price: number;
+  currency: string;
+  nutrition: ProductDetailNutrition | null;
+  ingredients: ProductDetailIngredient[];
+  allergenNames: string[];
+  certificationNames: string[];
+  rating: number | null;
+  reviewCount: number | null;
+}
+
 export async function getProductDetail(
   slug: string,
   opts: { customerGroup?: CustomerGroup } = {},
@@ -401,4 +418,60 @@ export async function getProductDetail(
     metaDescription: product.metaDescription,
     canonicalUrl: product.canonicalUrl,
   };
+}
+
+export async function getProductsForCompare(productIds: string[]): Promise<CompareItem[]> {
+  if (productIds.length === 0) return [];
+
+  const candidates = await productRepository.findProductsForCompareByIds(productIds);
+  const resolvedPrices = await pricingService.resolvePricesForProducts(
+    candidates.map((candidate) => candidate.id),
+    { customerGroup: "Retail" },
+  );
+
+  const byId = new Map<string, CompareItem>();
+  for (const candidate of candidates) {
+    const resolved = resolvedPrices.get(candidate.id);
+    if (!resolved) continue;
+
+    const reviewSummary = await getReviewSummary(candidate.id);
+    const primaryImage = candidate.images[0];
+
+    byId.set(candidate.id, {
+      id: candidate.id,
+      slug: candidate.slug,
+      name: candidate.name,
+      imageSrc: primaryImage?.url ?? "",
+      imageAlt: primaryImage?.altText ?? candidate.name,
+      brandName: candidate.brand?.name ?? null,
+      price: resolved.price.toNumber(),
+      currency: resolved.currency,
+      nutrition: candidate.nutrition
+        ? {
+            servingSize: candidate.nutrition.servingSize,
+            calories: candidate.nutrition.calories.toNumber(),
+            protein: candidate.nutrition.protein.toNumber(),
+            fat: candidate.nutrition.fat.toNumber(),
+            saturatedFat: candidate.nutrition.saturatedFat.toNumber(),
+            carbohydrates: candidate.nutrition.carbohydrates.toNumber(),
+            sugar: candidate.nutrition.sugar.toNumber(),
+            fibre: candidate.nutrition.fibre.toNumber(),
+            sodium: candidate.nutrition.sodium.toNumber(),
+          }
+        : null,
+      ingredients: candidate.ingredients.map((ingredient) => ({
+        name: ingredient.name,
+        isAllergen: ingredient.isAllergen,
+      })),
+      allergenNames: candidate.allergens.map((allergen) => allergen.name),
+      certificationNames: candidate.certifications.map((certification) => certification.name),
+      rating: reviewSummary?.averageRating ?? null,
+      reviewCount: reviewSummary?.reviewCount ?? null,
+    });
+  }
+
+  // Preserve the caller's id order (the tray's insertion order), not
+  // database/query order — a product dropped by the price/status filters
+  // above is simply absent, not a gap in the array.
+  return productIds.map((id) => byId.get(id)).filter((item): item is CompareItem => item !== undefined);
 }

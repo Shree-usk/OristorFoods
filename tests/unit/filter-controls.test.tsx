@@ -50,6 +50,33 @@ describe("FilterControls", () => {
     expect(onChange).toHaveBeenLastCalledWith({ ...baseValues, priceMin: 5 });
   });
 
+  it("names every checkbox by its text alone, not by an ancestor label that contains the checkbox", () => {
+    // Base UI otherwise points aria-labelledby at the wrapping <label>, which
+    // contains the checkbox itself — axe (aria-toggle-field-name) resolves
+    // that self-reference to an empty name.
+    render(
+      <FilterControls
+        values={baseValues}
+        onChange={vi.fn()}
+        allergenOptions={[{ value: "Peanuts", label: "Peanuts" }]}
+        certificationOptions={[{ value: "Halal", label: "Halal" }]}
+        brandOptions={[{ value: "oristor", label: "Oristor" }]}
+      />,
+    );
+
+    const checkboxes = screen.getAllByRole("checkbox");
+    expect(checkboxes).toHaveLength(4);
+    for (const checkbox of checkboxes) {
+      const labelledBy = checkbox.getAttribute("aria-labelledby");
+      const labelElement = labelledBy ? document.getElementById(labelledBy) : null;
+      expect(labelElement).not.toBeNull();
+      expect(labelElement?.contains(checkbox)).toBe(false);
+      expect(labelElement?.textContent?.trim()).not.toBe("");
+    }
+    expect(screen.getByRole("checkbox", { name: "Oristor" })).toBeDefined();
+    expect(screen.getByRole("checkbox", { name: "In stock only" })).toBeDefined();
+  });
+
   it("resets all values when Clear filters is clicked", async () => {
     const user = userEvent.setup();
     const onChange = vi.fn();

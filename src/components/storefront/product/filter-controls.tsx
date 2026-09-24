@@ -1,5 +1,7 @@
 "use client";
 
+import { useId } from "react";
+
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
@@ -30,6 +32,29 @@ const emptyFilterValues: FilterValues = {
 
 function toggleValue(list: string[], value: string): string[] {
   return list.includes(value) ? list.filter((item) => item !== value) : [...list, value];
+}
+
+interface CheckboxOptionProps {
+  label: string;
+  checked: boolean;
+  onCheckedChange: (checked: boolean) => void;
+}
+
+/**
+ * Checkbox + visible label. aria-labelledby points at the text span, not the
+ * wrapping <label>: Base UI otherwise falls back to the enclosing label, which
+ * contains the checkbox itself, and that self-reference resolves to an empty
+ * accessible name (axe aria-toggle-field-name). The <label> wrapper stays so
+ * clicking the text still toggles the checkbox.
+ */
+function CheckboxOption({ label, checked, onCheckedChange }: CheckboxOptionProps) {
+  const labelId = useId();
+  return (
+    <label className="flex items-center gap-2 text-small text-charcoal">
+      <Checkbox checked={checked} onCheckedChange={onCheckedChange} aria-labelledby={labelId} />
+      <span id={labelId}>{label}</span>
+    </label>
+  );
 }
 
 interface FilterControlsProps {
@@ -91,58 +116,53 @@ export function FilterControls({
       <fieldset className="flex flex-col gap-2">
         <legend className="text-small font-medium text-charcoal">Allergen-Free</legend>
         {allergenOptions.map((option) => (
-          <label key={option.value} className="flex items-center gap-2 text-small text-charcoal">
-            <Checkbox
-              checked={values.allergens.includes(option.value)}
-              onCheckedChange={() =>
-                onChange({ ...values, allergens: toggleValue(values.allergens, option.value) })
-              }
-            />
-            {option.label}
-          </label>
+          <CheckboxOption
+            key={option.value}
+            label={option.label}
+            checked={values.allergens.includes(option.value)}
+            onCheckedChange={() =>
+              onChange({ ...values, allergens: toggleValue(values.allergens, option.value) })
+            }
+          />
         ))}
       </fieldset>
 
       <fieldset className="flex flex-col gap-2">
         <legend className="text-small font-medium text-charcoal">Certifications</legend>
         {certificationOptions.map((option) => (
-          <label key={option.value} className="flex items-center gap-2 text-small text-charcoal">
-            <Checkbox
-              checked={values.certifications.includes(option.value)}
-              onCheckedChange={() =>
-                onChange({
-                  ...values,
-                  certifications: toggleValue(values.certifications, option.value),
-                })
-              }
-            />
-            {option.label}
-          </label>
+          <CheckboxOption
+            key={option.value}
+            label={option.label}
+            checked={values.certifications.includes(option.value)}
+            onCheckedChange={() =>
+              onChange({
+                ...values,
+                certifications: toggleValue(values.certifications, option.value),
+              })
+            }
+          />
         ))}
       </fieldset>
 
       <fieldset className="flex flex-col gap-2">
         <legend className="text-small font-medium text-charcoal">Brand</legend>
         {brandOptions.map((option) => (
-          <label key={option.value} className="flex items-center gap-2 text-small text-charcoal">
-            <Checkbox
-              checked={values.brands.includes(option.value)}
-              onCheckedChange={() =>
-                onChange({ ...values, brands: toggleValue(values.brands, option.value) })
-              }
-            />
-            {option.label}
-          </label>
+          <CheckboxOption
+            key={option.value}
+            label={option.label}
+            checked={values.brands.includes(option.value)}
+            onCheckedChange={() =>
+              onChange({ ...values, brands: toggleValue(values.brands, option.value) })
+            }
+          />
         ))}
       </fieldset>
 
-      <label className="flex items-center gap-2 text-small text-charcoal">
-        <Checkbox
-          checked={values.inStock}
-          onCheckedChange={(checked) => onChange({ ...values, inStock: checked === true })}
-        />
-        In stock only
-      </label>
+      <CheckboxOption
+        label="In stock only"
+        checked={values.inStock}
+        onCheckedChange={(checked) => onChange({ ...values, inStock: checked })}
+      />
 
       <Button type="button" variant="outline" onClick={() => onChange(emptyFilterValues)}>
         Clear filters
