@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Copy, Mail, MessageCircle } from "lucide-react";
+import { Copy, Mail, MessageCircle, Share2 } from "lucide-react";
 
 import { FacebookIcon } from "@/components/storefront/layout/social-icons";
 import { Button } from "@/components/ui/button";
@@ -24,11 +24,22 @@ export function ShareButtons({ url, title }: ShareButtonsProps) {
     });
   }
 
+  const canNativeShare = typeof navigator !== "undefined" && typeof navigator.share === "function";
+
+  function handleNativeShare() {
+    void navigator.share({ title, url });
+  }
+
   const encodedUrl = encodeURIComponent(url);
   const encodedTitle = encodeURIComponent(title);
 
   return (
     <div className="flex items-center gap-2">
+      {canNativeShare && (
+        <Button type="button" variant="outline" size="icon-sm" onClick={handleNativeShare} aria-label="Share via device">
+          <Share2 />
+        </Button>
+      )}
       <Button type="button" variant="outline" size="icon-sm" onClick={handleCopy} aria-label="Copy link">
         <Copy />
       </Button>
