@@ -157,9 +157,9 @@ model Recipe {
   STORY-018 increments `viewCount` on the detail page; STORY-022 maintains
   the rating pair. The seed sets realistic values so the sorts are
   demonstrable.
-- **Migration:** one committed migration, `add_recipes`, produced with
-  `migrate dev` against a freshly restarted `prisma dev` server (see
-  `docs/architecture-decisions.md`), with no BOM.
+- **Migration:** one committed migration, `add_recipes`, generated offline
+  with `prisma migrate diff` from the previous schema (as STORY-016 did),
+  with no BOM.
 
 ### Seed data
 
@@ -307,10 +307,12 @@ Zod 4 schema per the contract table, with `.transform()` placed before
 `recipeSortValues`, `recipeDifficultyValues`, `recipeTimeValues`.
 
 `src/lib/recipe-listing-params.ts` defines the nuqs parsers (`category`,
-`difficulty`, `time`, `diet`, `q`, `sort`, `page`) from the same tuples;
-`src/lib/recipe-listing-loader.ts` is the server `createLoader`, and
-`src/hooks/use-recipe-listing-params.ts` the client `useQueryStates` —
-the same trio as the product listing.
+`difficulty`, `time`, `diet`, `q`, `sort`, `page`) from the same tuples,
+plus a `serializeRecipeListing` helper for chip hrefs.
+`src/hooks/use-recipe-listing-params.ts` is the client `useQueryStates`,
+pushing history entries so Back/Forward walk through filter changes (the
+search box replaces instead). The page parses `searchParams` with the Zod
+schema directly, so no separate nuqs server loader is needed.
 
 ### API
 
@@ -329,7 +331,7 @@ logged and returned as a 500 with a generic message through a helper in
 
 ### Page — `src/app/(storefront)/recipes/page.tsx`
 
-Server Component. Loads params with `loadRecipeListingParams`, calls
+Server Component. Parses params with `recipeListingQuerySchema`, calls
 `listRecipes` and `listRecipeFacets` in parallel, renders:
 
 - `<h1>` "Recipe Centre" and a one-line intro
@@ -344,22 +346,25 @@ Metadata: title "Recipes | Oristor", description, canonical `/recipes`
 JSON-LD is STORY-018's detail page).
 
 `src/app/(storefront)/recipes/error.tsx` — a client error boundary with a
-short message and a "Try again" button (`reset()`), for a server-render
-failure. `loading.tsx` renders the skeleton grid.
+short message and a "Try again" button (Next 16's `unstable_retry()`), for
+a server-render failure. `loading.tsx` renders the skeleton grid.
 
 ### Client state — `recipe-listing.tsx`
 
 - `useRecipeListingParams()` for URL state; any filter/search/sort change
   resets `page` to 1.
-- TanStack Query on `["recipes", params]` fetching `/api/recipes`;
-  `initialData` only when the params equal the server-rendered params;
-  `placeholderData: keepPreviousData`.
-- On fetch error: keep showing the previous results **and** show an inline
-  alert "Couldn't update recipes." with a Retry button. Never show
-  unfiltered results as if they matched (the STORY-016 lesson).
-- A polite live region announces "N recipes found" / "No recipes match
-  those filters" after each settled fetch.
-- Skeleton grid only when there is no data at all.
+- TanStack Query on `["recipes", <api query string>]` fetching
+  `/api/recipes`; `initialData` only for the query the page first mounted
+  with; `placeholderData: keepPreviousData`. The search text is debounced
+  (300 ms) inside `useRecipeListing`, not in the input, so the box and the
+  URL stay in sync with Back/Forward.
+- On fetch error: keep showing the last successful results **and** show an
+  inline alert "Couldn't update recipes." with a Retry button. Never show
+  unfiltered results without that alert (the STORY-016 lesson).
+- The "N recipes" count is a polite live region, so every settled change
+  is announced.
+- No client skeleton after hydration: the listing always has the initial
+  or last-good data, and `loading.tsx` covers route navigation.
 - `page` beyond the last page renders the empty state with a "Go to first
   page" action.
 
@@ -378,11 +383,12 @@ failure. `loading.tsx` renders the skeleton grid.
 - `recipe-filter-controls.tsx` — fieldsets with legends for Difficulty,
   Time and Dietary; checkboxes via the shared `CheckboxOption`; "Clear
   filters" resets every filter, category and `q`.
-- `recipe-search-box.tsx` — labelled `type="search"` input, 300 ms
-  debounce into `q`, clear button, `role="search"` wrapper.
+- `recipe-search-box.tsx` — labelled `type="search"` input bound to `q`
+  (URL updates replace, not push), clear button, `role="search"` wrapper.
 - `recipe-grid.tsx` — responsive grid (1 / 2 / 3 columns) of `RecipeCard`.
-- `recipe-empty-state.tsx` — "No recipes match those filters" plus a
-  "Clear filters" button.
+- `recipe-empty-state.tsx` — a message plus one action: "No recipes match
+  those filters." with "Clear all filters", or "There are no recipes on
+  this page." with "Go to first page".
 - `recipe-sort-select.tsx` — thin wrapper passing recipe options to the
   shared `SortSelect`: Newest, Most Popular, Highest Rated, Cook Time
   (shortest first); aria-label "Sort recipes".
