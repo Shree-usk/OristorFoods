@@ -37,6 +37,20 @@ export function makeDietaryTag(overrides: TaxonomyOverrides = {}) {
   });
 }
 
+export interface RecipeIngredientOverride {
+  productId?: string;
+  quantity?: number;
+  unit?: string;
+  displayText: string;
+  sortOrder?: number;
+}
+
+export interface RecipeStepOverride {
+  stepNumber: number;
+  instruction: string;
+  imageUrl?: string;
+}
+
 export interface RecipeFixtureOverrides {
   slug?: string;
   title?: string;
@@ -52,6 +66,8 @@ export interface RecipeFixtureOverrides {
   ratingCount?: number;
   publishedAt?: Date | null;
   dietaryTagIds?: string[];
+  ingredients?: RecipeIngredientOverride[];
+  steps?: RecipeStepOverride[];
 }
 
 /** Test fixture: writes a recipe in any state directly. Defaults to Published, Easy, 30 minutes. */
@@ -79,6 +95,16 @@ export function makeRecipe(categoryId: string, overrides: RecipeFixtureOverrides
     ratingCount: overrides.ratingCount ?? 0,
     publishedAt: overrides.publishedAt === undefined ? new Date("2026-09-01T00:00:00Z") : overrides.publishedAt,
     dietaryTags: { create: (overrides.dietaryTagIds ?? []).map((dietaryTagId) => ({ dietaryTagId })) },
+    ingredients: {
+      create: (overrides.ingredients ?? []).map((ingredient, index) => ({
+        productId: ingredient.productId,
+        quantity: ingredient.quantity,
+        unit: ingredient.unit,
+        displayText: ingredient.displayText,
+        sortOrder: ingredient.sortOrder ?? index,
+      })),
+    },
+    steps: { create: overrides.steps ?? [] },
   });
 }
 

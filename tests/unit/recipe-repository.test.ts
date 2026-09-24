@@ -2,18 +2,25 @@
 import { afterEach, describe, expect, it } from "vitest";
 
 import type { RecipeFilters } from "@/lib/recipe-listing-values";
+import { prisma } from "@/lib/db";
+import { createProduct } from "@/repositories/product.repository";
 import {
   buildRecipeOrderBy,
   buildRecipeWhere,
   findActiveCategoriesWithPublishedRecipes,
   findActiveDietaryTagsWithPublishedRecipes,
   findFeaturedRecipes,
+  findPublishedRecipeBySlug,
   findPublishedRecipes,
+  findRecipesByProductId,
+  findRelatedRecipes,
+  incrementRecipeViewCount,
 } from "@/repositories/recipe.repository";
 import { cleanupRecipes, makeCategory, makeDietaryTag, makeRecipe } from "./recipe-fixtures";
 
 afterEach(async () => {
   await cleanupRecipes();
+  await prisma.product.deleteMany();
 });
 
 async function titlesFor(filters: RecipeFilters, sort: Parameters<typeof buildRecipeOrderBy>[0] = "newest") {
@@ -188,5 +195,88 @@ describe("findFeaturedRecipes", () => {
     await makeRecipe(category.id, { title: "Draft", status: "Draft", isFeatured: true });
 
     expect((await findFeaturedRecipes(2)).map((row) => row.title)).toEqual(["Newest", "New"]);
+  });
+});
+
+describe("findPublishedRecipeBySlug", () => {
+  it("returns null for a slug that doesn't exist", async () => {
+    const result = await findPublishedRecipeBySlug("does-not-exist");
+    expect(result).toBeNull();
+  });
+
+  it("returns null for a Draft recipe", async () => {
+    const category = await makeCategory();
+    await makeRecipe(category.id, { status: "Draft", slug: "draft-recipe" });
+
+    const result = await findPublishedRecipeBySlug("draft-recipe");
+
+    expect(result).toBeNull();
+  });
+
+  it("returns ingredients ordered by sortOrder and steps ordered by stepNumber", async () => {
+    const category = await makeCategory();
+    await makeRecipe(category.id, {
+      status: "Published",
+      slug: "ordered-recipe",
+      ingredients: [
+        { displayText: "Second", sortOrder: 2 },
+        { displayText: "First", sortOrder: 1 },
+      ],
+      steps: [
+        { stepNumber: 2, instruction: "Second step" },
+        { stepNumber: 1, instruction: "First step" },
+      ],
+    });
+
+    const result = await findPublishedRecipeBySlug("ordered-recipe");
+
+    expect(result?.ingredients.map((i) => i.displayText)).toEqual(["First", "Second"]);
+    expect(result?.steps.map((s) => s.instruction)).toEqual(["First step", "Second step"]);
+  });
+});
+
+describe("findRelatedRecipes", () => {
+  it("excludes the recipe itself and returns only Published recipes sharing category or cuisine", async () => {
+    const category = await makeCategory();
+    const target = await makeRecipe(category.id, { status: "Published", slug: "target", cuisine: "Sri Lankan" });
+    await makeRecipe(category.id, { status: "Published", slug: "same-category" });
+    await makeRecipe(category.id, { status: "Draft", slug: "draft-same-category" });
+
+    const related = await findRelatedRecipes(
+      { id: target.id, categoryId: target.categoryId, cuisine: target.cuisine },
+      6,
+    );
+
+    expect(related.map((r) => r.slug)).toContain("same-category");
+    expect(related.map((r) => r.slug)).not.toContain("target");
+    expect(related.map((r) => r.slug)).not.toContain("draft-same-category");
+  });
+});
+
+describe("findRecipesByProductId", () => {
+  it("returns Published recipes whose ingredients reference the product", async () => {
+    const product = await createProduct({ sku: "RECIPE-SKU-1", slug: "recipe-sku-1", name: "Test Product" });
+    const category = await makeCategory();
+    await makeRecipe(category.id, {
+      status: "Published",
+      slug: "uses-product",
+      ingredients: [{ productId: product.id, displayText: "1 unit" }],
+    });
+
+    const result = await findRecipesByProductId(product.id, 6);
+
+    expect(result.map((r) => r.slug)).toEqual(["uses-product"]);
+  });
+});
+
+describe("incrementRecipeViewCount", () => {
+  it("increments viewCount by 1", async () => {
+    const category = await makeCategory();
+    const recipe = await makeRecipe(category.id, { status: "Published", slug: "view-me", viewCount: 5 });
+
+    await incrementRecipeViewCount(recipe.id);
+
+    const updated = await prisma.recipe.findUniqueOrThrow({ where: { id: recipe.id } });
+    expect(updated.viewCount).toBe(6);
   });
 });
