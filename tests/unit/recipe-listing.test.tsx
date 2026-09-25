@@ -135,7 +135,10 @@ describe("RecipeListing", () => {
     await user.type(screen.getByRole("searchbox", { name: "Search recipes" }), "dhal");
 
     expect(onUrlUpdate.mock.calls.at(-1)?.[0].options.history).toBe("replace");
-    await waitFor(() => expect(vi.mocked(fetch).mock.calls.at(-1)?.[0]).toContain("q=dhal"));
+    // On a slow runner, keystrokes can land >300ms apart, so an intermediate
+    // debounced fetch fires first; the default 1s waitFor then expires before
+    // the final one settles.
+    await waitFor(() => expect(vi.mocked(fetch).mock.calls.at(-1)?.[0]).toContain("q=dhal"), { timeout: 3000 });
     expect(vi.mocked(fetch).mock.calls.filter(([url]) => String(url).includes("q=d&")).length).toBe(0);
   });
 });
