@@ -8,6 +8,7 @@ export const cookingTipCardSelect = {
   summary: true,
   imageUrl: true,
   videoUrl: true,
+  videoProvider: true,
   topicTag: true,
 } satisfies Prisma.CookingTipSelect;
 
@@ -28,7 +29,7 @@ export async function findPublishedCookingTips(args: {
   const [rows, total] = await prisma.$transaction([
     prisma.cookingTip.findMany({
       where,
-      orderBy: [{ publishedAt: "desc" }, { id: "asc" }],
+      orderBy: [{ publishedAt: { sort: "desc", nulls: "last" } }, { id: "asc" }],
       skip: args.skip,
       take: args.take,
       select: cookingTipCardSelect,
@@ -49,6 +50,7 @@ export const cookingTipDetailSelect = {
   videoProvider: true,
   topicTag: true,
   productRefs: {
+    where: { product: { status: "Published" } },
     select: { product: { select: { id: true, slug: true, name: true } } },
   },
 } satisfies Prisma.CookingTipSelect;

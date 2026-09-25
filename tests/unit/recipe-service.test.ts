@@ -134,6 +134,15 @@ describe("toRecipeCard hasVideo", () => {
     expect(videoCard?.hasVideo).toBe(true);
     expect(noVideoCard?.hasVideo).toBe(false);
   });
+
+  it("is false when videoUrl is set but videoProvider is null (not actually playable)", async () => {
+    const category = await makeCategory();
+    await makeRecipe(category.id, { title: "URL Without Provider", videoUrl: "https://youtu.be/abc123", videoProvider: null });
+
+    const result = await listRecipes({ page: 1, pageSize: 10, sort: "newest" });
+    const card = result.recipes.find((r) => r.title === "URL Without Provider");
+    expect(card?.hasVideo).toBe(false);
+  });
 });
 
 describe("getRecipeBySlug video field", () => {

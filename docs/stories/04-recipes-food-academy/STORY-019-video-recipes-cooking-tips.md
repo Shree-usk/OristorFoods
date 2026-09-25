@@ -31,7 +31,7 @@ This story adds video content to the Recipes area, covering the "Video Recipes" 
   - [x] Extend `Recipe` model with `videoUrl` (nullable), `videoProvider` (enum: YOUTUBE/VIMEO/SELF_HOSTED), `videoDurationSeconds` (nullable), `captionsUrl` (nullable) _(enum values are `Youtube`/`Vimeo`/`SelfHosted`, matching this schema's PascalCase convention — see `docs/architecture-decisions.md`)_
   - [x] Define `CookingTip` model: `id`, `slug`, `title`, `summary`, `bodyContent` (rich text/markdown), `videoUrl` (nullable), `videoProvider`, `imageUrl` (nullable), `topicTag`, `status`, `publishedAt`, `createdAt`, `updatedAt` _(`bodyContent` is plain text rendered `whitespace-pre-line`, not markdown — see design doc decision 5)_
   - [x] Define `CookingTipProductRef` join table (optional) linking tips to `Product` records (STORY-009) for tips like "how to store [product]"
-  - [x] Migration + seed data: a handful of recipes with `videoUrl` set, and 8–10 sample cooking tips across topic tags _(migration `20260925152046_add_video_cooking_tips`; 3 seeded video recipes — one each of Youtube/Vimeo/SelfHosted; 12 seeded cooking tips across topic tags in `prisma/seed-cooking-tips.ts`)_
+  - [x] Migration + seed data: a handful of recipes with `videoUrl` set, and 8–10 sample cooking tips across topic tags _(migration `20260925152046_add_video_cooking_tips`; 3 seeded video recipes — one each of Youtube/Vimeo/SelfHosted; 10 seeded cooking tips across topic tags in `prisma/seed-cooking-tips.ts`)_
 
 - [x] **API:**
   - [x] `GET /api/recipes?type=video` (extend STORY-017's list endpoint with a `hasVideo` filter) or a dedicated `GET /api/recipes/videos` _(delivered as `?hasVideo=true` on the existing `GET /api/recipes`, per the AC's own hasVideo-filter option)_
@@ -63,7 +63,7 @@ This story adds video content to the Recipes area, covering the "Video Recipes" 
 - [x] **Documentation:**
   - [x] Document supported video providers/URL formats and the lazy-load/facade pattern in `docs/architecture-decisions.md` so admin-side recipe/content authoring (STORY-043, STORY-044) produces compatible URLs
   - [x] Note the final chosen route for Cooking Tips (`/recipes/cooking-tips` vs `/food-academy/cooking-tips`) — done above and in `docs/architecture-decisions.md`
-  - [ ] Keep nav (STORY-004) in sync with the route decision _(**not fully done:** `src/lib/nav-config.ts`'s `recipesMegaMenu` was updated for "Video Recipes" → `/recipes?hasVideo=true`, but no "Cooking Tips" entry was added anywhere in `nav-config.ts` — `/recipes/cooking-tips` is reachable only by direct URL or from a cooking tip's own grid/detail links, not from primary nav. Not checked off; flagged as a follow-up for whoever next touches `nav-config.ts`.)_
+  - [x] Keep nav (STORY-004) in sync with the route decision _(`src/lib/nav-config.ts`'s `recipesMegaMenu` includes both "Video Recipes" → `/recipes?hasVideo=true` and "Cooking Tips" → `/recipes/cooking-tips`. The "Cooking Tips" entry was initially missed across Tasks 1-13; the gap was found during documentation review and fixed in a follow-up commit, `571f2da`.)_
 
 ## Dependencies
 - STORY-001 (Project Foundation Setup)

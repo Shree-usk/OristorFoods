@@ -26,7 +26,7 @@ function toRecipeCard(row: RecipeCardRow): RecipeCard {
     avgRating: row.avgRating === null ? null : row.avgRating.toNumber(),
     ratingCount: row.ratingCount,
     dietaryTags: row.dietaryTags.map((link) => link.dietaryTag.name),
-    hasVideo: row.videoUrl !== null,
+    hasVideo: row.videoUrl !== null && row.videoProvider !== null,
   };
 }
 

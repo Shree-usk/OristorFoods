@@ -21,6 +21,22 @@ describe("listCookingTips", () => {
     const result = await listCookingTips({ page: 1, pageSize: 10, topic: "storage" });
     expect(result.tips.map((t) => t.title)).toEqual(["Storage"]);
   });
+
+  it("hasVideo is false when videoUrl is set but videoProvider is null (not actually playable)", async () => {
+    await makeCookingTip({ title: "URL Without Provider", videoUrl: "https://youtu.be/abc123", videoProvider: null });
+
+    const result = await listCookingTips({ page: 1, pageSize: 10 });
+    const card = result.tips.find((t) => t.title === "URL Without Provider");
+    expect(card?.hasVideo).toBe(false);
+  });
+
+  it("hasVideo is true when both videoUrl and videoProvider are set", async () => {
+    await makeCookingTip({ title: "Full Video", videoUrl: "https://youtu.be/abc123", videoProvider: "Youtube" });
+
+    const result = await listCookingTips({ page: 1, pageSize: 10 });
+    const card = result.tips.find((t) => t.title === "Full Video");
+    expect(card?.hasVideo).toBe(true);
+  });
 });
 
 describe("getCookingTipBySlug", () => {

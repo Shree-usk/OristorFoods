@@ -4,7 +4,7 @@ import * as productRepository from "../src/repositories/product.repository";
 
 // Cooking Tips (STORY-019) demo content. Short-form video/photo tips,
 // independent of the Recipe Centre. Design:
-// docs/superpowers/sdd/2026-09-25-video-cooking-tips.
+// docs/superpowers/specs/2026-09-25-video-cooking-tips-design.md.
 
 // Real seeded Products (prisma/seed.ts), referenced here by slug so at
 // least one tip links to a real productId.

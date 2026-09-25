@@ -18,7 +18,7 @@ export async function generateMetadata({ params }: CookingTipDetailPageProps): P
   const { slug } = await params;
   const tip = await getCachedTip(slug);
   if (!tip) return {};
-  return { title: tip.title, description: tip.summary };
+  return { title: tip.title, description: tip.summary, alternates: { canonical: `/recipes/cooking-tips/${slug}` } };
 }
 
 export default async function CookingTipDetailPage({ params }: CookingTipDetailPageProps) {

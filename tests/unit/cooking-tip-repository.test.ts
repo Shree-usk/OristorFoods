@@ -51,11 +51,20 @@ describe("findPublishedCookingTipBySlug", () => {
   });
 
   it("includes linked products", async () => {
-    const product = await createProduct({ sku: "SKU-CT-1", slug: "curry-powder-ct", name: "Curry Powder" });
+    const product = await createProduct({ sku: "SKU-CT-1", slug: "curry-powder-ct", name: "Curry Powder", status: "Published" });
     await makeCookingTip({ slug: "with-product", productIds: [product.id] });
 
     const result = await findPublishedCookingTipBySlug("with-product");
     expect(result?.productRefs.map((ref) => ref.product.slug)).toEqual(["curry-powder-ct"]);
+  });
+
+  it("only includes Published linked products, excluding Draft/Archived/etc", async () => {
+    const published = await createProduct({ sku: "SKU-CT-PUB", slug: "curry-powder-pub", name: "Curry Powder", status: "Published" });
+    const draft = await createProduct({ sku: "SKU-CT-DRAFT", slug: "curry-powder-draft", name: "Draft Curry Powder", status: "Draft" });
+    await makeCookingTip({ slug: "with-mixed-products", productIds: [published.id, draft.id] });
+
+    const result = await findPublishedCookingTipBySlug("with-mixed-products");
+    expect(result?.productRefs.map((ref) => ref.product.slug)).toEqual(["curry-powder-pub"]);
   });
 });
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import { Play } from "lucide-react";
 import { normalizeVideoUrl, youtubeThumbnailUrl } from "@/lib/video-url";
@@ -15,9 +15,20 @@ interface VideoPlayerProps {
 
 export function VideoPlayer({ video, posterUrl, posterAlt, priority, sizes }: VideoPlayerProps) {
   const [playing, setPlaying] = useState(false);
+  const iframeRef = useRef<HTMLIFrameElement>(null);
   const normalized = normalizeVideoUrl(video.url);
 
-  if (!normalized) {
+  useEffect(() => {
+    if (playing) {
+      iframeRef.current?.focus();
+    }
+  }, [playing]);
+
+  // A URL that fails to normalize, or normalizes to a DIFFERENT provider
+  // than the one the content was authored with, can never be resolved to
+  // a playable video for the authored provider — fall back to the poster
+  // image rather than rendering a broken/misleading player.
+  if (!normalized || normalized.provider !== video.provider) {
     return (
       <div className="relative aspect-4/3 overflow-hidden rounded-lg bg-cream sm:aspect-16/9">
         <Image src={posterUrl} alt={posterAlt} fill className="object-cover" priority={priority} sizes={sizes} />
@@ -27,7 +38,7 @@ export function VideoPlayer({ video, posterUrl, posterAlt, priority, sizes }: Vi
 
   if (normalized.provider === "SelfHosted") {
     return (
-      <video controls poster={posterUrl} className="aspect-4/3 w-full rounded-lg bg-black sm:aspect-16/9">
+      <video controls preload="metadata" crossOrigin="anonymous" poster={posterUrl} className="aspect-4/3 w-full rounded-lg bg-black sm:aspect-16/9">
         <source src={normalized.url} />
         {video.captionsUrl && <track kind="captions" src={video.captionsUrl} />}
       </video>
@@ -59,8 +70,9 @@ export function VideoPlayer({ video, posterUrl, posterAlt, priority, sizes }: Vi
   return (
     <div className="aspect-4/3 overflow-hidden rounded-lg sm:aspect-16/9">
       <iframe
+        ref={iframeRef}
         src={embedSrc}
-        title={posterAlt}
+        title={`Video: ${posterAlt}`}
         allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
         allowFullScreen
         className="size-full"

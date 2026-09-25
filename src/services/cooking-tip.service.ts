@@ -15,7 +15,7 @@ function toCookingTipCard(row: CookingTipCardRow | CookingTipDetailRow): Cooking
     title: row.title,
     summary: row.summary,
     imageUrl: row.imageUrl,
-    hasVideo: row.videoUrl !== null,
+    hasVideo: row.videoUrl !== null && row.videoProvider !== null,
     topicTag: row.topicTag,
   };
 }

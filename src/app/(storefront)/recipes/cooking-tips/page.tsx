@@ -6,7 +6,11 @@ import { cn } from "@/lib/utils";
 import { listCookingTips, listCookingTipTopics } from "@/services/cooking-tip.service";
 import { cookingTipListQuerySchema } from "@/validation/cooking-tip.schema";
 
-export const metadata: Metadata = { title: "Cooking Tips" };
+export const metadata: Metadata = {
+  title: "Cooking Tips",
+  description: "Quick cooking tips and techniques from Oristor — knife skills, spice tempering, storage, and more.",
+  alternates: { canonical: "/recipes/cooking-tips" },
+};
 
 interface CookingTipsPageProps {
   searchParams: Promise<Record<string, string | string[] | undefined>>;

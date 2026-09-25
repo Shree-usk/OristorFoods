@@ -1321,10 +1321,13 @@ overlay) behind a "Play video" button; only on click does the real
 paying the third-party embed's network/JS cost on every recipe page load
 just to render a page most visitors won't play the video on — the
 standard mitigation for third-party video embeds tanking LCP. For
-`SelfHosted`, `VideoPlayer` renders a plain `<video src={url} controls
-poster={...}>` directly (matching `ProductGallery`'s existing `<video>`
-styling) — native `<video>` already lazy-loads by default, so no facade
-is needed there.
+`SelfHosted`, `VideoPlayer` renders the native `<video controls poster={...}>`
+element directly, with no click-to-play facade (matching `ProductGallery`'s
+existing `<video>` styling) — unlike the `Youtube`/`Vimeo` branches above.
+Browsers don't guarantee a "lazy by default" `preload` behavior (defaults
+vary and commonly fetch at least metadata on page load), so `VideoPlayer`
+sets `preload="metadata"` explicitly to bound the upfront network cost
+instead of relying on an assumption about browser defaults.
 
 **`captionsUrl` only applies to `SelfHosted` video.** `VideoPlayer` only
 renders a `<track kind="captions" src={captionsUrl}>` when

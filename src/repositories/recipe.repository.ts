@@ -83,6 +83,7 @@ export const recipeCardSelect = {
   avgRating: true,
   ratingCount: true,
   videoUrl: true,
+  videoProvider: true,
   category: { select: { name: true } },
   dietaryTags: {
     where: { dietaryTag: { status: "Active" } },
