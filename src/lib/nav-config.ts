@@ -62,6 +62,7 @@ const recipesMegaMenu: MegaMenuSection[] = [
       { label: "All Recipes", href: "/recipes" },
       { label: "Quick & Easy", href: "/recipes?difficulty=easy&time=under-15,15-30" },
       { label: "Video Recipes", href: "/recipes?hasVideo=true" },
+      { label: "Cooking Tips", href: "/recipes/cooking-tips" },
       { label: "Food Academy", href: "/food-academy" },
     ],
   },
