@@ -1,0 +1,67 @@
+// @vitest-environment node
+import { afterEach, describe, expect, it } from "vitest";
+import { createProduct } from "@/repositories/product.repository";
+import {
+  findActiveTopicTagsWithPublishedTips,
+  findPublishedCookingTipBySlug,
+  findPublishedCookingTips,
+  findRelatedCookingTips,
+} from "@/repositories/cooking-tip.repository";
+import { cleanupRecipes, makeCookingTip } from "./recipe-fixtures";
+
+afterEach(async () => {
+  await cleanupRecipes();
+});
+
+describe("findPublishedCookingTips", () => {
+  it("only returns Published tips, filtered by topic when given", async () => {
+    await makeCookingTip({ title: "Published Knife", topicTag: "knife-skills" });
+    await makeCookingTip({ title: "Draft Knife", topicTag: "knife-skills", status: "Draft" });
+    await makeCookingTip({ title: "Published Storage", topicTag: "storage" });
+
+    const all = await findPublishedCookingTips({ where: {}, skip: 0, take: 10 });
+    expect(all.rows.map((r) => r.title).sort()).toEqual(["Published Knife", "Published Storage"]);
+
+    const knifeOnly = await findPublishedCookingTips({ where: { topicTag: "knife-skills" }, skip: 0, take: 10 });
+    expect(knifeOnly.rows.map((r) => r.title)).toEqual(["Published Knife"]);
+  });
+});
+
+describe("findPublishedCookingTipBySlug", () => {
+  it("returns null for a missing or Draft slug", async () => {
+    await makeCookingTip({ slug: "draft-tip", status: "Draft" });
+    expect(await findPublishedCookingTipBySlug("draft-tip")).toBeNull();
+    expect(await findPublishedCookingTipBySlug("does-not-exist")).toBeNull();
+  });
+
+  it("includes linked products", async () => {
+    const product = await createProduct({ sku: "SKU-CT-1", slug: "curry-powder-ct", name: "Curry Powder" });
+    await makeCookingTip({ slug: "with-product", productIds: [product.id] });
+
+    const result = await findPublishedCookingTipBySlug("with-product");
+    expect(result?.productRefs.map((ref) => ref.product.slug)).toEqual(["curry-powder-ct"]);
+  });
+});
+
+describe("findRelatedCookingTips", () => {
+  it("excludes the tip itself and only returns Published tips sharing the topic", async () => {
+    const target = await makeCookingTip({ slug: "target", topicTag: "knife-skills" });
+    await makeCookingTip({ slug: "same-topic", topicTag: "knife-skills" });
+    await makeCookingTip({ slug: "draft-same-topic", topicTag: "knife-skills", status: "Draft" });
+    await makeCookingTip({ slug: "other-topic", topicTag: "storage" });
+
+    const related = await findRelatedCookingTips({ id: target.id, topicTag: target.topicTag }, 6);
+    expect(related.map((r) => r.slug)).toEqual(["same-topic"]);
+  });
+});
+
+describe("findActiveTopicTagsWithPublishedTips", () => {
+  it("returns distinct topic tags that have at least one Published tip", async () => {
+    await makeCookingTip({ topicTag: "knife-skills" });
+    await makeCookingTip({ topicTag: "knife-skills" });
+    await makeCookingTip({ topicTag: "storage-only-drafts", status: "Draft" });
+
+    const tags = await findActiveTopicTagsWithPublishedTips();
+    expect(tags.map((t) => t.tag)).toEqual(["knife-skills"]);
+  });
+});

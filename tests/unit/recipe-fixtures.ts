@@ -1,6 +1,13 @@
-import type { ContentStatus, RecipeDifficulty, RecipeStatus, VideoProvider } from "@/generated/prisma/client";
+import type {
+  ContentStatus,
+  CookingTipStatus,
+  RecipeDifficulty,
+  RecipeStatus,
+  VideoProvider,
+} from "@/generated/prisma/client";
 import { prisma } from "@/lib/db";
 import { computeTotalTimeMinutes } from "@/lib/recipe-time";
+import { createCookingTip } from "@/repositories/cooking-tip.repository";
 import { createDietaryTag, createRecipe, createRecipeCategory } from "@/repositories/recipe.repository";
 import type { RecipeDetail } from "@/types/recipe";
 
@@ -165,8 +172,41 @@ export function buildRecipeDetail(overrides: Partial<RecipeDetail> = {}): Recipe
   };
 }
 
+export interface CookingTipFixtureOverrides {
+  slug?: string;
+  title?: string;
+  summary?: string;
+  bodyContent?: string;
+  videoUrl?: string | null;
+  videoProvider?: VideoProvider | null;
+  imageUrl?: string | null;
+  topicTag?: string;
+  status?: CookingTipStatus;
+  publishedAt?: Date | null;
+  productIds?: string[];
+}
+
+/** Test fixture: writes a cooking tip in any state directly. Defaults to Published, topic "general". */
+export function makeCookingTip(overrides: CookingTipFixtureOverrides = {}) {
+  const n = nextNumber();
+  return createCookingTip({
+    slug: overrides.slug ?? `cooking-tip-${n}`,
+    title: overrides.title ?? `Cooking Tip ${n}`,
+    summary: overrides.summary ?? "A test cooking tip.",
+    bodyContent: overrides.bodyContent ?? "Body content.",
+    videoUrl: overrides.videoUrl ?? null,
+    videoProvider: overrides.videoProvider ?? null,
+    imageUrl: overrides.imageUrl ?? "/images/products/export/curry-powder.webp",
+    topicTag: overrides.topicTag ?? "general",
+    status: overrides.status ?? "Published",
+    publishedAt: overrides.publishedAt === undefined ? new Date("2026-09-01T00:00:00Z") : overrides.publishedAt,
+    productRefs: { create: (overrides.productIds ?? []).map((productId) => ({ productId })) },
+  });
+}
+
 export async function cleanupRecipes() {
   await prisma.recipe.deleteMany();
   await prisma.dietaryTag.deleteMany();
   await prisma.recipeCategory.deleteMany();
+  await prisma.cookingTip.deleteMany();
 }
