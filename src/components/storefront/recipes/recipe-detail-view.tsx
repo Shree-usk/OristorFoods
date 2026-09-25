@@ -31,10 +31,7 @@ export function RecipeDetailView({ recipe, pageUrl }: { recipe: RecipeDetail; pa
         </div>
       </div>
       <div>
-        <h2 className="text-h4 font-heading text-charcoal">Nutrition per serving</h2>
-        <div className="mt-3">
-          <NutritionPanel nutrition={recipe.nutrition} baseServings={recipe.servings} servings={servings} />
-        </div>
+        <NutritionPanel nutrition={recipe.nutrition} servings={servings} />
       </div>
     </div>
   );

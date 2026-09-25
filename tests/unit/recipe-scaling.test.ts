@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatScaledQuantity, scaleNutritionValue, scaleQuantity } from "@/lib/recipe-scaling";
+import { formatIngredientLine, formatScaledQuantity, scaleQuantity } from "@/lib/recipe-scaling";
 
 describe("scaleQuantity", () => {
   it("scales proportionally", () => {
@@ -26,14 +26,37 @@ describe("formatScaledQuantity", () => {
     expect(formatScaledQuantity(1.5, "cup")).toBe("1.5");
     expect(formatScaledQuantity(2, "tbsp")).toBe("2");
   });
-});
 
-describe("scaleNutritionValue", () => {
-  it("scales proportionally to the new serving count", () => {
-    expect(scaleNutritionValue(400, 4, 8)).toBe(800);
+  it("treats whole/large/medium/small as whole-count units", () => {
+    expect(formatScaledQuantity(3.5, "large")).toBe("4");
+    expect(formatScaledQuantity(2.4, "medium")).toBe("2");
+    expect(formatScaledQuantity(1.5, "small")).toBe("2");
   });
 
-  it("returns null for a null base value", () => {
-    expect(scaleNutritionValue(null, 4, 8)).toBeNull();
+  it("never rounds a positive whole-count quantity down to 0", () => {
+    expect(formatScaledQuantity(0.3, "whole")).toBe("1");
+    expect(formatScaledQuantity(0.4, "egg")).toBe("1");
+  });
+
+  it("still rounds a zero or negative whole-count quantity to 0", () => {
+    expect(formatScaledQuantity(0, "egg")).toBe("0");
+  });
+});
+
+describe("formatIngredientLine", () => {
+  it("composes quantity + unit + displayText", () => {
+    expect(
+      formatIngredientLine({ quantity: 2, unit: "tbsp", displayText: "Curry Powder" }, "2"),
+    ).toBe("2 tbsp Curry Powder");
+  });
+
+  it("composes quantity + displayText when there is no unit", () => {
+    expect(formatIngredientLine({ quantity: 2, unit: null, displayText: "Limes" }, "2")).toBe("2 Limes");
+  });
+
+  it("falls back to displayText alone when there is no quantity", () => {
+    expect(
+      formatIngredientLine({ quantity: null, unit: null, displayText: "Salt, to taste" }, null),
+    ).toBe("Salt, to taste");
   });
 });
