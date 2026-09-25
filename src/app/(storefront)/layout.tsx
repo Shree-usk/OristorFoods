@@ -21,12 +21,16 @@ import { MobileNav } from "@/components/storefront/layout/mobile-nav";
 export default function StorefrontLayout({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex min-h-dvh flex-col">
-      <Header />
+      <div className="print:hidden">
+        <Header />
+      </div>
       <main id="main-content" className="flex-1 pb-16 lg:pb-0">
         <PageTransition>{children}</PageTransition>
       </main>
       <MobileNav />
-      <Footer />
+      <div className="print:hidden">
+        <Footer />
+      </div>
     </div>
   );
 }

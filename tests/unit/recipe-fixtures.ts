@@ -2,6 +2,7 @@ import type { ContentStatus, RecipeDifficulty, RecipeStatus } from "@/generated/
 import { prisma } from "@/lib/db";
 import { computeTotalTimeMinutes } from "@/lib/recipe-time";
 import { createDietaryTag, createRecipe, createRecipeCategory } from "@/repositories/recipe.repository";
+import type { RecipeDetail } from "@/types/recipe";
 
 let sequence = 0;
 
@@ -106,6 +107,53 @@ export function makeRecipe(categoryId: string, overrides: RecipeFixtureOverrides
     },
     steps: { create: overrides.steps ?? [] },
   });
+}
+
+/**
+ * Plain in-memory `RecipeDetail` builder — no Prisma, no DB access.
+ * For Client Component / view tests that just need a well-formed object
+ * to pass as a prop (unlike `makeRecipe`, which writes a row for
+ * repository/service/route tests). Every field has a sane default;
+ * override any subset.
+ */
+export function buildRecipeDetail(overrides: Partial<RecipeDetail> = {}): RecipeDetail {
+  return {
+    id: "recipe-1",
+    slug: "test-recipe",
+    href: "/recipes/test-recipe",
+    title: "Test Recipe",
+    shortDescription: "A short description of the test recipe.",
+    heroImage: "/images/products/export/curry-powder.webp",
+    heroImageAlt: "Test hero image",
+    galleryImageUrls: [],
+    categoryName: "Curries",
+    categorySlug: "curries",
+    cuisine: "Sri Lankan",
+    difficulty: "Easy",
+    prepTimeMinutes: 10,
+    cookTimeMinutes: 20,
+    totalTimeMinutes: 30,
+    servings: 4,
+    avgRating: null,
+    ratingCount: 0,
+    dietaryTags: [],
+    chefNotes: null,
+    nutrition: {
+      calories: 250,
+      protein: 10,
+      carbs: 30,
+      fat: 8,
+      fiber: 4,
+      sodium: 400,
+    },
+    ingredients: [{ id: "ing-1", quantity: 2, unit: "cup", displayText: "2 cups rice", product: null }],
+    steps: [{ stepNumber: 1, instruction: "Do the thing.", imageUrl: null }],
+    metaTitle: null,
+    metaDescription: null,
+    publishedAt: "2026-09-01T00:00:00.000Z",
+    relatedRecipes: [],
+    ...overrides,
+  };
 }
 
 export async function cleanupRecipes() {
