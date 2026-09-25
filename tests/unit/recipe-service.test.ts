@@ -86,6 +86,7 @@ describe("listRecipes", () => {
           avgRating: 4.9,
           ratingCount: 58,
           dietaryTags: ["Spicy"],
+          hasVideo: false,
         },
       ],
       total: 1,
@@ -118,6 +119,36 @@ describe("listRecipes", () => {
     expect(result.total).toBe(3);
     expect(result.page).toBe(2);
     expect(result.recipes.map((recipe) => recipe.title)).toEqual(["Curry 3"]);
+  });
+});
+
+describe("toRecipeCard hasVideo", () => {
+  it("maps hasVideo true/false correctly", async () => {
+    const category = await makeCategory();
+    await makeRecipe(category.id, { title: "Video One", videoUrl: "https://youtu.be/abc123", videoProvider: "Youtube" });
+    await makeRecipe(category.id, { title: "No Video One" });
+
+    const result = await listRecipes({ page: 1, pageSize: 10, sort: "newest" });
+    const videoCard = result.recipes.find((r) => r.title === "Video One");
+    const noVideoCard = result.recipes.find((r) => r.title === "No Video One");
+    expect(videoCard?.hasVideo).toBe(true);
+    expect(noVideoCard?.hasVideo).toBe(false);
+  });
+});
+
+describe("getRecipeBySlug video field", () => {
+  it("maps the video object when present, null when absent", async () => {
+    const category = await makeCategory();
+    await makeRecipe(category.id, {
+      slug: "with-video", videoUrl: "https://youtu.be/abc123", videoProvider: "Youtube",
+      videoDurationSeconds: 300, captionsUrl: null,
+    });
+    await makeRecipe(category.id, { slug: "without-video" });
+
+    const withVideo = await getRecipeBySlug("with-video");
+    const withoutVideo = await getRecipeBySlug("without-video");
+    expect(withVideo?.video).toEqual({ url: "https://youtu.be/abc123", provider: "Youtube", durationSeconds: 300, captionsUrl: null });
+    expect(withoutVideo?.video).toBeNull();
   });
 });
 

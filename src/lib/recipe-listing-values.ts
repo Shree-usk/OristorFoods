@@ -41,4 +41,5 @@ export interface RecipeFilters {
   /** Dietary tag slugs; a recipe must have every one. */
   diet?: string[];
   q?: string;
+  hasVideo?: boolean;
 }

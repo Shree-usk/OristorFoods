@@ -26,6 +26,7 @@ function toRecipeCard(row: RecipeCardRow): RecipeCard {
     avgRating: row.avgRating === null ? null : row.avgRating.toNumber(),
     ratingCount: row.ratingCount,
     dietaryTags: row.dietaryTags.map((link) => link.dietaryTag.name),
+    hasVideo: row.videoUrl !== null,
   };
 }
 
@@ -177,6 +178,10 @@ export async function getRecipeBySlug(slug: string): Promise<RecipeDetail | null
     metaDescription: row.metaDescription,
     publishedAt: row.publishedAt?.toISOString() ?? null,
     relatedRecipes,
+    video:
+      row.videoUrl === null || row.videoProvider === null
+        ? null
+        : { url: row.videoUrl, provider: row.videoProvider, durationSeconds: row.videoDurationSeconds, captionsUrl: row.captionsUrl },
   };
 }
 

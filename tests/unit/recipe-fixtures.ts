@@ -1,4 +1,4 @@
-import type { ContentStatus, RecipeDifficulty, RecipeStatus } from "@/generated/prisma/client";
+import type { ContentStatus, RecipeDifficulty, RecipeStatus, VideoProvider } from "@/generated/prisma/client";
 import { prisma } from "@/lib/db";
 import { computeTotalTimeMinutes } from "@/lib/recipe-time";
 import { createDietaryTag, createRecipe, createRecipeCategory } from "@/repositories/recipe.repository";
@@ -69,6 +69,10 @@ export interface RecipeFixtureOverrides {
   dietaryTagIds?: string[];
   ingredients?: RecipeIngredientOverride[];
   steps?: RecipeStepOverride[];
+  videoUrl?: string | null;
+  videoProvider?: VideoProvider | null;
+  videoDurationSeconds?: number | null;
+  captionsUrl?: string | null;
 }
 
 /** Test fixture: writes a recipe in any state directly. Defaults to Published, Easy, 30 minutes. */
@@ -95,6 +99,10 @@ export function makeRecipe(categoryId: string, overrides: RecipeFixtureOverrides
     avgRating: overrides.avgRating ?? null,
     ratingCount: overrides.ratingCount ?? 0,
     publishedAt: overrides.publishedAt === undefined ? new Date("2026-09-01T00:00:00Z") : overrides.publishedAt,
+    videoUrl: overrides.videoUrl ?? null,
+    videoProvider: overrides.videoProvider ?? null,
+    videoDurationSeconds: overrides.videoDurationSeconds ?? null,
+    captionsUrl: overrides.captionsUrl ?? null,
     dietaryTags: { create: (overrides.dietaryTagIds ?? []).map((dietaryTagId) => ({ dietaryTagId })) },
     ingredients: {
       create: (overrides.ingredients ?? []).map((ingredient, index) => ({
@@ -152,6 +160,7 @@ export function buildRecipeDetail(overrides: Partial<RecipeDetail> = {}): Recipe
     metaDescription: null,
     publishedAt: "2026-09-01T00:00:00.000Z",
     relatedRecipes: [],
+    video: null,
     ...overrides,
   };
 }
