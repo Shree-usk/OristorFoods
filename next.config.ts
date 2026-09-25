@@ -12,6 +12,13 @@ const nextConfig: NextConfig = {
     // the root here is exactly the fix Next's own warning recommends.
     root: path.join(__dirname),
   },
+  images: {
+    remotePatterns: [
+      { protocol: "https", hostname: "i.ytimg.com" },
+      { protocol: "https", hostname: "vimeo.com" },
+      { protocol: "https", hostname: "cdn.oristor.test" },
+    ],
+  },
 };
 
 export default nextConfig;
