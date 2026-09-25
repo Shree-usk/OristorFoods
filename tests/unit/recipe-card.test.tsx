@@ -19,6 +19,7 @@ const recipe: RecipeCardData = {
   avgRating: 4.9,
   ratingCount: 58,
   dietaryTags: ["Gluten-Free", "Spicy"],
+  hasVideo: false,
 };
 
 describe("RecipeCard", () => {

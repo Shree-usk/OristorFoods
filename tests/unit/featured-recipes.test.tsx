@@ -24,6 +24,7 @@ function card(slug: string, title: string): RecipeCard {
     avgRating: null,
     ratingCount: 0,
     dietaryTags: [],
+    hasVideo: false,
   };
 }
 
