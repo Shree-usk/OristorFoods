@@ -11,7 +11,11 @@ export function CookingTipCard({ tip }: { tip: CookingTipCardData }) {
           <Image src={tip.imageUrl} alt="" fill sizes="(min-width: 1280px) 25vw, (min-width: 640px) 45vw, 90vw" className="object-contain p-6" />
         )}
         {tip.hasVideo && (
-          <span aria-label="Video available" className="absolute top-2 right-2 flex size-7 items-center justify-center rounded-full bg-black/60 text-white">
+          <span
+            role="img"
+            aria-label="Video available"
+            className="absolute top-2 right-2 flex size-7 items-center justify-center rounded-full bg-black/60 text-white"
+          >
             <Play className="size-3.5 fill-current" aria-hidden="true" />
           </span>
         )}

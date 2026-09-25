@@ -32,6 +32,7 @@ export function RecipeCard({ recipe, headingLevel: Heading = "h3" }: RecipeCardP
         />
         {recipe.hasVideo && (
           <span
+            role="img"
             aria-label="Video available"
             className="absolute top-2 right-2 flex size-7 items-center justify-center rounded-full bg-black/60 text-white"
           >
