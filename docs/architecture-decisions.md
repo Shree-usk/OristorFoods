@@ -1198,3 +1198,81 @@ recipe provider is registered there and feeds header search suggestions.
 
 **Nav.** "Quick & Easy" is `/recipes?difficulty=easy&time=under-15,15-30`.
 "Video Recipes" is removed until STORY-019.
+
+## 2026-09-24 — STORY-018 Recipe Detail Page
+
+**Data model.** `RecipeIngredient` (`recipeId`, nullable `productId` FK to
+`Product` with `onDelete: SetNull`, nullable `Decimal quantity`, nullable
+`unit`, `displayText`, `sortOrder`) and `RecipeStep` (`stepNumber`,
+`instruction`, nullable `imageUrl`, unique per recipe). Nutrition
+(`nutritionCalories/Protein/Carbs/Fat/Fiber/Sodium`, all nullable `Int`)
+plus `chefNotes` and `galleryImageUrls` are flat columns on `Recipe`, not a
+sub-model, since nutrition is one-to-one recipe data. Migration
+`prisma/migrations/20260924100000_add_recipe_detail`.
+
+**`displayText` contract (important for STORY-043's admin builder).**
+`displayText` is the ingredient's name/description only — it never
+includes quantity or unit. The rendered ingredient line is composed at
+read time as "{scaled quantity} {unit} {displayText}", or just
+`displayText` when quantity/unit are null (e.g. "Salt, to taste"). It is
+always the authored `displayText`, never the linked product's catalogue
+name, which can differ from how the recipe names the ingredient (e.g.
+"Oristor chilli powder" in a recipe vs. the product "Chilli Powder 100g").
+A bug that substituted the product name for `displayText` was caught in
+review and fixed — STORY-043's builder must keep writing `displayText`
+independently of any linked `productId`.
+
+**Ingredient→product linking and reverse lookup.** `RecipeIngredient.productId`
+is nullable and set at authoring time; STORY-043 owns the authoring UI that
+populates it (and every other field this story reads). `getRecipesByProductId`
+in `recipe.service.ts` powers "recipes using this product" and is registered
+via the existing `registerRecipeSummaryProvider` extension point (from
+`product-detail-extensions.ts`, the same pattern reviews and Q&A use) inside
+`registerRecipeProviders()` — it is not a public REST route. STORY-011 (PDP)
+consumes it in-process. Both STORY-011 and STORY-043 depend on this shape
+staying stable.
+
+**Read path.** `GET /api/recipes/[slug]` and the `/recipes/[slug]` page both
+go through `getRecipeBySlug` → `findPublishedRecipeBySlug` (Published only;
+anything else resolves to null → 404). `getRecipeBySlug` also returns up to
+6 related recipes (same category OR same cuisine, Published, excluding
+self, most-viewed first) and atomically increments `viewCount` (the Recipe
+Centre's "Most Popular" sort reads it).
+
+**Serving-size scaling** is pure client-side math in
+`src/lib/recipe-scaling.ts` (whole numbers for count units like eggs or
+cloves, one decimal otherwise), bounded 1–50. Only `ServingSizeAdjuster`
+and `RecipePrintShareBar` (via the `RecipeDetailView` wrapper that owns
+servings state) are Client Components; method, chef notes, and related
+recipes stay server-rendered.
+
+**Print is CSS-driven off the live page**, not a separate route: a
+`print:hidden` approach hides the Header/Footer (from the storefront
+layout) plus breadcrumbs, share bar, and related recipes, so printing
+always reflects the currently adjusted serving size. **Share** reuses the
+existing `ShareButtons`, extended with a native Web Share button shown
+only when `navigator.share` exists.
+
+**Soft-404 fix / route group.** The Recipe Centre's `loading.tsx`
+originally sat at `recipes/` and so wrapped `recipes/[slug]` in a
+streaming Suspense boundary; Next.js flushes the 200 status with the
+loading shell before `notFound()` runs, so missing/Draft slugs returned
+200 with not-found content. Fixed by moving the listing's `page.tsx` /
+`loading.tsx` / `error.tsx` into a `recipes/(listing)/` route group so the
+boundary covers only `/recipes` (URLs unchanged). **Rule for future
+work:** don't add a `loading.tsx` at a segment whose child routes rely on
+`notFound()` for a real 404 status.
+
+**Testing note.** Vitest's global setup truncates the dev DB, so reseed
+(`npx prisma db execute --file tests/unit/truncate-all.sql` then
+`npx tsx --env-file=.env prisma/seed.ts`) before running Playwright e2e
+locally.
+
+**Known follow-ups (deferred, not blocking).** Seed ingredients for two
+recipes' method steps mention items not in their ingredient list; gallery
+thumbnails use decorative `alt=""` because `galleryImageUrls` has no
+alt-text field (worth adding when STORY-043 builds the gallery editor);
+the seed inlines `computeTotalTimeMinutes` and dietary-tag logic rather
+than going through `recipe.service.ts`'s `createRecipe`, because
+`NewRecipeInput` doesn't yet carry ingredients/steps — STORY-043 should
+extend it and route the seed through the service.
