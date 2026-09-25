@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { prisma } from "@/lib/db";
 import { createProduct } from "@/repositories/product.repository";
@@ -289,8 +289,13 @@ describe("getRecipeBySlug", () => {
     ]);
     expect(result?.relatedRecipes.map((r) => r.slug)).toEqual(["related-recipe"]);
 
-    const updated = await prisma.recipe.findUniqueOrThrow({ where: { id: recipe.id } });
-    expect(updated.viewCount).toBe(6);
+    // The service no longer awaits the view-count increment (it's
+    // fire-and-forget so a failed UPDATE can't 500 the page), so poll for
+    // it instead of asserting it happened synchronously.
+    await vi.waitFor(async () => {
+      const updated = await prisma.recipe.findUniqueOrThrow({ where: { id: recipe.id } });
+      expect(updated.viewCount).toBe(6);
+    });
   });
 
   it("maps non-null nutrition values", async () => {

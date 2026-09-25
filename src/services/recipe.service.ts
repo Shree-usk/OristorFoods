@@ -133,9 +133,13 @@ export async function getRecipeBySlug(slug: string): Promise<RecipeDetail | null
   const row = await recipeRepository.findPublishedRecipeBySlug(slug);
   if (!row) return null;
 
+  // Fire-and-forget: a view-count UPDATE failing must never fail the page
+  // render (it's a nice-to-have popularity signal, not core content).
   const [relatedRecipes] = await Promise.all([
     getRelatedRecipes(row, 6),
-    recipeRepository.incrementRecipeViewCount(row.id),
+    recipeRepository.incrementRecipeViewCount(row.id).catch((error: unknown) => {
+      console.error(`Failed to increment view count for recipe ${row.id}`, error);
+    }),
   ]);
 
   return {

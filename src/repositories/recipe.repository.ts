@@ -219,8 +219,12 @@ export function findRecipesByProductId(productId: string, limit: number): Promis
   });
 }
 
+/**
+ * Raw UPDATE rather than `prisma.recipe.update` so `@updatedAt` isn't
+ * touched by a view — a page view is not a content edit.
+ */
 export async function incrementRecipeViewCount(recipeId: string): Promise<void> {
-  await prisma.recipe.update({ where: { id: recipeId }, data: { viewCount: { increment: 1 } } });
+  await prisma.$executeRaw`UPDATE "Recipe" SET "viewCount" = "viewCount" + 1 WHERE "id" = ${recipeId}`;
 }
 
 // Writes. Used by the seed and tests now; STORY-043's admin builder later.
