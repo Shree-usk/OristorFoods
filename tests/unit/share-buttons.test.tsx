@@ -48,4 +48,25 @@ describe("ShareButtons", () => {
       expect.stringContaining("mailto:"),
     );
   });
+
+  it("does not render a native share button when navigator.share is unavailable", () => {
+    render(<ShareButtons url="https://oristor.com/products/curry-powder" title="Curry Powder" />);
+    expect(screen.queryByRole("button", { name: "Share via device" })).not.toBeInTheDocument();
+  });
+
+  it("calls navigator.share with the title and url when available", async () => {
+    const user = userEvent.setup();
+    const share = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "share", { value: share, configurable: true });
+
+    render(<ShareButtons url="https://oristor.com/products/curry-powder" title="Curry Powder" />);
+    await user.click(screen.getByRole("button", { name: "Share via device" }));
+
+    expect(share).toHaveBeenCalledWith({ title: "Curry Powder", url: "https://oristor.com/products/curry-powder" });
+
+    // Clean up so this doesn't leak into other tests in the file (navigator.share
+    // does not exist by default in jsdom, so delete it back to that state).
+    // @ts-expect-error -- reverting to the undefined-by-default jsdom state
+    delete navigator.share;
+  });
 });

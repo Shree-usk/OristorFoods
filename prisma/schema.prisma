@@ -202,6 +202,7 @@ model Product {
   reviews             Review[]
   ratingSummary       ProductRatingSummary?
   questions           Question[]
+  recipeIngredients   RecipeIngredient[]
 
   @@index([status])
   @@index([status, inStock])
@@ -580,6 +581,16 @@ model Recipe {
   ratingCount      Int                @default(0)
   metaTitle        String?
   metaDescription  String?
+  chefNotes        String?
+  nutritionCalories Int?
+  nutritionProtein  Int?
+  nutritionCarbs    Int?
+  nutritionFat      Int?
+  nutritionFiber    Int?
+  nutritionSodium   Int?
+  galleryImageUrls String[]           @default([])
+  ingredients      RecipeIngredient[]
+  steps            RecipeStep[]
   dietaryTags      RecipeDietaryTag[]
   publishedAt      DateTime?
   createdAt        DateTime           @default(now())
@@ -590,4 +601,35 @@ model Recipe {
   @@index([status, totalTimeMinutes])
   @@index([status, viewCount])
   @@index([status, isFeatured])
+}
+
+model RecipeIngredient {
+  id        String   @id @default(cuid())
+  recipeId  String
+  recipe    Recipe   @relation(fields: [recipeId], references: [id], onDelete: Cascade)
+  productId String?
+  product   Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
+  quantity  Decimal? @db.Decimal(8, 2)
+  unit      String?
+  // Name/description ONLY — never includes quantity or unit. The rendered
+  // line is always composed at read time as "{scaled quantity} {unit}
+  // {displayText}" when quantity+unit are set, else just "{displayText}"
+  // (see IngredientLink in Task 9). Baking "2 tbsp" into this field would
+  // double up with the scaled quantity once servings are adjusted.
+  displayText String
+  sortOrder   Int
+
+  @@index([recipeId, sortOrder])
+  @@index([productId])
+}
+
+model RecipeStep {
+  id          String  @id @default(cuid())
+  recipeId    String
+  recipe      Recipe  @relation(fields: [recipeId], references: [id], onDelete: Cascade)
+  stepNumber  Int
+  instruction String
+  imageUrl    String?
+
+  @@unique([recipeId, stepNumber])
 }

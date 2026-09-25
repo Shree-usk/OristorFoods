@@ -38,7 +38,10 @@ function renderListing(data: RecipeListResult = initialData, searchParams = "") 
     <QueryClientProvider client={queryClient}>
       <RecipeListing initialData={data} facets={facets} />
     </QueryClientProvider>,
-    { wrapper: withNuqsTestingAdapter({ searchParams, hasMemory: true, onUrlUpdate }) },
+    // resetUrlUpdateQueueOnMount runs on every adapter render, not just mount.
+    // With hasMemory, each URL update re-renders the adapter, which could abort
+    // a keystroke's still-queued update (the search test's final "l").
+    { wrapper: withNuqsTestingAdapter({ searchParams, hasMemory: true, onUrlUpdate, resetUrlUpdateQueueOnMount: false }) },
   );
   return { onUrlUpdate };
 }

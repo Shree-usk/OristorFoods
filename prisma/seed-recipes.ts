@@ -1,9 +1,11 @@
 import type { RecipeDifficulty, RecipeStatus } from "../src/generated/prisma/client";
+import { computeTotalTimeMinutes } from "../src/lib/recipe-time";
+import * as productRepository from "../src/repositories/product.repository";
 import * as recipeRepository from "../src/repositories/recipe.repository";
-import { createRecipe } from "../src/services/recipe.service";
 
-// Recipe Centre demo content (STORY-017). tests/e2e/recipe-centre.spec.ts
-// depends on these exact values. Hero images reuse Oristor product photos
+// Recipe Centre demo content (STORY-017), extended with ingredients/steps/
+// nutrition/chef notes (STORY-018). tests/e2e/recipe-centre.spec.ts depends
+// on the base field values below. Hero images reuse Oristor product photos
 // until real recipe photography is uploaded through the Media Library.
 
 const categories = [
@@ -27,6 +29,30 @@ const dietaryTags = [
 type CategorySlug = (typeof categories)[number]["slug"];
 type DietarySlug = (typeof dietaryTags)[number]["slug"];
 
+// Products already created in prisma/seed.ts's main(). Referenced here by
+// slug (not id, since ids are only known at seed time) to link at least
+// some ingredients to a real seeded Product.
+const linkableProductSlugs = ["roasted-curry-powder-100g", "chilli-powder-100g"] as const;
+type LinkableProductSlug = (typeof linkableProductSlugs)[number];
+
+interface SeedIngredient {
+  // Omitted (undefined) means this ingredient has no linked Product — the
+  // common case. displayText is the ingredient NAME/description ONLY (see
+  // the schema comment on RecipeIngredient.displayText): quantity/unit are
+  // composed onto it at render time, never baked in here.
+  productSlug?: LinkableProductSlug;
+  quantity: number | null;
+  unit: string | null;
+  displayText: string;
+  sortOrder: number;
+}
+
+interface SeedStep {
+  stepNumber: number;
+  instruction: string;
+  imageUrl?: string | null;
+}
+
 interface SeedRecipe {
   slug: string;
   title: string;
@@ -46,6 +72,15 @@ interface SeedRecipe {
   avgRating: number | null;
   ratingCount: number;
   publishedAt: string | null;
+  chefNotes: string;
+  nutritionCalories: number;
+  nutritionProtein: number;
+  nutritionCarbs: number;
+  nutritionFat: number;
+  nutritionFiber: number;
+  nutritionSodium: number;
+  ingredients: SeedIngredient[];
+  steps: SeedStep[];
 }
 
 const recipes: SeedRecipe[] = [
@@ -68,6 +103,26 @@ const recipes: SeedRecipe[] = [
     avgRating: 4.7,
     ratingCount: 32,
     publishedAt: "2026-09-01",
+    chefNotes: "Keep the heat high and don't overcrowd the wok — the prawns should sear, not steam.",
+    nutritionCalories: 260,
+    nutritionProtein: 28,
+    nutritionCarbs: 10,
+    nutritionFat: 12,
+    nutritionFiber: 2,
+    nutritionSodium: 620,
+    ingredients: [
+      { productSlug: "chilli-powder-100g", quantity: 2, unit: "tbsp", displayText: "Oristor chili powder", sortOrder: 1 },
+      { quantity: 500, unit: "g", displayText: "Prawns, peeled and deveined", sortOrder: 2 },
+      { quantity: 1, unit: "large", displayText: "Onion, sliced", sortOrder: 3 },
+      { quantity: 1, unit: "large", displayText: "Capsicum, sliced", sortOrder: 4 },
+      { quantity: null, unit: null, displayText: "Salt, to taste", sortOrder: 5 },
+    ],
+    steps: [
+      { stepNumber: 1, instruction: "Marinate the prawns with a pinch of salt and turmeric for 10 minutes." },
+      { stepNumber: 2, instruction: "Heat oil in a wok and stir-fry the onion and capsicum until just softened." },
+      { stepNumber: 3, instruction: "Add the prawns and chili powder, tossing over high heat until the prawns are cooked through." },
+      { stepNumber: 4, instruction: "Finish with a splash of soy sauce and serve immediately while sizzling hot.", imageUrl: null },
+    ],
   },
   {
     slug: "coconut-sambol-maldive-fish",
@@ -88,6 +143,25 @@ const recipes: SeedRecipe[] = [
     avgRating: 4.8,
     ratingCount: 41,
     publishedAt: "2026-08-20",
+    chefNotes: "Pound rather than blend — a mortar and pestle keeps the texture coarse, the way it's meant to be.",
+    nutritionCalories: 180,
+    nutritionProtein: 6,
+    nutritionCarbs: 8,
+    nutritionFat: 14,
+    nutritionFiber: 4,
+    nutritionSodium: 320,
+    ingredients: [
+      { quantity: 2, unit: "cup", displayText: "Freshly grated coconut", sortOrder: 1 },
+      { quantity: 3, unit: "tbsp", displayText: "Maldive fish flakes", sortOrder: 2 },
+      { quantity: 1, unit: "tsp", displayText: "Chilli flakes", sortOrder: 3 },
+      { quantity: 0.5, unit: "medium", displayText: "Red onion, finely chopped", sortOrder: 4 },
+      { quantity: null, unit: null, displayText: "Lime juice, to taste", sortOrder: 5 },
+    ],
+    steps: [
+      { stepNumber: 1, instruction: "Pound the coconut, Maldive fish and chilli flakes together in a mortar and pestle until fragrant." },
+      { stepNumber: 2, instruction: "Mix in the chopped red onion." },
+      { stepNumber: 3, instruction: "Season with lime juice and salt, then serve fresh." },
+    ],
   },
   {
     slug: "spiced-mango-pickle-rice",
@@ -108,6 +182,26 @@ const recipes: SeedRecipe[] = [
     avgRating: 4.5,
     ratingCount: 12,
     publishedAt: "2026-09-10",
+    chefNotes: "Let the rice cool slightly before mixing — warm rice turns gluey when tossed with the pickle.",
+    nutritionCalories: 320,
+    nutritionProtein: 6,
+    nutritionCarbs: 62,
+    nutritionFat: 6,
+    nutritionFiber: 3,
+    nutritionSodium: 480,
+    ingredients: [
+      { quantity: 2, unit: "cup", displayText: "Basmati rice", sortOrder: 1 },
+      { quantity: 3, unit: "tbsp", displayText: "Oristor mango pickle", sortOrder: 2 },
+      { quantity: 1, unit: "tsp", displayText: "Mustard seeds", sortOrder: 3 },
+      { quantity: 8, unit: "leaves", displayText: "Curry leaves", sortOrder: 4 },
+      { quantity: null, unit: null, displayText: "Salt, to taste", sortOrder: 5 },
+    ],
+    steps: [
+      { stepNumber: 1, instruction: "Rinse the rice until the water runs clear, then cook until just tender and set aside to cool." },
+      { stepNumber: 2, instruction: "Heat oil in a pan and splutter the mustard seeds with the curry leaves." },
+      { stepNumber: 3, instruction: "Stir in the mango pickle and cooked rice, tossing gently to coat every grain." },
+      { stepNumber: 4, instruction: "Season with salt and serve warm or at room temperature." },
+    ],
   },
   {
     slug: "sri-lankan-chicken-curry",
@@ -128,6 +222,27 @@ const recipes: SeedRecipe[] = [
     avgRating: 4.9,
     ratingCount: 58,
     publishedAt: "2026-07-15",
+    chefNotes: "Toast the spices whole and grind them fresh — it makes a real difference to the final flavour.",
+    nutritionCalories: 420,
+    nutritionProtein: 32,
+    nutritionCarbs: 10,
+    nutritionFat: 28,
+    nutritionFiber: 2,
+    nutritionSodium: 540,
+    ingredients: [
+      { productSlug: "roasted-curry-powder-100g", quantity: 3, unit: "tbsp", displayText: "Oristor roasted curry powder", sortOrder: 1 },
+      { quantity: 1, unit: "kg", displayText: "Chicken, cut into curry pieces", sortOrder: 2 },
+      { quantity: 400, unit: "ml", displayText: "Coconut milk", sortOrder: 3 },
+      { quantity: 2, unit: "medium", displayText: "Onions, sliced", sortOrder: 4 },
+      { quantity: null, unit: null, displayText: "Salt, to taste", sortOrder: 5 },
+    ],
+    steps: [
+      { stepNumber: 1, instruction: "Marinate the chicken with the roasted curry powder, salt and a squeeze of lime for 30 minutes." },
+      { stepNumber: 2, instruction: "Sauté the onions in oil until deeply golden." },
+      { stepNumber: 3, instruction: "Add the marinated chicken and cook, stirring, until it starts to brown." },
+      { stepNumber: 4, instruction: "Pour in the coconut milk, cover and simmer until the chicken is tender and the sauce has thickened." },
+      { stepNumber: 5, instruction: "Rest for 10 minutes before serving with rice or roti." },
+    ],
   },
   {
     slug: "dhal-curry-parippu",
@@ -148,6 +263,26 @@ const recipes: SeedRecipe[] = [
     avgRating: 4.6,
     ratingCount: 47,
     publishedAt: "2026-06-30",
+    chefNotes: "Simmer gently once the coconut milk goes in — a rolling boil can make it split.",
+    nutritionCalories: 260,
+    nutritionProtein: 12,
+    nutritionCarbs: 30,
+    nutritionFat: 10,
+    nutritionFiber: 8,
+    nutritionSodium: 380,
+    ingredients: [
+      { quantity: 1, unit: "cup", displayText: "Red lentils", sortOrder: 1 },
+      { quantity: 0.5, unit: "tsp", displayText: "Turmeric powder", sortOrder: 2 },
+      { quantity: 200, unit: "ml", displayText: "Coconut milk", sortOrder: 3 },
+      { quantity: 1, unit: "tsp", displayText: "Mustard seeds", sortOrder: 4 },
+      { quantity: null, unit: null, displayText: "Salt, to taste", sortOrder: 5 },
+    ],
+    steps: [
+      { stepNumber: 1, instruction: "Rinse the lentils and simmer with the turmeric until soft and starting to break down." },
+      { stepNumber: 2, instruction: "Stir in the coconut milk and simmer gently for a further 5 minutes." },
+      { stepNumber: 3, instruction: "In a separate small pan, splutter the mustard seeds and curry leaves in oil." },
+      { stepNumber: 4, instruction: "Pour the tempering over the dhal and season with salt before serving." },
+    ],
   },
   {
     slug: "kiribath-milk-rice",
@@ -168,6 +303,23 @@ const recipes: SeedRecipe[] = [
     avgRating: null,
     ratingCount: 0,
     publishedAt: "2026-04-20",
+    chefNotes: "Press the rice down firmly while it's still warm — that's what gives kiribath its clean diamond cuts.",
+    nutritionCalories: 300,
+    nutritionProtein: 5,
+    nutritionCarbs: 50,
+    nutritionFat: 9,
+    nutritionFiber: 1,
+    nutritionSodium: 220,
+    ingredients: [
+      { quantity: 2, unit: "cup", displayText: "White rice", sortOrder: 1 },
+      { quantity: 400, unit: "ml", displayText: "Thick coconut milk", sortOrder: 2 },
+      { quantity: null, unit: null, displayText: "Salt, to taste", sortOrder: 3 },
+    ],
+    steps: [
+      { stepNumber: 1, instruction: "Cook the rice with water until almost done and most of the liquid has absorbed." },
+      { stepNumber: 2, instruction: "Stir in the coconut milk and salt, then continue cooking on low heat until thick and creamy." },
+      { stepNumber: 3, instruction: "Spread onto a flat tray, cool slightly, then cut into diamonds to serve." },
+    ],
   },
   {
     slug: "watalappan",
@@ -188,6 +340,27 @@ const recipes: SeedRecipe[] = [
     avgRating: 4.4,
     ratingCount: 9,
     publishedAt: "2026-05-12",
+    chefNotes: "Steam low and slow — a hard boil will curdle the custard instead of setting it silky.",
+    nutritionCalories: 340,
+    nutritionProtein: 8,
+    nutritionCarbs: 38,
+    nutritionFat: 18,
+    nutritionFiber: 1,
+    nutritionSodium: 90,
+    ingredients: [
+      { quantity: 4, unit: "large", displayText: "Eggs", sortOrder: 1 },
+      { quantity: 200, unit: "g", displayText: "Kithul jaggery, grated", sortOrder: 2 },
+      { quantity: 400, unit: "ml", displayText: "Coconut milk", sortOrder: 3 },
+      { quantity: 0.5, unit: "tsp", displayText: "Ground cardamom", sortOrder: 4 },
+      { quantity: null, unit: null, displayText: "Grated nutmeg, to taste", sortOrder: 5 },
+    ],
+    steps: [
+      { stepNumber: 1, instruction: "Melt the jaggery with a little water over low heat until dissolved, then cool slightly." },
+      { stepNumber: 2, instruction: "Whisk the eggs and coconut milk together until smooth." },
+      { stepNumber: 3, instruction: "Stir the jaggery syrup into the egg mixture along with the cardamom." },
+      { stepNumber: 4, instruction: "Pour into a steaming dish, cover and steam gently until just set." },
+      { stepNumber: 5, instruction: "Chill before serving, dusted with grated nutmeg." },
+    ],
   },
   {
     slug: "fish-ambul-thiyal",
@@ -208,6 +381,27 @@ const recipes: SeedRecipe[] = [
     avgRating: 4.7,
     ratingCount: 15,
     publishedAt: "2026-08-05",
+    chefNotes: "Resist stirring too much once the fish is in the pot — it holds together better if you turn it gently instead.",
+    nutritionCalories: 240,
+    nutritionProtein: 34,
+    nutritionCarbs: 4,
+    nutritionFat: 9,
+    nutritionFiber: 1,
+    nutritionSodium: 460,
+    ingredients: [
+      { productSlug: "chilli-powder-100g", quantity: 2, unit: "tbsp", displayText: "Oristor chilli powder", sortOrder: 1 },
+      { quantity: 600, unit: "g", displayText: "Firm fish, cubed (tuna or similar)", sortOrder: 2 },
+      { quantity: 6, unit: "pieces", displayText: "Goraka (dried gamboge)", sortOrder: 3 },
+      { quantity: 1, unit: "tsp", displayText: "Black pepper, freshly ground", sortOrder: 4 },
+      { quantity: null, unit: null, displayText: "Salt, to taste", sortOrder: 5 },
+    ],
+    steps: [
+      { stepNumber: 1, instruction: "Soak the goraka in warm water until soft, then blend to a paste." },
+      { stepNumber: 2, instruction: "Rub the fish cubes with the chilli powder, pepper and goraka paste." },
+      { stepNumber: 3, instruction: "Layer the fish in a clay pot with curry leaves and a splash of water." },
+      { stepNumber: 4, instruction: "Cook uncovered on low heat, turning gently, until the liquid has dried up completely." },
+      { stepNumber: 5, instruction: "Rest before serving — the flavour deepens as it cools." },
+    ],
   },
   {
     slug: "pol-roti-lunu-miris",
@@ -228,6 +422,25 @@ const recipes: SeedRecipe[] = [
     avgRating: null,
     ratingCount: 0,
     publishedAt: "2026-09-15",
+    chefNotes: "Pat the dough out by hand rather than rolling it — a rolling pin overworks the coconut and toughens the roti.",
+    nutritionCalories: 280,
+    nutritionProtein: 6,
+    nutritionCarbs: 40,
+    nutritionFat: 11,
+    nutritionFiber: 4,
+    nutritionSodium: 260,
+    ingredients: [
+      { quantity: 2, unit: "cup", displayText: "Wheat flour", sortOrder: 1 },
+      { quantity: 1, unit: "cup", displayText: "Freshly grated coconut", sortOrder: 2 },
+      { quantity: 2, unit: "tbsp", displayText: "Chilli powder", sortOrder: 3 },
+      { quantity: null, unit: null, displayText: "Salt, to taste", sortOrder: 4 },
+    ],
+    steps: [
+      { stepNumber: 1, instruction: "Mix the flour, grated coconut and salt with enough water to form a soft dough." },
+      { stepNumber: 2, instruction: "Divide into balls and pat out into thick flatbreads." },
+      { stepNumber: 3, instruction: "Cook on a hot griddle until charred spots appear on both sides." },
+      { stepNumber: 4, instruction: "Serve warm with lunu miris on the side." },
+    ],
   },
   {
     slug: "chicken-kottu-roti",
@@ -248,6 +461,27 @@ const recipes: SeedRecipe[] = [
     avgRating: 4.6,
     ratingCount: 36,
     publishedAt: "2026-09-18",
+    chefNotes: "Keep the hot plate really hot and keep everything moving — kottu is meant to be chopped and tossed fast.",
+    nutritionCalories: 480,
+    nutritionProtein: 26,
+    nutritionCarbs: 52,
+    nutritionFat: 18,
+    nutritionFiber: 2,
+    nutritionSodium: 680,
+    ingredients: [
+      { productSlug: "roasted-curry-powder-100g", quantity: 2, unit: "tbsp", displayText: "Oristor roasted curry powder", sortOrder: 1 },
+      { quantity: 3, unit: "pieces", displayText: "Godamba roti, chopped", sortOrder: 2 },
+      { quantity: 200, unit: "g", displayText: "Chicken, diced", sortOrder: 3 },
+      { quantity: 1, unit: "large", displayText: "Egg", sortOrder: 4 },
+      { quantity: null, unit: null, displayText: "Salt, to taste", sortOrder: 5 },
+    ],
+    steps: [
+      { stepNumber: 1, instruction: "Cook the diced chicken with the curry powder until browned and cooked through." },
+      { stepNumber: 2, instruction: "Push to one side of the hot plate and scramble the egg." },
+      { stepNumber: 3, instruction: "Add the chopped roti and vegetables, tossing everything together with two flat blades." },
+      { stepNumber: 4, instruction: "Chop and mix continuously until well combined and lightly charred in places." },
+      { stepNumber: 5, instruction: "Serve immediately with a side of curry sauce." },
+    ],
   },
   {
     slug: "sri-lankan-ginger-tea",
@@ -268,6 +502,24 @@ const recipes: SeedRecipe[] = [
     avgRating: 4.2,
     ratingCount: 5,
     publishedAt: "2026-04-02",
+    chefNotes: "Bruise the ginger slices with the back of a knife first — it releases the flavour much faster.",
+    nutritionCalories: 40,
+    nutritionProtein: 0,
+    nutritionCarbs: 10,
+    nutritionFat: 0,
+    nutritionFiber: 0,
+    nutritionSodium: 5,
+    ingredients: [
+      { quantity: 2, unit: "cup", displayText: "Water", sortOrder: 1 },
+      { quantity: 2, unit: "tsp", displayText: "Ceylon black tea leaves", sortOrder: 2 },
+      { quantity: 1, unit: "tbsp", displayText: "Fresh ginger, sliced", sortOrder: 3 },
+      { quantity: null, unit: null, displayText: "Jaggery, to taste", sortOrder: 4 },
+    ],
+    steps: [
+      { stepNumber: 1, instruction: "Bring the water to the boil with the sliced ginger." },
+      { stepNumber: 2, instruction: "Add the tea leaves and simmer for two minutes." },
+      { stepNumber: 3, instruction: "Strain into cups and sweeten with jaggery to taste." },
+    ],
   },
   {
     slug: "wood-apple-juice",
@@ -288,6 +540,24 @@ const recipes: SeedRecipe[] = [
     avgRating: null,
     ratingCount: 0,
     publishedAt: "2026-03-18",
+    chefNotes: "Strain twice if you can — wood apple seeds are easy to miss and unpleasant to bite into.",
+    nutritionCalories: 160,
+    nutritionProtein: 2,
+    nutritionCarbs: 22,
+    nutritionFat: 8,
+    nutritionFiber: 3,
+    nutritionSodium: 20,
+    ingredients: [
+      { quantity: 1, unit: "cup", displayText: "Wood apple pulp", sortOrder: 1 },
+      { quantity: 200, unit: "ml", displayText: "Coconut milk", sortOrder: 2 },
+      { quantity: 2, unit: "tbsp", displayText: "Kithul treacle", sortOrder: 3 },
+      { quantity: null, unit: null, displayText: "Ice, as needed", sortOrder: 4 },
+    ],
+    steps: [
+      { stepNumber: 1, instruction: "Scoop the wood apple pulp into a bowl and mash with a little water to loosen it." },
+      { stepNumber: 2, instruction: "Blend with the coconut milk and kithul treacle until smooth." },
+      { stepNumber: 3, instruction: "Strain out the seeds and serve over ice." },
+    ],
   },
   {
     slug: "vegetable-samosas",
@@ -308,6 +578,28 @@ const recipes: SeedRecipe[] = [
     avgRating: 4.3,
     ratingCount: 21,
     publishedAt: "2026-07-01",
+    chefNotes: "Let the filling cool fully before folding — warm filling steams the pastry and it won't crisp up.",
+    nutritionCalories: 220,
+    nutritionProtein: 5,
+    nutritionCarbs: 30,
+    nutritionFat: 9,
+    nutritionFiber: 3,
+    nutritionSodium: 340,
+    ingredients: [
+      { quantity: 2, unit: "cup", displayText: "Plain flour", sortOrder: 1 },
+      { quantity: 2, unit: "medium", displayText: "Potatoes, boiled and diced", sortOrder: 2 },
+      { quantity: 1, unit: "medium", displayText: "Carrot, finely diced", sortOrder: 3 },
+      { quantity: 2, unit: "tbsp", displayText: "Oristor masala blend", sortOrder: 4 },
+      { quantity: null, unit: null, displayText: "Salt, to taste", sortOrder: 5 },
+    ],
+    steps: [
+      { stepNumber: 1, instruction: "Make a stiff dough with the flour, a little oil, salt and water, then rest for 20 minutes." },
+      { stepNumber: 2, instruction: "Sauté the potatoes, carrot and leeks with the masala blend until fragrant." },
+      { stepNumber: 3, instruction: "Cool the filling completely before assembling." },
+      { stepNumber: 4, instruction: "Roll the dough thin, cut into strips and fold into cones." },
+      { stepNumber: 5, instruction: "Fill each cone with the vegetable mixture and seal the edges with a flour paste." },
+      { stepNumber: 6, instruction: "Deep-fry in batches over medium heat until golden and crisp." },
+    ],
   },
   {
     slug: "seeni-sambol",
@@ -328,6 +620,26 @@ const recipes: SeedRecipe[] = [
     avgRating: 4.8,
     ratingCount: 29,
     publishedAt: "2026-06-10",
+    chefNotes: "Low and slow is non-negotiable here — rushed onions never get that deep, jammy sweetness.",
+    nutritionCalories: 140,
+    nutritionProtein: 2,
+    nutritionCarbs: 22,
+    nutritionFat: 5,
+    nutritionFiber: 3,
+    nutritionSodium: 300,
+    ingredients: [
+      { productSlug: "chilli-powder-100g", quantity: 2, unit: "tbsp", displayText: "Oristor chilli powder", sortOrder: 1 },
+      { quantity: 6, unit: "large", displayText: "Onions, thinly sliced", sortOrder: 2 },
+      { quantity: 2, unit: "tbsp", displayText: "Tamarind pulp", sortOrder: 3 },
+      { quantity: 1, unit: "tbsp", displayText: "Sugar", sortOrder: 4 },
+      { quantity: null, unit: null, displayText: "Salt, to taste", sortOrder: 5 },
+    ],
+    steps: [
+      { stepNumber: 1, instruction: "Slowly cook the onions in oil over low heat until deeply caramelised, stirring often." },
+      { stepNumber: 2, instruction: "Stir in the chilli powder and cook for a further minute until fragrant." },
+      { stepNumber: 3, instruction: "Add the tamarind pulp and sugar, then simmer until jammy and glossy." },
+      { stepNumber: 4, instruction: "Season with salt and cool before serving or storing." },
+    ],
   },
   {
     slug: "brinjal-moju",
@@ -348,6 +660,26 @@ const recipes: SeedRecipe[] = [
     avgRating: 4.5,
     ratingCount: 14,
     publishedAt: "2026-05-25",
+    chefNotes: "Fry the brinjal in small batches — overcrowding the pan steams it instead of browning it.",
+    nutritionCalories: 160,
+    nutritionProtein: 2,
+    nutritionCarbs: 14,
+    nutritionFat: 11,
+    nutritionFiber: 5,
+    nutritionSodium: 380,
+    ingredients: [
+      { quantity: 2, unit: "large", displayText: "Brinjal (aubergine), sliced", sortOrder: 1 },
+      { quantity: 2, unit: "tbsp", displayText: "Vinegar", sortOrder: 2 },
+      { quantity: 1, unit: "tsp", displayText: "Mustard seeds", sortOrder: 3 },
+      { quantity: 4, unit: "pieces", displayText: "Green chillies, slit", sortOrder: 4 },
+      { quantity: null, unit: null, displayText: "Salt, to taste", sortOrder: 5 },
+    ],
+    steps: [
+      { stepNumber: 1, instruction: "Fry the brinjal slices in batches until golden and softened, then drain." },
+      { stepNumber: 2, instruction: "In the same pan, splutter the mustard seeds with the shallots and green chillies." },
+      { stepNumber: 3, instruction: "Add the vinegar and a splash of water, then bring to a brief simmer." },
+      { stepNumber: 4, instruction: "Toss the fried brinjal through the pickling liquid and season with salt." },
+    ],
   },
   {
     slug: "isso-vadai",
@@ -368,9 +700,30 @@ const recipes: SeedRecipe[] = [
     avgRating: 4.6,
     ratingCount: 19,
     publishedAt: "2026-08-28",
+    chefNotes: "Keep the lentil batter coarse, not smooth — the crunch is the whole point of a vadai.",
+    nutritionCalories: 200,
+    nutritionProtein: 12,
+    nutritionCarbs: 18,
+    nutritionFat: 9,
+    nutritionFiber: 4,
+    nutritionSodium: 420,
+    ingredients: [
+      { quantity: 1, unit: "cup", displayText: "Split lentils, soaked", sortOrder: 1 },
+      { quantity: 12, unit: "whole", displayText: "Prawns", sortOrder: 2 },
+      { quantity: 1, unit: "medium", displayText: "Onion, finely chopped", sortOrder: 3 },
+      { quantity: 1, unit: "tsp", displayText: "Chilli flakes", sortOrder: 4 },
+      { quantity: null, unit: null, displayText: "Salt, to taste", sortOrder: 5 },
+    ],
+    steps: [
+      { stepNumber: 1, instruction: "Coarsely blend the soaked lentils with minimal water to a thick, gritty paste." },
+      { stepNumber: 2, instruction: "Mix in the onion, chilli flakes and salt." },
+      { stepNumber: 3, instruction: "Shape into small patties and press a whole prawn onto the top of each." },
+      { stepNumber: 4, instruction: "Deep-fry until crisp and golden, prawn side up first." },
+    ],
   },
   // Not Published: must never appear on the storefront. The Draft is flagged
-  // featured on purpose (the homepage must still skip it).
+  // featured on purpose (the homepage must still skip it). Still gets full
+  // ingredients/steps/nutrition — an admin can preview a Draft's detail page.
   {
     slug: "pumpkin-curry",
     title: "Pumpkin Curry",
@@ -390,6 +743,26 @@ const recipes: SeedRecipe[] = [
     avgRating: null,
     ratingCount: 0,
     publishedAt: null,
+    chefNotes: "Don't overcook the pumpkin — it should hold its shape, not collapse into the sauce.",
+    nutritionCalories: 180,
+    nutritionProtein: 3,
+    nutritionCarbs: 20,
+    nutritionFat: 10,
+    nutritionFiber: 4,
+    nutritionSodium: 260,
+    ingredients: [
+      { productSlug: "roasted-curry-powder-100g", quantity: 1, unit: "tbsp", displayText: "Oristor roasted curry powder", sortOrder: 1 },
+      { quantity: 600, unit: "g", displayText: "Pumpkin, cubed", sortOrder: 2 },
+      { quantity: 200, unit: "ml", displayText: "Coconut milk", sortOrder: 3 },
+      { quantity: 1, unit: "tsp", displayText: "Mustard seeds", sortOrder: 4 },
+      { quantity: null, unit: null, displayText: "Salt, to taste", sortOrder: 5 },
+    ],
+    steps: [
+      { stepNumber: 1, instruction: "Splutter the mustard seeds and curry leaves in a little oil." },
+      { stepNumber: 2, instruction: "Add the pumpkin and curry powder, tossing to coat." },
+      { stepNumber: 3, instruction: "Pour in the coconut milk and simmer until the pumpkin is tender." },
+      { stepNumber: 4, instruction: "Season with salt and serve warm." },
+    ],
   },
   {
     slug: "milk-toffee",
@@ -410,6 +783,27 @@ const recipes: SeedRecipe[] = [
     avgRating: 4.1,
     ratingCount: 7,
     publishedAt: "2025-12-01",
+    chefNotes: "Stir without stopping once it thickens — milk toffee catches and burns in seconds if you look away.",
+    nutritionCalories: 150,
+    nutritionProtein: 2,
+    nutritionCarbs: 24,
+    nutritionFat: 5,
+    nutritionFiber: 0,
+    nutritionSodium: 40,
+    ingredients: [
+      { quantity: 1, unit: "tin", displayText: "Condensed milk", sortOrder: 1 },
+      { quantity: 2, unit: "cup", displayText: "Sugar", sortOrder: 2 },
+      { quantity: 0.5, unit: "tsp", displayText: "Ground cardamom", sortOrder: 3 },
+      { quantity: 0.5, unit: "cup", displayText: "Cashew nuts, chopped", sortOrder: 4 },
+      { quantity: null, unit: null, displayText: "Butter, for greasing", sortOrder: 5 },
+    ],
+    steps: [
+      { stepNumber: 1, instruction: "Combine the condensed milk and sugar in a heavy-bottomed pan over low heat." },
+      { stepNumber: 2, instruction: "Cook, stirring constantly, until the mixture thickens and starts pulling away from the sides." },
+      { stepNumber: 3, instruction: "Stir in the cardamom and cashew nuts." },
+      { stepNumber: 4, instruction: "Pour into a greased tray and smooth the top." },
+      { stepNumber: 5, instruction: "Cool completely before cutting into squares." },
+    ],
   },
 ];
 
@@ -434,8 +828,19 @@ export async function seedRecipes(): Promise<{ recipes: number; published: numbe
     tagIds.set(tag.slug, created.id);
   }
 
+  // Real seeded Products (prisma/seed.ts), looked up by slug so at least
+  // one RecipeIngredient per relevant recipe links to a real productId.
+  const productIds = new Map<string, string>();
+  for (const slug of linkableProductSlugs) {
+    const product = await productRepository.findProductBySlug(slug);
+    if (!product) {
+      throw new Error(`Unknown seed product slug: ${slug}`);
+    }
+    productIds.set(slug, product.id);
+  }
+
   for (const recipe of recipes) {
-    await createRecipe({
+    await recipeRepository.createRecipe({
       slug: recipe.slug,
       title: recipe.title,
       shortDescription: recipe.shortDescription,
@@ -446,6 +851,7 @@ export async function seedRecipes(): Promise<{ recipes: number; published: numbe
       difficulty: recipe.difficulty,
       prepTimeMinutes: recipe.prep,
       cookTimeMinutes: recipe.cook,
+      totalTimeMinutes: computeTotalTimeMinutes(recipe.prep, recipe.cook),
       servings: recipe.servings,
       status: recipe.status,
       isFeatured: recipe.isFeatured,
@@ -453,7 +859,30 @@ export async function seedRecipes(): Promise<{ recipes: number; published: numbe
       avgRating: recipe.avgRating,
       ratingCount: recipe.ratingCount,
       publishedAt: recipe.publishedAt ? new Date(`${recipe.publishedAt}T09:00:00Z`) : null,
-      dietaryTagIds: recipe.tags.map((slug) => requireId(tagIds, slug)),
+      chefNotes: recipe.chefNotes,
+      nutritionCalories: recipe.nutritionCalories,
+      nutritionProtein: recipe.nutritionProtein,
+      nutritionCarbs: recipe.nutritionCarbs,
+      nutritionFat: recipe.nutritionFat,
+      nutritionFiber: recipe.nutritionFiber,
+      nutritionSodium: recipe.nutritionSodium,
+      dietaryTags: { create: recipe.tags.map((slug) => ({ dietaryTagId: requireId(tagIds, slug) })) },
+      ingredients: {
+        create: recipe.ingredients.map((ingredient) => ({
+          productId: ingredient.productSlug ? requireId(productIds, ingredient.productSlug) : null,
+          quantity: ingredient.quantity,
+          unit: ingredient.unit,
+          displayText: ingredient.displayText,
+          sortOrder: ingredient.sortOrder,
+        })),
+      },
+      steps: {
+        create: recipe.steps.map((step) => ({
+          stepNumber: step.stepNumber,
+          instruction: step.instruction,
+          imageUrl: step.imageUrl ?? null,
+        })),
+      },
     });
   }
 

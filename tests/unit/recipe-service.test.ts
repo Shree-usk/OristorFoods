@@ -1,10 +1,16 @@
 // @vitest-environment node
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { prisma } from "@/lib/db";
+import { createProduct } from "@/repositories/product.repository";
+import { findPublishedRecipeBySlug } from "@/repositories/recipe.repository";
+import { getRecipeSummary, resetProductDetailExtensionsForTesting } from "@/services/product-detail-extensions";
 import {
   createRecipe,
   getFeaturedRecipes,
+  getRecipeBySlug,
+  getRecipesByProductId,
+  getRelatedRecipes,
   listRecipeFacets,
   listRecipes,
   registerRecipeProviders,
@@ -16,7 +22,9 @@ import { cleanupRecipes, makeCategory, makeDietaryTag, makeRecipe } from "./reci
 
 afterEach(async () => {
   resetSearchExtensionsForTesting();
+  resetProductDetailExtensionsForTesting();
   await cleanupRecipes();
+  await prisma.product.deleteMany();
 });
 
 describe("createRecipe", () => {
@@ -159,5 +167,200 @@ describe("recipe search provider", () => {
     expect(await searchRecipes("dhal", 5)).toEqual([]);
     registerRecipeProviders();
     expect((await searchRecipes("dhal", 5)).map((item) => item.href)).toEqual(["/recipes/dhal-curry"]);
+  });
+
+  it("is also what the PDP's recipe summary uses once registerRecipeProviders() runs", async () => {
+    const category = await makeCategory();
+    const product = await createProduct({ sku: "SKU-T5-PROVIDER", slug: "provider-product", name: "Provider Product" });
+    await makeRecipe(category.id, {
+      slug: "uses-provider-product",
+      title: "Uses Provider Product",
+      ingredients: [{ productId: product.id, displayText: "Some of it" }],
+    });
+
+    expect(await getRecipeSummary(product.id)).toBeNull();
+    registerRecipeProviders();
+    expect(await getRecipeSummary(product.id)).toEqual({
+      recipes: [
+        {
+          id: expect.any(String),
+          title: "Uses Provider Product",
+          slug: "uses-provider-product",
+          imageSrc: "/images/products/export/curry-powder.webp",
+        },
+      ],
+    });
+  });
+});
+
+describe("getRecipeBySlug", () => {
+  it("returns null for a missing slug", async () => {
+    expect(await getRecipeBySlug("does-not-exist")).toBeNull();
+  });
+
+  it("returns null for a non-Published recipe", async () => {
+    const category = await makeCategory();
+    await makeRecipe(category.id, { slug: "draft-recipe", status: "Draft" });
+
+    expect(await getRecipeBySlug("draft-recipe")).toBeNull();
+  });
+
+  it("maps every RecipeDetail field, including ingredients, steps, dietary tags and related recipes, and increments the view count", async () => {
+    const category = await makeCategory({ name: "Curries", slug: "curries-t5" });
+    const spicy = await makeDietaryTag({ name: "Spicy", slug: "spicy-t5" });
+    const product = await createProduct({ sku: "SKU-T5-1", slug: "curry-powder-t5", name: "Curry Powder" });
+
+    const recipe = await makeRecipe(category.id, {
+      slug: "full-recipe",
+      title: "Full Recipe",
+      shortDescription: "A fully specified test recipe.",
+      cuisine: "Sri Lankan",
+      difficulty: "Medium",
+      prepTimeMinutes: 10,
+      cookTimeMinutes: 20,
+      avgRating: 4.5,
+      ratingCount: 12,
+      viewCount: 5,
+      publishedAt: new Date("2026-08-01T00:00:00Z"),
+      dietaryTagIds: [spicy.id],
+      ingredients: [
+        { productId: product.id, quantity: 2, unit: "tbsp", displayText: "Curry Powder", sortOrder: 1 },
+        { displayText: "Salt, to taste", sortOrder: 2 },
+      ],
+      steps: [
+        { stepNumber: 1, instruction: "Do the first thing" },
+        { stepNumber: 2, instruction: "Do the second thing" },
+      ],
+    });
+    // A related recipe in the same category, and an unrelated one that should not appear.
+    await makeRecipe(category.id, { slug: "related-recipe", title: "Related Recipe" });
+    await makeRecipe((await makeCategory()).id, { slug: "unrelated-recipe", cuisine: "Italian" });
+
+    const result = await getRecipeBySlug("full-recipe");
+
+    expect(result).toMatchObject({
+      id: recipe.id,
+      slug: "full-recipe",
+      href: "/recipes/full-recipe",
+      title: "Full Recipe",
+      shortDescription: "A fully specified test recipe.",
+      heroImage: "/images/products/export/curry-powder.webp",
+      heroImageAlt: "Test hero image",
+      galleryImageUrls: [],
+      categoryName: "Curries",
+      categorySlug: "curries-t5",
+      cuisine: "Sri Lankan",
+      difficulty: "Medium",
+      prepTimeMinutes: 10,
+      cookTimeMinutes: 20,
+      totalTimeMinutes: 30,
+      servings: 4,
+      avgRating: 4.5,
+      ratingCount: 12,
+      dietaryTags: [{ name: "Spicy", slug: "spicy-t5" }],
+      chefNotes: null,
+      nutrition: {
+        calories: null,
+        protein: null,
+        carbs: null,
+        fat: null,
+        fiber: null,
+        sodium: null,
+      },
+      metaTitle: null,
+      metaDescription: null,
+      publishedAt: "2026-08-01T00:00:00.000Z",
+    });
+    expect(result?.ingredients[0]).toMatchObject({
+      quantity: 2,
+      unit: "tbsp",
+      displayText: "Curry Powder",
+      product: { slug: "curry-powder-t5", name: "Curry Powder" },
+    });
+    expect(result?.ingredients[1]).toMatchObject({
+      quantity: null,
+      unit: null,
+      displayText: "Salt, to taste",
+      product: null,
+    });
+    expect(result?.steps).toEqual([
+      { stepNumber: 1, instruction: "Do the first thing", imageUrl: null },
+      { stepNumber: 2, instruction: "Do the second thing", imageUrl: null },
+    ]);
+    expect(result?.relatedRecipes.map((r) => r.slug)).toEqual(["related-recipe"]);
+
+    // The service no longer awaits the view-count increment (it's
+    // fire-and-forget so a failed UPDATE can't 500 the page), so poll for
+    // it instead of asserting it happened synchronously.
+    await vi.waitFor(async () => {
+      const updated = await prisma.recipe.findUniqueOrThrow({ where: { id: recipe.id } });
+      expect(updated.viewCount).toBe(6);
+    });
+  });
+
+  it("maps non-null nutrition values", async () => {
+    const category = await makeCategory();
+    const recipe = await makeRecipe(category.id, { slug: "nutrition-recipe" });
+    await prisma.recipe.update({
+      where: { id: recipe.id },
+      data: {
+        chefNotes: "Best served hot.",
+        nutritionCalories: 320,
+        nutritionProtein: 12,
+        nutritionCarbs: 40,
+        nutritionFat: 8,
+        nutritionFiber: 5,
+        nutritionSodium: 600,
+      },
+    });
+
+    const result = await getRecipeBySlug("nutrition-recipe");
+
+    expect(result?.chefNotes).toBe("Best served hot.");
+    expect(result?.nutrition).toEqual({
+      calories: 320,
+      protein: 12,
+      carbs: 40,
+      fat: 8,
+      fiber: 5,
+      sodium: 600,
+    });
+  });
+});
+
+describe("getRelatedRecipes", () => {
+  it("returns Published recipes sharing category or cuisine, excluding the recipe itself", async () => {
+    const category = await makeCategory();
+    const otherCategory = await makeCategory();
+    await makeRecipe(category.id, { slug: "target", cuisine: "Sri Lankan" });
+    await makeRecipe(category.id, { slug: "same-category" });
+    await makeRecipe(otherCategory.id, { slug: "same-cuisine", cuisine: "Sri Lankan" });
+    await makeRecipe(otherCategory.id, { slug: "unrelated", cuisine: "Italian" });
+
+    const row = await findPublishedRecipeBySlug("target");
+    const related = await getRelatedRecipes(row!, 6);
+
+    expect(related.map((r) => r.slug).sort()).toEqual(["same-category", "same-cuisine"]);
+  });
+});
+
+describe("getRecipesByProductId", () => {
+  it("maps repository rows to RecipePreview shape", async () => {
+    const category = await makeCategory();
+    const product = await createProduct({ sku: "SKU-T5-2", slug: "product-t5", name: "Product T5" });
+    await makeRecipe(category.id, {
+      slug: "uses-product",
+      title: "Uses Product",
+      ingredients: [{ productId: product.id, displayText: "Uses it", sortOrder: 1 }],
+    });
+
+    expect(await getRecipesByProductId(product.id)).toEqual([
+      {
+        id: expect.any(String),
+        title: "Uses Product",
+        slug: "uses-product",
+        imageSrc: "/images/products/export/curry-powder.webp",
+      },
+    ]);
   });
 });

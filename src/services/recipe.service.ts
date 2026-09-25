@@ -1,9 +1,10 @@
 import type { RecipeDifficulty, RecipeStatus } from "@/generated/prisma/client";
 import { computeTotalTimeMinutes } from "@/lib/recipe-time";
 import * as recipeRepository from "@/repositories/recipe.repository";
-import type { RecipeCardRow } from "@/repositories/recipe.repository";
+import type { RecipeCardRow, RecipeDetailRow } from "@/repositories/recipe.repository";
+import { registerRecipeSummaryProvider, type RecipePreview } from "@/services/product-detail-extensions";
 import { registerRecipeSearchProvider, type SearchSuggestionItem } from "@/services/search-extensions";
-import type { RecipeCard, RecipeFacets, RecipeListResult } from "@/types/recipe";
+import type { RecipeCard, RecipeDetail, RecipeFacets, RecipeIngredientItem, RecipeListResult, RecipeStepItem } from "@/types/recipe";
 import type { RecipeListingQuery } from "@/validation/recipe-listing.schema";
 
 function recipeHref(slug: string) {
@@ -105,7 +106,91 @@ export async function searchRecipeSuggestions(query: string, limit: number): Pro
   }));
 }
 
+function toIngredientItem(row: RecipeDetailRow["ingredients"][number]): RecipeIngredientItem {
+  return {
+    id: row.id,
+    quantity: row.quantity === null ? null : row.quantity.toNumber(),
+    unit: row.unit,
+    displayText: row.displayText,
+    product: row.product,
+  };
+}
+
+function toStepItem(row: RecipeDetailRow["steps"][number]): RecipeStepItem {
+  return { stepNumber: row.stepNumber, instruction: row.instruction, imageUrl: row.imageUrl };
+}
+
+/** Up to `limit` other Published recipes sharing this recipe's category or cuisine. */
+export async function getRelatedRecipes(recipe: RecipeDetailRow, limit = 6): Promise<RecipeCard[]> {
+  const rows = await recipeRepository.findRelatedRecipes(
+    { id: recipe.id, categoryId: recipe.categoryId, cuisine: recipe.cuisine },
+    limit,
+  );
+  return rows.map(toRecipeCard);
+}
+
+export async function getRecipeBySlug(slug: string): Promise<RecipeDetail | null> {
+  const row = await recipeRepository.findPublishedRecipeBySlug(slug);
+  if (!row) return null;
+
+  // Fire-and-forget: a view-count UPDATE failing must never fail the page
+  // render (it's a nice-to-have popularity signal, not core content).
+  const [relatedRecipes] = await Promise.all([
+    getRelatedRecipes(row, 6),
+    recipeRepository.incrementRecipeViewCount(row.id).catch((error: unknown) => {
+      console.error(`Failed to increment view count for recipe ${row.id}`, error);
+    }),
+  ]);
+
+  return {
+    id: row.id,
+    slug: row.slug,
+    href: recipeHref(row.slug),
+    title: row.title,
+    shortDescription: row.shortDescription,
+    heroImage: row.heroImage,
+    heroImageAlt: row.heroImageAlt,
+    galleryImageUrls: row.galleryImageUrls,
+    categoryName: row.category.name,
+    categorySlug: row.category.slug,
+    cuisine: row.cuisine,
+    difficulty: row.difficulty,
+    prepTimeMinutes: row.prepTimeMinutes,
+    cookTimeMinutes: row.cookTimeMinutes,
+    totalTimeMinutes: row.totalTimeMinutes,
+    servings: row.servings,
+    avgRating: row.avgRating === null ? null : row.avgRating.toNumber(),
+    ratingCount: row.ratingCount,
+    dietaryTags: row.dietaryTags.map((link) => ({ name: link.dietaryTag.name, slug: link.dietaryTag.slug })),
+    chefNotes: row.chefNotes,
+    nutrition: {
+      calories: row.nutritionCalories,
+      protein: row.nutritionProtein,
+      carbs: row.nutritionCarbs,
+      fat: row.nutritionFat,
+      fiber: row.nutritionFiber,
+      sodium: row.nutritionSodium,
+    },
+    ingredients: row.ingredients.map(toIngredientItem),
+    steps: row.steps.map(toStepItem),
+    metaTitle: row.metaTitle,
+    metaDescription: row.metaDescription,
+    publishedAt: row.publishedAt?.toISOString() ?? null,
+    relatedRecipes,
+  };
+}
+
+/** "Recipes using this product": consumed by the PDP via getRecipeSummary(). */
+export async function getRecipesByProductId(productId: string): Promise<RecipePreview[]> {
+  const rows = await recipeRepository.findRecipesByProductId(productId, 6);
+  return rows.map((row) => ({ id: row.id, title: row.title, slug: row.slug, imageSrc: row.heroImage }));
+}
+
 /** Called once from src/instrumentation.ts. */
 export function registerRecipeProviders(): void {
   registerRecipeSearchProvider(searchRecipeSuggestions);
+  registerRecipeSummaryProvider(async (productId) => {
+    const recipes = await getRecipesByProductId(productId);
+    return recipes.length > 0 ? { recipes } : null;
+  });
 }

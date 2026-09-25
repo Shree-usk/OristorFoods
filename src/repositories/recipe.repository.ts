@@ -136,6 +136,97 @@ export function findFeaturedRecipes(limit: number) {
   });
 }
 
+export const recipeDetailSelect = {
+  id: true,
+  slug: true,
+  title: true,
+  shortDescription: true,
+  heroImage: true,
+  heroImageAlt: true,
+  galleryImageUrls: true,
+  categoryId: true,
+  cuisine: true,
+  difficulty: true,
+  prepTimeMinutes: true,
+  cookTimeMinutes: true,
+  totalTimeMinutes: true,
+  servings: true,
+  avgRating: true,
+  ratingCount: true,
+  chefNotes: true,
+  nutritionCalories: true,
+  nutritionProtein: true,
+  nutritionCarbs: true,
+  nutritionFat: true,
+  nutritionFiber: true,
+  nutritionSodium: true,
+  metaTitle: true,
+  metaDescription: true,
+  publishedAt: true,
+  category: { select: { name: true, slug: true } },
+  dietaryTags: {
+    where: { dietaryTag: { status: "Active" } },
+    orderBy: { dietaryTag: { sortOrder: "asc" } },
+    select: { dietaryTag: { select: { name: true, slug: true } } },
+  },
+  ingredients: {
+    orderBy: { sortOrder: "asc" },
+    select: {
+      id: true,
+      quantity: true,
+      unit: true,
+      displayText: true,
+      product: { select: { id: true, slug: true, name: true } },
+    },
+  },
+  steps: {
+    orderBy: { stepNumber: "asc" },
+    select: { id: true, stepNumber: true, instruction: true, imageUrl: true },
+  },
+} satisfies Prisma.RecipeSelect;
+
+export type RecipeDetailRow = Prisma.RecipeGetPayload<{ select: typeof recipeDetailSelect }>;
+
+export function findPublishedRecipeBySlug(slug: string): Promise<RecipeDetailRow | null> {
+  return prisma.recipe.findFirst({
+    where: { slug, status: "Published" },
+    select: recipeDetailSelect,
+  });
+}
+
+export function findRelatedRecipes(
+  recipe: { id: string; categoryId: string; cuisine: string | null },
+  limit: number,
+): Promise<RecipeCardRow[]> {
+  return prisma.recipe.findMany({
+    where: {
+      status: "Published",
+      id: { not: recipe.id },
+      OR: [{ categoryId: recipe.categoryId }, ...(recipe.cuisine ? [{ cuisine: recipe.cuisine }] : [])],
+    },
+    orderBy: buildRecipeOrderBy("popular"),
+    take: limit,
+    select: recipeCardSelect,
+  });
+}
+
+export function findRecipesByProductId(productId: string, limit: number): Promise<RecipeCardRow[]> {
+  return prisma.recipe.findMany({
+    where: { status: "Published", ingredients: { some: { productId } } },
+    orderBy: buildRecipeOrderBy("popular"),
+    take: limit,
+    select: recipeCardSelect,
+  });
+}
+
+/**
+ * Raw UPDATE rather than `prisma.recipe.update` so `@updatedAt` isn't
+ * touched by a view — a page view is not a content edit.
+ */
+export async function incrementRecipeViewCount(recipeId: string): Promise<void> {
+  await prisma.$executeRaw`UPDATE "Recipe" SET "viewCount" = "viewCount" + 1 WHERE "id" = ${recipeId}`;
+}
+
 // Writes. Used by the seed and tests now; STORY-043's admin builder later.
 
 export function createRecipeCategory(data: Prisma.RecipeCategoryCreateInput) {
