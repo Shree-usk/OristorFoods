@@ -13,7 +13,7 @@ const categories = [
   { name: "Snacks", slug: "snacks" },
 ];
 const hrefFor = (slug: string | null) => (slug ? `/recipes?category=${slug}` : "/recipes");
-const noFilters: RecipeFilterValues = { difficulty: [], time: [], diet: [] };
+const noFilters: RecipeFilterValues = { difficulty: [], time: [], diet: [], hasVideo: false };
 
 describe("RecipeCategoryChips", () => {
   it("renders All plus one link per category, marking the selected one", () => {
@@ -61,7 +61,7 @@ describe("RecipeFilterControls", () => {
     const onChange = vi.fn();
     render(
       <RecipeFilterControls
-        values={{ difficulty: ["easy"], time: [], diet: [] }}
+        values={{ difficulty: ["easy"], time: [], diet: [], hasVideo: false }}
         onChange={onChange}
         onClear={vi.fn()}
         dietaryTagOptions={[{ name: "Vegan", slug: "vegan" }]}
@@ -72,9 +72,17 @@ describe("RecipeFilterControls", () => {
     await user.click(screen.getByRole("checkbox", { name: "Under 15 min" }));
     await user.click(screen.getByRole("checkbox", { name: "Vegan" }));
 
-    expect(onChange).toHaveBeenNthCalledWith(1, { difficulty: [], time: [], diet: [] });
-    expect(onChange).toHaveBeenNthCalledWith(2, { difficulty: ["easy"], time: ["under-15"], diet: [] });
-    expect(onChange).toHaveBeenNthCalledWith(3, { difficulty: ["easy"], time: [], diet: ["vegan"] });
+    expect(onChange).toHaveBeenNthCalledWith(1, { difficulty: [], time: [], diet: [], hasVideo: false });
+    expect(onChange).toHaveBeenNthCalledWith(2, { difficulty: ["easy"], time: ["under-15"], diet: [], hasVideo: false });
+    expect(onChange).toHaveBeenNthCalledWith(3, { difficulty: ["easy"], time: [], diet: ["vegan"], hasVideo: false });
+  });
+
+  it("calls onChange with hasVideo true when the Has Video checkbox is checked", async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    render(<RecipeFilterControls values={noFilters} onChange={onChange} onClear={vi.fn()} dietaryTagOptions={[]} />);
+    await user.click(screen.getByRole("checkbox", { name: /has video/i }));
+    expect(onChange).toHaveBeenCalledWith({ ...noFilters, hasVideo: true });
   });
 
   it("omits the Dietary fieldset when there are no tags, and clears on request", async () => {

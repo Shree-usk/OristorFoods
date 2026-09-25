@@ -41,6 +41,7 @@ export function RecipeListing({ initialData, facets }: RecipeListingProps) {
     difficulty: params.difficulty ?? [],
     time: params.time ?? [],
     diet: params.diet ?? [],
+    hasVideo: params.hasVideo ?? false,
   };
 
   function handleFilterChange(next: RecipeFilterValues) {
@@ -49,12 +50,13 @@ export function RecipeListing({ initialData, facets }: RecipeListingProps) {
       difficulty: next.difficulty.length > 0 ? next.difficulty : null,
       time: next.time.length > 0 ? next.time : null,
       diet: next.diet.length > 0 ? next.diet : null,
+      hasVideo: next.hasVideo ? true : null,
     });
   }
 
   function clearFilters() {
     setSearchInput("");
-    void setParams({ page: null, category: null, difficulty: null, time: null, diet: null, q: null });
+    void setParams({ page: null, category: null, difficulty: null, time: null, diet: null, hasVideo: null, q: null });
   }
 
   const filters = (

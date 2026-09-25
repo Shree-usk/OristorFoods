@@ -18,6 +18,7 @@ export interface RecipeFilterValues {
   time: RecipeTimeRange[];
   /** Dietary tag slugs. */
   diet: string[];
+  hasVideo: boolean;
 }
 
 interface RecipeFilterControlsProps {
@@ -68,6 +69,15 @@ export function RecipeFilterControls({ values, onChange, dietaryTagOptions, onCl
           ))}
         </fieldset>
       )}
+
+      <fieldset className="flex flex-col gap-2">
+        <legend className="mb-2 text-small font-medium text-charcoal">Video</legend>
+        <CheckboxOption
+          label="Has video"
+          checked={values.hasVideo}
+          onCheckedChange={(checked) => onChange({ ...values, hasVideo: checked })}
+        />
+      </fieldset>
 
       <Button type="button" variant="outline" onClick={onClear}>
         Clear filters

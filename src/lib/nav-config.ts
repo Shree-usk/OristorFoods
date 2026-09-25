@@ -61,7 +61,7 @@ const recipesMegaMenu: MegaMenuSection[] = [
     links: [
       { label: "All Recipes", href: "/recipes" },
       { label: "Quick & Easy", href: "/recipes?difficulty=easy&time=under-15,15-30" },
-      // "Video Recipes" returns with STORY-019 (video recipes).
+      { label: "Video Recipes", href: "/recipes?hasVideo=true" },
       { label: "Food Academy", href: "/food-academy" },
     ],
   },

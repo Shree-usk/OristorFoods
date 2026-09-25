@@ -1,6 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
-import { Clock, Star } from "lucide-react";
+import { Clock, Play, Star } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { formatRecipeTime } from "@/lib/recipe-time";
@@ -30,6 +30,14 @@ export function RecipeCard({ recipe, headingLevel: Heading = "h3" }: RecipeCardP
           sizes="(min-width: 1280px) 25vw, (min-width: 640px) 45vw, 90vw"
           className="object-contain p-6 transition-transform duration-300 group-hover:scale-105"
         />
+        {recipe.hasVideo && (
+          <span
+            aria-label="Video available"
+            className="absolute top-2 right-2 flex size-7 items-center justify-center rounded-full bg-black/60 text-white"
+          >
+            <Play className="size-3.5 fill-current" aria-hidden="true" />
+          </span>
+        )}
       </div>
       <p className="mt-3 text-caption font-medium text-chilli">
         <span>{recipe.categoryName}</span>
