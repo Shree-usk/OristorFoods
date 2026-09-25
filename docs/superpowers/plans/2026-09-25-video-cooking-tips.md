@@ -732,7 +732,11 @@ export async function findPublishedCookingTips(args: {
   skip: number;
   take: number;
 }): Promise<{ rows: CookingTipCardRow[]; total: number }> {
-  const where: Prisma.CookingTipWhereInput = { status: "Published", ...args.where };
+  // AND-composed, not spread-merged: a plain `{ status: "Published",
+  // ...args.where }` lets a caller-supplied `where.status` silently win
+  // (object-spread, later key wins) and override the Published-only
+  // invariant. Same pattern as buildRecipeWhere in recipe.repository.ts.
+  const where: Prisma.CookingTipWhereInput = { AND: [{ status: "Published" }, args.where] };
   const [rows, total] = await prisma.$transaction([
     prisma.cookingTip.findMany({
       where,
