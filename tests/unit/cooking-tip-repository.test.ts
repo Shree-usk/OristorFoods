@@ -1,5 +1,7 @@
 // @vitest-environment node
 import { afterEach, describe, expect, it } from "vitest";
+import type { Prisma } from "@/generated/prisma/client";
+import { prisma } from "@/lib/db";
 import { createProduct } from "@/repositories/product.repository";
 import {
   findActiveTopicTagsWithPublishedTips,
@@ -11,6 +13,7 @@ import { cleanupRecipes, makeCookingTip } from "./recipe-fixtures";
 
 afterEach(async () => {
   await cleanupRecipes();
+  await prisma.product.deleteMany();
 });
 
 describe("findPublishedCookingTips", () => {
@@ -24,6 +27,19 @@ describe("findPublishedCookingTips", () => {
 
     const knifeOnly = await findPublishedCookingTips({ where: { topicTag: "knife-skills" }, skip: 0, take: 10 });
     expect(knifeOnly.rows.map((r) => r.title)).toEqual(["Published Knife"]);
+  });
+
+  it("cannot be overridden by a caller-supplied status filter", async () => {
+    await makeCookingTip({ title: "Real Published" });
+    await makeCookingTip({ title: "Sneaky Draft", status: "Draft" });
+
+    // Even if a caller's where object tries to widen the status filter, only Published tips come back.
+    const result = await findPublishedCookingTips({
+      where: { status: "Draft" } as Prisma.CookingTipWhereInput,
+      skip: 0,
+      take: 10,
+    });
+    expect(result.rows.map((r) => r.title)).toEqual(["Real Published"]);
   });
 });
 
