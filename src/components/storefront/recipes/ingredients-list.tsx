@@ -14,7 +14,7 @@ export function IngredientsList({ ingredients, baseServings, servings }: Ingredi
       {ingredients.map((ingredient) => {
         const scaledQuantity =
           ingredient.quantity !== null
-            ? Number(formatScaledQuantity(scaleQuantity(ingredient.quantity, baseServings, servings), ingredient.unit))
+            ? formatScaledQuantity(scaleQuantity(ingredient.quantity, baseServings, servings), ingredient.unit)
             : null;
         return (
           <li key={ingredient.id}>

@@ -1,16 +1,15 @@
 import Link from "next/link";
+import { formatIngredientLine } from "@/lib/recipe-scaling";
 import type { RecipeIngredientItem } from "@/types/recipe";
 
 interface IngredientLinkProps {
   ingredient: RecipeIngredientItem;
-  /** Pre-scaled display quantity, or null when the ingredient has no scalable amount. */
-  scaledQuantity: number | null;
+  /** Pre-scaled, pre-formatted display quantity, or null when the ingredient has no scalable amount. */
+  scaledQuantity: string | null;
 }
 
 export function IngredientLink({ ingredient, scaledQuantity }: IngredientLinkProps) {
-  const label = scaledQuantity !== null && ingredient.unit
-    ? `${scaledQuantity} ${ingredient.unit} ${ingredient.displayText}`
-    : ingredient.displayText;
+  const label = formatIngredientLine(ingredient, scaledQuantity);
 
   if (!ingredient.product) return <span>{label}</span>;
 

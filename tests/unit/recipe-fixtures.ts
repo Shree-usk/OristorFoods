@@ -146,7 +146,7 @@ export function buildRecipeDetail(overrides: Partial<RecipeDetail> = {}): Recipe
       fiber: 4,
       sodium: 400,
     },
-    ingredients: [{ id: "ing-1", quantity: 2, unit: "cup", displayText: "2 cups rice", product: null }],
+    ingredients: [{ id: "ing-1", quantity: 2, unit: "cup", displayText: "Rice", product: null }],
     steps: [{ stepNumber: 1, instruction: "Do the thing.", imageUrl: null }],
     metaTitle: null,
     metaDescription: null,

@@ -11,6 +11,7 @@ import { RecipeDetailView } from "@/components/storefront/recipes/recipe-detail-
 import { RecipeHero } from "@/components/storefront/recipes/recipe-hero";
 import { RecipeJsonLd } from "@/components/storefront/recipes/recipe-json-ld";
 import { RelatedRecipes } from "@/components/storefront/recipes/related-recipes";
+import { formatIngredientLine, formatScaledQuantity } from "@/lib/recipe-scaling";
 import { formatRecipeTime } from "@/lib/recipe-time";
 import { getRecipeBySlug } from "@/services/recipe.service";
 
@@ -42,6 +43,13 @@ export default async function RecipeDetailPage({ params }: RecipeDetailPageProps
 
   const pageUrl = `${SITE_URL}/recipes/${recipe.slug}`;
 
+  // Base-servings ingredient lines with quantities, for the schema.org JSON-LD
+  // (the JSON-LD always describes the recipe as authored, not the
+  // customer's currently adjusted serving size).
+  const ingredientTexts = recipe.ingredients.map((i) =>
+    formatIngredientLine(i, i.quantity === null ? null : formatScaledQuantity(i.quantity, i.unit)),
+  );
+
   return (
     <Section>
       <RecipeJsonLd
@@ -50,7 +58,7 @@ export default async function RecipeDetailPage({ params }: RecipeDetailPageProps
         imageUrls={[recipe.heroImage, ...recipe.galleryImageUrls]}
         totalTimeMinutes={recipe.totalTimeMinutes}
         recipeYield={recipe.servings}
-        ingredientTexts={recipe.ingredients.map((i) => i.displayText)}
+        ingredientTexts={ingredientTexts}
         instructionTexts={recipe.steps.map((s) => s.instruction)}
         nutritionCalories={recipe.nutrition.calories}
         averageRating={recipe.avgRating ?? undefined}

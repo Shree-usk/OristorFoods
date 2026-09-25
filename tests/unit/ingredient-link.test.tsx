@@ -6,11 +6,13 @@ describe("IngredientLink", () => {
   it("renders a link to the product page when a product is linked", () => {
     render(
       <IngredientLink
-        ingredient={{ id: "i1", quantity: 2, unit: "tbsp", displayText: "2 tbsp Curry Powder", product: { id: "p1", slug: "curry-powder", name: "Curry Powder" } }}
-        scaledQuantity={2}
+        ingredient={{ id: "i1", quantity: 2, unit: "tbsp", displayText: "Curry Powder", product: { id: "p1", slug: "curry-powder", name: "Curry Powder" } }}
+        scaledQuantity="2"
       />,
     );
-    expect(screen.getByRole("link", { name: /curry powder/i })).toHaveAttribute("href", "/products/curry-powder");
+    const link = screen.getByRole("link", { name: /curry powder/i });
+    expect(link).toHaveAttribute("href", "/products/curry-powder");
+    expect(link).toHaveTextContent("2 tbsp Curry Powder");
   });
 
   it("renders plain text when no product is linked", () => {
@@ -23,7 +25,7 @@ describe("IngredientLink", () => {
     render(
       <IngredientLink
         ingredient={{ id: "i3", quantity: 2, unit: "tbsp", displayText: "Oristor chilli powder", product: { id: "p3", slug: "chilli-powder-100g", name: "Chilli Powder 100g" } }}
-        scaledQuantity={2}
+        scaledQuantity="2"
       />,
     );
     expect(screen.getByRole("link")).toHaveTextContent("2 tbsp Oristor chilli powder");
