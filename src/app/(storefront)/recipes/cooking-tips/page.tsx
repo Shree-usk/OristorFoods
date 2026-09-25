@@ -26,6 +26,7 @@ export default async function CookingTipsPage({ searchParams }: CookingTipsPageP
       <nav aria-label="Filter by topic" className="mt-4 flex flex-wrap gap-2">
         <Link
           href="/recipes/cooking-tips"
+          aria-current={!query.topic ? "page" : undefined}
           className={cn("rounded-full border px-4 py-1.5 text-small", !query.topic ? "border-chilli bg-chilli text-white" : "border-input")}
         >
           All
@@ -33,13 +34,17 @@ export default async function CookingTipsPage({ searchParams }: CookingTipsPageP
         {topics.map(({ tag }) => (
           <Link
             key={tag}
-            href={`/recipes/cooking-tips?topic=${tag}`}
+            href={`/recipes/cooking-tips?topic=${encodeURIComponent(tag)}`}
+            aria-current={query.topic === tag ? "page" : undefined}
             className={cn("rounded-full border px-4 py-1.5 text-small", query.topic === tag ? "border-chilli bg-chilli text-white" : "border-input")}
           >
             {tag}
           </Link>
         ))}
       </nav>
+      <h2 id="cooking-tips-results-heading" className="sr-only">
+        Cooking tips results
+      </h2>
       {result.tips.length === 0 ? (
         <p className="mt-8 text-body text-charcoal/70">No cooking tips match that topic.</p>
       ) : (
