@@ -1247,8 +1247,9 @@ servings state) are Client Components; method, chef notes, and related
 recipes stay server-rendered.
 
 **Print is CSS-driven off the live page**, not a separate route: a
-`print:hidden` approach hides the Header/Footer (from the storefront
-layout) plus breadcrumbs, share bar, and related recipes, so printing
+`print:hidden` approach hides the Header/Footer/MobileNav (from the
+storefront layout) plus breadcrumbs, share bar, and related recipes, so
+printing
 always reflects the currently adjusted serving size. **Share** reuses the
 existing `ShareButtons`, extended with a native Web Share button shown
 only when `navigator.share` exists.

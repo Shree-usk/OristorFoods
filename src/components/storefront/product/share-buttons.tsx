@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useSyncExternalStore } from "react";
 import { Copy, Mail, MessageCircle, Share2 } from "lucide-react";
 
 import { FacebookIcon } from "@/components/storefront/layout/social-icons";
@@ -24,10 +24,21 @@ export function ShareButtons({ url, title }: ShareButtonsProps) {
     });
   }
 
-  const canNativeShare = typeof navigator !== "undefined" && typeof navigator.share === "function";
+  // The server always renders without native share (no `navigator`); the
+  // client's first render must match that or React throws a hydration
+  // mismatch. useSyncExternalStore's getServerSnapshot forces `false` for
+  // SSR/hydration, then the client snapshot reads the real capability on
+  // the next paint.
+  const canNativeShare = useSyncExternalStore(
+    () => () => {},
+    () => typeof navigator.share === "function",
+    () => false,
+  );
 
   function handleNativeShare() {
-    void navigator.share({ title, url });
+    // A user cancelling the native share sheet rejects the promise; that's
+    // not an error worth surfacing.
+    navigator.share({ title, url }).catch(() => {});
   }
 
   const encodedUrl = encodeURIComponent(url);

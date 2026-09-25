@@ -24,10 +24,12 @@ export default function StorefrontLayout({ children }: { children: React.ReactNo
       <div className="print:hidden">
         <Header />
       </div>
-      <main id="main-content" className="flex-1 pb-16 lg:pb-0">
+      <main id="main-content" className="flex-1 pb-16 lg:pb-0 print:pb-0">
         <PageTransition>{children}</PageTransition>
       </main>
-      <MobileNav />
+      <div className="print:hidden">
+        <MobileNav />
+      </div>
       <div className="print:hidden">
         <Footer />
       </div>
