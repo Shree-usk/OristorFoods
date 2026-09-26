@@ -204,6 +204,7 @@ model Product {
   questions           Question[]
   recipeIngredients   RecipeIngredient[]
   cookingTipRefs      CookingTipProductRef[]
+  foodAcademyRefs     FoodAcademyProductRef[]
 
   @@index([status])
   @@index([status, inStock])
@@ -605,6 +606,7 @@ model Recipe {
   ingredients          RecipeIngredient[]
   steps                RecipeStep[]
   dietaryTags          RecipeDietaryTag[]
+  foodAcademyRefs      FoodAcademyRecipeRef[]
   publishedAt          DateTime?
   createdAt            DateTime           @default(now())
   updatedAt            DateTime           @updatedAt
@@ -687,5 +689,98 @@ model CookingTipProductRef {
   product      Product    @relation(fields: [productId], references: [id], onDelete: Cascade)
 
   @@unique([cookingTipId, productId])
+  @@index([productId])
+}
+
+// --- Food Academy (STORY-020) ---
+// Long-form food education content (articles, guides, courses), independent
+// of the Recipe Centre and Cooking Tips. Design:
+// .superpowers/sdd/2026-09-26-food-academy/
+
+enum FoodAcademyEntryStatus {
+  Draft
+  Published
+}
+
+enum FoodAcademyContentType {
+  Article
+  Guide
+  Course
+}
+
+model FoodAcademyCategory {
+  id          String               @id @default(cuid())
+  name        String
+  slug        String               @unique
+  description String?
+  sortOrder   Int                  @default(0)
+  status      ContentStatus        @default(Active)
+  entries     FoodAcademyEntry[]
+}
+
+model FoodAcademyEntry {
+  id           String                  @id @default(cuid())
+  slug         String                  @unique
+  title        String
+  summary      String
+  heroImageUrl String?
+  contentType  FoodAcademyContentType
+  categoryId   String
+  category     FoodAcademyCategory     @relation(fields: [categoryId], references: [id])
+  // Markdown. Required in practice for Article/Guide, an optional short
+  // intro for Course (whose real content lives in `sections`). There is no
+  // create/update API in this story's scope — this is a seed-data
+  // convention, not a runtime-validated one (mirrors CookingTip's
+  // createCookingTip being seed-only).
+  bodyContent  String?
+  readingTimeMinutes Int?
+  authorName   String?
+  isFeatured   Boolean                 @default(false)
+  status       FoodAcademyEntryStatus  @default(Draft)
+  publishedAt  DateTime?
+  createdAt    DateTime                @default(now())
+  updatedAt    DateTime                @updatedAt
+
+  sections    FoodAcademySection[]
+  recipeRefs  FoodAcademyRecipeRef[]
+  productRefs FoodAcademyProductRef[]
+
+  @@index([status, publishedAt])
+  @@index([status, categoryId])
+  @@index([status, contentType])
+  @@index([status, isFeatured])
+}
+
+model FoodAcademySection {
+  id            String           @id @default(cuid())
+  entryId       String
+  entry         FoodAcademyEntry @relation(fields: [entryId], references: [id], onDelete: Cascade)
+  sectionNumber Int
+  title         String
+  bodyContent   String
+  imageUrl      String?
+
+  @@unique([entryId, sectionNumber])
+}
+
+model FoodAcademyRecipeRef {
+  id       String           @id @default(cuid())
+  entryId  String
+  entry    FoodAcademyEntry @relation(fields: [entryId], references: [id], onDelete: Cascade)
+  recipeId String
+  recipe   Recipe           @relation(fields: [recipeId], references: [id], onDelete: Cascade)
+
+  @@unique([entryId, recipeId])
+  @@index([recipeId])
+}
+
+model FoodAcademyProductRef {
+  id        String           @id @default(cuid())
+  entryId   String
+  entry     FoodAcademyEntry @relation(fields: [entryId], references: [id], onDelete: Cascade)
+  productId String
+  product   Product          @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([entryId, productId])
   @@index([productId])
 }
