@@ -19,6 +19,7 @@ const recipe: RecipeCardData = {
   avgRating: 4.9,
   ratingCount: 58,
   dietaryTags: ["Gluten-Free", "Spicy"],
+  hasVideo: false,
 };
 
 describe("RecipeCard", () => {
@@ -57,6 +58,16 @@ describe("RecipeCard", () => {
 
     expect(screen.getByRole("img", { name: "Rated 5.0 out of 5 from 1 rating" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { level: 2 })).toBeInTheDocument();
+  });
+
+  it("shows a video badge when the recipe has video", () => {
+    render(<RecipeCard recipe={{ ...recipe, hasVideo: true }} />);
+    expect(screen.getByLabelText(/video available/i)).toBeInTheDocument();
+  });
+
+  it("omits the video badge when there is no video", () => {
+    render(<RecipeCard recipe={{ ...recipe, hasVideo: false }} />);
+    expect(screen.queryByLabelText(/video available/i)).not.toBeInTheDocument();
   });
 });
 

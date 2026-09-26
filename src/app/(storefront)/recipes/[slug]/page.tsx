@@ -73,7 +73,12 @@ export default async function RecipeDetailPage({ params }: RecipeDetailPageProps
         />
       </div>
       <div className="mt-6 grid grid-cols-1 gap-10 lg:grid-cols-2">
-        <RecipeHero heroImage={recipe.heroImage} heroImageAlt={recipe.heroImageAlt} galleryImageUrls={recipe.galleryImageUrls} />
+        <RecipeHero
+          heroImage={recipe.heroImage}
+          heroImageAlt={recipe.heroImageAlt}
+          galleryImageUrls={recipe.galleryImageUrls}
+          video={recipe.video}
+        />
         <div>
           <p className="text-caption font-medium text-chilli">
             <span>{recipe.categoryName}</span>

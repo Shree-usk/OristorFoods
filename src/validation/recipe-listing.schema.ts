@@ -42,6 +42,11 @@ export const recipeListingQuerySchema = z.object({
     .transform((value) => value.slice(0, 100))
     .optional()
     .catch(undefined),
+  hasVideo: z
+    .enum(["true", "false"])
+    .transform((value) => value === "true")
+    .optional()
+    .catch(undefined),
   sort: z.enum(recipeSortValues).catch("newest"),
   page: z.coerce.number().int().positive().catch(1),
   pageSize: z.coerce.number().int().positive().max(48).catch(12),

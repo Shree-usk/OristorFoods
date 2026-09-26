@@ -21,21 +21,21 @@ datasource db {
 // STORY-038. Do not extend this beyond auth's requirements here.
 
 model User {
-  id                String    @id @default(cuid())
+  id                String     @id @default(cuid())
   name              String?
-  email             String?   @unique
+  email             String?    @unique
   emailVerified     DateTime?
   image             String?
   passwordHash      String?
   accounts          Account[]
   sessions          Session[]
   wishlist          Wishlist?
-  reviews           Review[]  @relation("ReviewAuthor")
-  moderatedReviews  Review[]  @relation("ReviewModerator")
+  reviews           Review[]   @relation("ReviewAuthor")
+  moderatedReviews  Review[]   @relation("ReviewModerator")
   questions         Question[] @relation("QuestionAsker")
   answeredQuestions Question[] @relation("QuestionAnswerer")
-  createdAt         DateTime  @default(now())
-  updatedAt         DateTime  @updatedAt
+  createdAt         DateTime   @default(now())
+  updatedAt         DateTime   @updatedAt
 }
 
 model Account {
@@ -98,11 +98,11 @@ model Category {
   canonicalUrl    String?
   ogImage         String?
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  products  Product[]
 
   @@index([parentId])
-  products Product[]
 }
 
 model Brand {
@@ -112,8 +112,8 @@ model Brand {
   logo        String?
   description String?
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
   products  Product[]
 }
 
@@ -132,8 +132,8 @@ model Collection {
   canonicalUrl    String?
   ogImage         String?
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
   products  Product[]
 }
 
@@ -155,20 +155,20 @@ enum ProductType {
 }
 
 model Product {
-  id               String        @id @default(cuid())
-  sku              String        @unique
-  barcode          String?       @unique
-  slug             String        @unique
-  name             String
-  shortDescription String?
-  story            String?
-  status           ProductStatus @default(Draft)
-  productType      ProductType   @default(Standard)
-  publishedAt      DateTime?
-  rewardPoints     Int           @default(0)
-  inStock          Boolean       @default(true)
-  benefits           String[] @default([])
-  servingSuggestions String[] @default([])
+  id                 String        @id @default(cuid())
+  sku                String        @unique
+  barcode            String?       @unique
+  slug               String        @unique
+  name               String
+  shortDescription   String?
+  story              String?
+  status             ProductStatus @default(Draft)
+  productType        ProductType   @default(Standard)
+  publishedAt        DateTime?
+  rewardPoints       Int           @default(0)
+  inStock            Boolean       @default(true)
+  benefits           String[]      @default([])
+  servingSuggestions String[]      @default([])
 
   brandId String?
   brand   Brand?  @relation(fields: [brandId], references: [id], onDelete: SetNull)
@@ -184,12 +184,12 @@ model Product {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  images ProductImage[]
-  videos ProductVideo[]
-  nutrition   ProductNutrition?
-  ingredients ProductIngredient[]
-  allergens   Allergen[]
-  certifications Certification[]
+  images            ProductImage[]
+  videos            ProductVideo[]
+  nutrition         ProductNutrition?
+  ingredients       ProductIngredient[]
+  allergens         Allergen[]
+  certifications    Certification[]
   bundle            ProductBundle?
   bundleComponentOf BundleItem[]
 
@@ -203,6 +203,7 @@ model Product {
   ratingSummary       ProductRatingSummary?
   questions           Question[]
   recipeIngredients   RecipeIngredient[]
+  cookingTipRefs      CookingTipProductRef[]
 
   @@index([status])
   @@index([status, inStock])
@@ -521,6 +522,12 @@ enum RecipeDifficulty {
   Hard
 }
 
+enum VideoProvider {
+  Youtube
+  Vimeo
+  SelfHosted
+}
+
 model RecipeCategory {
   id              String        @id @default(cuid())
   name            String
@@ -557,44 +564,50 @@ model RecipeDietaryTag {
 }
 
 model Recipe {
-  id               String             @id @default(cuid())
-  slug             String             @unique
-  title            String
-  shortDescription String
-  heroImage        String
-  heroImageAlt     String
-  categoryId       String
-  category         RecipeCategory     @relation(fields: [categoryId], references: [id], onDelete: Restrict)
-  cuisine          String?
-  difficulty       RecipeDifficulty
-  prepTimeMinutes  Int
-  cookTimeMinutes  Int
+  id                   String             @id @default(cuid())
+  slug                 String             @unique
+  title                String
+  shortDescription     String
+  heroImage            String
+  heroImageAlt         String
+  categoryId           String
+  category             RecipeCategory     @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  cuisine              String?
+  difficulty           RecipeDifficulty
+  prepTimeMinutes      Int
+  cookTimeMinutes      Int
   // Always prep + cook, via computeTotalTimeMinutes() (src/lib/recipe-time.ts).
   // Stored so the time filter and sort can use an index.
-  totalTimeMinutes Int
-  servings         Int
-  status           RecipeStatus       @default(Draft)
-  isFeatured       Boolean            @default(false)
+  totalTimeMinutes     Int
+  servings             Int
+  status               RecipeStatus       @default(Draft)
+  isFeatured           Boolean            @default(false)
   // Written by STORY-018 (views) and STORY-022 (ratings); seed values until then.
-  viewCount        Int                @default(0)
-  avgRating        Decimal?           @db.Decimal(2, 1)
-  ratingCount      Int                @default(0)
-  metaTitle        String?
-  metaDescription  String?
-  chefNotes        String?
-  nutritionCalories Int?
-  nutritionProtein  Int?
-  nutritionCarbs    Int?
-  nutritionFat      Int?
-  nutritionFiber    Int?
-  nutritionSodium   Int?
-  galleryImageUrls String[]           @default([])
-  ingredients      RecipeIngredient[]
-  steps            RecipeStep[]
-  dietaryTags      RecipeDietaryTag[]
-  publishedAt      DateTime?
-  createdAt        DateTime           @default(now())
-  updatedAt        DateTime           @updatedAt
+  viewCount            Int                @default(0)
+  avgRating            Decimal?           @db.Decimal(2, 1)
+  ratingCount          Int                @default(0)
+  metaTitle            String?
+  metaDescription      String?
+  chefNotes            String?
+  nutritionCalories    Int?
+  nutritionProtein     Int?
+  nutritionCarbs       Int?
+  nutritionFat         Int?
+  nutritionFiber       Int?
+  nutritionSodium      Int?
+  galleryImageUrls     String[]           @default([])
+  videoUrl             String?
+  videoProvider        VideoProvider?
+  videoDurationSeconds Int?
+  // Only meaningful when videoProvider is SelfHosted — a caption track
+  // can't be injected into a cross-origin YouTube/Vimeo iframe.
+  captionsUrl          String?
+  ingredients          RecipeIngredient[]
+  steps                RecipeStep[]
+  dietaryTags          RecipeDietaryTag[]
+  publishedAt          DateTime?
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
 
   @@index([status, publishedAt])
   @@index([status, categoryId])
@@ -604,13 +617,13 @@ model Recipe {
 }
 
 model RecipeIngredient {
-  id        String   @id @default(cuid())
-  recipeId  String
-  recipe    Recipe   @relation(fields: [recipeId], references: [id], onDelete: Cascade)
-  productId String?
-  product   Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
-  quantity  Decimal? @db.Decimal(8, 2)
-  unit      String?
+  id          String   @id @default(cuid())
+  recipeId    String
+  recipe      Recipe   @relation(fields: [recipeId], references: [id], onDelete: Cascade)
+  productId   String?
+  product     Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
+  quantity    Decimal? @db.Decimal(8, 2)
+  unit        String?
   // Name/description ONLY — never includes quantity or unit. The rendered
   // line is always composed at read time as "{scaled quantity} {unit}
   // {displayText}" when quantity+unit are set, else just "{displayText}"
@@ -632,4 +645,47 @@ model RecipeStep {
   imageUrl    String?
 
   @@unique([recipeId, stepNumber])
+}
+
+// --- Cooking Tips (STORY-019) ---
+// Short-form video/photo tips, independent of the Recipe Centre. Design:
+// docs/superpowers/specs/2026-09-25-video-cooking-tips-design.md.
+
+enum CookingTipStatus {
+  Draft
+  Published
+}
+
+model CookingTip {
+  id            String           @id @default(cuid())
+  slug          String           @unique
+  title         String
+  summary       String
+  // Plain text, not markdown — rendered with whitespace-pre-line. See
+  // design doc decision 5.
+  bodyContent   String
+  videoUrl      String?
+  videoProvider VideoProvider?
+  imageUrl      String?
+  topicTag      String
+  status        CookingTipStatus @default(Draft)
+  publishedAt   DateTime?
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+
+  productRefs CookingTipProductRef[]
+
+  @@index([status, publishedAt])
+  @@index([status, topicTag])
+}
+
+model CookingTipProductRef {
+  id           String     @id @default(cuid())
+  cookingTipId String
+  cookingTip   CookingTip @relation(fields: [cookingTipId], references: [id], onDelete: Cascade)
+  productId    String
+  product      Product    @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([cookingTipId, productId])
+  @@index([productId])
 }

@@ -41,6 +41,9 @@ export function buildRecipeWhere(filters: RecipeFilters): { AND: Prisma.RecipeWh
   for (const slug of filters.diet ?? []) {
     and.push({ dietaryTags: { some: { dietaryTag: { slug, status: "Active" } } } });
   }
+  if (filters.hasVideo) {
+    and.push({ videoUrl: { not: null } });
+  }
   for (const word of searchWords(filters.q)) {
     const escaped = escapeLikePattern(word);
     and.push({
@@ -79,6 +82,8 @@ export const recipeCardSelect = {
   totalTimeMinutes: true,
   avgRating: true,
   ratingCount: true,
+  videoUrl: true,
+  videoProvider: true,
   category: { select: { name: true } },
   dietaryTags: {
     where: { dietaryTag: { status: "Active" } },
@@ -163,6 +168,10 @@ export const recipeDetailSelect = {
   metaTitle: true,
   metaDescription: true,
   publishedAt: true,
+  videoUrl: true,
+  videoProvider: true,
+  videoDurationSeconds: true,
+  captionsUrl: true,
   category: { select: { name: true, slug: true } },
   dietaryTags: {
     where: { dietaryTag: { status: "Active" } },
