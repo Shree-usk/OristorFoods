@@ -6,6 +6,7 @@ import { Breadcrumbs } from "@/components/storefront/layout/breadcrumbs";
 import { Section } from "@/components/storefront/layout/section";
 import { FoodAcademyCard } from "@/components/storefront/food-academy/food-academy-card";
 import { FoodAcademyJsonLd } from "@/components/storefront/food-academy/food-academy-json-ld";
+import { FoodAcademySectionNav } from "@/components/storefront/food-academy/food-academy-section-nav";
 import { RelatedRecipesBlock } from "@/components/storefront/food-academy/related-recipes-block";
 import { RelatedProductsBlock } from "@/components/storefront/food-academy/related-products-block";
 import { MarkdownContent } from "@/components/shared/markdown-content";
@@ -63,7 +64,26 @@ export default async function FoodAcademyDetailPage({ params }: FoodAcademyDetai
         </div>
       )}
 
-      {/* Course section rendering + FoodAcademySectionNav added in Task 9 */}
+      {entry.contentType === "Course" && entry.sections.length > 0 && (
+        <div className="mt-6 flex gap-8">
+          <FoodAcademySectionNav sections={entry.sections} />
+          <div className="min-w-0 flex-1 space-y-10">
+            {entry.sections.map((section) => (
+              <div key={section.id} id={`section-${section.sectionNumber}`}>
+                <h2 className="text-h3 font-heading text-charcoal">{section.title}</h2>
+                {section.imageUrl && (
+                  <div className="relative mt-4 aspect-video w-full overflow-hidden rounded-lg bg-cream">
+                    <Image src={section.imageUrl} alt="" fill className="object-cover" />
+                  </div>
+                )}
+                <div className="mt-4 max-w-2xl">
+                  <MarkdownContent content={section.bodyContent} />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       <RelatedRecipesBlock recipes={entry.relatedRecipes} />
       <RelatedProductsBlock products={entry.relatedProducts} />
