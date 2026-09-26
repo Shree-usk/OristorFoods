@@ -1,4 +1,4 @@
-import type { RecipeDifficulty, RecipeStatus } from "../src/generated/prisma/client";
+import type { RecipeDifficulty, RecipeStatus, VideoProvider } from "../src/generated/prisma/client";
 import { computeTotalTimeMinutes } from "../src/lib/recipe-time";
 import * as productRepository from "../src/repositories/product.repository";
 import * as recipeRepository from "../src/repositories/recipe.repository";
@@ -79,6 +79,10 @@ interface SeedRecipe {
   nutritionFat: number;
   nutritionFiber: number;
   nutritionSodium: number;
+  videoUrl?: string;
+  videoProvider?: VideoProvider;
+  videoDurationSeconds?: number;
+  captionsUrl?: string;
   ingredients: SeedIngredient[];
   steps: SeedStep[];
 }
@@ -229,6 +233,9 @@ const recipes: SeedRecipe[] = [
     nutritionFat: 28,
     nutritionFiber: 2,
     nutritionSodium: 540,
+    videoUrl: "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+    videoProvider: "Youtube",
+    videoDurationSeconds: 420,
     ingredients: [
       { productSlug: "roasted-curry-powder-100g", quantity: 3, unit: "tbsp", displayText: "Oristor roasted curry powder", sortOrder: 1 },
       { quantity: 1, unit: "kg", displayText: "Chicken, cut into curry pieces", sortOrder: 2 },
@@ -270,6 +277,9 @@ const recipes: SeedRecipe[] = [
     nutritionFat: 10,
     nutritionFiber: 8,
     nutritionSodium: 380,
+    videoUrl: "https://vimeo.com/76979871",
+    videoProvider: "Vimeo",
+    videoDurationSeconds: 310,
     ingredients: [
       { quantity: 1, unit: "cup", displayText: "Red lentils", sortOrder: 1 },
       { quantity: 0.5, unit: "tsp", displayText: "Turmeric powder", sortOrder: 2 },
@@ -468,6 +478,10 @@ const recipes: SeedRecipe[] = [
     nutritionFat: 18,
     nutritionFiber: 2,
     nutritionSodium: 680,
+    videoUrl: "https://cdn.oristor.test/videos/chicken-kottu-roti.mp4",
+    videoProvider: "SelfHosted",
+    videoDurationSeconds: 265,
+    captionsUrl: "https://cdn.oristor.test/videos/chicken-kottu-roti.vtt",
     ingredients: [
       { productSlug: "roasted-curry-powder-100g", quantity: 2, unit: "tbsp", displayText: "Oristor roasted curry powder", sortOrder: 1 },
       { quantity: 3, unit: "pieces", displayText: "Godamba roti, chopped", sortOrder: 2 },
@@ -866,6 +880,10 @@ export async function seedRecipes(): Promise<{ recipes: number; published: numbe
       nutritionFat: recipe.nutritionFat,
       nutritionFiber: recipe.nutritionFiber,
       nutritionSodium: recipe.nutritionSodium,
+      videoUrl: recipe.videoUrl ?? null,
+      videoProvider: recipe.videoProvider ?? null,
+      videoDurationSeconds: recipe.videoDurationSeconds ?? null,
+      captionsUrl: recipe.captionsUrl ?? null,
       dietaryTags: { create: recipe.tags.map((slug) => ({ dietaryTagId: requireId(tagIds, slug) })) },
       ingredients: {
         create: recipe.ingredients.map((ingredient) => ({

@@ -1,6 +1,7 @@
 import {
   createSerializer,
   parseAsArrayOf,
+  parseAsBoolean,
   parseAsInteger,
   parseAsString,
   parseAsStringLiteral,
@@ -20,6 +21,7 @@ export const recipeListingParsers = {
   time: parseAsArrayOf(parseAsStringLiteral(recipeTimeValues)),
   diet: parseAsArrayOf(parseAsString),
   q: parseAsString,
+  hasVideo: parseAsBoolean,
   sort: parseAsStringLiteral(recipeSortValues).withDefault("newest"),
   page: parseAsInteger.withDefault(1),
 };

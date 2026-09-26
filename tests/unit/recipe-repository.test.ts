@@ -274,6 +274,17 @@ describe("findRecipesByProductId", () => {
   });
 });
 
+describe("hasVideo filter", () => {
+  it("only returns recipes with a videoUrl when hasVideo is true", async () => {
+    const category = await makeCategory();
+    await makeRecipe(category.id, { title: "Has Video", videoUrl: "https://youtu.be/abc123", videoProvider: "Youtube" });
+    await makeRecipe(category.id, { title: "No Video" });
+
+    expect(await titlesFor({ hasVideo: true })).toEqual(["Has Video"]);
+    expect((await titlesFor({})).sort()).toEqual(["Has Video", "No Video"]);
+  });
+});
+
 describe("incrementRecipeViewCount", () => {
   it("increments viewCount by 1", async () => {
     const category = await makeCategory();

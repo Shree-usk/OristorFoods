@@ -1277,3 +1277,122 @@ the seed inlines `computeTotalTimeMinutes` and dietary-tag logic rather
 than going through `recipe.service.ts`'s `createRecipe`, because
 `NewRecipeInput` doesn't yet carry ingredients/steps — STORY-043 should
 extend it and route the seed through the service.
+
+---
+
+## 2026-09-25 — STORY-019 Video Recipes & Cooking Tips
+
+**Video URL normalization/provider detection.** `normalizeVideoUrl(rawUrl)`
+(`src/lib/video-url.ts`) accepts a pasted share URL and returns
+`{ provider: "Youtube" | "Vimeo" | "SelfHosted", embedId: string | null,
+url: string } | null`. Recognized formats: YouTube
+(`youtube.com/watch?v=`, `youtu.be/`, `youtube.com/embed/`) and Vimeo
+(`vimeo.com/<id>`, `player.vimeo.com/video/<id>`) both extract an
+`embedId`; anything else with a valid `http(s)` URL falls through to
+`SelfHosted` (`embedId: null`, the URL itself is the playable file) rather
+than being rejected — `null` is reserved for an empty string or a URL
+whose protocol isn't `http`/`https`. Enum values follow this schema's
+existing PascalCase-single-word convention (`Youtube`/`Vimeo`/
+`SelfHosted`, not the story text's `YOUTUBE`/`VIMEO`/`SELF_HOSTED`).
+Shared by `Recipe.videoUrl`/`videoProvider` and `CookingTip.videoUrl`/
+`videoProvider` (same `VideoProvider` enum on both models) — **STORY-043
+(Admin Recipes Workflow) and STORY-044 must feed authored video URLs
+through this same function** when they add write endpoints, so the
+provider/embedId derived at read time stays consistent with what admin
+authoring accepted.
+
+**No Zod schema wraps `normalizeVideoUrl` in this story, deliberately.**
+This story is read-only/customer-facing — no API route built here accepts
+a video URL from a client, so a validation wrapper would have no caller.
+`normalizeVideoUrl`'s `null` return already **is** the validation,
+consumed directly by `VideoPlayer`. When STORY-043/044 add an admin write
+endpoint for `Recipe.videoUrl`/`CookingTip.videoUrl`, wrap this same
+function at that boundary: `z.string().refine((url) => normalizeVideoUrl(url)
+!== null)` — don't hand-roll a second URL-shape validator.
+
+**Facade/lazy-load pattern for third-party embeds (LCP protection).**
+`VideoPlayer` (`src/components/storefront/recipes/video-player.tsx`, a
+Client Component) never mounts a YouTube/Vimeo `<iframe>` on initial
+render. For `Youtube`/`Vimeo`, it renders a poster image (YouTube:
+`https://i.ytimg.com/vi/{id}/hqdefault.jpg`, no extra fetch; Vimeo has no
+unauthenticated thumbnail endpoint, so it renders a generic play-button
+overlay) behind a "Play video" button; only on click does the real
+`<iframe src=".../embed/{id}?autoplay=1">` get mounted. This avoids
+paying the third-party embed's network/JS cost on every recipe page load
+just to render a page most visitors won't play the video on — the
+standard mitigation for third-party video embeds tanking LCP. For
+`SelfHosted`, `VideoPlayer` renders the native `<video controls poster={...}>`
+element directly, with no click-to-play facade (matching `ProductGallery`'s
+existing `<video>` styling) — unlike the `Youtube`/`Vimeo` branches above.
+Browsers don't guarantee a "lazy by default" `preload` behavior (defaults
+vary and commonly fetch at least metadata on page load), so `VideoPlayer`
+sets `preload="metadata"` explicitly to bound the upfront network cost
+instead of relying on an assumption about browser defaults.
+
+**`captionsUrl` only applies to `SelfHosted` video.** `VideoPlayer` only
+renders a `<track kind="captions" src={captionsUrl}>` when
+`provider === "SelfHosted" && captionsUrl` is set. A cross-origin
+YouTube/Vimeo `<iframe>` cannot have a caption track injected into it —
+captions for those providers come from the provider's own player UI,
+outside this app's control. Don't add a `captionsUrl` prop path for the
+`Youtube`/`Vimeo` branches; it would silently do nothing.
+
+**Cooking Tips route: `/recipes/cooking-tips`, not `/food-academy/cooking-tips`.**
+The story's own task list drafted the route under `food-academy/` before
+this was resolved. `docs/blueprint.md` Section 4's site map settles it:
+`Recipes (Categories, Details, Video Recipes, Cooking Tips)` lists
+Cooking Tips as a sub-item of **Recipes**, while Food Academy is a
+separate, sibling top-level nav item (`primaryNavItems` in
+`src/lib/nav-config.ts` already has both as distinct entries). Delivered
+at `src/app/(storefront)/recipes/cooking-tips/page.tsx` (list, plain
+Server Component reading `topic` from `searchParams`) and
+`.../cooking-tips/[slug]/page.tsx` (detail) — full rationale in
+`docs/superpowers/specs/2026-09-25-video-cooking-tips-design.md`,
+decision 1.
+
+**Video Recipes: `/recipes?hasVideo=true` filter, not a separate
+`/recipes/videos` page.** The AC offered both options. STORY-017 already
+built a URL-driven, query-param filter architecture for `/recipes`
+(`recipe-listing-values.ts` → `recipe-listing.schema.ts` →
+`recipe-listing-params.ts` → `RecipeListing`/`RecipeFilterControls`), with
+an exact precedent for a boolean filter of this shape
+(`product-listing-params.ts`'s `inStock`). `hasVideo` was added the same
+way: `RecipeFilters.hasVideo` flows from `recipeListingQuerySchema`
+through `listRecipes` to `recipe.repository.ts`'s Prisma filter, a
+"Has Video" `CheckboxOption` was added to `RecipeFilterControls` (so it
+composes with every other filter, not just reachable via a canned link),
+and the nav's "Video Recipes" link
+(`src/lib/nav-config.ts`) now points at `/recipes?hasVideo=true`. This
+reuses the existing `RecipeGrid`/`RecipeCard`/`RecipeListing` stack
+(with a new `RecipeCard.hasVideo` boolean driving a `Play`-icon badge on
+the card image) instead of duplicating that whole stack behind a second
+page — full rationale in the design doc, decision 2.
+
+**`CookingTipStatus` is a plain two-value enum, intentionally.**
+`enum CookingTipStatus { Draft Published }` — no moderation/review-pipeline
+states, unlike `ReviewStatus`/`QuestionStatus` (customer-submitted content:
+Pending → Approved/Rejected → Published) or `RecipeStatus` (multi-stage
+authoring: Draft → Review → Approved → Published → Archived). Cooking tips
+are admin-authored directly (Epic 07), with no customer-submission or
+review stage anywhere in this story's scope — reusing a bigger workflow
+enum would model stages that never occur. Only `Published` tips are ever
+returned to the storefront (`findPublishedCookingTips` in
+`cooking-tip.repository.ts` hardcodes the filter; it does not trust a
+caller-supplied status). **STORY-043/044 authoring UI writes this same
+two-value enum** — don't reintroduce a review-pipeline state onto
+`CookingTip` without a real product requirement for one.
+
+**`CookingTip.bodyContent` is plain text, not markdown/rich-text**,
+rendered with `whitespace-pre-line` (same pattern STORY-018 established
+for `chefNotes`) so authored line breaks survive without adding a
+markdown-parsing dependency for one field. See design doc decision 5.
+
+**`CookingTipProductRef` is a plain forward join** (tip → products only,
+via `cooking-tip.repository.ts`'s query that `include`s linked products
+when fetching a tip by slug) — no reverse "cooking tips about this
+product" provider registered on the Product Detail Page, since no AC in
+this story asks for one (unlike STORY-018's recipe↔product reverse
+lookup, which STORY-011 explicitly consumes). If a future story wants
+that reverse lookup, follow the `registerRecipeSummaryProvider` pattern
+from `product-detail-extensions.ts` rather than querying `Product`
+directly from a new route.

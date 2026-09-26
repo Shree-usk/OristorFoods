@@ -16,6 +16,7 @@ export interface RecipeCard {
   ratingCount: number;
   /** Active dietary tag names, in tag sortOrder. */
   dietaryTags: string[];
+  hasVideo: boolean;
 }
 
 export interface RecipeListResult {
@@ -88,4 +89,5 @@ export interface RecipeDetail {
   metaDescription: string | null;
   publishedAt: string | null;
   relatedRecipes: RecipeCard[];
+  video: { url: string; provider: "Youtube" | "Vimeo" | "SelfHosted"; durationSeconds: number | null; captionsUrl: string | null } | null;
 }

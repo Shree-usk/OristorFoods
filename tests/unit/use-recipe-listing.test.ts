@@ -9,6 +9,7 @@ const base: RecipeListingParams = {
   time: null,
   diet: null,
   q: null,
+  hasVideo: null,
   sort: "newest",
   page: 1,
 };

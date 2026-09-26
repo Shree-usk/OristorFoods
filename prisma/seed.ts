@@ -6,6 +6,7 @@ import * as productRepository from "../src/repositories/product.repository";
 import * as pricingRepository from "../src/repositories/pricing.repository";
 import { advanceReviewToPublished, submitReview } from "../src/services/review.service";
 import { advanceQuestionToPublished, submitQuestion } from "../src/services/qa.service";
+import { seedCookingTips } from "./seed-cooking-tips";
 import { seedRecipes } from "./seed-recipes";
 
 async function main() {
@@ -251,12 +252,16 @@ async function main() {
   // Recipe Centre (STORY-017).
   const recipeSeed = await seedRecipes();
 
+  // Cooking Tips (STORY-019).
+  const cookingTipSeed = await seedCookingTips();
+
   console.log("Seed complete:", {
     brand: brand.slug,
     categories: [spices.slug, giftSets.slug],
     collection: avurudu.slug,
     products: [curryPowder.slug, chilliPowder.slug, giftSet.slug, seasonalSweets.slug],
     recipes: recipeSeed,
+    cookingTips: cookingTipSeed,
   });
 }
 
