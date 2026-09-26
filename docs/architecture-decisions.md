@@ -1493,7 +1493,20 @@ storefront-facing query in `blog.repository.ts`
 `findPublishedBlogPostIdBySlug`, `findRelatedBlogPosts`,
 `findActiveBlogTags`, `findActiveBlogAuthorsWithPublishedPosts`)
 hardcodes `status: "Published"` *and* `publishedAt: { lte: now() }` as a
-single, non-negotiable `AND` (see `publishedWhere()`, `blog.repository.ts:18-20`).
+single, non-negotiable `AND`. **For the record:** only
+`findPublishedBlogPosts` actually composes its `where` by calling the
+`publishedWhere()` helper (`blog.repository.ts:18-20`); the other five
+functions each inline the identical `status: "Published"`/`publishedAt: {
+lte: now() }` condition literally at their own call site rather than
+calling the helper. All six are independently correct and covered by
+`tests/unit/blog-repository.test.ts`, but an earlier draft of this note
+overstated it as "every query routes through the shared helper" — that is
+not what the code does; only one of the six does. A future cleanup could
+route the other five through `publishedWhere()` too (two of them —
+`findActiveBlogTags`/`findActiveBlogAuthorsWithPublishedPosts` — apply the
+condition inside a nested relation filter rather than at the query's own
+top level, so that refactor is not a pure drop-in), but this story ships
+with the duplication left in place, invariant intact.
 `findPublishedBlogPosts` also strips any caller-supplied `status`/
 `publishedAt` from the incoming filter object via destructuring (never a
 spread) before composing `where`, mirroring the Food Academy repository's
@@ -1538,15 +1551,25 @@ comment, so there is no third status to wait in between. `Approved:
 ["Hidden"]` exists so a moderator can retract a comment after the fact
 without deleting the row (audit trail preserved) — this is the only
 post-approval transition. `changeCommentStatus`/`advanceCommentToApproved`
-exist in `blog.service.ts` only as the mechanism the seed (and Playwright
-fixtures, if ever needed) use to walk a seeded comment from `Pending` to
-`Approved`; **the actual moderation UI (approve/reject/hide, with a
-moderator identity and audit note) is Epic 07's concern**
-(STORY-044/045), not built here. This story only ever produces `Pending`
-comments (`createBlogComment` hardcodes `status: "Pending"` at the type
-level — its input type has no `status` field a caller could set) and
-renders `Approved` ones (`blogPostDetailSelect`'s `comments` relation
-hardcodes `where: { status: "Approved" }`).
+exist in `blog.service.ts` as the mechanism intended to walk a seeded
+comment from `Pending` to `Approved` through the same state machine a real
+moderation action would use; **the actual moderation UI (approve/reject/
+hide, with a moderator identity and audit note) is Epic 07's concern**
+(STORY-044/045), not built here. **For the record:** `prisma/seed-blog.ts`
+does not actually call `advanceCommentToApproved` — it writes each seed
+comment's `status` (including `"Approved"`) directly via
+`prisma.blogComment.create({ data: { ..., status: comment.status } })`,
+bypassing both `createBlogComment`'s Pending-only rule and the moderation
+state machine entirely. This differs from the Recipe/Review seeds, which
+do route their seed data through their own `advance*ToPublished` helpers.
+`advanceCommentToApproved` is currently exercised only by its own unit
+test (`tests/unit/blog-service.test.ts`, "advanceCommentToApproved
+(dev/seed helper)"), not by the seed script. This story only ever produces
+`Pending` comments through the real submission path
+(`createBlogComment` hardcodes `status: "Pending"` at the type level — its
+input type has no `status` field a caller could set) and renders
+`Approved` ones (`blogPostDetailSelect`'s `comments` relation hardcodes
+`where: { status: "Approved" }`).
 
 **Recipe/video embed mechanism (`parseBodyBlocks`/`BlogPostBody`) is a
 separate, blog-only piece — not a modification of the shared
