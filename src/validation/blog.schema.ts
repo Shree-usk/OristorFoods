@@ -15,9 +15,11 @@ export const blogSlugParamSchema = z.object({
 /**
  * `name`/`email` are optional at the schema level because a logged-in
  * customer's request omits them (the service reads identity from the
- * session instead). The service enforces that a request WITHOUT a session
- * must supply both — that requires the session, which this schema cannot
- * see, so it is not a validation-layer rule.
+ * session instead). A request WITHOUT a session must supply both — that
+ * requires knowing whether a session resolved, which this schema cannot
+ * see, so it is not a rule this schema enforces itself. Instead,
+ * `POST /api/blog/[slug]/comments` re-validates the guest path against
+ * `blogGuestCommentInputSchema` below once it knows there is no session.
  */
 export const blogCommentInputSchema = z.object({
   name: z.string().trim().min(1).max(100).optional(),
@@ -36,3 +38,18 @@ export const blogCommentInputSchema = z.object({
   honeypot: z.string(),
 });
 export type BlogCommentInput = z.infer<typeof blogCommentInputSchema>;
+
+/**
+ * The stricter variant enforced for a request with no session (see
+ * `blogCommentInputSchema`'s doc comment above): `name`/`email` become
+ * genuinely required here, not merely non-`undefined`. Used both by
+ * `BlogCommentForm` (client-side, when `useSession()` reports no session)
+ * and by `POST /api/blog/[slug]/comments` (server-side, when
+ * `resolveCommentSession` returns `null`) — defined once and imported by
+ * both so the two never drift apart.
+ */
+export const blogGuestCommentInputSchema = blogCommentInputSchema.extend({
+  name: z.string({ error: "Name is required" }).trim().min(1, "Name is required").max(100),
+  email: z.email("Enter a valid email address"),
+});
+export type BlogGuestCommentInput = z.infer<typeof blogGuestCommentInputSchema>;

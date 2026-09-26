@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { blogCommentInputSchema, blogListQuerySchema, blogSlugParamSchema } from "@/validation/blog.schema";
+import { blogCommentInputSchema, blogGuestCommentInputSchema, blogListQuerySchema, blogSlugParamSchema } from "@/validation/blog.schema";
 
 describe("blogListQuerySchema", () => {
   it("defaults page/pageSize and leaves tag/author undefined when absent", () => {
@@ -61,5 +61,37 @@ describe("blogCommentInputSchema", () => {
   it("rejects a malformed email when provided", () => {
     const result = blogCommentInputSchema.safeParse({ name: "A", email: "not-an-email", body: "A fine comment.", honeypot: "" });
     expect(result.success).toBe(false);
+  });
+});
+
+describe("blogGuestCommentInputSchema", () => {
+  it("accepts a valid guest submission", () => {
+    const result = blogGuestCommentInputSchema.safeParse({
+      name: "Nadeesha",
+      email: "nadeesha@example.com",
+      body: "Lovely post, thank you!",
+      honeypot: "",
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("rejects a missing name and a missing email, unlike the base schema", () => {
+    const result = blogGuestCommentInputSchema.safeParse({ body: "Great recipe idea.", honeypot: "" });
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      const fieldErrors = result.error.flatten().fieldErrors;
+      expect(fieldErrors.name?.[0]).toBe("Name is required");
+      expect(fieldErrors.email).toBeDefined();
+    }
+  });
+
+  it("rejects an empty-string name and email, not just an absent one", () => {
+    const result = blogGuestCommentInputSchema.safeParse({ name: "", email: "", body: "Great recipe idea.", honeypot: "" });
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      const fieldErrors = result.error.flatten().fieldErrors;
+      expect(fieldErrors.name?.[0]).toBe("Name is required");
+      expect(fieldErrors.email).toBeDefined();
+    }
   });
 });

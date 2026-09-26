@@ -110,6 +110,42 @@ describe("POST /api/blog/[slug]/comments", () => {
     expect(response.status).toBe(400);
   });
 
+  it("returns 400 with fieldErrors and does not persist when a guest omits name and email", async () => {
+    mockAuth.mockResolvedValue(null);
+    const author = await makeBlogAuthor();
+    const post = await makeBlogPost({ slug: "commentable-post-guest-missing", authorId: author.id, publishedAt: PAST });
+
+    const request = new Request("http://localhost/api/blog/commentable-post-guest-missing/comments", {
+      method: "POST",
+      body: JSON.stringify({ body: "A comment with no identity at all.", honeypot: "" }),
+    });
+    const response = await postComment(request, { params: Promise.resolve({ slug: "commentable-post-guest-missing" }) });
+    const responseBody = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(responseBody.fieldErrors.name).toBeDefined();
+    expect(responseBody.fieldErrors.email).toBeDefined();
+    expect(await prisma.blogComment.count({ where: { postId: post.id } })).toBe(0);
+  });
+
+  it("returns 400 with fieldErrors and does not persist when a guest sends empty-string name/email", async () => {
+    mockAuth.mockResolvedValue(null);
+    const author = await makeBlogAuthor();
+    const post = await makeBlogPost({ slug: "commentable-post-guest-empty", authorId: author.id, publishedAt: PAST });
+
+    const request = new Request("http://localhost/api/blog/commentable-post-guest-empty/comments", {
+      method: "POST",
+      body: JSON.stringify({ name: "", email: "", body: "A comment with blank identity fields.", honeypot: "" }),
+    });
+    const response = await postComment(request, { params: Promise.resolve({ slug: "commentable-post-guest-empty" }) });
+    const responseBody = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(responseBody.fieldErrors.name).toBeDefined();
+    expect(responseBody.fieldErrors.email).toBeDefined();
+    expect(await prisma.blogComment.count({ where: { postId: post.id } })).toBe(0);
+  });
+
   it("uses the session's identity when a session is present, ignoring the client-supplied name/email", async () => {
     const user = await prisma.user.create({ data: { email: "real@example.com", name: "Real Customer" } });
     mockAuth.mockResolvedValue(sessionFor(user.id));

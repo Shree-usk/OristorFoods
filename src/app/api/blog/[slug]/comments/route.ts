@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { validationErrorResponse, serverErrorResponse } from "@/lib/api/responses";
 import { getPostIdBySlug, resolveCommentSession, submitComment } from "@/services/blog.service";
-import { blogCommentInputSchema, blogSlugParamSchema } from "@/validation/blog.schema";
+import { blogCommentInputSchema, blogGuestCommentInputSchema, blogSlugParamSchema } from "@/validation/blog.schema";
 
 type RouteContext = { params: Promise<{ slug: string }> };
 
@@ -26,6 +26,16 @@ export async function POST(request: Request, { params }: RouteContext) {
     // response for the latter case: same "never let an edge case learn
     // which path it hit" rule as the honeypot/rate-limit checks below.
     const commentSession = session?.user?.id ? await resolveCommentSession(session.user.id) : null;
+
+    // Guest path only: an authenticated commentSession supplies its own
+    // identity (see submitComment), so name/email stay optional for it.
+    // A guest request must actually supply both — re-validate here rather
+    // than trusting the permissive `blogCommentInputSchema` parse above,
+    // which only enforces "not undefined", not "non-empty".
+    if (!commentSession) {
+      const guestParsed = blogGuestCommentInputSchema.safeParse(parsed.data);
+      if (!guestParsed.success) return validationErrorResponse(guestParsed.error);
+    }
 
     const result = await submitComment(postId, parsed.data, commentSession);
     return NextResponse.json(result, { status: 200 });
