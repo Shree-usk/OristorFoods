@@ -42,9 +42,15 @@ describe("blogCommentInputSchema", () => {
     expect(result.success).toBe(true);
   });
 
-  it("rejects a non-empty honeypot value", () => {
+  // The anti-spam decision on a filled honeypot lives in `submitComment`
+  // (Task 5's service layer), not here — this schema only validates shape.
+  // A `.max(0)` constraint here would make the route reject a filled
+  // honeypot with a distinguishable 400 before `submitComment` ever runs,
+  // defeating the "a bot must not be able to tell honeypot/rate-limit/
+  // success apart" design.
+  it("accepts a non-empty honeypot value at the shape level", () => {
     const result = blogCommentInputSchema.safeParse({ body: "Buy cheap watches now", honeypot: "I am a bot" });
-    expect(result.success).toBe(false);
+    expect(result.success).toBe(true);
   });
 
   it("rejects a body that is too short or too long", () => {

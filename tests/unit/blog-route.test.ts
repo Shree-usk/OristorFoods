@@ -70,6 +70,23 @@ describe("POST /api/blog/[slug]/comments", () => {
     expect(await prisma.blogComment.count({ where: { postId: post.id } })).toBe(1);
   });
 
+  it("silently acknowledges a filled honeypot with the same pending-review response, without persisting a comment", async () => {
+    mockAuth.mockResolvedValue(null);
+    const author = await makeBlogAuthor();
+    const post = await makeBlogPost({ slug: "commentable-post-honeypot", authorId: author.id, publishedAt: PAST });
+
+    const request = new Request("http://localhost/api/blog/commentable-post-honeypot/comments", {
+      method: "POST",
+      body: JSON.stringify({ name: "Bot", email: "bot@example.com", body: "spam spam spam", honeypot: "gotcha" }),
+    });
+    const response = await postComment(request, { params: Promise.resolve({ slug: "commentable-post-honeypot" }) });
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body).toEqual({ status: "pending-review" });
+    expect(await prisma.blogComment.count({ where: { postId: post.id } })).toBe(0);
+  });
+
   it("returns 404 when the post slug does not resolve to a Published post", async () => {
     mockAuth.mockResolvedValue(null);
     const request = new Request("http://localhost/api/blog/does-not-exist/comments", {

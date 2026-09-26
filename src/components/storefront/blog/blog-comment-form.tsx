@@ -3,34 +3,12 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
-import { z } from "zod";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { blogCommentInputSchema, type BlogCommentInput } from "@/validation/blog.schema";
 import { cn } from "@/lib/utils";
-
-/**
- * The honeypot field must never surface a client-side validation error.
- * `blogCommentInputSchema`'s `honeypot: z.string().max(0)` rule exists so
- * the *server* can silently no-op a spam submission while returning the
- * exact same `{ status: "pending-review" }` shape as a genuine one — a bot
- * (or a browser extension that blindly autofills every field, hidden ones
- * included) must not be able to tell the two paths apart. If the form used
- * `blogCommentInputSchema` directly as its resolver, a non-empty honeypot
- * would fail client-side validation, `handleSubmit`'s success callback
- * would never run, and the form would just silently stop responding —
- * never calling the API and never showing the "awaiting approval" message
- * a real submission shows. That's a *visible* difference (nothing happens
- * vs. a clear confirmation), which defeats the whole point, and it would
- * also strand a genuine human whose browser happens to autofill the hidden
- * field. So this schema keeps every other rule (name/email/body) but
- * relaxes `honeypot` to a plain string: whatever ends up in it is still
- * submitted to the server untouched, and the server remains the only place
- * that decides what to do with it.
- */
-const commentFormSchema = blogCommentInputSchema.extend({ honeypot: z.string() });
 
 export function BlogCommentForm({ postSlug }: { postSlug: string }) {
   const [submitted, setSubmitted] = useState(false);
@@ -39,7 +17,7 @@ export function BlogCommentForm({ postSlug }: { postSlug: string }) {
     handleSubmit,
     formState: { errors, isSubmitting },
   } = useForm<BlogCommentInput>({
-    resolver: zodResolver(commentFormSchema),
+    resolver: zodResolver(blogCommentInputSchema),
     defaultValues: { honeypot: "" },
   });
 

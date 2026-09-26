@@ -23,6 +23,16 @@ export const blogCommentInputSchema = z.object({
   name: z.string().trim().min(1).max(100).optional(),
   email: z.email("Enter a valid email address").optional(),
   body: z.string().trim().min(3, "Comment is too short").max(2000, "Comment is too long"),
-  honeypot: z.string().max(0, "Invalid submission"),
+  /**
+   * Shape-validation only ("is this a string") — deliberately no length
+   * constraint here. The actual accept/reject decision on a filled
+   * honeypot belongs entirely to `submitComment`'s runtime check
+   * (`src/services/blog.service.ts`), which silently no-ops instead of
+   * returning a distinguishable error. A `.max(0)` constraint here would
+   * make the route's own `safeParse` reject a filled honeypot with a 400
+   * before `submitComment` ever runs, defeating the "a bot must not be
+   * able to tell honeypot/rate-limit/success apart" design.
+   */
+  honeypot: z.string(),
 });
 export type BlogCommentInput = z.infer<typeof blogCommentInputSchema>;
