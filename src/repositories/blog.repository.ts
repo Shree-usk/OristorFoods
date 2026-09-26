@@ -159,3 +159,12 @@ export function updateCommentStatus(commentId: string, status: BlogCommentStatus
 export function findCommentById(commentId: string) {
   return prisma.blogComment.findUnique({ where: { id: commentId } });
 }
+
+/** Looks up a signed-in commenter's canonical name/email from the User
+ *  table. The comments route must not trust `session.user.name`/`email`
+ *  directly — auth uses the JWT strategy, so those claims are only as
+ *  fresh as the user's last sign-in and can go stale after a profile
+ *  update. */
+export function findUserIdentityById(userId: string): Promise<{ name: string | null; email: string | null } | null> {
+  return prisma.user.findUnique({ where: { id: userId }, select: { name: true, email: true } });
+}

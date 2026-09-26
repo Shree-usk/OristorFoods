@@ -126,6 +126,18 @@ export interface CommentSession {
   email: string | null;
 }
 
+/**
+ * Resolves a signed-in commenter's canonical identity from the User table
+ * for the comments route to pass into `submitComment`. The route only
+ * knows the session's `userId` is trustworthy — its `name`/`email` claims
+ * come from a JWT and are not treated as a source of truth (see
+ * `findUserIdentityById`).
+ */
+export async function resolveCommentSession(userId: string): Promise<CommentSession> {
+  const user = await blogRepository.findUserIdentityById(userId);
+  return { userId, name: user?.name ?? null, email: user?.email ?? null };
+}
+
 export async function submitComment(
   postId: string,
   input: BlogCommentInput,
