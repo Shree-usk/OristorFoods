@@ -108,9 +108,13 @@ test("clicking a different tag chip while an author filter is active preserves t
   const tagNav = page.getByRole("navigation", { name: "Filter by tag" });
   await tagNav.getByRole("link", { name: "Spices", exact: true }).click();
 
-  // This exact bug class (a chip click clobbering the other active filter)
-  // was found and fixed in Task 7 (src/lib/blog-chip-href.ts,
-  // buildBlogChipHref) — the author param must survive this navigation.
+  // Basic filter-chip-preserves-other-filter check: clicking a normal tag
+  // chip (an `overrides` object that never contains an `author` key at
+  // all) falls through to `query.author` unchanged in buildBlogChipHref
+  // regardless of the Task 7 bug — this isn't the regression guard for
+  // that bug (see the "All tags"/"All authors" reset-chip test below for
+  // that), it just documents that a plain chip click preserves the other
+  // active filter.
   await expect(page).toHaveURL(/\/blog\?tag=spices&author=kamal-de-silva$/);
   await expect(page.getByRole("heading", { level: 3, name: "Understanding the Health Benefits of Turmeric" })).toBeVisible();
   await expect(page.getByRole("heading", { level: 3, name: "Everything You Need to Know About Jaggery" })).toHaveCount(0);
@@ -130,6 +134,16 @@ test("clicking a different author chip while a tag filter is active preserves th
 });
 
 test("clicking 'All tags' clears only the tag filter and preserves the author filter", async ({ page }) => {
+  // This is the actual Task 7 regression guard. The historical bug was
+  // specifically in the reset chips ("All tags"/"All authors"), which pass
+  // an explicit `{ tag: undefined }` override — buildBlogChipHref used to
+  // check `overrides.tag !== undefined` to decide whether a key was
+  // overridden, which can't distinguish "explicitly clear this filter"
+  // from "leave this filter alone" (both read as `undefined`), so the
+  // reset chip was a silent no-op pre-fix. A plain chip click (as in the
+  // two tests above) never exercises this path, since its `overrides`
+  // object never contains the other filter's key at all. This test would
+  // have failed against the pre-fix code; the two above would not have.
   await page.goto("/blog?tag=spices&author=kamal-de-silva");
 
   const tagNav = page.getByRole("navigation", { name: "Filter by tag" });
