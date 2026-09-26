@@ -49,8 +49,9 @@ describe("listFeaturedEntries", () => {
 });
 
 describe("listCategories", () => {
-  it("returns active categories", async () => {
-    await makeFoodAcademyCategory({ name: "Ingredients" });
+  it("returns active categories that have at least one Published entry", async () => {
+    const category = await makeFoodAcademyCategory({ name: "Ingredients" });
+    await makeFoodAcademyEntry({ categoryId: category.id });
     expect((await listCategories()).map((c) => c.name)).toEqual(["Ingredients"]);
   });
 });

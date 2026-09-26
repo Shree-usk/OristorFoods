@@ -97,7 +97,7 @@ describe("findPublishedFoodAcademyEntryBySlug", () => {
 });
 
 describe("findRelatedFoodAcademyEntries", () => {
-  it("excludes the entry itself and only returns Published entries sharing the category", async () => {
+  it("excludes the entry itself and drafts, and prefers Published entries sharing the category up to the limit", async () => {
     const category = await makeFoodAcademyCategory();
     const target = await makeFoodAcademyEntry({ slug: "target", categoryId: category.id });
     await makeFoodAcademyEntry({ slug: "same-category", categoryId: category.id });
@@ -105,19 +105,47 @@ describe("findRelatedFoodAcademyEntries", () => {
     const otherCategory = await makeFoodAcademyCategory();
     await makeFoodAcademyEntry({ slug: "other-category", categoryId: otherCategory.id });
 
-    const related = await findRelatedFoodAcademyEntries({ id: target.id, categoryId: category.id }, 6);
+    // Limit matches the number of same-category candidates (1), so the
+    // same-category-only result already satisfies the limit and no
+    // cross-category fallback entry is topped up.
+    const related = await findRelatedFoodAcademyEntries({ id: target.id, categoryId: category.id }, 1);
     expect(related.map((r) => r.slug)).toEqual(["same-category"]);
+  });
+
+  it("tops up with other Published entries when the same category has no other siblings", async () => {
+    const lonelyCategory = await makeFoodAcademyCategory();
+    const target = await makeFoodAcademyEntry({ slug: "lonely-target", categoryId: lonelyCategory.id });
+
+    const otherCategory = await makeFoodAcademyCategory();
+    await makeFoodAcademyEntry({ slug: "fallback-candidate", categoryId: otherCategory.id });
+    await makeFoodAcademyEntry({ slug: "fallback-draft", categoryId: otherCategory.id, status: "Draft" });
+
+    const related = await findRelatedFoodAcademyEntries({ id: target.id, categoryId: lonelyCategory.id }, 6);
+    expect(related.map((r) => r.slug)).toEqual(["fallback-candidate"]);
   });
 });
 
 describe("findActiveFoodAcademyCategories", () => {
   it("returns Active categories, sorted by sortOrder", async () => {
-    await makeFoodAcademyCategory({ name: "B" });
-    await makeFoodAcademyCategory({ name: "A" });
+    const categoryB = await makeFoodAcademyCategory({ name: "B" });
+    const categoryA = await makeFoodAcademyCategory({ name: "A" });
+    await makeFoodAcademyEntry({ categoryId: categoryB.id });
+    await makeFoodAcademyEntry({ categoryId: categoryA.id });
     await prisma.foodAcademyCategory.create({ data: { name: "Inactive", slug: "inactive-cat", status: "Inactive" } });
 
     const categories = await findActiveFoodAcademyCategories();
     expect(categories.map((c) => c.name)).toEqual(["B", "A"]);
+  });
+
+  it("excludes an Active category whose only entries are Draft", async () => {
+    const draftOnlyCategory = await makeFoodAcademyCategory({ name: "Culture & Heritage" });
+    await makeFoodAcademyEntry({ categoryId: draftOnlyCategory.id, status: "Draft" });
+
+    const publishedCategory = await makeFoodAcademyCategory({ name: "Knife Skills" });
+    await makeFoodAcademyEntry({ categoryId: publishedCategory.id, status: "Published" });
+
+    const categories = await findActiveFoodAcademyCategories();
+    expect(categories.map((c) => c.name)).toEqual(["Knife Skills"]);
   });
 });
 

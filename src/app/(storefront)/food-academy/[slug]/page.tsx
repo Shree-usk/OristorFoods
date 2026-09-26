@@ -65,7 +65,7 @@ export default async function FoodAcademyDetailPage({ params }: FoodAcademyDetai
       )}
 
       {entry.contentType === "Course" && entry.sections.length > 0 && (
-        <div className="mt-6 flex gap-8">
+        <div className="mt-6 flex flex-col gap-6 lg:flex-row lg:gap-8">
           <FoodAcademySectionNav sections={entry.sections} />
           <div className="min-w-0 flex-1 space-y-10">
             {entry.sections.map((section) => (

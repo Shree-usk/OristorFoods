@@ -82,21 +82,36 @@ export function findPublishedFoodAcademyEntryBySlug(slug: string): Promise<FoodA
   });
 }
 
-export function findRelatedFoodAcademyEntries(
+export async function findRelatedFoodAcademyEntries(
   entry: { id: string; categoryId: string },
   limit: number,
 ): Promise<FoodAcademyEntryCardRow[]> {
-  return prisma.foodAcademyEntry.findMany({
+  const sameCategory = await prisma.foodAcademyEntry.findMany({
     where: { status: "Published", id: { not: entry.id }, categoryId: entry.categoryId },
     orderBy: [{ publishedAt: { sort: "desc", nulls: "last" } }, { id: "asc" }],
     take: limit,
     select: foodAcademyEntryCardSelect,
   });
+  if (sameCategory.length >= limit) return sameCategory;
+
+  // Top up with other recent Published entries so an entry in a category
+  // with no other Published siblings still gets a related/next
+  // recommendation, per the acceptance criterion.
+  const fallback = await prisma.foodAcademyEntry.findMany({
+    where: {
+      status: "Published",
+      id: { notIn: [entry.id, ...sameCategory.map((e) => e.id)] },
+    },
+    orderBy: [{ publishedAt: { sort: "desc", nulls: "last" } }, { id: "asc" }],
+    take: limit - sameCategory.length,
+    select: foodAcademyEntryCardSelect,
+  });
+  return [...sameCategory, ...fallback];
 }
 
 export function findActiveFoodAcademyCategories(): Promise<{ id: string; name: string; slug: string }[]> {
   return prisma.foodAcademyCategory.findMany({
-    where: { status: "Active" },
+    where: { status: "Active", entries: { some: { status: "Published" } } },
     orderBy: [{ sortOrder: "asc" }, { id: "asc" }],
     select: { id: true, name: true, slug: true },
   });
