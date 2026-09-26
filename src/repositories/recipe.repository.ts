@@ -238,6 +238,14 @@ export function findRecipesByIds(ids: string[], limit: number): Promise<RecipeCa
   });
 }
 
+export function findPublishedRecipesBySlugs(slugs: string[]): Promise<RecipeCardRow[]> {
+  if (slugs.length === 0) return Promise.resolve([]);
+  return prisma.recipe.findMany({
+    where: { status: "Published", slug: { in: slugs } },
+    select: recipeCardSelect,
+  });
+}
+
 /**
  * Raw UPDATE rather than `prisma.recipe.update` so `@updatedAt` isn't
  * touched by a view — a page view is not a content edit.

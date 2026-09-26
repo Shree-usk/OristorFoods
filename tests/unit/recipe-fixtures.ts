@@ -255,6 +255,87 @@ export function makeFoodAcademyEntry(overrides: FoodAcademyEntryOverrides) {
   });
 }
 
+export interface BlogAuthorOverrides {
+  name?: string;
+  slug?: string;
+}
+
+export function makeBlogAuthor(overrides: BlogAuthorOverrides = {}) {
+  const n = nextNumber();
+  return prisma.blogAuthor.create({
+    data: {
+      name: overrides.name ?? `Author ${n}`,
+      slug: overrides.slug ?? `blog-author-${n}`,
+      bio: "A test author.",
+    },
+  });
+}
+
+export interface BlogTagOverrides {
+  name?: string;
+  slug?: string;
+}
+
+export function makeBlogTag(overrides: BlogTagOverrides = {}) {
+  const n = nextNumber();
+  return prisma.blogTag.create({
+    data: {
+      name: overrides.name ?? `Tag ${n}`,
+      slug: overrides.slug ?? `blog-tag-${n}`,
+    },
+  });
+}
+
+export interface BlogPostOverrides {
+  slug?: string;
+  title?: string;
+  excerpt?: string;
+  bodyContent?: string;
+  authorId: string;
+  status?: "Draft" | "Scheduled" | "Published" | "Archived";
+  publishedAt?: Date | null;
+  tagIds?: string[];
+}
+
+export function makeBlogPost(overrides: BlogPostOverrides) {
+  const n = nextNumber();
+  return prisma.blogPost.create({
+    data: {
+      slug: overrides.slug ?? `blog-post-${n}`,
+      title: overrides.title ?? `Post ${n}`,
+      excerpt: overrides.excerpt ?? "A test post.",
+      bodyContent: overrides.bodyContent ?? "Body content.",
+      authorId: overrides.authorId,
+      status: overrides.status ?? "Published",
+      publishedAt: overrides.publishedAt === undefined ? new Date("2026-09-01T00:00:00Z") : overrides.publishedAt,
+      tags: { create: (overrides.tagIds ?? []).map((tagId) => ({ tagId })) },
+    },
+  });
+}
+
+export interface BlogCommentOverrides {
+  postId: string;
+  authorName?: string;
+  authorEmail?: string;
+  customerId?: string;
+  body?: string;
+  status?: "Pending" | "Approved" | "Rejected" | "Hidden";
+}
+
+export function makeBlogComment(overrides: BlogCommentOverrides) {
+  const n = nextNumber();
+  return prisma.blogComment.create({
+    data: {
+      postId: overrides.postId,
+      authorName: overrides.authorName ?? `Commenter ${n}`,
+      authorEmail: overrides.authorEmail ?? `commenter-${n}@test.com`,
+      customerId: overrides.customerId,
+      body: overrides.body ?? "A test comment.",
+      status: overrides.status ?? "Approved",
+    },
+  });
+}
+
 export async function cleanupRecipes() {
   // FoodAcademyEntry deletes before FoodAcademyCategory (categoryId has no
   // cascade, so leftover entries would block a category delete) and before
@@ -266,6 +347,13 @@ export async function cleanupRecipes() {
   await prisma.foodAcademyProductRef.deleteMany();
   await prisma.foodAcademyEntry.deleteMany();
   await prisma.foodAcademyCategory.deleteMany();
+  // BlogComment/BlogPostTag cascade off BlogPost, so they must go first;
+  // BlogPost must clear before BlogAuthor (no cascade on that FK).
+  await prisma.blogComment.deleteMany();
+  await prisma.blogPostTag.deleteMany();
+  await prisma.blogPost.deleteMany();
+  await prisma.blogAuthor.deleteMany();
+  await prisma.blogTag.deleteMany();
   await prisma.recipe.deleteMany();
   await prisma.dietaryTag.deleteMany();
   await prisma.recipeCategory.deleteMany();
