@@ -354,6 +354,13 @@ export async function cleanupRecipes() {
   await prisma.blogPost.deleteMany();
   await prisma.blogAuthor.deleteMany();
   await prisma.blogTag.deleteMany();
+  // Some blog-comment tests create a User directly (for the "logged-in
+  // commenter" path) with a hardcoded fixture email, which otherwise
+  // collides across test files sharing this DB. Safe to delete any time
+  // relative to BlogComment above: BlogComment.customerId's FK is
+  // ON DELETE SET NULL, not a cascade or restrict, so it never blocks a
+  // User delete either way.
+  await prisma.user.deleteMany();
   await prisma.recipe.deleteMany();
   await prisma.dietaryTag.deleteMany();
   await prisma.recipeCategory.deleteMany();
