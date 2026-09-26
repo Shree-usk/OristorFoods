@@ -83,6 +83,9 @@ export default async function BlogPage({ searchParams }: BlogPageProps) {
         ))}
       </nav>
 
+      <h2 id="blog-results-heading" className="sr-only">
+        Blog results
+      </h2>
       <p className="mt-6 text-small text-charcoal/70">{result.total} post{result.total === 1 ? "" : "s"}</p>
 
       {result.posts.length === 0 ? (

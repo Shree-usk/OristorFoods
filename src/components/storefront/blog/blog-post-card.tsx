@@ -24,7 +24,7 @@ export function BlogPostCard({ post }: { post: BlogPostCardData }) {
         </Link>
       </h3>
       <p className="mt-2 text-small text-charcoal/80">{post.excerpt}</p>
-      <div className="mt-2 flex flex-wrap items-center gap-3 text-caption text-charcoal/60">
+      <div className="mt-2 flex flex-wrap items-center gap-3 text-caption text-charcoal/70">
         <span>{post.authorName}</span>
         {post.readingTimeMinutes !== null && <span>{post.readingTimeMinutes} min read</span>}
       </div>
