@@ -4,6 +4,7 @@ import { Section } from "@/components/storefront/layout/section";
 import { BlogPostCard } from "@/components/storefront/blog/blog-post-card";
 import { BlogPagination } from "@/components/storefront/blog/blog-pagination";
 import { ItemListJsonLd } from "@/components/storefront/product/item-list-json-ld";
+import { buildBlogChipHref } from "@/lib/blog-chip-href";
 import { cn } from "@/lib/utils";
 import { listAuthors, listPosts, listTags } from "@/services/blog.service";
 import { blogListQuerySchema } from "@/validation/blog.schema";
@@ -28,13 +29,7 @@ export default async function BlogPage({ searchParams }: BlogPageProps) {
   const [result, tags, authors] = await Promise.all([listPosts(query), listTags(), listAuthors()]);
 
   function chipHref(overrides: { tag?: string; author?: string }) {
-    const params = new URLSearchParams();
-    const tag = overrides.tag !== undefined ? overrides.tag : query.tag;
-    const author = overrides.author !== undefined ? overrides.author : query.author;
-    if (tag) params.set("tag", tag);
-    if (author) params.set("author", author);
-    const qs = params.toString();
-    return qs ? `/blog?${qs}` : "/blog";
+    return buildBlogChipHref(query, overrides);
   }
 
   function pageHref(page: number) {
