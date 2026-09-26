@@ -8,6 +8,7 @@ import type {
 import { prisma } from "@/lib/db";
 import { computeTotalTimeMinutes } from "@/lib/recipe-time";
 import { createCookingTip } from "@/repositories/cooking-tip.repository";
+import { createFoodAcademyEntry } from "@/repositories/food-academy.repository";
 import { createDietaryTag, createRecipe, createRecipeCategory } from "@/repositories/recipe.repository";
 import type { RecipeDetail } from "@/types/recipe";
 
@@ -204,7 +205,67 @@ export function makeCookingTip(overrides: CookingTipFixtureOverrides = {}) {
   });
 }
 
+export interface FoodAcademyCategoryOverrides {
+  name?: string;
+  slug?: string;
+  status?: ContentStatus;
+}
+
+export function makeFoodAcademyCategory(overrides: FoodAcademyCategoryOverrides = {}) {
+  const n = nextNumber();
+  return prisma.foodAcademyCategory.create({
+    data: {
+      name: overrides.name ?? `Category ${n}`,
+      slug: overrides.slug ?? `fa-category-${n}`,
+      status: overrides.status ?? "Active",
+    },
+  });
+}
+
+export interface FoodAcademyEntryOverrides {
+  slug?: string;
+  title?: string;
+  summary?: string;
+  contentType?: "Article" | "Guide" | "Course";
+  categoryId: string;
+  bodyContent?: string | null;
+  isFeatured?: boolean;
+  status?: "Draft" | "Published";
+  publishedAt?: Date | null;
+  recipeIds?: string[];
+  productIds?: string[];
+  sections?: { sectionNumber: number; title: string; bodyContent: string }[];
+}
+
+export function makeFoodAcademyEntry(overrides: FoodAcademyEntryOverrides) {
+  const n = nextNumber();
+  return createFoodAcademyEntry({
+    slug: overrides.slug ?? `fa-entry-${n}`,
+    title: overrides.title ?? `Entry ${n}`,
+    summary: overrides.summary ?? "A test entry.",
+    contentType: overrides.contentType ?? "Article",
+    categoryId: overrides.categoryId,
+    bodyContent: overrides.bodyContent === undefined ? "Body content." : overrides.bodyContent,
+    isFeatured: overrides.isFeatured ?? false,
+    status: overrides.status ?? "Published",
+    publishedAt: overrides.publishedAt === undefined ? new Date("2026-09-01T00:00:00Z") : overrides.publishedAt,
+    recipeRefs: { create: (overrides.recipeIds ?? []).map((recipeId) => ({ recipeId })) },
+    productRefs: { create: (overrides.productIds ?? []).map((productId) => ({ productId })) },
+    sections: { create: overrides.sections ?? [] },
+  });
+}
+
 export async function cleanupRecipes() {
+  // FoodAcademyEntry deletes before FoodAcademyCategory (categoryId has no
+  // cascade, so leftover entries would block a category delete) and before
+  // recipe/product cleanup (their refs point at Recipe/Product). Sections
+  // and refs cascade-delete with their parent FoodAcademyEntry, but are
+  // listed explicitly to match this file's one-line-per-table style.
+  await prisma.foodAcademySection.deleteMany();
+  await prisma.foodAcademyRecipeRef.deleteMany();
+  await prisma.foodAcademyProductRef.deleteMany();
+  await prisma.foodAcademyEntry.deleteMany();
+  await prisma.foodAcademyCategory.deleteMany();
   await prisma.recipe.deleteMany();
   await prisma.dietaryTag.deleteMany();
   await prisma.recipeCategory.deleteMany();
