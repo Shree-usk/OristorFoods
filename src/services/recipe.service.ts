@@ -191,6 +191,12 @@ export async function getRecipesByProductId(productId: string): Promise<RecipePr
   return rows.map((row) => ({ id: row.id, title: row.title, slug: row.slug, imageSrc: row.heroImage }));
 }
 
+export async function getRecipesByIds(ids: string[]): Promise<RecipePreview[]> {
+  if (ids.length === 0) return [];
+  const rows = await recipeRepository.findRecipesByIds(ids, ids.length);
+  return rows.map((row) => ({ id: row.id, title: row.title, slug: row.slug, imageSrc: row.heroImage }));
+}
+
 /** Called once from src/instrumentation.ts. */
 export function registerRecipeProviders(): void {
   registerRecipeSearchProvider(searchRecipeSuggestions);
