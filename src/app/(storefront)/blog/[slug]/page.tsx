@@ -7,6 +7,7 @@ import { Section } from "@/components/storefront/layout/section";
 import { BlogJsonLd } from "@/components/storefront/blog/blog-json-ld";
 import { BlogPostBody } from "@/components/storefront/blog/blog-post-body";
 import { BlogPostCard } from "@/components/storefront/blog/blog-post-card";
+import { CommentSection } from "@/components/storefront/blog/comment-section";
 import { parseBodyBlocks } from "@/lib/blog-body-blocks";
 import { getPostBySlug } from "@/services/blog.service";
 
@@ -82,7 +83,7 @@ export default async function BlogDetailPage({ params }: BlogDetailPageProps) {
         </div>
       )}
 
-      {/* Comment list + form added in Task 9 */}
+      <CommentSection postSlug={post.slug} comments={post.comments} />
     </Section>
   );
 }
