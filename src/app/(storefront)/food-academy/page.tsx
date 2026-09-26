@@ -37,11 +37,14 @@ export default async function FoodAcademyPage({ searchParams }: FoodAcademyPageP
       <h1 className="text-h1 font-heading text-charcoal">Food Academy</h1>
 
       {featured.length > 0 && (
-        <div className="mt-8 grid grid-cols-1 gap-6 sm:grid-cols-2 xl:grid-cols-4">
-          {featured.map((entry) => (
-            <FoodAcademyCard key={entry.id} entry={entry} />
-          ))}
-        </div>
+        <>
+          <h2 className="sr-only">Featured Food Academy content</h2>
+          <div className="mt-8 grid grid-cols-1 gap-6 sm:grid-cols-2 xl:grid-cols-4">
+            {featured.map((entry) => (
+              <FoodAcademyCard key={entry.id} entry={entry} />
+            ))}
+          </div>
+        </>
       )}
 
       <nav aria-label="Filter by category" className="mt-8 flex flex-wrap gap-2">

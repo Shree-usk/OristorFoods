@@ -26,7 +26,7 @@ export function MarkdownContent({ content, className }: MarkdownContentProps) {
           ul: ({ children }) => <ul className="list-disc pl-6 mb-4 text-body text-charcoal">{children}</ul>,
           ol: ({ children }) => <ol className="list-decimal pl-6 mb-4 text-body text-charcoal">{children}</ol>,
           a: ({ href, children }) => (
-            <a href={href} className="text-chilli underline-offset-2 hover:underline">
+            <a href={href} className="text-chilli underline underline-offset-2 hover:no-underline">
               {children}
             </a>
           ),

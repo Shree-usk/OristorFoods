@@ -47,9 +47,9 @@ export default async function FoodAcademyDetailPage({ params }: FoodAcademyDetai
 
       <h1 className="mt-4 text-h1 font-heading text-charcoal">{entry.title}</h1>
       <p className="mt-2 text-body text-charcoal/80">{entry.summary}</p>
-      {entry.authorName && <p className="mt-1 text-caption text-charcoal/60">By {entry.authorName}</p>}
+      {entry.authorName && <p className="mt-1 text-caption text-charcoal/70">By {entry.authorName}</p>}
       {entry.readingTimeMinutes !== null && (
-        <p className="mt-1 text-caption text-charcoal/60">{entry.readingTimeMinutes} min read</p>
+        <p className="mt-1 text-caption text-charcoal/70">{entry.readingTimeMinutes} min read</p>
       )}
 
       {entry.heroImageUrl && (

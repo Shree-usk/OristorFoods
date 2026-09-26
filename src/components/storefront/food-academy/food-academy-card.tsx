@@ -26,7 +26,7 @@ export function FoodAcademyCard({ entry }: { entry: FoodAcademyEntryCardData }) 
       </h3>
       <p className="mt-2 text-small text-charcoal/80">{entry.summary}</p>
       {entry.readingTimeMinutes !== null && (
-        <p className="mt-2 text-caption text-charcoal/60">{entry.readingTimeMinutes} min read</p>
+        <p className="mt-2 text-caption text-charcoal/70">{entry.readingTimeMinutes} min read</p>
       )}
     </article>
   );
