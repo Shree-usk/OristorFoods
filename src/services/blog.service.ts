@@ -132,10 +132,18 @@ export interface CommentSession {
  * knows the session's `userId` is trustworthy — its `name`/`email` claims
  * come from a JWT and are not treated as a source of truth (see
  * `findUserIdentityById`).
+ *
+ * Returns `null` when the session's `userId` has no corresponding `User`
+ * row (a deleted account, or a stale/forged JWT). The caller must treat
+ * that exactly like an absent session — falling back to the guest path —
+ * rather than passing a session-shaped object with a dangling `userId`
+ * into `submitComment`, which would otherwise throw on the `customerId`
+ * foreign key at insert time.
  */
-export async function resolveCommentSession(userId: string): Promise<CommentSession> {
+export async function resolveCommentSession(userId: string): Promise<CommentSession | null> {
   const user = await blogRepository.findUserIdentityById(userId);
-  return { userId, name: user?.name ?? null, email: user?.email ?? null };
+  if (!user) return null;
+  return { userId, name: user.name, email: user.email };
 }
 
 export async function submitComment(

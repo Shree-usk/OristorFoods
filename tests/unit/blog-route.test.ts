@@ -108,4 +108,23 @@ describe("POST /api/blog/[slug]/comments", () => {
     const stored = await prisma.blogComment.findFirst({ where: { postId: post.id } });
     expect(stored).toMatchObject({ authorName: "Real Customer", authorEmail: "real@example.com", customerId: user.id });
   });
+
+  it("falls back to the guest path when the session's user no longer exists", async () => {
+    mockAuth.mockResolvedValue(sessionFor("does-not-exist-in-db"));
+    const author = await makeBlogAuthor();
+    const post = await makeBlogPost({ slug: "commentable-post-4", authorId: author.id, publishedAt: PAST });
+
+    const request = new Request("http://localhost/api/blog/commentable-post-4/comments", {
+      method: "POST",
+      body: JSON.stringify({ name: "Guest", email: "guest@example.com", body: "Still works.", honeypot: "" }),
+    });
+    const response = await postComment(request, { params: Promise.resolve({ slug: "commentable-post-4" }) });
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body).toEqual({ status: "pending-review" });
+
+    const stored = await prisma.blogComment.findFirst({ where: { postId: post.id } });
+    expect(stored).toMatchObject({ authorName: "Guest", authorEmail: "guest@example.com", customerId: null });
+  });
 });
