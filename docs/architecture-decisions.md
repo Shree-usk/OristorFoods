@@ -1396,3 +1396,88 @@ lookup, which STORY-011 explicitly consumes). If a future story wants
 that reverse lookup, follow the `registerRecipeSummaryProvider` pattern
 from `product-detail-extensions.ts` rather than querying `Product`
 directly from a new route.
+
+---
+
+## 2026-09-26 — STORY-020 Food Academy
+
+**`Article`/`Guide`/`Course` content-type split: `bodyContent` vs.
+`sections`.** `FoodAcademyEntry.contentType` (`FoodAcademyContentType`
+enum: `Article`, `Guide`, `Course` — PascalCase-single-word, following the
+same convention correction STORY-019 already made for `VideoProvider`
+rather than the story text's `ARTICLE`/`GUIDE`/`COURSE`) decides which of
+two content shapes an entry uses. `Article`/`Guide` entries are flat: the
+entire body is one markdown string in `FoodAcademyEntry.bodyContent`,
+rendered through a single `<MarkdownContent>` call
+(`src/app/(storefront)/food-academy/[slug]/page.tsx`). `Course` entries
+are multi-part: their real content lives in an ordered `FoodAcademySection[]`
+(`sectionNumber`, `title`, `bodyContent` markdown, optional `imageUrl`,
+unique-per-entry `sectionNumber`), each rendered through its own
+`<MarkdownContent>` call with a heading anchor (`id="section-{n}"`) and
+listed in `FoodAcademySectionNav`'s sticky table of contents. A `Course`'s
+own `bodyContent` is optional and, when present, renders as a short intro
+*before* the sections — it is never a substitute for `sections`, and the
+seeded course entry (`mastering-the-art-of-roasted-curry-powder`) leaves
+it `null` on purpose to exercise that path (`tests/e2e/food-academy.spec.ts`
+asserts the empty-intro block does not render). Any future authoring UI
+(Epic 07) must gate the `sections` editor on `contentType === "Course"`
+and keep `bodyContent` as the single free-text field for `Article`/`Guide`.
+
+**`<MarkdownContent>` (`src/components/shared/markdown-content.tsx`) is
+now the shared, reusable markdown renderer** for the codebase — the first
+markdown dependency introduced (`react-markdown` + `remark-gfm`). It
+renders straight to React elements rather than raw HTML strings, so raw
+HTML embedded in markdown source (a pasted `<script>` tag, an `onerror`
+attribute) comes out as inert literal text with no
+`dangerouslySetInnerHTML`/sanitizer boundary to get wrong —
+`tests/unit/markdown-content.test.tsx` locks this in directly. **Raw HTML
+rendering is disabled by default and must stay that way**: do not add
+`rehype-raw` (or any plugin that turns markdown-embedded HTML back into
+real DOM) without re-examining the sanitization story first, since
+`FoodAcademyEntry`/`FoodAcademySection` bodies are seed/admin-authored
+text with no server-side sanitizer in front of them today — the safety
+property currently comes entirely from `react-markdown` not executing raw
+HTML, not from any sanitization step. Future content types (Blog,
+STORY-021) should reuse this component rather than rolling a second
+markdown renderer.
+
+**`FoodAcademyEntryStatus` is intentionally a plain two-value enum**
+(`Draft`, `Published` — no moderation/review-pipeline states), the same
+rationale as STORY-019's `CookingTipStatus`: entries are admin-authored
+directly (a future Epic 07 admin content module, not yet built), with no
+customer-submission or multi-stage review process anywhere in this
+story's scope, unlike `RecipeStatus`'s five-stage authoring pipeline. Only
+`Published` entries are ever returned to the storefront —
+`findPublishedFoodAcademyEntries`/`findFeaturedFoodAcademyEntries`/
+`findPublishedFoodAcademyEntryBySlug`/`findRelatedFoodAcademyEntries`
+(`src/repositories/food-academy.repository.ts`) all hardcode
+`status: "Published"` and, for the list query, strip any caller-supplied
+`status` key before composing the `where` (`AND: [{status: "Published"}, restWhere]`)
+rather than object-spreading it, so a caller can never widen the
+invariant. Don't reintroduce a review-pipeline state onto
+`FoodAcademyEntry` without a real product requirement for one.
+
+**`FoodAcademyRecipeRef`/`FoodAcademyProductRef` cross-link pattern: raw
+ids in the repository, resolved in the service layer.** Both ref tables
+are plain forward joins (entry → `Recipe`/`Product`, cascade delete,
+unique compound key, indexed on the far side — mirroring
+`CookingTipProductRef`'s shape). `food-academy.repository.ts`'s detail
+select (`foodAcademyEntryDetailSelect`) deliberately selects only
+`recipeRefs: { select: { recipeId: true } }` and
+`productRefs: { select: { productId: true } }` — it never joins
+`Recipe`/`Product` fields directly. Resolution happens one layer up, in
+`food-academy.service.ts`'s `getEntryBySlug`, via `getRecipesByIds`
+(`src/services/recipe.service.ts`, returning the existing minimal
+`RecipePreview { id, title, slug, imageSrc }` shape from
+`product-detail-extensions.ts` rather than a new type) and
+`getProductsByIds` (`src/services/product.service.ts`, returning full
+`ProductListItem`s with resolved pricing). Both of those id-resolution
+functions independently enforce Published-only
+(`findRecipesByIds`/`buildProductListingWhere` both hardcode
+`status: "Published"`), so the Food Academy repository/service never has
+to re-implement that guard for the cross-linked rows. This split (repo:
+ids only; service: resolve + re-guard status) is the pattern future
+content types should follow for their own cross-links (e.g. Blog,
+STORY-021) rather than each content type's repository independently
+joining into `Recipe`/`Product` and deciding for itself what those cards
+look like.
