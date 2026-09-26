@@ -25,7 +25,7 @@ describe("GET /api/food-academy", () => {
 describe("GET /api/food-academy/categories", () => {
   it("returns active categories", async () => {
     await makeFoodAcademyCategory({ name: "Ingredients" });
-    const response = await getCategories(new Request("http://localhost/api/food-academy/categories"));
+    const response = await getCategories();
     expect(response.status).toBe(200);
     expect((await response.json()).map((c: { name: string }) => c.name)).toEqual(["Ingredients"]);
   });
