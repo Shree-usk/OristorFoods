@@ -6,7 +6,7 @@ import { useState } from "react";
 
 import { cn } from "@/lib/utils";
 import { mobileNavItems } from "@/lib/nav-config";
-import { useCartStore } from "@/lib/stores/cart-store";
+import { useCart } from "@/hooks/use-cart";
 import { MobileMenuDrawer } from "./mobile-menu-drawer";
 
 /**
@@ -17,7 +17,8 @@ import { MobileMenuDrawer } from "./mobile-menu-drawer";
  */
 export function MobileNav() {
   const pathname = usePathname();
-  const cartCount = useCartStore((state) => state.count);
+  const { cart } = useCart();
+  const cartCount = cart?.itemCount ?? 0;
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
 
   // Close the drawer on route change (AC: closes on route change). Setting
