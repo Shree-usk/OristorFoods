@@ -7,13 +7,18 @@ import { Breadcrumbs } from "@/components/storefront/layout/breadcrumbs";
 import { Section } from "@/components/storefront/layout/section";
 import { ChefNotes } from "@/components/storefront/recipes/chef-notes";
 import { MethodSteps } from "@/components/storefront/recipes/method-steps";
+import { RecipeBookmarkButton } from "@/components/storefront/recipes/recipe-bookmark-button";
 import { RecipeDetailView } from "@/components/storefront/recipes/recipe-detail-view";
 import { RecipeHero } from "@/components/storefront/recipes/recipe-hero";
 import { RecipeJsonLd } from "@/components/storefront/recipes/recipe-json-ld";
+import { RecipeRatingStars } from "@/components/storefront/recipes/recipe-rating-stars";
+import { RecipeReviewsSection } from "@/components/storefront/recipes/reviews/recipe-reviews-section";
 import { RelatedRecipes } from "@/components/storefront/recipes/related-recipes";
 import { formatIngredientLine, formatScaledQuantity } from "@/lib/recipe-scaling";
 import { formatRecipeTime } from "@/lib/recipe-time";
+import { listApprovedReviewsForRecipe } from "@/services/recipe-review.service";
 import { getRecipeBySlug } from "@/services/recipe.service";
+import { RECIPE_REVIEW_PAGE_SIZE } from "@/types/recipe-review";
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://oristor.com";
 
@@ -40,6 +45,12 @@ export default async function RecipeDetailPage({ params }: RecipeDetailPageProps
   const { slug } = await params;
   const recipe = await getCachedRecipe(slug);
   if (!recipe) notFound();
+
+  const initialReviewPage = await listApprovedReviewsForRecipe(recipe.id, {
+    page: 1,
+    pageSize: RECIPE_REVIEW_PAGE_SIZE,
+    sort: "recent",
+  });
 
   const pageUrl = `${SITE_URL}/recipes/${recipe.slug}`;
 
@@ -114,6 +125,11 @@ export default async function RecipeDetailPage({ params }: RecipeDetailPageProps
               ))}
             </div>
           )}
+
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+            <RecipeRatingStars avgRating={recipe.avgRating} ratingCount={recipe.ratingCount} />
+            <RecipeBookmarkButton recipeId={recipe.id} recipeSlug={recipe.slug} variant="labelled" />
+          </div>
         </div>
       </div>
       <div className="mt-10">
@@ -129,6 +145,9 @@ export default async function RecipeDetailPage({ params }: RecipeDetailPageProps
             <ChefNotes notes={recipe.chefNotes} />
           </div>
         </div>
+      </div>
+      <div className="mt-10">
+        <RecipeReviewsSection recipeSlug={recipe.slug} initialReviewPage={initialReviewPage} />
       </div>
       <div className="mt-10">
         <RelatedRecipes recipes={recipe.relatedRecipes} />

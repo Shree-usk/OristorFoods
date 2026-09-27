@@ -1,9 +1,23 @@
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { ReactElement } from "react";
 
 import { RecipeCard } from "@/components/storefront/recipes/recipe-card";
 import { RecipeGrid } from "@/components/storefront/recipes/recipe-grid";
 import type { RecipeCard as RecipeCardData } from "@/types/recipe";
+
+const mockUseSession = vi.fn();
+vi.mock("next-auth/react", () => ({ useSession: () => mockUseSession() }));
+
+beforeEach(() => {
+  mockUseSession.mockReturnValue({ status: "unauthenticated" });
+});
+
+function renderCard(ui: ReactElement) {
+  const queryClient = new QueryClient();
+  return render(<QueryClientProvider client={queryClient}>{ui}</QueryClientProvider>);
+}
 
 const recipe: RecipeCardData = {
   id: "r1",
@@ -24,7 +38,7 @@ const recipe: RecipeCardData = {
 
 describe("RecipeCard", () => {
   it("links the title to the recipe detail page", () => {
-    render(<RecipeCard recipe={recipe} />);
+    renderCard(<RecipeCard recipe={recipe} />);
 
     expect(screen.getByRole("link", { name: "Sri Lankan Chicken Curry" })).toHaveAttribute(
       "href",
@@ -34,7 +48,7 @@ describe("RecipeCard", () => {
   });
 
   it("shows the hero image with its alt text, category, cuisine, time and difficulty", () => {
-    render(<RecipeCard recipe={recipe} />);
+    renderCard(<RecipeCard recipe={recipe} />);
 
     expect(screen.getByAltText("Oristor chicken masala, used in this recipe")).toBeInTheDocument();
     expect(screen.getByText("Curries")).toBeInTheDocument();
@@ -44,36 +58,36 @@ describe("RecipeCard", () => {
   });
 
   it("shows an accessible rating when the recipe has ratings", () => {
-    render(<RecipeCard recipe={recipe} />);
+    renderCard(<RecipeCard recipe={recipe} />);
     expect(screen.getByRole("img", { name: "Rated 4.9 out of 5 from 58 ratings" })).toBeInTheDocument();
   });
 
   it("hides the rating when there are no ratings yet", () => {
-    render(<RecipeCard recipe={{ ...recipe, avgRating: null, ratingCount: 0 }} />);
+    renderCard(<RecipeCard recipe={{ ...recipe, avgRating: null, ratingCount: 0 }} />);
     expect(screen.queryByRole("img", { name: /Rated/ })).not.toBeInTheDocument();
   });
 
   it("uses singular wording for one rating and supports an h2 heading", () => {
-    render(<RecipeCard recipe={{ ...recipe, avgRating: 5, ratingCount: 1 }} headingLevel="h2" />);
+    renderCard(<RecipeCard recipe={{ ...recipe, avgRating: 5, ratingCount: 1 }} headingLevel="h2" />);
 
     expect(screen.getByRole("img", { name: "Rated 5.0 out of 5 from 1 rating" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { level: 2 })).toBeInTheDocument();
   });
 
   it("shows a video badge when the recipe has video", () => {
-    render(<RecipeCard recipe={{ ...recipe, hasVideo: true }} />);
+    renderCard(<RecipeCard recipe={{ ...recipe, hasVideo: true }} />);
     expect(screen.getByLabelText(/video available/i)).toBeInTheDocument();
   });
 
   it("omits the video badge when there is no video", () => {
-    render(<RecipeCard recipe={{ ...recipe, hasVideo: false }} />);
+    renderCard(<RecipeCard recipe={{ ...recipe, hasVideo: false }} />);
     expect(screen.queryByLabelText(/video available/i)).not.toBeInTheDocument();
   });
 });
 
 describe("RecipeGrid", () => {
   it("renders one list item per recipe", () => {
-    render(<RecipeGrid recipes={[recipe, { ...recipe, id: "r2", title: "Dhal Curry" }]} />);
+    renderCard(<RecipeGrid recipes={[recipe, { ...recipe, id: "r2", title: "Dhal Curry" }]} />);
     expect(screen.getAllByRole("listitem")).toHaveLength(2);
   });
 });

@@ -6,6 +6,8 @@ import * as productRepository from "../src/repositories/product.repository";
 import * as pricingRepository from "../src/repositories/pricing.repository";
 import { advanceReviewToPublished, submitReview } from "../src/services/review.service";
 import { advanceQuestionToPublished, submitQuestion } from "../src/services/qa.service";
+import { advanceRecipeReviewToApproved, changeRecipeReviewStatus, submitReview as submitRecipeReview } from "../src/services/recipe-review.service";
+import { addBookmark } from "../src/services/recipe-bookmark.service";
 import { seedBlog } from "./seed-blog";
 import { seedCookingTips } from "./seed-cooking-tips";
 import { seedFoodAcademy } from "./seed-food-academy";
@@ -253,6 +255,46 @@ async function main() {
 
   // Recipe Centre (STORY-017).
   const recipeSeed = await seedRecipes();
+
+  // Demo recipe reviews and bookmarks (STORY-022), submitted/approved
+  // through the real workflow so Recipe.avgRating/ratingCount are always
+  // backed by real rows — never the hardcoded placeholder numbers
+  // prisma/seed-recipes.ts used before this story existed.
+  const demoRecipeReviews = [
+    { userId: nadeesha.id, slug: "sri-lankan-chicken-curry", rating: 5, reviewText: "Our family's new favourite — the coconut milk makes it so rich." },
+    { userId: kamal.id, slug: "sri-lankan-chicken-curry", rating: 5, reviewText: "Restaurant quality. The chicken masala really carries this one." },
+    { userId: nadeesha.id, slug: "watalappan", rating: 5, reviewText: "Perfectly set, not too sweet. A real crowd-pleaser at Avurudu." },
+    { userId: kamal.id, slug: "watalappan", rating: 4, reviewText: "Delicious, though mine took longer to set than the recipe suggested." },
+    { userId: kamal.id, slug: "coconut-sambol-maldive-fish", rating: 5, reviewText: "Exactly like my grandmother's pol sambol." },
+    { userId: nadeesha.id, slug: "coconut-sambol-maldive-fish", rating: 4, reviewText: "Great with kottu. I used a bit less maldive fish for a milder version." },
+    { userId: nadeesha.id, slug: "dhal-curry-parippu", rating: 4, reviewText: "Simple, comforting, and freezes well for meal prep." },
+  ];
+  for (const demo of demoRecipeReviews) {
+    const review = await submitRecipeReview(demo.userId, demo.slug, { rating: demo.rating, reviewText: demo.reviewText });
+    await advanceRecipeReviewToApproved(review.id);
+  }
+
+  // One still-Pending review (awaiting moderation) and one Rejected review,
+  // so the seeded database demonstrates every review state, not only
+  // Approved. Kept off sri-lankan-chicken-curry/watalappan/
+  // coconut-sambol-maldive-fish (used above) and dhal-curry-parippu (used
+  // above) to avoid a duplicate-review conflict for the same customer.
+  const asanka = await prisma.user.create({ data: { email: "asanka.demo@oristor.test", name: "Asanka F." } });
+  const pendingReview = await submitRecipeReview(asanka.id, "fish-ambul-thiyal", {
+    rating: 5,
+    reviewText: "Tried this last weekend — will report back once I've perfected the tamarind balance!",
+  });
+  void pendingReview; // left Pending deliberately — demonstrates the "awaiting approval" state
+
+  const rejectedReview = await submitRecipeReview(kamal.id, "dhal-curry-parippu", { rating: 1, reviewText: "Link spam: buy-followers-now.example" });
+  await changeRecipeReviewStatus(rejectedReview.id, "Rejected");
+
+  // Demo bookmarks for the same two seeded customers.
+  await addBookmark(nadeesha.id, "sri-lankan-chicken-curry");
+  await addBookmark(nadeesha.id, "watalappan");
+  await addBookmark(nadeesha.id, "seeni-sambol");
+  await addBookmark(kamal.id, "dhal-curry-parippu");
+  await addBookmark(kamal.id, "coconut-sambol-maldive-fish");
 
   // Cooking Tips (STORY-019).
   const cookingTipSeed = await seedCookingTips();

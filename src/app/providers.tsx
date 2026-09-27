@@ -5,6 +5,7 @@ import { SessionProvider } from "next-auth/react";
 import { NuqsAdapter } from "nuqs/adapters/next/app";
 import { useState } from "react";
 
+import { RecipeBookmarkMergeSync } from "@/components/providers/recipe-bookmark-merge-sync";
 import { WishlistMergeSync } from "@/components/providers/wishlist-merge-sync";
 
 export function Providers({ children }: { children: React.ReactNode }) {
@@ -14,6 +15,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
     <SessionProvider>
       <QueryClientProvider client={queryClient}>
         <WishlistMergeSync />
+        <RecipeBookmarkMergeSync />
         <NuqsAdapter>{children}</NuqsAdapter>
       </QueryClientProvider>
     </SessionProvider>

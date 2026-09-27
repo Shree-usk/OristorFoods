@@ -35,6 +35,8 @@ model User {
   questions         Question[] @relation("QuestionAsker")
   answeredQuestions Question[] @relation("QuestionAnswerer")
   blogComments      BlogComment[]
+  recipeReviews     RecipeReview[]
+  recipeBookmarks   RecipeBookmark[]
   createdAt         DateTime   @default(now())
   updatedAt         DateTime   @updatedAt
 }
@@ -608,6 +610,8 @@ model Recipe {
   steps                RecipeStep[]
   dietaryTags          RecipeDietaryTag[]
   foodAcademyRefs      FoodAcademyRecipeRef[]
+  recipeReviews        RecipeReview[]
+  recipeBookmarks      RecipeBookmark[]
   publishedAt          DateTime?
   createdAt            DateTime           @default(now())
   updatedAt            DateTime           @updatedAt
@@ -648,6 +652,43 @@ model RecipeStep {
   imageUrl    String?
 
   @@unique([recipeId, stepNumber])
+}
+
+// --- Recipe Reviews & Bookmarks (STORY-022) ---
+
+enum RecipeReviewStatus {
+  Pending
+  Approved
+  Rejected
+  Hidden
+}
+
+model RecipeReview {
+  id         String             @id @default(cuid())
+  recipeId   String
+  recipe     Recipe             @relation(fields: [recipeId], references: [id], onDelete: Cascade)
+  customerId String
+  customer   User               @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  rating     Int
+  reviewText String?
+  status     RecipeReviewStatus @default(Pending)
+  createdAt  DateTime           @default(now())
+  updatedAt  DateTime           @updatedAt
+
+  @@unique([recipeId, customerId])
+  @@index([recipeId, status])
+}
+
+model RecipeBookmark {
+  id         String   @id @default(cuid())
+  recipeId   String
+  recipe     Recipe   @relation(fields: [recipeId], references: [id], onDelete: Cascade)
+  customerId String
+  customer   User     @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  createdAt  DateTime @default(now())
+
+  @@unique([recipeId, customerId])
+  @@index([customerId])
 }
 
 // --- Cooking Tips (STORY-019) ---
