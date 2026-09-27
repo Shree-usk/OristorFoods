@@ -1,13 +1,23 @@
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { ReactNode } from "react";
 
 import type { RecipeCard } from "@/types/recipe";
 
 vi.mock("next/server", () => ({ connection: vi.fn().mockResolvedValue(undefined) }));
 vi.mock("@/services/recipe.service", () => ({ getFeaturedRecipes: vi.fn() }));
 
+const mockUseSession = vi.fn();
+vi.mock("next-auth/react", () => ({ useSession: () => mockUseSession() }));
+
 import { FeaturedRecipes } from "@/components/storefront/home/featured-recipes";
 import { getFeaturedRecipes } from "@/services/recipe.service";
+
+function renderWithProviders(ui: ReactNode) {
+  const queryClient = new QueryClient();
+  return render(<QueryClientProvider client={queryClient}>{ui}</QueryClientProvider>);
+}
 
 function card(slug: string, title: string): RecipeCard {
   return {
@@ -30,13 +40,14 @@ function card(slug: string, title: string): RecipeCard {
 
 beforeEach(() => {
   vi.mocked(getFeaturedRecipes).mockReset();
+  mockUseSession.mockReturnValue({ status: "unauthenticated" });
 });
 
 describe("FeaturedRecipes", () => {
   it("renders the featured recipes as cards linking to their pages", async () => {
     vi.mocked(getFeaturedRecipes).mockResolvedValue([card("dhal-curry", "Dhal Curry"), card("seeni-sambol", "Seeni Sambol")]);
 
-    render(await FeaturedRecipes());
+    renderWithProviders(await FeaturedRecipes());
 
     expect(getFeaturedRecipes).toHaveBeenCalledWith(4);
     expect(screen.getByRole("heading", { level: 2, name: "Featured Recipes" })).toBeInTheDocument();

@@ -4,6 +4,9 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { withNuqsTestingAdapter } from "nuqs/adapters/testing";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+const mockUseSession = vi.fn();
+vi.mock("next-auth/react", () => ({ useSession: () => mockUseSession() }));
+
 import { RecipeListing } from "@/components/storefront/recipes/recipe-listing";
 import type { RecipeCard, RecipeFacets, RecipeListResult } from "@/types/recipe";
 
@@ -53,6 +56,7 @@ function respondWith(body: RecipeListResult) {
 
 beforeEach(() => {
   vi.stubGlobal("fetch", respondWith(initialData));
+  mockUseSession.mockReturnValue({ status: "unauthenticated" });
 });
 
 afterEach(() => {
