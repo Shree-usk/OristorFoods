@@ -23,7 +23,7 @@ export function RecipeDetailView({ recipe, pageUrl }: { recipe: RecipeDetail; pa
       <div className="lg:col-span-2">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <ServingSizeAdjuster servings={servings} onChange={setServings} />
-          <RecipePrintShareBar url={pageUrl} title={recipe.title} />
+          <RecipePrintShareBar url={pageUrl} title={recipe.title} recipeSlug={recipe.slug} />
         </div>
         <h2 className="mt-8 text-h3 font-heading text-charcoal">Ingredients</h2>
         <div className="mt-3">
