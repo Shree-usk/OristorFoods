@@ -910,3 +910,39 @@ model BlogComment {
   @@index([postId, status])
   @@index([postId, authorEmail, createdAt])
 }
+
+// --- Downloads & Resources (STORY-023) ---
+
+enum DownloadResourceStatus {
+  Draft
+  Published
+  Archived
+}
+
+model DownloadCategory {
+  id        String             @id @default(cuid())
+  name      String
+  slug      String             @unique
+  sortOrder Int                @default(0)
+  resources DownloadResource[]
+}
+
+model DownloadResource {
+  id            String                 @id @default(cuid())
+  slug          String                 @unique
+  title         String
+  description   String?
+  thumbnailUrl  String
+  fileUrl       String
+  fileType      String
+  fileSizeBytes Int
+  categoryId    String
+  category      DownloadCategory       @relation(fields: [categoryId], references: [id])
+  requiresAuth  Boolean                @default(false)
+  status        DownloadResourceStatus @default(Draft)
+  downloadCount Int                    @default(0)
+  createdAt     DateTime               @default(now())
+  updatedAt     DateTime               @updatedAt
+
+  @@index([status, categoryId])
+}

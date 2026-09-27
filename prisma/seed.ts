@@ -10,6 +10,7 @@ import { advanceRecipeReviewToApproved, changeRecipeReviewStatus, submitReview a
 import { addBookmark } from "../src/services/recipe-bookmark.service";
 import { seedBlog } from "./seed-blog";
 import { seedCookingTips } from "./seed-cooking-tips";
+import { seedDownloads } from "./seed-downloads";
 import { seedFoodAcademy } from "./seed-food-academy";
 import { seedRecipes } from "./seed-recipes";
 
@@ -305,6 +306,9 @@ async function main() {
   // Blog (STORY-021).
   const blogSeed = await seedBlog();
 
+  // Downloads & Resources (STORY-023).
+  const downloadsSeed = await seedDownloads();
+
   console.log("Seed complete:", {
     brand: brand.slug,
     categories: [spices.slug, giftSets.slug],
@@ -314,6 +318,7 @@ async function main() {
     cookingTips: cookingTipSeed,
     foodAcademy: foodAcademySeed,
     blog: blogSeed,
+    downloads: downloadsSeed,
   });
 }
 

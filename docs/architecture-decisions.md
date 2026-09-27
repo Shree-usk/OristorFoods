@@ -1739,3 +1739,95 @@ navigates to the listing page rather than the recipe's own detail-page URL
 test). Every unit-test recipe fixture (`tests/unit/recipe-fixtures.ts`)
 already sets `publishedAt`; any e2e spec whose test visits `/recipes`
 (rather than only `/recipes/[slug]`) must do the same.
+
+---
+
+## 2026-09-27 — STORY-023 Downloads & Resources
+
+**File storage for `DownloadResource` is local `public/downloads/`, not
+cloud storage — this is a deliberate, documented placeholder, not an
+oversight.** No cloud storage provider (S3/Cloudinary/etc.) is decided
+anywhere in this project (`docs/blueprint.md` Section 10 lists
+"hosting/cloud provider specifics" as an open item), and every existing
+image asset in this codebase is already a plain `public/images/...` path
+with the same limitation. `DownloadResource.fileUrl`/`.thumbnailUrl` follow
+that same convention. **The swap point when a provider is chosen:**
+`fileUrl` becomes a full external URL, and
+`/api/downloads/[slug]/file/route.ts`'s single `readFile(path.join(...,
+resource.fileUrl))` call becomes a `fetch(resource.fileUrl)` instead — no
+schema change, and the route's `resolveFileAccess`/`recordDownload` call
+sites either side of it are unaffected.
+
+**PDF generation uses `@react-pdf/renderer`, not headless-Chromium
+print-to-PDF, despite Playwright already being a devDependency.** Chosen
+because it needs no browser binary in production — this project's hosting
+target is still an open item (blueprint Section 10), and a
+headless-Chromium requirement would have constrained that unrelated,
+future decision. `recipe-pdf.service.tsx`'s recipe-card PDF and
+`prisma/seed-downloads.tsx`'s placeholder guide PDFs both use it directly.
+The trade-off: `@react-pdf/renderer` has its own `StyleSheet` API, so none
+of the storefront's Tailwind classes carry over — the recipe PDF is a
+second, independent rendering of the recipe, not a reuse of STORY-018's
+`print:hidden`-CSS browser-print view. **Fonts:** the web app's
+`next/font/google` mechanism is a build-time CSS optimization
+`@react-pdf/renderer` cannot consume — it needs real font files, registered
+via `Font.register()`. This story adds `@fontsource/inter` and
+`@fontsource/cormorant-garamond` as dependencies (not devDependencies —
+needed at request time) purely to get at their bundled `.woff` files;
+`recipe-pdf.service.tsx` registers three weights (`Inter` 400/600/700,
+`Cormorant Garamond` 700) once at module load, styled with the brand hex
+values from `docs/blueprint.md` Section 2. **Any file containing
+`@react-pdf/renderer`'s `<Document>`/`<Page>`/etc. JSX must be `.tsx`, not
+`.ts`** — both `recipe-pdf.service.tsx` and `seed-downloads.tsx` needed
+this extension; a plain `.ts` file cannot contain JSX regardless of the
+project's `jsx` tsconfig setting.
+
+**`downloadCount` increments via the same raw-`$executeRaw`-UPDATE shape as
+`Recipe.viewCount`** (`recipe.repository.ts`'s `incrementRecipeViewCount`)
+— reused verbatim, not just in spirit, specifically so the increment
+doesn't also bump `@updatedAt` (a download is not a content edit). This is
+now the second use of this exact pattern in the codebase; any future
+counter needing the same atomicity-without-touching-`updatedAt` guarantee
+(e.g. a future product/recipe share-count, or STORY-047/STORY-036's future
+invoice/packing-slip PDF download tracking, both of which currently
+reference PDF generation with no implementation of their own) should reuse
+this shape rather than inventing a new one.
+
+**A generated recipe PDF is intentionally not a `DownloadResource` row.**
+It has no counter, is never listed on `/downloads`, and is regenerated
+fresh on every `GET /api/recipes/[slug]/pdf` request rather than cached —
+`@react-pdf/renderer`'s render time for a one-page structured document is
+small, and caching would add invalidation complexity (servings/ingredients
+can change) for no measured benefit.
+
+**Recipe PDF v1 renders text only — no embedded hero photo.** The AC's
+"ingredients + method, respecting the brand's visual identity" doesn't
+require the photo, and `@react-pdf/renderer`'s `<Image>` embedding adds a
+second filesystem-read path and image-format-compatibility surface for no
+AC-required behavior. `recipe.heroImage` is already available on the
+`RecipeDetail` `recipe-pdf.service.tsx` receives, so adding it later is a
+small, additive change, not a re-architecture.
+
+**Base UI's `Button` (`src/components/ui/button.tsx`, wrapping
+`@base-ui/react/button`) always stamps `role="button"` onto whatever it
+renders via the `render` prop, even with `nativeButton={false}`.** A
+download link built as `<Button render={<a href=... download>}>` is
+misrepresented to assistive tech (announced as a button, not a link) and
+is invisible to a `getByRole("link", ...)` query — confirmed by inspecting
+the actual server-rendered HTML. **When a control needs to be a real
+navigable link (has an `href`, especially with `download`), style a plain
+`<a>` directly with `buttonVariants({ variant, size })` (exported from
+`button.tsx`) instead of routing it through `Button`.** `DownloadCard`'s
+own download link already did this; the recipe detail page's "Download
+PDF" link (`RecipePrintShareBar`) was fixed to match. This is the first
+documented Button-as-link case in this codebase — future ones should start
+from `buttonVariants`, not `Button`.
+
+**e2e spec hygiene: every spec file needs its own `beforeEach` fixture
+cleanup, even a single-test file.** `recipe-pdf.spec.ts` initially had
+none, and a leftover row from one killed run collided with the next run's
+fixture creation (`Unique constraint failed on slug`). Every other e2e
+spec in this codebase (including this story's own `downloads.spec.ts`)
+deletes its fixtures by slug/email prefix in `beforeEach` for exactly this
+reason — it is not optional scaffolding, it is what makes a spec safely
+rerunnable after an interrupted run.
