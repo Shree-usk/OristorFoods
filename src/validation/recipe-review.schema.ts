@@ -18,8 +18,8 @@ export const recipeReviewInputSchema = z.object({
     .string()
     .trim()
     .max(2000, "Review must be 2,000 characters or fewer")
-    .optional()
-    .transform((value) => (value === "" ? undefined : value)),
+    .transform((value) => (value === "" ? undefined : value))
+    .optional(),
 });
 
 export type RecipeReviewInput = z.infer<typeof recipeReviewInputSchema>;
