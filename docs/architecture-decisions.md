@@ -1831,3 +1831,95 @@ spec in this codebase (including this story's own `downloads.spec.ts`)
 deletes its fixtures by slug/email prefix in `beforeEach` for exactly this
 reason — it is not optional scaffolding, it is what makes a spec safely
 rerunnable after an interrupted run.
+
+---
+
+## 2026-09-27 — STORY-024 Shopping Cart
+
+**The guest-cart cookie (`oristor-cart-token`) is the first hand-set,
+non-NextAuth cookie in this codebase.** It's a 24-byte random token,
+HMAC-SHA256-signed with the existing `AUTH_SECRET` (no new secret
+provisioned), stored as `token.signature` in an `httpOnly`,
+`sameSite: lax`, 30-day cookie. `src/lib/cart-token.ts`'s
+`verifyCartCookieValue()` is the only place that trusts a cookie value as
+a `Cart.guestToken` lookup key — it constant-time-compares the signature
+and returns `null` (never throws) for anything missing, malformed, or
+tampered, which `cart.service.ts`'s `resolveCartIdentity()` treats
+identically to "no guest cart yet" (creates a fresh one). Any future
+story needing a signed, server-verified guest identity (not just
+client-side `localStorage`, which Wishlist/Recipe Bookmark already cover)
+should reuse this exact shape rather than inventing a second signing
+scheme.
+
+**Cart merge is server-to-server, not a client-payload POST — deliberately
+different from `mergeGuestWishlist`.** Wishlist's guest state is 100%
+`localStorage`, so its merge endpoint receives a product-id array in the
+request body. The cart's guest state is *also* server-persisted (a real
+`Cart` row keyed by the guest cookie, needed so price/stock can be
+revalidated even before login) — so `POST /api/cart/merge` takes no body
+at all; it resolves the guest `Cart` from the request's own cookie,
+combines matching-product quantities into the user's cart (capped at
+current `Product.stockQuantity`), appends distinct products, then deletes
+the guest `Cart` row and clears the cookie. `CartMergeSync`
+(`src/components/providers/cart-merge-sync.tsx`) mirrors
+`WishlistMergeSync`'s session-transition-watcher trigger exactly, just
+without any client state to read first.
+
+**`Product.stockQuantity` was added directly to `Product`, scoped
+narrowly on purpose — no `Reservation`/`StockHold` model, no background
+cleanup job.** STORY-009 never built real inventory tracking (`Product`
+only had a boolean `inStock`), but this story's AC requires blocking a
+cart quantity that exceeds available stock, which a boolean can't express.
+The cart checks the requested quantity against the live `stockQuantity`
+on every add/update and again on every read — it does not reserve stock
+ahead of checkout (STORY-025's territory once it exists) and does not run
+any scheduled abandoned-cart cleanup (the guest cookie's own 30-day
+expiry is the only cleanup mechanism this story ships).
+
+**Every price resolution call uses `customerGroup: "Retail"` — a
+codebase-wide limitation, not a cart-specific one.** `User` has no
+`customerGroup` field (deferred to STORY-033/034's customer profile or
+STORY-038's admin roles). `wishlist.service.ts`, `product.service.ts`,
+`search.service.ts`, and now `cart.service.ts` all hardcode `"Retail"` for
+the same reason — the pricing engine's other four tiers
+(campaign/sale/customerGroup/volumeDiscount) already work correctly for
+every product, and wiring a real customer group through will only ever
+require changing the value passed at each of these call sites, never the
+engine itself.
+
+**`resolvePrice()` is called per cart line, never the bulk
+`resolvePricesForProducts()`.** The bulk function shares one `quantity`
+across every requested product (correct for a listing page, where every
+product is implicitly priced at quantity=1) — a cart has a different
+quantity per line, and `VolumeDiscountTier` selection depends on it. Carts
+are small (a handful of lines), so N individual 5-query `resolvePrice()`
+calls is the right tradeoff; the bulk function's reason to exist
+(avoiding N-per-product fetches at listing scale) doesn't apply here.
+
+**Revalidation always refreshes to the live price, and flags the change
+exactly once — not a standing "outdated" banner.** On every cart read,
+each line's live price is compared to its stored `unitPriceSnapshot`; if
+they differ, the response marks that line `priceChanged: true` for this
+read only, then the snapshot is overwritten to the live price before the
+response is built. The displayed total is always current; the notice
+tells the customer something moved, without becoming stale information
+itself on the next read. Availability (`unavailable`,
+`quantityCapped`) works the same way and never silently mutates or
+removes a line — the customer adjusts or removes it themselves.
+
+**`cart-store.ts` (the count-only Zustand stub from STORY-004) was fully
+retired, not just superseded** — `CartBadge` and `MobileNav` (the plan's
+task list named only the former) both switched to `useCart()`, deriving
+their displayed count from `cart?.itemCount ?? 0`. `nav-stores.test.ts`,
+which tested the store's internals directly, was deleted with it.
+
+**Multi-worktree dev-server gotcha, reconfirmed:** running this story's
+`tests/e2e/cart.spec.ts` initially 404'd because Playwright's
+`reuseExistingServer: true` reused a stale `npm run dev` process left
+running on port 3000 from a *different* story's worktree (STORY-023's),
+which obviously has no cart routes. Running two `next dev` instances
+against the same worktree's `.next` directory simultaneously is also
+unsafe (produces `ChunkLoadError` from concurrent build-cache writes).
+Before trusting `reuseExistingServer` in a session that's touched more
+than one worktree, check `netstat -ano | grep :3000` and kill anything
+not launched from the worktree you're testing.
