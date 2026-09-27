@@ -272,19 +272,65 @@ content that shouldn't be bookmarkable.
 
 ## 9. Frontend structure
 
-`RecipeRatingStars` (Server Component, display-only — filled/outline `Star`
-icons plus the numeric average and count, `role="img"` with a computed
-`aria-label`, same accessible pattern the existing `RecipeCard`'s inline
-rating already uses). `RecipeReviewForm` and `RecipeReviewList` (sort
-control: Newest/Highest Rated/Lowest Rated, reusing the existing
-`SortSelect`/`Pagination` shared listing components from
-`src/components/storefront/listing/`) integrate into the STORY-018 detail
-page below the ingredients/method sections. `RecipeBookmarkButton`
-(Client Component, `useRecipeBookmark`, optimistic icon toggle with
-`aria-pressed`) integrates into both `RecipeCard` (STORY-017 grid — a small
-icon-only variant, top-right corner, matching `WishlistBadge`'s placement
-convention on `ProductCard`) and the STORY-018 detail page (a labelled
-button near the title).
+**Correction from an earlier draft of this section:** the product Review UI
+does NOT use the generic `SortSelect`/`Pagination` components from
+`src/components/storefront/listing/` — those are for the Product/Recipe
+*grid* listings (STORY-010/017). The actual, closer precedent is
+`reviews-section.tsx`/`review-list.tsx`, which hand-roll their own inline
+`Select` (from `@/components/ui/select`) and a simple Previous/Next button
+pair (no numbered page links), because the review list's query state
+(sort, page) lives in local component state, not the URL — the detail
+page's own URL must stay canonical. This spec follows that closer
+precedent, not the grid-listing one.
+
+- `RecipeRatingStars` (Server Component, display-only — filled/outline
+  `Star` icons plus the numeric average and count, `role="img"` with a
+  computed `aria-label`, matching `star-rating.tsx`'s existing display
+  pattern).
+- `RecipeReviewsSection` (Client Component, mirrors `reviews-section.tsx`):
+  owns the list's `{ page, sort }` query state, composes
+  `RecipeRatingStars`, `RecipeReviewList`, and `RecipeReviewForm`.
+- `RecipeReviewList` (Client Component, mirrors `review-list.tsx` exactly):
+  `useQuery` with `initialData` seeded from the detail page's own
+  server-fetched first page (so the list isn't empty before hydration),
+  the inline `Select` for Newest/Highest Rated/Lowest Rated, Previous/Next
+  buttons gated on `page`/`lastPage`.
+- `RecipeReviewForm` (Client Component, mirrors `review-form.tsx` exactly):
+  sign-in prompt via `/account/login?callbackUrl=...` when unauthenticated,
+  `fetchMyReview`/edit/withdraw state machine, controlled star-radio input
+  (dropping the `title` field per decision #1).
+- `RecipeBookmarkButton` (Client Component, `useRecipeBookmark`): a small,
+  self-contained toggle — **not** `WishlistBadge` (that's the header nav's
+  item-count badge, a different component entirely) but the inline toggle
+  `ProductCard` itself renders (`<Button variant="ghost" size="icon-sm"
+  aria-pressed aria-label="Add to wishlist"/"Remove from wishlist"
+  onClick={(e) => { e.preventDefault(); e.stopPropagation(); ... }}>`,
+  absolutely positioned top-right, since the whole card is a `<Link>`).
+  **Deliberate improvement over the `ProductCard` precedent**:
+  `ProductCard` itself had to become a Client Component to call
+  `useWishlist` directly, but `RecipeCard` is currently a pure Server
+  Component (its own comment explicitly values this — it renders
+  server-side on the homepage and inside the client `/recipes` listing
+  alike). `RecipeBookmarkButton` stays an isolated Client Component that
+  `RecipeCard` renders as a child — Next.js Server Components can render
+  Client Component children without becoming Client Components
+  themselves — so `RecipeCard` keeps its Server Component status. Used in
+  both `RecipeCard` (STORY-017 grid, icon-only, top-right corner) and the
+  STORY-018 detail page (a labelled button near the title).
+
+**No provider-registry needed for the rating summary.** Product's PDP gets
+its review summary through `product-detail-extensions.ts`'s
+`registerReviewSummaryProvider`, because `product.service.ts` must not
+import `review.service.ts` directly (avoiding a circular dependency) and
+still needs `getReviewSummaryForProduct`'s data at render time. Recipe
+doesn't have this problem: `Recipe.avgRating`/`ratingCount` are already
+flat columns `recipe.service.ts`'s existing `getRecipeBySlug` returns
+directly (decision #2) — no cross-service call needed for the summary at
+all. The STORY-018 detail page's own Server Component calls
+`recipe-review.service.ts`'s `listApprovedReviews` directly (the same way
+`blog.service.ts`'s `getPostBySlug` calls its own repository without a
+registry) to seed `RecipeReviewsSection`'s `initialData` — no new
+provider/registration pattern is introduced by this story.
 
 ## 10. Accessibility floor
 
