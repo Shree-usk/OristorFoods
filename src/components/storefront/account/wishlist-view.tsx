@@ -6,7 +6,7 @@ import { useSession } from "next-auth/react";
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
-import { useAddToCart } from "@/hooks/use-add-to-cart";
+import { useCart } from "@/hooks/use-cart";
 import { fetchProductsByIds, fetchWishlist, removeWishlistItem } from "@/lib/api/wishlist-client";
 import { useWishlistStore } from "@/lib/stores/wishlist-store";
 import { WishlistItemRow } from "@/components/storefront/account/wishlist-item-row";
@@ -30,13 +30,13 @@ export function WishlistView() {
     enabled: !isSessionLoading,
   });
 
-  // isAvailable doesn't currently depend on which product id is passed
-  // (the stub always returns false) — calling it once here for the
-  // "move all" button's disabled state, rather than per-row, is safe
-  // under that stub. Revisit if STORY-024's real hook makes availability
-  // product-specific.
-  const cartStub = useAddToCart(items[0]?.id ?? "");
-  const inStockCount = items.filter((item) => item.inStock).length;
+  const { addItem } = useCart();
+  const inStockItems = items.filter((item) => item.inStock);
+  const inStockCount = inStockItems.length;
+
+  function handleMoveAllToCart() {
+    inStockItems.forEach((item) => addItem(item.id, 1));
+  }
 
   function handleRemove(productId: string) {
     if (isAuthenticated) {
@@ -80,7 +80,7 @@ export function WishlistView() {
       <div className="flex items-center justify-between">
         <h1 className="text-h3 text-charcoal">My Wishlist</h1>
         <div className="text-right">
-          <Button type="button" disabled={!cartStub.isAvailable || inStockCount === 0}>
+          <Button type="button" disabled={inStockCount === 0} onClick={handleMoveAllToCart}>
             Move all to cart
           </Button>
           <p className="mt-1 text-caption text-charcoal/70">

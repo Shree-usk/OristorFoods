@@ -88,7 +88,7 @@ describe("WishlistView — authenticated", () => {
     expect(screen.getByText("LKR 450")).toBeInTheDocument();
   });
 
-  it("shows a disabled 'Move all to cart' button (cart not built yet)", async () => {
+  it("enables 'Move all to cart' now that STORY-024 provides a real cart", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve({ items: [item] }) }),
@@ -97,6 +97,23 @@ describe("WishlistView — authenticated", () => {
     renderView();
 
     await waitFor(() => expect(screen.getByText("Curry Powder")).toBeInTheDocument());
-    expect(screen.getByRole("button", { name: /move all to cart/i })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /move all to cart/i })).toBeEnabled();
+  });
+
+  it("clicking 'Move all to cart' adds every in-stock item to the cart", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve({ items: [item] }) });
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderView();
+
+    await waitFor(() => expect(screen.getByText("Curry Powder")).toBeInTheDocument());
+    screen.getByRole("button", { name: /move all to cart/i }).click();
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/cart/items",
+        expect.objectContaining({ method: "POST", body: JSON.stringify({ productId: "p1", quantity: 1 }) }),
+      );
+    });
   });
 });
