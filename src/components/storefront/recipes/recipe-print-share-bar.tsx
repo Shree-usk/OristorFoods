@@ -20,6 +20,7 @@ export function RecipePrintShareBar({ url, title, recipeSlug }: RecipePrintShare
       <Button
         variant="outline"
         size="sm"
+        nativeButton={false}
         render={
           <a href={`/api/recipes/${recipeSlug}/pdf`} download aria-label={`Download ${title} recipe card as a PDF`}>
             <Download />
