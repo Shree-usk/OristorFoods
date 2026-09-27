@@ -76,6 +76,52 @@ describe("addBookmark / removeBookmark", () => {
 
     expect(await listBookmarksForCustomer(user.id)).toEqual([]);
   });
+
+  it("removeBookmark on a recipe the customer never bookmarked is an idempotent no-op", async () => {
+    const recipe = await makeRecipe();
+    const user = await makeUser();
+
+    await expect(removeBookmark(user.id, recipe.slug)).resolves.toBeUndefined();
+    expect(await listBookmarksForCustomer(user.id)).toEqual([]);
+  });
+});
+
+describe("listBookmarksForCustomer", () => {
+  it("orders results most-recently-bookmarked first, independent of findRecipesByIds's popularity order", async () => {
+    const user = await makeUser();
+    const recipeA = await makeRecipe();
+    const recipeB = await makeRecipe();
+    const recipeC = await makeRecipe();
+
+    await addBookmark(user.id, recipeA.slug);
+    await addBookmark(user.id, recipeB.slug);
+    await addBookmark(user.id, recipeC.slug);
+
+    // Pin explicit, unambiguous createdAt values on the bookmark rows so the
+    // assertion below exercises the recency-reordering in
+    // listBookmarksForCustomer rather than depending on how fast the three
+    // addBookmark calls above actually ran (which could tie at millisecond
+    // resolution and make the test flaky).
+    const base = new Date("2026-01-01T00:00:00.000Z").getTime();
+    await prisma.recipeBookmark.update({
+      where: { recipeId_customerId: { recipeId: recipeA.id, customerId: user.id } },
+      data: { createdAt: new Date(base + 1000) },
+    });
+    await prisma.recipeBookmark.update({
+      where: { recipeId_customerId: { recipeId: recipeB.id, customerId: user.id } },
+      data: { createdAt: new Date(base + 2000) },
+    });
+    await prisma.recipeBookmark.update({
+      where: { recipeId_customerId: { recipeId: recipeC.id, customerId: user.id } },
+      data: { createdAt: new Date(base + 3000) },
+    });
+
+    const bookmarks = await listBookmarksForCustomer(user.id);
+
+    // recipeC was bookmarked last (latest createdAt) so it must appear
+    // first; recipeA was bookmarked first so it must appear last.
+    expect(bookmarks.map((r) => r.id)).toEqual([recipeC.id, recipeB.id, recipeA.id]);
+  });
 });
 
 describe("mergeGuestBookmarks", () => {
