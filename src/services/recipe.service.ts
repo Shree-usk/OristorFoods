@@ -130,19 +130,7 @@ export async function getRelatedRecipes(recipe: RecipeDetailRow, limit = 6): Pro
   return rows.map(toRecipeCard);
 }
 
-export async function getRecipeBySlug(slug: string): Promise<RecipeDetail | null> {
-  const row = await recipeRepository.findPublishedRecipeBySlug(slug);
-  if (!row) return null;
-
-  // Fire-and-forget: a view-count UPDATE failing must never fail the page
-  // render (it's a nice-to-have popularity signal, not core content).
-  const [relatedRecipes] = await Promise.all([
-    getRelatedRecipes(row, 6),
-    recipeRepository.incrementRecipeViewCount(row.id).catch((error: unknown) => {
-      console.error(`Failed to increment view count for recipe ${row.id}`, error);
-    }),
-  ]);
-
+function toRecipeDetail(row: RecipeDetailRow, relatedRecipes: RecipeCard[]): RecipeDetail {
   return {
     id: row.id,
     slug: row.slug,
@@ -183,6 +171,36 @@ export async function getRecipeBySlug(slug: string): Promise<RecipeDetail | null
         ? null
         : { url: row.videoUrl, provider: row.videoProvider, durationSeconds: row.videoDurationSeconds, captionsUrl: row.captionsUrl },
   };
+}
+
+export async function getRecipeBySlug(slug: string): Promise<RecipeDetail | null> {
+  const row = await recipeRepository.findPublishedRecipeBySlug(slug);
+  if (!row) return null;
+
+  // Fire-and-forget: a view-count UPDATE failing must never fail the page
+  // render (it's a nice-to-have popularity signal, not core content).
+  const [relatedRecipes] = await Promise.all([
+    getRelatedRecipes(row, 6),
+    recipeRepository.incrementRecipeViewCount(row.id).catch((error: unknown) => {
+      console.error(`Failed to increment view count for recipe ${row.id}`, error);
+    }),
+  ]);
+
+  return toRecipeDetail(row, relatedRecipes);
+}
+
+/**
+ * Same RecipeDetail shape as getRecipeBySlug, but without that function's
+ * page-view side effects (viewCount increment, related-recipes query) —
+ * for callers where fetching the recipe isn't a page view. The on-demand
+ * recipe PDF (STORY-023) is the first caller: a PDF download shouldn't
+ * inflate the "Most Popular" sort the same way a real page view does, and
+ * a PDF has no use for relatedRecipes (returned empty, not fetched).
+ */
+export async function getRecipeForExport(slug: string): Promise<RecipeDetail | null> {
+  const row = await recipeRepository.findPublishedRecipeBySlug(slug);
+  if (!row) return null;
+  return toRecipeDetail(row, []);
 }
 
 /** "Recipes using this product": consumed by the PDP via getRecipeSummary(). */

@@ -1,13 +1,13 @@
 import { NextResponse } from "next/server";
 
 import { serverErrorResponse } from "@/lib/api/responses";
-import { getRecipeBySlug } from "@/services/recipe.service";
+import { getRecipeForExport } from "@/services/recipe.service";
 import { renderRecipePdf } from "@/services/recipe-pdf.service";
 
 export async function GET(request: Request, { params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
   try {
-    const recipe = await getRecipeBySlug(slug);
+    const recipe = await getRecipeForExport(slug);
     if (!recipe) return NextResponse.json({ error: "Recipe not found" }, { status: 404 });
 
     const buffer = await renderRecipePdf(recipe);

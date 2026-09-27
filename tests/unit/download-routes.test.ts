@@ -17,7 +17,11 @@ import { prisma } from "@/lib/db";
 const mockAuth = auth as unknown as Mock<() => Promise<Session | null>>;
 
 let sequence = 0;
-const TEST_FILE_DIR = path.join(process.cwd(), "public", "downloads");
+// A subdirectory of public/downloads/, never the directory itself — the
+// real public/downloads/ holds the committed seed PDFs (Task 9); deleting
+// the whole directory in afterEach (as an earlier version of this test
+// did) wiped those tracked files on every `npm run test`.
+const TEST_FILE_DIR = path.join(process.cwd(), "public", "downloads", "__test__");
 
 async function makeCategory() {
   sequence += 1;
@@ -34,7 +38,7 @@ async function makeResourceWithRealFile(categoryId: string, overrides: Record<st
       slug: `dl-route-resource-${sequence}`,
       title: `Resource ${sequence}`,
       thumbnailUrl: "/images/products/export/curry-powder.webp",
-      fileUrl: `/downloads/${fileName}`,
+      fileUrl: `/downloads/__test__/${fileName}`,
       fileType: "PDF",
       fileSizeBytes: 27,
       categoryId,
@@ -164,5 +168,30 @@ describe("GET /api/downloads/[slug]/file", () => {
     expect(response.status).toBe(404);
     const refreshed = await prisma.downloadResource.findUniqueOrThrow({ where: { id: resource.id } });
     expect(refreshed.downloadCount).toBe(0); // never reached recordDownload
+  });
+
+  it("returns 404 (never the real file) when fileUrl attempts to escape the downloads directory", async () => {
+    const category = await makeCategory();
+    const resource = await prisma.downloadResource.create({
+      data: {
+        slug: "dl-route-path-traversal",
+        title: "Path traversal attempt",
+        thumbnailUrl: "/images/products/export/curry-powder.webp",
+        // Not currently reachable through the seed/admin UI, but this field
+        // will eventually be admin-authored (Epic 07 Media Library) — the
+        // route itself must not trust it.
+        fileUrl: "/../.env",
+        fileType: "PDF",
+        fileSizeBytes: 100,
+        categoryId: category.id,
+        status: "Published",
+      },
+    });
+
+    const response = await getDownloadFile(new Request(`http://localhost/api/downloads/${resource.slug}/file`), {
+      params: Promise.resolve({ slug: resource.slug }),
+    });
+
+    expect(response.status).toBe(404);
   });
 });

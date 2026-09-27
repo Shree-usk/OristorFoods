@@ -2,7 +2,8 @@ import path from "node:path";
 
 import { Document, Font, Page, renderToBuffer, StyleSheet, Text, View } from "@react-pdf/renderer";
 
-import type { RecipeDetail } from "@/types/recipe";
+import { formatIngredientLine, formatScaledQuantity } from "@/lib/recipe-scaling";
+import type { RecipeDetail, RecipeIngredientItem } from "@/types/recipe";
 
 // @react-pdf/renderer embeds fonts via fontkit, which needs real font
 // files — the web app's next/font/google CSS mechanism doesn't apply here.
@@ -51,6 +52,18 @@ const styles = StyleSheet.create({
   footer: { position: "absolute", bottom: 24, left: 40, right: 40, fontSize: 8, color: COLORS.stoneGrey, textAlign: "center" },
 });
 
+/**
+ * The PDF renders at the recipe's default servings (not a visitor-adjusted
+ * count — it's a static artifact, not a live view), so this needs no scale
+ * factor: `formatScaledQuantity` is still required to round the base
+ * quantity to a display string, matching the same
+ * "quantity + unit + displayText" composition the web view's JSON-LD block
+ * already uses (src/app/(storefront)/recipes/[slug]/page.tsx).
+ */
+export function formatPdfIngredientLine(ingredient: RecipeIngredientItem): string {
+  return formatIngredientLine(ingredient, ingredient.quantity === null ? null : formatScaledQuantity(ingredient.quantity, ingredient.unit));
+}
+
 function RecipePdfDocument({ recipe }: { recipe: RecipeDetail }) {
   return (
     <Document title={`${recipe.title} — Oristor`}>
@@ -84,7 +97,7 @@ function RecipePdfDocument({ recipe }: { recipe: RecipeDetail }) {
         <Text style={styles.sectionHeading}>Ingredients</Text>
         {recipe.ingredients.map((ingredient) => (
           <Text key={ingredient.id} style={styles.ingredientRow}>
-            • {ingredient.displayText}
+            • {formatPdfIngredientLine(ingredient)}
           </Text>
         ))}
 

@@ -2,7 +2,7 @@
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
 
-import { renderRecipePdf } from "@/services/recipe-pdf.service";
+import { formatPdfIngredientLine, renderRecipePdf } from "@/services/recipe-pdf.service";
 import type { RecipeDetail } from "@/types/recipe";
 
 function makeMinimalRecipe(overrides: Partial<RecipeDetail> = {}): RecipeDetail {
@@ -28,7 +28,7 @@ function makeMinimalRecipe(overrides: Partial<RecipeDetail> = {}): RecipeDetail 
     dietaryTags: [],
     chefNotes: null,
     nutrition: { calories: null, protein: null, carbs: null, fat: null, fiber: null, sodium: null },
-    ingredients: [{ id: "ing-1", quantity: 1, unit: "tsp", displayText: "1 tsp Salt, to taste", product: null }],
+    ingredients: [{ id: "ing-1", quantity: null, unit: null, displayText: "Salt, to taste", product: null }],
     steps: [{ stepNumber: 1, instruction: "Combine everything.", imageUrl: null }],
     metaTitle: null,
     metaDescription: null,
@@ -38,6 +38,18 @@ function makeMinimalRecipe(overrides: Partial<RecipeDetail> = {}): RecipeDetail 
     ...overrides,
   };
 }
+
+describe("formatPdfIngredientLine", () => {
+  it("includes the scaled quantity and unit ahead of the ingredient name", () => {
+    const line = formatPdfIngredientLine({ id: "ing-1", quantity: 500, unit: "g", displayText: "Prawns, peeled and deveined", product: null });
+    expect(line).toBe("500 g Prawns, peeled and deveined");
+  });
+
+  it("omits the quantity for an ingredient with no scalable amount", () => {
+    const line = formatPdfIngredientLine({ id: "ing-2", quantity: null, unit: null, displayText: "Salt, to taste", product: null });
+    expect(line).toBe("Salt, to taste");
+  });
+});
 
 describe("renderRecipePdf", () => {
   it("renders a non-empty PDF buffer for a fully-populated recipe", async () => {
@@ -62,7 +74,7 @@ describe("renderRecipePdf", () => {
   it("renders successfully with multiple ingredients and steps", async () => {
     const recipe = makeMinimalRecipe({
       ingredients: [
-        { id: "ing-1", quantity: 1, unit: "kg", displayText: "1 kg Chicken", product: null },
+        { id: "ing-1", quantity: 1, unit: "kg", displayText: "Chicken, cut into curry pieces", product: null },
         { id: "ing-2", quantity: null, unit: null, displayText: "Salt, to taste", product: null },
       ],
       steps: [

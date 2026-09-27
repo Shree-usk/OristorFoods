@@ -34,6 +34,7 @@ export const footerColumns: FooterColumn[] = [
       { label: "Recipes", href: "/recipes" },
       { label: "Food Academy", href: "/food-academy" },
       { label: "Blog", href: "/blog" },
+      { label: "Downloads & Resources", href: "/downloads" },
     ],
   },
   {

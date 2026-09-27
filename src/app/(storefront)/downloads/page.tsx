@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import { Section } from "@/components/storefront/layout/section";
 import { DownloadCard } from "@/components/storefront/downloads/download-card";
 import { DownloadCategoryFilter } from "@/components/storefront/downloads/download-category-filter";
+import { DownloadPagination } from "@/components/storefront/downloads/download-pagination";
 import { listCategories, listResources } from "@/services/download.service";
 import { downloadListQuerySchema } from "@/validation/download.schema";
 
@@ -23,6 +24,13 @@ export default async function DownloadsPage({ searchParams }: DownloadsPageProps
     page: rawParams.page,
   });
   const [result, categories] = await Promise.all([listResources(query), listCategories()]);
+
+  function pageHref(page: number) {
+    const params = new URLSearchParams();
+    if (query.category) params.set("category", query.category);
+    params.set("page", String(page));
+    return `/downloads?${params.toString()}`;
+  }
 
   return (
     <Section>
@@ -46,6 +54,8 @@ export default async function DownloadsPage({ searchParams }: DownloadsPageProps
           ))}
         </div>
       )}
+
+      <DownloadPagination page={result.page} pageSize={result.pageSize} total={result.total} buildHref={pageHref} />
     </Section>
   );
 }

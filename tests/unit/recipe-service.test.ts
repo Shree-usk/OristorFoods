@@ -9,6 +9,7 @@ import {
   createRecipe,
   getFeaturedRecipes,
   getRecipeBySlug,
+  getRecipeForExport,
   getRecipesByProductId,
   getRelatedRecipes,
   listRecipeFacets,
@@ -365,6 +366,41 @@ describe("getRecipeBySlug", () => {
       fiber: 5,
       sodium: 600,
     });
+  });
+});
+
+describe("getRecipeForExport", () => {
+  it("returns null for a missing slug", async () => {
+    expect(await getRecipeForExport("does-not-exist")).toBeNull();
+  });
+
+  it("returns null for a non-Published recipe", async () => {
+    const category = await makeCategory();
+    await makeRecipe(category.id, { slug: "draft-export-recipe", status: "Draft" });
+
+    expect(await getRecipeForExport("draft-export-recipe")).toBeNull();
+  });
+
+  it("maps the same RecipeDetail fields as getRecipeBySlug, but does not increment viewCount or compute relatedRecipes", async () => {
+    const category = await makeCategory();
+    const recipe = await makeRecipe(category.id, {
+      slug: "export-recipe",
+      title: "Export Recipe",
+      viewCount: 5,
+      ingredients: [{ displayText: "Salt, to taste", sortOrder: 1 }],
+      steps: [{ stepNumber: 1, instruction: "Do the thing" }],
+    });
+    await makeRecipe(category.id, { slug: "would-be-related", title: "Would Be Related" });
+
+    const result = await getRecipeForExport("export-recipe");
+
+    expect(result).toMatchObject({ id: recipe.id, slug: "export-recipe", title: "Export Recipe" });
+    expect(result?.ingredients).toHaveLength(1);
+    expect(result?.steps).toHaveLength(1);
+    expect(result?.relatedRecipes).toEqual([]);
+
+    const unchanged = await prisma.recipe.findUniqueOrThrow({ where: { id: recipe.id } });
+    expect(unchanged.viewCount).toBe(5);
   });
 });
 
