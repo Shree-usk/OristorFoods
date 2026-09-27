@@ -9,6 +9,16 @@ codebase already has a mature, shipped precedent for each: `review.service.ts`
 This spec is mostly "apply that precedent to Recipe," with the differences
 called out explicitly.
 
+**Ground rule for every "mirrors X" decision below:** adapt the
+architectural pattern (layering, transaction shape, error-handling
+convention, optimistic-update flow) — never copy a `Review`/`Wishlist`
+source file byte-for-byte and rename identifiers. Where the two domains
+already need identical logic (e.g. the "strip-and-lock-then-recompute"
+transaction shape, or the guest-store `add`/`remove`/`has`/`clear` shape),
+write it fresh for `Recipe`; do not introduce a shared abstraction between
+the Product and Recipe implementations solely to make them structurally
+identical — that would be new coupling this spec has no requirement for.
+
 ## 1. `RecipeReview`: simpler lifecycle than `Review`, no title field
 
 `Review` (Product Reviews) has a 5-state lifecycle (`Pending → Approved →
@@ -239,7 +249,28 @@ convention `src/app/api/products/[slug]/reviews/**` and
 `recipe-review-responses.ts` mapping `RecipeReviewErrorCode` → status the
 same way `review-responses.ts` does today.
 
-## 8. Frontend structure
+## 8. Security posture
+
+Reviews require full authentication end-to-end — unlike `BlogComment`
+(STORY-021), there is no guest-submission path, so none of that story's
+honeypot/rate-limit spam-guard machinery applies here; `submitReview`'s
+security surface is simpler by construction, not by omission. Every
+mutation (`submitReview`, `editOwnPendingReview`, `withdrawOwnPendingReview`,
+`toggleBookmark`, the merge endpoint) resolves the customer identity from
+`auth()`'s session server-side, the same way `review.service.ts`/
+`wishlist.service.ts` already do — a request body's `customerId` (if a
+caller supplied one) is never trusted or read. `editOwnPendingReview`/
+`withdrawOwnPendingReview` re-check both ownership (`review.customerId ===
+session.user.id`) and status (`review.status === "Pending"`) inside the
+same conditional-update pattern `review.service.ts`'s doc comment already
+explains, closing the same read-then-write race that pattern was built to
+close. The bookmark merge endpoint validates every incoming recipe id is
+real and Published before creating a row — the same guard
+`mergeGuestWishlist` already applies for Draft/Discontinued products —
+so a tampered or stale guest-store id can't create a bookmark row for
+content that shouldn't be bookmarkable.
+
+## 9. Frontend structure
 
 `RecipeRatingStars` (Server Component, display-only — filled/outline `Star`
 icons plus the numeric average and count, `role="img"` with a computed
@@ -255,7 +286,7 @@ icon-only variant, top-right corner, matching `WishlistBadge`'s placement
 convention on `ProductCard`) and the STORY-018 detail page (a labelled
 button near the title).
 
-## 9. Accessibility floor
+## 10. Accessibility floor
 
 Star rating input: a `<fieldset>`/`<legend>` grouping five radio inputs
 (`ReviewForm.tsx`'s exact pattern — visually-hidden native radios, a
@@ -266,26 +297,24 @@ toggle: a real `<button aria-pressed={isBookmarked}>` with a text
 alternative that changes with state ("Bookmark this recipe" /
 "Remove bookmark"), not an icon-only control with a static label.
 
-## 10. Testing plan
+## 11. Testing plan
 
-Unit: `recalculateRatingSummary`-equivalent (average across `Approved`-only
-reviews, ignores `Pending`/`Rejected`/`Hidden`, recomputed correctly on
-both `Pending→Approved` and `Approved→Hidden`), the upsert/edit/withdraw
-service functions (duplicate rejected via the unique constraint, edit
-rejected once no longer `Pending`, withdraw only removes an unpublished
-row), `canTransitionRecipeReview`'s transition table (mirroring
-`blog-service.test.ts`'s equivalent shape), bookmark add/remove
-idempotency (`P2002` swallowed, `deleteMany` on an already-removed row is a
-no-op not a 404), `mergeGuestBookmarks` (skips ids already bookmarked,
-skips Draft/unpublished recipe ids — same guard `mergeGuestWishlist`
-applies for Draft/Discontinued products).
+Unit — Reviews:
+- Review creation (valid input persists as `Pending`).
+- Zod validation (`rating` out of 1–5 range rejected; `reviewText` length bound if one is set).
+- Duplicate-review prevention (`@@unique([recipeId, customerId])`; a second `submitReview` call upserts/conflicts per decision #3, never creates a second row).
+- `canTransitionRecipeReview`'s full transition table, both allowed and disallowed pairs (mirroring `blog-service.test.ts`'s equivalent shape).
+- Approval, rejection, and hiding (`changeRecipeReviewStatus` for each target status) each recompute `Recipe.avgRating`/`ratingCount` correctly; rejection alone (`Pending→Rejected`, never touching `Approved`) does NOT trigger a recalculation.
+- Withdrawal (only removes a still-`Pending`, own row; a no-longer-`Pending` or another customer's row is rejected).
+- Rating recalculation correctness: average across `Approved`-only reviews, ignores `Pending`/`Rejected`/`Hidden`; the zero-`Approved`-reviews case resolves to `avgRating: null, ratingCount: 0` (matching `Recipe.avgRating`'s existing nullable-until-rated convention from STORY-017, not `0`).
+- **Concurrent status-change safety**: two simultaneous `changeRecipeReviewStatus` calls touching the same recipe's aggregate (e.g. two reviews approved at once) must not lose an update — a practical test using two overlapping transactions against the real PGlite connection (matching this codebase's existing pattern for exercising `SELECT ... FOR UPDATE` row-locking, if one already exists for `review.repository.ts`; otherwise a sequential-but-interleaved simulation that proves the lock is actually acquired) must confirm the final `ratingCount` reflects both approvals, not just one.
+- Pagination and each sort order (Newest, Highest Rated, Lowest Rated) on `listApprovedReviews`.
 
-Playwright e2e: as an authenticated test customer — submit a review,
-confirm the "awaiting approval" state and that it's absent from the public
-list; edit a Pending review; withdraw a Pending review; toggle a bookmark
-on both the recipe card and the detail page and confirm the state survives
-a reload. As an unauthenticated visitor — confirm both actions prompt
-sign-in rather than silently failing, and (guest-bookmark path) confirm a
-bookmark made while signed out appears automatically once signed in.
-Accessibility: axe scan on the review form's star input and the bookmark
-toggle in both states.
+Unit — Bookmarks:
+- Bookmark creation.
+- Duplicate-bookmark prevention (`P2002` swallowed — idempotent, not an error — and no second row created even under a simulated concurrent double-submit).
+- Bookmark removal (`deleteMany` on an already-removed row is a no-op, not a 404).
+- `mergeGuestBookmarks`: skips ids already bookmarked, skips Draft/unpublished recipe ids (same guard `mergeGuestWishlist` applies for Draft/Discontinued products), and — repeated/idempotent merge — calling it twice with the same id list produces no duplicate rows and no error the second time.
+- Unauthorized access: every mutation rejects a request with no session (401) before touching the repository layer.
+
+Playwright e2e: as an authenticated test customer — submit a review, confirm the "awaiting approval" state and that it's absent from the public list; edit a Pending review; withdraw a Pending review; toggle a bookmark on both the recipe card and the detail page and confirm the state survives a reload (including the optimistic-UI behavior: the toggle visibly flips before the network round-trip resolves). As an unauthenticated visitor — confirm both actions prompt sign-in (with `callbackUrl` preserved) rather than silently failing, and (guest-bookmark path) confirm a bookmark made while signed out appears automatically once signed in. Accessibility: axe scan on the review form's star input and the bookmark toggle in both states.
