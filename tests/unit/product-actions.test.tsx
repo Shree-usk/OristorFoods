@@ -47,10 +47,11 @@ describe("ProductActions", () => {
     );
   });
 
-  it("disables Add to Cart even when in stock, until STORY-024 provides a real implementation", () => {
+  it("enables Add to Cart now that STORY-024 provides a real implementation", () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(null, { status: 200 })));
     renderWithProviders(<ProductActions productId="p1" inStock={true} />);
 
-    expect(screen.getByRole("button", { name: "Add to Cart" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Add to Cart" })).toBeEnabled();
   });
 
   it("renders a compare toggle that adds the product to the compare store", () => {
