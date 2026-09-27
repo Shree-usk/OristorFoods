@@ -3,6 +3,7 @@ import Link from "next/link";
 import { Clock, Play, Star } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
+import { RecipeBookmarkButton } from "@/components/storefront/recipes/recipe-bookmark-button";
 import { formatRecipeTime } from "@/lib/recipe-time";
 import type { RecipeCard as RecipeCardData } from "@/types/recipe";
 
@@ -34,11 +35,12 @@ export function RecipeCard({ recipe, headingLevel: Heading = "h3" }: RecipeCardP
           <span
             role="img"
             aria-label="Video available"
-            className="absolute top-2 right-2 flex size-7 items-center justify-center rounded-full bg-black/60 text-white"
+            className="absolute top-2 left-2 flex size-7 items-center justify-center rounded-full bg-black/60 text-white"
           >
             <Play className="size-3.5 fill-current" aria-hidden="true" />
           </span>
         )}
+        <RecipeBookmarkButton recipeId={recipe.id} recipeSlug={recipe.slug} />
       </div>
       <p className="mt-3 text-caption font-medium text-chilli">
         <span>{recipe.categoryName}</span>
