@@ -2,7 +2,7 @@
 
 import { Download, Printer } from "lucide-react";
 import { ShareButtons } from "@/components/storefront/product/share-buttons";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 
 interface RecipePrintShareBarProps {
   url: string;
@@ -17,17 +17,15 @@ export function RecipePrintShareBar({ url, title, recipeSlug }: RecipePrintShare
         <Printer />
         Print
       </Button>
-      <Button
-        variant="outline"
-        size="sm"
-        nativeButton={false}
-        render={
-          <a href={`/api/recipes/${recipeSlug}/pdf`} download aria-label={`Download ${title} recipe card as a PDF`}>
-            <Download />
-            Download PDF
-          </a>
-        }
-      />
+      <a
+        href={`/api/recipes/${recipeSlug}/pdf`}
+        download
+        aria-label={`Download ${title} recipe card as a PDF`}
+        className={buttonVariants({ variant: "outline", size: "sm" })}
+      >
+        <Download />
+        Download PDF
+      </a>
       <ShareButtons url={url} title={title} />
     </div>
   );
