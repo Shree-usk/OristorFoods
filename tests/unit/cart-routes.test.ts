@@ -12,6 +12,7 @@ import { createProduct } from "@/repositories/product.repository";
 import { GET as getCartRoute } from "@/app/api/cart/route";
 import { POST as postCartItem } from "@/app/api/cart/items/route";
 import { PATCH as patchCartItem, DELETE as deleteCartItem } from "@/app/api/cart/items/[id]/route";
+import { POST as postCartMerge } from "@/app/api/cart/merge/route";
 import { CART_COOKIE_NAME } from "@/services/cart.service";
 
 const mockAuth = auth as unknown as Mock<() => Promise<Session | null>>;
@@ -196,5 +197,31 @@ describe("DELETE /api/cart/items/[id]", () => {
       params: Promise.resolve({ id: "does-not-exist" }),
     });
     expect(response.status).toBe(404);
+  });
+});
+
+describe("POST /api/cart/merge", () => {
+  it("requires authentication", async () => {
+    const response = await postCartMerge(new Request("http://localhost/api/cart/merge", { method: "POST" }));
+    expect(response.status).toBe(401);
+  });
+
+  it("merges the guest cart identified by the request's cookie into the authenticated user's cart", async () => {
+    const product = await makeProduct();
+    const addResponse = await postCartItem(
+      new Request("http://localhost/api/cart/items", { method: "POST", body: JSON.stringify({ productId: product.id, quantity: 2 }), headers: { "Content-Type": "application/json" } }),
+    );
+    const guestCookie = cookieValueFrom(addResponse)!;
+
+    const user = await makeUser();
+    mockAuth.mockResolvedValue(sessionFor(user.id));
+
+    const response = await postCartMerge(requestWithCookie("http://localhost/api/cart/merge", guestCookie, { method: "POST" }));
+    expect(response.status).toBe(200);
+
+    const cartResponse = await getCartRoute(new Request("http://localhost/api/cart"));
+    const body = (await cartResponse.json()) as { items: { quantity: number }[] };
+    expect(body.items).toHaveLength(1);
+    expect(body.items[0]?.quantity).toBe(2);
   });
 });
