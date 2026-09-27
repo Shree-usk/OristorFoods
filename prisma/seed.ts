@@ -48,6 +48,7 @@ async function main() {
     productType: "Standard",
     publishedAt: new Date(),
     rewardPoints: 10,
+    stockQuantity: 250,
     benefits: ["Rich in antioxidants", "No artificial preservatives"],
     servingSuggestions: ["Add to curries and stews", "Sprinkle over roasted vegetables"],
     brand: { connect: { id: brand.id } },
@@ -137,6 +138,7 @@ async function main() {
     productType: "Standard",
     publishedAt: new Date(),
     rewardPoints: 8,
+    stockQuantity: 250,
     brand: { connect: { id: brand.id } },
     categories: { connect: [{ id: spices.id }] },
   });
@@ -153,6 +155,7 @@ async function main() {
     productType: "Bundle",
     publishedAt: new Date(),
     rewardPoints: 25,
+    stockQuantity: 60,
     brand: { connect: { id: brand.id } },
     categories: { connect: [{ id: giftSets.id }] },
   });
@@ -183,6 +186,7 @@ async function main() {
     productType: "Seasonal",
     publishedAt: new Date(),
     rewardPoints: 15,
+    stockQuantity: 40,
     brand: { connect: { id: brand.id } },
     collections: { connect: [{ id: avurudu.id }] },
   });
