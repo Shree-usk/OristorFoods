@@ -1,7 +1,15 @@
 import type { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/db";
 
-const withProduct = { product: true } satisfies Prisma.CartItemInclude;
+// Nested include, not `product: true` — Prisma only loads a relation's own
+// scalar fields on a plain `include`, and cart.service.ts's line-item
+// mapping needs the product's primary image (a relation of Product, not a
+// scalar) for the thumbnail. Same ordering convention as
+// product.repository.ts's findProductDetailBySlug; `take: 1` since a cart
+// line only ever shows one thumbnail.
+const withProduct = {
+  product: { include: { images: { orderBy: [{ isPrimary: "desc" }, { sortOrder: "asc" }], take: 1 } } },
+} satisfies Prisma.CartItemInclude;
 
 export type CartItemWithProduct = Prisma.CartItemGetPayload<{ include: typeof withProduct }>;
 
