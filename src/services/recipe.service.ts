@@ -11,7 +11,7 @@ function recipeHref(slug: string) {
   return `/recipes/${slug}`;
 }
 
-function toRecipeCard(row: RecipeCardRow): RecipeCard {
+export function toRecipeCard(row: RecipeCardRow): RecipeCard {
   return {
     id: row.id,
     slug: row.slug,
@@ -195,6 +195,12 @@ export async function getRecipesByIds(ids: string[]): Promise<RecipePreview[]> {
   if (ids.length === 0) return [];
   const rows = await recipeRepository.findRecipesByIds(ids, ids.length);
   return rows.map((row) => ({ id: row.id, title: row.title, slug: row.slug, imageSrc: row.heroImage }));
+}
+
+export async function getRecipeCardsBySlugs(slugs: string[]): Promise<RecipeCard[]> {
+  if (slugs.length === 0) return [];
+  const rows = await recipeRepository.findPublishedRecipesBySlugs(slugs);
+  return rows.map(toRecipeCard);
 }
 
 /** Called once from src/instrumentation.ts. */

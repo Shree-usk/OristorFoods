@@ -1481,3 +1481,174 @@ content types should follow for their own cross-links (e.g. Blog,
 STORY-021) rather than each content type's repository independently
 joining into `Recipe`/`Product` and deciding for itself what those cards
 look like.
+
+---
+
+## 2026-09-27 — STORY-021 Blog
+
+**Scheduled-publish contract: `status: "Published"` AND `publishedAt <=
+now()`, and why `Scheduled` needs no separate query branch.** Every
+storefront-facing query in `blog.repository.ts`
+(`findPublishedBlogPosts`, `findPublishedBlogPostBySlug`,
+`findPublishedBlogPostIdBySlug`, `findRelatedBlogPosts`,
+`findActiveBlogTags`, `findActiveBlogAuthorsWithPublishedPosts`)
+hardcodes `status: "Published"` *and* `publishedAt: { lte: now() }` as a
+single, non-negotiable `AND`. **For the record:** only
+`findPublishedBlogPosts` actually composes its `where` by calling the
+`publishedWhere()` helper (`blog.repository.ts:18-20`); the other five
+functions each inline the identical `status: "Published"`/`publishedAt: {
+lte: now() }` condition literally at their own call site rather than
+calling the helper. All six are independently correct and covered by
+`tests/unit/blog-repository.test.ts`, but an earlier draft of this note
+overstated it as "every query routes through the shared helper" — that is
+not what the code does; only one of the six does. A future cleanup could
+route the other five through `publishedWhere()` too (two of them —
+`findActiveBlogTags`/`findActiveBlogAuthorsWithPublishedPosts` — apply the
+condition inside a nested relation filter rather than at the query's own
+top level, so that refactor is not a pure drop-in), but this story ships
+with the duplication left in place, invariant intact.
+`findPublishedBlogPosts` also strips any caller-supplied `status`/
+`publishedAt` from the incoming filter object via destructuring (never a
+spread) before composing `where`, mirroring the Food Academy repository's
+identical caller-cannot-widen-the-invariant pattern (see the STORY-020
+entry above) — `tests/unit/blog-repository.test.ts` ("cannot be overridden
+by a caller-supplied status or publishedAt filter") locks this in.
+`BlogPostStatus` is a four-value enum (`Draft`/`Scheduled`/`Published`/
+`Archived`), but **`Scheduled` never needs its own query branch**: a
+`Scheduled` post's `status` is simply not `"Published"`, so the hardcoded
+`status: "Published"` equality check excludes it unconditionally,
+regardless of what its `publishedAt` holds. The `publishedAt <= now()`
+half of the guard exists for a different case entirely — a post an admin
+has already flipped to `status: "Published"` with a future `publishedAt`
+(the normal shape of "publish this on launch day, dated for that day, and
+just leave it Published rather than babysitting a separate Scheduled →
+Published flip at the right moment"). The seed's future-dated regression
+post (`our-plans-for-next-years-product-lineup`, `publishedAt:
+"2099-01-01"`) is deliberately seeded with `status: "Published"`, not
+`status: "Scheduled"`, to exercise exactly this case — see
+`prisma/seed-blog.ts` and `tests/unit/blog-repository.test.ts`
+("excludes Draft, Archived, and Published-but-future-dated posts").
+Any future Admin Blog Editor (Epic 07) that adds a real `Scheduled` →
+`Published` authoring flip should keep writing `publishedAt` at
+authoring time either way — this story's read path already handles both
+"authored as Scheduled, flipped to Published later" and "authored as
+Published with a future date" identically, since both simply wait for
+`publishedAt <= now()` once `status` is `"Published"`.
+
+**`BlogComment` moderation lifecycle mirrors `review.service.ts`'s
+state-machine shape exactly, one state smaller.** `blog.service.ts`
+defines `allowedCommentTransitions` (`Pending: ["Approved", "Rejected"]`,
+`Approved: ["Hidden"]`, `Rejected: []`, `Hidden: []`) plus
+`canTransitionComment`/`changeCommentStatus`, the identical
+table-plus-single-mutation-function shape `review.service.ts` already
+established (`allowedTransitions`/`canTransitionReview`/
+`changeReviewStatus`). `BlogCommentStatus` has one fewer state than
+`ReviewStatus`: reviews have a separate "Approved but not yet Published"
+step (`Approved: ["Published", "Rejected"]`) because publishing a review
+is a distinct moderator action from approving it; comments have no
+equivalent gap — `Approved` **is** the publicly-visible state for a
+comment, so there is no third status to wait in between. `Approved:
+["Hidden"]` exists so a moderator can retract a comment after the fact
+without deleting the row (audit trail preserved) — this is the only
+post-approval transition. `changeCommentStatus`/`advanceCommentToApproved`
+exist in `blog.service.ts` as the mechanism intended to walk a seeded
+comment from `Pending` to `Approved` through the same state machine a real
+moderation action would use; **the actual moderation UI (approve/reject/
+hide, with a moderator identity and audit note) is Epic 07's concern**
+(STORY-044/045), not built here. **For the record:** `prisma/seed-blog.ts`
+does not actually call `advanceCommentToApproved` — it writes each seed
+comment's `status` (including `"Approved"`) directly via
+`prisma.blogComment.create({ data: { ..., status: comment.status } })`,
+bypassing both `createBlogComment`'s Pending-only rule and the moderation
+state machine entirely. This differs from the Recipe/Review seeds, which
+do route their seed data through their own `advance*ToPublished` helpers.
+`advanceCommentToApproved` is currently exercised only by its own unit
+test (`tests/unit/blog-service.test.ts`, "advanceCommentToApproved
+(dev/seed helper)"), not by the seed script. This story only ever produces
+`Pending` comments through the real submission path
+(`createBlogComment` hardcodes `status: "Pending"` at the type level — its
+input type has no `status` field a caller could set) and renders
+`Approved` ones (`blogPostDetailSelect`'s `comments` relation hardcodes
+`where: { status: "Approved" }`).
+
+**Recipe/video embed mechanism (`parseBodyBlocks`/`BlogPostBody`) is a
+separate, blog-only piece — not a modification of the shared
+`<MarkdownContent>`.** `src/lib/blog-body-blocks.ts`'s `parseBodyBlocks`
+splits a post's raw `bodyContent` on blank lines into an ordered
+`BlogBodyBlock[]` (`{kind: "markdown"}` / `{kind: "recipeEmbed", slug}` /
+`{kind: "videoEmbed", url}`), recognizing a block as an embed only when
+the *entire* trimmed block is exactly `[[recipe:slug]]` or
+`[[video:url]]` — an embed-shaped token appearing mid-paragraph stays
+ordinary markdown text. `BlogPostBody` (`blog-post-body.tsx`) then walks
+that array, handing each `markdown` block to the existing
+`<MarkdownContent>` unmodified, and rendering `recipeEmbed`/`videoEmbed`
+blocks with the existing `RecipeCard`/`VideoPlayer` components instead
+(reusing STORY-017's card and STORY-019's facade-lazy-load video player
+rather than building new ones). This was deliberately built as a
+pre-processing step in front of `<MarkdownContent>`, not as a change to
+`<MarkdownContent>` itself (e.g. a custom remark/rehype plugin for embed
+syntax) — `<MarkdownContent>` is shared with Food Academy
+(`FoodAcademyEntry`/`FoodAcademySection` bodies, STORY-020) and Recipes'
+`chefNotes`-adjacent rendering, and STORY-020's entry above already
+documents that its raw-HTML-disabled safety property must not be
+disturbed without re-examining sanitization. Giving Blog its own
+block-splitting layer in front of the unchanged renderer means Blog's
+embed syntax has zero regression risk to any other content type that
+calls `<MarkdownContent>` directly — a bug or behavior change in
+`parseBodyBlocks` cannot affect Food Academy or recipe rendering, because
+neither of those call paths goes anywhere near it. An unresolvable
+`[[recipe:...]]` embed (slug not found, or resolves to a non-Published
+recipe — `recipeCards` only ever contains Published cards, resolved via
+`getRecipeCardsBySlugs`) renders nothing for that block rather than
+literal token text or a broken card (`tests/e2e/blog.spec.ts`, "renders
+without crashing and without broken/literal token text").
+
+**Honeypot + DB-based rate-limit spam guard: identity-based, not
+IP-based.** The original story task list's wording ("simple rate limit by
+IP/session") was not what got built, and this entry documents the actual
+mechanism rather than the aspirational one. `submitComment`
+(`blog.service.ts`) checks `blogRepository.findRecentCommentByIdentity`
+against `BlogComment`'s own table, scoped to the same post and the same
+*identity* — `customerId` for an authenticated session, `authorEmail` for
+a guest — within a 60-second window (`RATE_LIMIT_WINDOW_MS`). There is no
+IP address anywhere in this check: no request-IP capture, no per-IP
+counter, no CAPTCHA. This is a deliberate, in-scope choice, not an
+oversight — the story's own acceptance criterion is explicit that
+submission must be rate-limited/spam-guarded "at minimum with honeypot or
+equivalent basic protection (full spam/abuse tooling is not required
+here)," and an identity-scoped DB check satisfies that "basic protection"
+bar without adding IP-capture plumbing or a third-party CAPTCHA
+dependency this story doesn't otherwise need. A future story that wants
+real abuse-resistant rate limiting (shared IPs, header spoofing, a bot
+rotating email addresses) should treat this as a floor, not a ceiling.
+
+**Gotcha for anyone touching `blogCommentInputSchema` or the comments
+route: the honeypot's silent-rejection property must be enforced ONLY in
+`submitComment`, never as schema validation.** This was a real bug found
+and fixed during this story's build (commit `48c7601`). The design intent
+— stated directly in `submitComment`'s own comment (`blog.service.ts:154-158`)
+— is that a bot must not be able to distinguish a honeypot rejection, a
+rate-limit rejection, and a genuine success from the HTTP response: all
+three return the identical `200 {status: "pending-review"}`.
+`blogCommentInputSchema.honeypot` was originally `z.string().max(0, "Invalid
+submission")`, and since `POST /api/blog/[slug]/comments` runs
+`blogCommentInputSchema.safeParse` on the raw request body *before* ever
+calling `submitComment`, a real non-empty honeypot value was rejected at
+the route with a distinguishable `400` — completely defeating the "can't
+tell them apart" property, even though `submitComment`'s own honeypot
+check (already correct, already tested in isolation) never got the
+chance to run on that request. It slipped through Task 5/6 review because
+neither task's tests exercised a non-empty honeypot through the real
+route — Task 5 tested `submitComment` directly, and Task 6's route tests
+all hardcoded `honeypot: ""`. **The fix, and the rule going forward:**
+`honeypot` at the schema layer is shape-validation only (`z.string()`,
+no length constraint) — the accept/reject decision belongs entirely to
+`submitComment`'s runtime check. Do not reintroduce a `.max(0)` (or any
+other honeypot-rejecting) constraint on this field in
+`blogCommentInputSchema`, and if a future route ever parses comment input
+with a *different* schema before calling `submitComment`, that schema
+must make the same choice. `tests/unit/blog-route.test.ts` ("silently
+acknowledges a filled honeypot with the same pending-review response,
+without persisting a comment") is the regression guard — it exercises the
+real route handler, not just the service function, specifically because
+that is the layer the original bug lived in.

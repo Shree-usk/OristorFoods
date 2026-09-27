@@ -1,0 +1,97 @@
+import { describe, expect, it } from "vitest";
+import { blogCommentInputSchema, blogGuestCommentInputSchema, blogListQuerySchema, blogSlugParamSchema } from "@/validation/blog.schema";
+
+describe("blogListQuerySchema", () => {
+  it("defaults page/pageSize and leaves tag/author undefined when absent", () => {
+    const result = blogListQuerySchema.parse({});
+    expect(result).toMatchObject({ page: 1, pageSize: 12 });
+    expect(result.tag).toBeUndefined();
+    expect(result.author).toBeUndefined();
+  });
+
+  it("passes through combined tag and author filters", () => {
+    const result = blogListQuerySchema.parse({ tag: "spices", author: "amara-perera" });
+    expect(result).toMatchObject({ tag: "spices", author: "amara-perera" });
+  });
+
+  it("falls back to defaults for malformed page/pageSize", () => {
+    expect(blogListQuerySchema.parse({ page: "nope", pageSize: "-1" })).toMatchObject({ page: 1, pageSize: 12 });
+  });
+});
+
+describe("blogSlugParamSchema", () => {
+  it("accepts a non-empty slug and rejects an empty one", () => {
+    expect(blogSlugParamSchema.safeParse({ slug: "a-real-post" }).success).toBe(true);
+    expect(blogSlugParamSchema.safeParse({ slug: "" }).success).toBe(false);
+  });
+});
+
+describe("blogCommentInputSchema", () => {
+  it("accepts a valid guest submission", () => {
+    const result = blogCommentInputSchema.safeParse({
+      name: "Nadeesha",
+      email: "nadeesha@example.com",
+      body: "Lovely post, thank you!",
+      honeypot: "",
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("accepts a valid submission with name/email omitted (authenticated caller)", () => {
+    const result = blogCommentInputSchema.safeParse({ body: "Great recipe idea.", honeypot: "" });
+    expect(result.success).toBe(true);
+  });
+
+  // The anti-spam decision on a filled honeypot lives in `submitComment`
+  // (Task 5's service layer), not here — this schema only validates shape.
+  // A `.max(0)` constraint here would make the route reject a filled
+  // honeypot with a distinguishable 400 before `submitComment` ever runs,
+  // defeating the "a bot must not be able to tell honeypot/rate-limit/
+  // success apart" design.
+  it("accepts a non-empty honeypot value at the shape level", () => {
+    const result = blogCommentInputSchema.safeParse({ body: "Buy cheap watches now", honeypot: "I am a bot" });
+    expect(result.success).toBe(true);
+  });
+
+  it("rejects a body that is too short or too long", () => {
+    expect(blogCommentInputSchema.safeParse({ body: "hi", honeypot: "" }).success).toBe(false);
+    expect(blogCommentInputSchema.safeParse({ body: "x".repeat(2001), honeypot: "" }).success).toBe(false);
+  });
+
+  it("rejects a malformed email when provided", () => {
+    const result = blogCommentInputSchema.safeParse({ name: "A", email: "not-an-email", body: "A fine comment.", honeypot: "" });
+    expect(result.success).toBe(false);
+  });
+});
+
+describe("blogGuestCommentInputSchema", () => {
+  it("accepts a valid guest submission", () => {
+    const result = blogGuestCommentInputSchema.safeParse({
+      name: "Nadeesha",
+      email: "nadeesha@example.com",
+      body: "Lovely post, thank you!",
+      honeypot: "",
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("rejects a missing name and a missing email, unlike the base schema", () => {
+    const result = blogGuestCommentInputSchema.safeParse({ body: "Great recipe idea.", honeypot: "" });
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      const fieldErrors = result.error.flatten().fieldErrors;
+      expect(fieldErrors.name?.[0]).toBe("Name is required");
+      expect(fieldErrors.email).toBeDefined();
+    }
+  });
+
+  it("rejects an empty-string name and email, not just an absent one", () => {
+    const result = blogGuestCommentInputSchema.safeParse({ name: "", email: "", body: "Great recipe idea.", honeypot: "" });
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      const fieldErrors = result.error.flatten().fieldErrors;
+      expect(fieldErrors.name?.[0]).toBe("Name is required");
+      expect(fieldErrors.email).toBeDefined();
+    }
+  });
+});

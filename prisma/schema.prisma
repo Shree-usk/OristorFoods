@@ -34,6 +34,7 @@ model User {
   moderatedReviews  Review[]   @relation("ReviewModerator")
   questions         Question[] @relation("QuestionAsker")
   answeredQuestions Question[] @relation("QuestionAnswerer")
+  blogComments      BlogComment[]
   createdAt         DateTime   @default(now())
   updatedAt         DateTime   @updatedAt
 }
@@ -783,4 +784,88 @@ model FoodAcademyProductRef {
 
   @@unique([entryId, productId])
   @@index([productId])
+}
+
+// --- Blog (STORY-021) ---
+// Customer-facing blog: brand stories, recipes tie-ins and cooking content,
+// independent of the Recipe Centre, Cooking Tips and Food Academy. Design:
+// .superpowers/sdd/2026-09-26-blog/
+
+enum BlogPostStatus {
+  Draft
+  Scheduled
+  Published
+  Archived
+}
+
+enum BlogCommentStatus {
+  Pending
+  Approved
+  Rejected
+  Hidden
+}
+
+model BlogAuthor {
+  id        String     @id @default(cuid())
+  name      String
+  slug      String     @unique
+  bio       String?
+  avatarUrl String?
+  posts     BlogPost[]
+}
+
+model BlogTag {
+  id    String        @id @default(cuid())
+  name  String
+  slug  String        @unique
+  posts BlogPostTag[]
+}
+
+model BlogPost {
+  id                 String         @id @default(cuid())
+  slug               String         @unique
+  title              String
+  heroImageUrl       String?
+  excerpt            String
+  bodyContent        String
+  authorId           String
+  author             BlogAuthor     @relation(fields: [authorId], references: [id])
+  readingTimeMinutes Int?
+  status             BlogPostStatus @default(Draft)
+  publishedAt        DateTime?
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+
+  tags     BlogPostTag[]
+  comments BlogComment[]
+
+  @@index([status, publishedAt])
+  @@index([status, authorId])
+}
+
+model BlogPostTag {
+  id     String   @id @default(cuid())
+  postId String
+  post   BlogPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  tagId  String
+  tag    BlogTag  @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@unique([postId, tagId])
+  @@index([tagId])
+}
+
+model BlogComment {
+  id          String            @id @default(cuid())
+  postId      String
+  post        BlogPost          @relation(fields: [postId], references: [id], onDelete: Cascade)
+  authorName  String
+  authorEmail String
+  customerId  String?
+  customer    User?             @relation(fields: [customerId], references: [id])
+  body        String
+  status      BlogCommentStatus @default(Pending)
+  createdAt   DateTime          @default(now())
+
+  @@index([postId, status])
+  @@index([postId, authorEmail, createdAt])
 }

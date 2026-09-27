@@ -6,6 +6,7 @@ import * as productRepository from "../src/repositories/product.repository";
 import * as pricingRepository from "../src/repositories/pricing.repository";
 import { advanceReviewToPublished, submitReview } from "../src/services/review.service";
 import { advanceQuestionToPublished, submitQuestion } from "../src/services/qa.service";
+import { seedBlog } from "./seed-blog";
 import { seedCookingTips } from "./seed-cooking-tips";
 import { seedFoodAcademy } from "./seed-food-academy";
 import { seedRecipes } from "./seed-recipes";
@@ -259,6 +260,9 @@ async function main() {
   // Food Academy (STORY-020).
   const foodAcademySeed = await seedFoodAcademy();
 
+  // Blog (STORY-021).
+  const blogSeed = await seedBlog();
+
   console.log("Seed complete:", {
     brand: brand.slug,
     categories: [spices.slug, giftSets.slug],
@@ -267,6 +271,7 @@ async function main() {
     recipes: recipeSeed,
     cookingTips: cookingTipSeed,
     foodAcademy: foodAcademySeed,
+    blog: blogSeed,
   });
 }
 
