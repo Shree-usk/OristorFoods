@@ -298,7 +298,7 @@ git commit -m "feat: add download types, validation schema, and file-size format
 
 **Interfaces:**
 - Consumes: `Prisma`/`DownloadResourceStatus` from `@/generated/prisma/client` (Task 1).
-- Produces: error classes `DownloadServiceError`, `DownloadResourceNotFoundError` (each with a `.code`); repository functions `findPublishedResourceBySlug`, `listCategories`, `listPublishedResources`, `incrementDownloadCount`, and type `DownloadResourceWithCategory`. Task 4's service imports all of these.
+- Produces: error classes `DownloadServiceError`, `DownloadResourceNotFoundError`, `DownloadAuthRequiredError` (each with a `.code`); repository functions `findPublishedResourceBySlug`, `listCategories`, `listPublishedResources`, `incrementDownloadCount`, and type `DownloadResourceWithCategory`. Task 4's service imports all of these.
 
 - [ ] **Step 1: Write `src/services/download.errors.ts`**
 
