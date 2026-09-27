@@ -1652,3 +1652,90 @@ acknowledges a filled honeypot with the same pending-review response,
 without persisting a comment") is the regression guard — it exercises the
 real route handler, not just the service function, specifically because
 that is the layer the original bug lived in.
+
+---
+
+## 2026-09-27 — STORY-022 Recipe Reviews & Bookmarks
+
+**`RecipeBookmark` and `recipe-bookmark.service.ts` are the shared source
+of truth for saved recipes — STORY-037 (Saved Recipes & Sync) must consume
+`listBookmarksForCustomer(customerId): Promise<RecipeCard[]>` rather than
+querying `RecipeBookmark` directly or introducing a second bookmark table.**
+`RecipeBookmark` is a flat `{ id, recipeId, customerId, createdAt }` model
+with `@@unique([recipeId, customerId])` — deliberately not a
+`Wishlist`-style two-table container, since a bookmark is a simple
+recipe-to-customer relationship with no need for multiple named lists.
+`addBookmark`/`removeBookmark`/`listBookmarksForCustomer`/
+`mergeGuestBookmarks` (`src/services/recipe-bookmark.service.ts`) are the
+only sanctioned write/read paths; `src/repositories/recipe-bookmark.repository.ts`
+is the only file that imports Prisma for this model. STORY-037's
+account-side dashboard should call `listBookmarksForCustomer` directly for
+its list view.
+
+**`Recipe.avgRating`/`ratingCount` recalculation strategy: service-level
+recompute on every status-changing write, inside the same transaction,
+row-locked — not a trigger, and not a scheduled job.** Chosen because a
+review's status change is already a single, identifiable write path
+(`recipe-review.service.ts`'s `changeRecipeReviewStatus`, the only function
+that mutates `RecipeReview.status`), so there is exactly one place that
+needs to trigger recalculation — a DB trigger or background job would add
+operational complexity (migration-managed trigger functions, or a queue
+and worker) for no benefit over a direct transactional call at that single
+call site. `recipe-review.repository.ts`'s `updateReviewStatusAndRecalculate`
+does `SELECT ... FOR UPDATE` on the `Recipe` row before re-aggregating
+`AVG(rating)`/`COUNT(*)` over `Approved`-only reviews, so two concurrent
+status changes on the same recipe can't produce a lost update (the second
+transaction blocks until the first commits, then re-reads the post-commit
+state). Zero `Approved` reviews resolves to `avgRating: null`, `ratingCount:
+0` — never `0` for the average, matching `Recipe.avgRating`'s existing
+nullable-until-rated convention from STORY-017. This is the same pattern
+`review.repository.ts`'s `updateStatusAndRecalculate` already established
+for `Product`/`ProductRatingSummary` (STORY-015) — any future review-heavy
+story needing the same guarantee should reuse this shape (row-lock the
+parent, re-aggregate from source rows inside the same transaction, write
+back conditionally on the pre-change status) rather than inventing a new
+one.
+
+**`RecipeReview`'s lifecycle is intentionally simpler than `Review`'s:**
+`Pending → Approved | Rejected`, `Approved → Hidden` — four states, not
+`Review`'s five (no separate "Approved but not yet Published" step,
+because approval and publication are the same event for recipe reviews).
+This mirrors `BlogComment`'s lifecycle shape exactly
+(`canTransitionRecipeReview`/`changeRecipeReviewStatus` in
+`recipe-review.service.ts` mirror `blog.service.ts`'s
+`canTransitionComment`/`changeCommentStatus`), not `review.service.ts`'s
+more complex one. No moderator-audit columns (`reviewedById`,
+`moderatorNote`, a separate `publishedAt`) exist on `RecipeReview` at this
+story's stage — Epic 07's Reviews Moderation Console (STORY-045) can add
+them alongside its own UI if it needs them, the same deferral already made
+for `BlogComment`.
+
+**Two independent `RecipeNotFoundError` classes exist by design** — one in
+`recipe-review.errors.ts`, one in `recipe-bookmark.errors.ts`. Reviews and
+Bookmarks import nothing from each other; introducing a shared error
+module for one ~10-line class would be exactly the kind of unnecessary
+coupling the story's own design spec warned against.
+
+**Seed data fix: `prisma/seed-recipes.ts`'s `avgRating`/`ratingCount` were
+previously hardcoded fake numbers (e.g. `sri-lankan-chicken-curry:
+avgRating: 4.9, ratingCount: 58`) with zero backing `RecipeReview` rows —
+written before this story existed.** Now that these columns are a
+review-derived invariant, they were nulled out and replaced with real
+`RecipeReview` rows walked through the actual `submitReview`/
+`advanceRecipeReviewToApproved` workflow in `prisma/seed.ts` (mirroring how
+`prisma/seed.ts` already does this for `Product`/`Review`). Anyone adding a
+new seeded recipe with a nonzero `avgRating` in the future must back it
+with real seeded reviews the same way — a fake rating with no reviews
+behind it is a bug, not a shortcut, once a working review system exists.
+
+**e2e fixture gotcha: a directly-created test `Recipe` needs an explicit
+`publishedAt`.** `createRecipe()` (`src/repositories/recipe.repository.ts`)
+is a thin passthrough with no default — `publishedAt` stays `null` unless
+the caller sets it. `/recipes` defaults to `sort=newest`
+(`publishedAt desc, nulls last`), so a fixture recipe with no `publishedAt`
+sorts to the very end of the listing and is invisible to any e2e test that
+navigates to the listing page rather than the recipe's own detail-page URL
+(caught by `recipe-bookmarks.spec.ts`'s "toggling on the recipe card"
+test). Every unit-test recipe fixture (`tests/unit/recipe-fixtures.ts`)
+already sets `publishedAt`; any e2e spec whose test visits `/recipes`
+(rather than only `/recipes/[slug]`) must do the same.
