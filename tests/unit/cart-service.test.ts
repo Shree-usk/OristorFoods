@@ -3,6 +3,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 
 import { prisma } from "@/lib/db";
+import { verifyCartCookieValue } from "@/lib/cart-token";
 import { createProduct } from "@/repositories/product.repository";
 import {
   CartItemForbiddenError,
@@ -13,6 +14,7 @@ import {
 import {
   addItem,
   getCart,
+  mergeGuestCartIntoUser,
   removeItem,
   resolveCartIdentity,
   updateItemQuantity,
@@ -239,5 +241,62 @@ describe("revalidation on read", () => {
     const summary = await getCart(user.id, null);
     expect(summary.items[0]?.unavailable).toBe(true);
     expect(summary.items).toHaveLength(1);
+  });
+});
+
+describe("mergeGuestCartIntoUser", () => {
+  it("merges a guest cart's items into a user with no existing cart", async () => {
+    const user = await makeUser();
+    const product = await makeProduct();
+    const { newCookieValue } = await addItem(null, undefined, product.id, 2);
+
+    await mergeGuestCartIntoUser(user.id, newCookieValue ?? undefined);
+
+    const summary = await getCart(user.id, null);
+    expect(summary.items).toHaveLength(1);
+    expect(summary.items[0]?.quantity).toBe(2);
+  });
+
+  it("combines quantities for a product both carts already have, capped at stock", async () => {
+    const user = await makeUser();
+    const product = await makeProduct({ stockQuantity: 4 });
+    await addItem(user.id, null, product.id, 2);
+    const { newCookieValue } = await addItem(null, undefined, product.id, 3);
+
+    await mergeGuestCartIntoUser(user.id, newCookieValue ?? undefined);
+
+    const summary = await getCart(user.id, null);
+    expect(summary.items).toHaveLength(1);
+    expect(summary.items[0]?.quantity).toBe(4); // 2 + 3 = 5, capped at stockQuantity 4
+  });
+
+  it("appends a distinct product the guest cart had that the account cart didn't", async () => {
+    const user = await makeUser();
+    const accountProduct = await makeProduct();
+    const guestProduct = await makeProduct();
+    await addItem(user.id, null, accountProduct.id, 1);
+    const { newCookieValue } = await addItem(null, undefined, guestProduct.id, 1);
+
+    await mergeGuestCartIntoUser(user.id, newCookieValue ?? undefined);
+
+    const summary = await getCart(user.id, null);
+    expect(summary.items.map((i) => i.productId).sort()).toEqual([accountProduct.id, guestProduct.id].sort());
+  });
+
+  it("deletes the guest cart after a successful merge", async () => {
+    const user = await makeUser();
+    const product = await makeProduct();
+    const { newCookieValue } = await addItem(null, undefined, product.id, 1);
+    const guestToken = verifyCartCookieValue(newCookieValue ?? undefined);
+
+    await mergeGuestCartIntoUser(user.id, newCookieValue ?? undefined);
+
+    expect(await prisma.cart.findUnique({ where: { guestToken: guestToken! } })).toBeNull();
+  });
+
+  it("is a no-op when there is no valid guest cookie", async () => {
+    const user = await makeUser();
+    await expect(mergeGuestCartIntoUser(user.id, undefined)).resolves.not.toThrow();
+    expect((await getCart(user.id, null)).items).toHaveLength(0);
   });
 });

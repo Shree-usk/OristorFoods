@@ -159,3 +159,52 @@ export async function removeItem(userId: string | null, guestCookieValue: string
   await requireOwnCartItem(userId, guestCookieValue, itemId);
   await cartRepository.deleteCartItem(itemId);
 }
+
+/**
+ * Merges a guest cart (identified by the still-present guest cookie) into
+ * the now-authenticated user's cart. Matching products combine quantity
+ * (capped at current stock — never silently over-adds past what's
+ * available); distinct products are appended. The guest Cart row is
+ * deleted only after the merge's writes complete, so a failure leaves the
+ * guest cart/cookie intact for a retry on the next session transition
+ * (CartMergeSync, Task 9, clears the cookie client-side only after this
+ * call succeeds).
+ */
+export async function mergeGuestCartIntoUser(userId: string, guestCookieValue: string | undefined): Promise<void> {
+  const guestToken = verifyCartCookieValue(guestCookieValue);
+  if (!guestToken) return;
+
+  const guestCart = await cartRepository.findCartByGuestToken(guestToken);
+  if (!guestCart) return;
+
+  const guestItems = await cartRepository.listCartItemsWithProduct(guestCart.id);
+  if (guestItems.length === 0) {
+    await cartRepository.deleteCart(guestCart.id);
+    return;
+  }
+
+  const { cart: userCart } = await resolveCartIdentity(userId, undefined);
+  const userItems = await cartRepository.listCartItemsWithProduct(userCart.id);
+  const userItemByProductId = new Map(userItems.map((item) => [item.productId, item]));
+
+  for (const guestItem of guestItems) {
+    const existing = userItemByProductId.get(guestItem.productId);
+    const combinedQuantity = (existing?.quantity ?? 0) + guestItem.quantity;
+    const product = await findProductById(guestItem.productId);
+    if (!product || product.status !== "Published") continue; // dropped, same convention addItem's requireAvailableProduct enforces
+    const cappedQuantity = Math.min(combinedQuantity, product.stockQuantity);
+    if (cappedQuantity <= 0) continue;
+
+    const resolved = await resolvePrice({ productId: guestItem.productId, customerGroup: "Retail", quantity: cappedQuantity });
+    const unitPrice = resolved?.price.toFixed(2) ?? guestItem.unitPriceSnapshot.toFixed(2);
+
+    if (existing) {
+      await cartRepository.updateCartItemQuantity(existing.id, cappedQuantity);
+      await cartRepository.updateCartItemSnapshot(existing.id, unitPrice);
+    } else {
+      await cartRepository.upsertCartItem(userCart.id, guestItem.productId, cappedQuantity, unitPrice);
+    }
+  }
+
+  await cartRepository.deleteCart(guestCart.id);
+}
