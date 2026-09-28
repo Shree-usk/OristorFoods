@@ -9,7 +9,7 @@ import { buttonVariants } from "@/components/ui/button";
 import { useCart } from "@/hooks/use-cart";
 
 export default function CartPage() {
-  const { cart, isPending, updateQuantity, removeItem } = useCart();
+  const { cart, isPending, updateQuantity, removeItem, isUpdatingItemId, updateQuantityError, isRemovingItemId, removeItemError } = useCart();
   const [announcement, setAnnouncement] = useState("");
 
   function handleRemove(itemId: string, productName: string) {
@@ -37,6 +37,12 @@ export default function CartPage() {
                 item={item}
                 onQuantityChange={(quantity) => updateQuantity(item.id, quantity)}
                 onRemove={() => handleRemove(item.id, item.productName)}
+                isMutating={isUpdatingItemId === item.id || isRemovingItemId === item.id}
+                error={
+                  (updateQuantityError?.itemId === item.id && updateQuantityError.message) ||
+                  (removeItemError?.itemId === item.id && removeItemError.message) ||
+                  null
+                }
               />
             ))}
           </div>

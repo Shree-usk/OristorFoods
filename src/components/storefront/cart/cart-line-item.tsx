@@ -11,11 +11,15 @@ interface CartLineItemRowProps {
   item: CartLineItem;
   onQuantityChange: (quantity: number) => void;
   onRemove: () => void;
+  /** True while a quantity-update or remove mutation targeting this row is in flight — disables its controls so a second click can't fire against a stale quantity. */
+  isMutating?: boolean;
+  /** The message from this row's most recent failed mutation, if any. */
+  error?: string | null;
 }
 
-export function CartLineItemRow({ item, onQuantityChange, onRemove }: CartLineItemRowProps) {
+export function CartLineItemRow({ item, onQuantityChange, onRemove, isMutating = false, error = null }: CartLineItemRowProps) {
   const noticeId = `cart-item-notice-${item.id}`;
-  const hasNotice = item.priceChanged || item.unavailable || item.quantityCapped;
+  const hasNotice = item.priceChanged || item.unavailable || item.quantityCapped || !!error;
 
   return (
     <div className="flex gap-4 border-b border-input py-4" aria-describedby={hasNotice ? noticeId : undefined}>
@@ -36,8 +40,15 @@ export function CartLineItemRow({ item, onQuantityChange, onRemove }: CartLineIt
             variant="outline"
             size="icon-sm"
             aria-label={`Decrease quantity of ${item.productName}`}
-            disabled={item.quantity <= 1}
-            onClick={() => onQuantityChange(item.quantity - 1)}
+            disabled={item.quantity <= 1 || isMutating}
+            onClick={() =>
+              // When over-capped by more than one unit, a plain -1 step
+              // would still exceed availableQuantity and the server would
+              // reject it again — jump straight down to the available
+              // amount instead, so the customer can always get unstuck in
+              // one click.
+              onQuantityChange(item.quantityCapped ? Math.min(item.quantity - 1, item.availableQuantity) : item.quantity - 1)
+            }
           >
             <Minus />
           </Button>
@@ -49,21 +60,26 @@ export function CartLineItemRow({ item, onQuantityChange, onRemove }: CartLineIt
             variant="outline"
             size="icon-sm"
             aria-label={`Increase quantity of ${item.productName}`}
-            disabled={item.quantity >= item.availableQuantity}
+            disabled={item.quantity >= item.availableQuantity || isMutating}
             onClick={() => onQuantityChange(item.quantity + 1)}
           >
             <Plus />
           </Button>
-          <Button type="button" variant="ghost" size="icon-sm" aria-label={`Remove ${item.productName} from cart`} onClick={onRemove}>
+          <Button type="button" variant="ghost" size="icon-sm" aria-label={`Remove ${item.productName} from cart`} disabled={isMutating} onClick={onRemove}>
             <X />
           </Button>
         </div>
 
         {hasNotice && (
           <p id={noticeId} role="status" className="mt-2 text-small text-destructive">
-            {item.unavailable && "This item is no longer available."}
-            {!item.unavailable && item.quantityCapped && `Only ${item.availableQuantity} left in stock.`}
-            {!item.unavailable && !item.quantityCapped && item.priceChanged && "The price for this item just changed."}
+            {error ??
+              (item.unavailable
+                ? "This item is no longer available."
+                : item.quantityCapped
+                  ? `Only ${item.availableQuantity} left in stock.`
+                  : item.priceChanged
+                    ? "The price for this item just changed."
+                    : null)}
           </p>
         )}
       </div>

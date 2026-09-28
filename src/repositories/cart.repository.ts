@@ -82,3 +82,15 @@ export function listCartItemsWithProduct(cartId: string): Promise<CartItemWithPr
 export function deleteCart(id: string) {
   return prisma.cart.delete({ where: { id } });
 }
+
+/**
+ * Deletes a guest cart only if its guestToken still matches, and reports
+ * whether this call was the one that deleted it. Used to atomically
+ * "claim" a guest cart before merging it — a second, concurrent call
+ * (e.g. two tabs authenticating at once) matches zero rows and returns
+ * false, rather than both calls reading and re-applying the same items.
+ */
+export async function deleteGuestCartIfMatchesToken(cartId: string, guestToken: string): Promise<boolean> {
+  const result = await prisma.cart.deleteMany({ where: { id: cartId, guestToken } });
+  return result.count === 1;
+}

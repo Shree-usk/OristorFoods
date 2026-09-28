@@ -14,7 +14,7 @@ interface CartDrawerProps {
 }
 
 export function CartDrawer({ open, onClose }: CartDrawerProps) {
-  const { cart, updateQuantity, removeItem } = useCart();
+  const { cart, updateQuantity, removeItem, isUpdatingItemId, updateQuantityError, isRemovingItemId, removeItemError } = useCart();
   const [announcement, setAnnouncement] = useState("");
 
   function handleRemove(itemId: string, productName: string) {
@@ -47,6 +47,12 @@ export function CartDrawer({ open, onClose }: CartDrawerProps) {
                 item={item}
                 onQuantityChange={(quantity) => updateQuantity(item.id, quantity)}
                 onRemove={() => handleRemove(item.id, item.productName)}
+                isMutating={isUpdatingItemId === item.id || isRemovingItemId === item.id}
+                error={
+                  (updateQuantityError?.itemId === item.id && updateQuantityError.message) ||
+                  (removeItemError?.itemId === item.id && removeItemError.message) ||
+                  null
+                }
               />
             ))
           )}

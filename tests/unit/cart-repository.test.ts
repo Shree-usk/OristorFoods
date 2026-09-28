@@ -9,6 +9,7 @@ import {
   createUserCart,
   deleteCart,
   deleteCartItem,
+  deleteGuestCartIfMatchesToken,
   findCartByGuestToken,
   findCartByUserId,
   findCartItemById,
@@ -125,6 +126,26 @@ describe("listCartItemsWithProduct", () => {
     const items = await listCartItemsWithProduct(cart.id);
     expect(items).toHaveLength(2);
     expect(items.map((i) => i.product.id).sort()).toEqual([productA.id, productB.id].sort());
+  });
+});
+
+describe("deleteGuestCartIfMatchesToken", () => {
+  it("deletes the cart and returns true when the token matches", async () => {
+    const cart = await createGuestCart("claim-token-1");
+    expect(await deleteGuestCartIfMatchesToken(cart.id, "claim-token-1")).toBe(true);
+    expect(await findCartByGuestToken("claim-token-1")).toBeNull();
+  });
+
+  it("returns false and leaves the cart intact when the token doesn't match", async () => {
+    const cart = await createGuestCart("claim-token-2");
+    expect(await deleteGuestCartIfMatchesToken(cart.id, "wrong-token")).toBe(false);
+    expect(await findCartByGuestToken("claim-token-2")).not.toBeNull();
+  });
+
+  it("a second call after the first already deleted it returns false (simulates a concurrent merge)", async () => {
+    const cart = await createGuestCart("claim-token-3");
+    expect(await deleteGuestCartIfMatchesToken(cart.id, "claim-token-3")).toBe(true);
+    expect(await deleteGuestCartIfMatchesToken(cart.id, "claim-token-3")).toBe(false);
   });
 });
 

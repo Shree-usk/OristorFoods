@@ -10,6 +10,24 @@ async function fetchCart(): Promise<CartSummary> {
   return response.json() as Promise<CartSummary>;
 }
 
+/**
+ * Reads the server's `{ error }` body (all cart routes' error responses
+ * carry one, see cart-responses.ts) so a stock-exceeded/unavailable
+ * rejection surfaces its real message ("Only 2 left in stock") instead of
+ * a generic fallback — falls back to `fallbackMessage` only when the body
+ * isn't the expected shape (e.g. a network failure with no response).
+ */
+async function throwWithServerMessage(response: Response, fallbackMessage: string): Promise<never> {
+  let message = fallbackMessage;
+  try {
+    const body = (await response.json()) as { error?: string };
+    if (body.error) message = body.error;
+  } catch {
+    // Non-JSON or empty body — keep the fallback.
+  }
+  throw new Error(message);
+}
+
 export function useCart() {
   const queryClient = useQueryClient();
   const query = useQuery({ queryKey: ["cart"], queryFn: fetchCart });
@@ -24,7 +42,7 @@ export function useCart() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ productId, quantity }),
       });
-      if (!response.ok) throw new Error("Failed to add to cart");
+      if (!response.ok) await throwWithServerMessage(response, "Failed to add to cart");
     },
     onSuccess: invalidate,
   });
@@ -37,7 +55,7 @@ export function useCart() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ quantity }),
       });
-      if (!response.ok) throw new Error("Failed to update quantity");
+      if (!response.ok) await throwWithServerMessage(response, "Failed to update quantity");
     },
     onSuccess: invalidate,
   });
@@ -45,7 +63,7 @@ export function useCart() {
   const removeItemMutation = useMutation({
     mutationFn: async (itemId: string) => {
       const response = await fetch(`/api/cart/items/${itemId}`, { method: "DELETE", credentials: "include" });
-      if (!response.ok) throw new Error("Failed to remove item");
+      if (!response.ok) await throwWithServerMessage(response, "Failed to remove item");
     },
     onSuccess: invalidate,
   });
@@ -56,5 +74,11 @@ export function useCart() {
     addItem: (productId: string, quantity = 1) => addItemMutation.mutate({ productId, quantity }),
     updateQuantity: (itemId: string, quantity: number) => updateQuantityMutation.mutate({ itemId, quantity }),
     removeItem: (itemId: string) => removeItemMutation.mutate(itemId),
+    isAddingItem: addItemMutation.isPending,
+    addItemError: addItemMutation.error?.message ?? null,
+    isUpdatingItemId: updateQuantityMutation.isPending ? updateQuantityMutation.variables?.itemId : undefined,
+    updateQuantityError: updateQuantityMutation.isError ? { itemId: updateQuantityMutation.variables?.itemId, message: updateQuantityMutation.error.message } : null,
+    isRemovingItemId: removeItemMutation.isPending ? removeItemMutation.variables : undefined,
+    removeItemError: removeItemMutation.isError ? { itemId: removeItemMutation.variables, message: removeItemMutation.error.message } : null,
   };
 }

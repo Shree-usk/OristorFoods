@@ -54,7 +54,7 @@ export async function resolveCartIdentity(
 
 async function requireAvailableProduct(productId: string, requestedQuantity: number) {
   const product = await findProductById(productId);
-  if (!product || product.status !== "Published") throw new ProductUnavailableError();
+  if (!product || product.status !== "Published" || !product.inStock) throw new ProductUnavailableError();
   if (requestedQuantity > product.stockQuantity) throw new StockExceededError(product.stockQuantity);
   return product;
 }
@@ -75,7 +75,7 @@ function toLineItem(item: CartItemWithProduct, resolvedUnitPrice: number, curren
     lineTotal: Math.round(resolvedUnitPrice * item.quantity * 100) / 100,
     rewardPointsEarned: item.product.rewardPoints * item.quantity,
     priceChanged,
-    unavailable: item.product.status !== "Published",
+    unavailable: item.product.status !== "Published" || !item.product.inStock,
     quantityCapped,
     availableQuantity: item.product.stockQuantity,
   };
@@ -164,11 +164,18 @@ export async function removeItem(userId: string | null, guestCookieValue: string
  * Merges a guest cart (identified by the still-present guest cookie) into
  * the now-authenticated user's cart. Matching products combine quantity
  * (capped at current stock — never silently over-adds past what's
- * available); distinct products are appended. The guest Cart row is
- * deleted only after the merge's writes complete, so a failure leaves the
- * guest cart/cookie intact for a retry on the next session transition
- * (CartMergeSync, Task 9, clears the cookie client-side only after this
- * call succeeds).
+ * available); distinct products are appended.
+ *
+ * The guest Cart row is claimed via a guarded delete (matching both id
+ * and guestToken) BEFORE any merge writes happen, not after — this makes
+ * two concurrent calls for the same guest cookie (e.g. two tabs both
+ * transitioning to authenticated at once) safe: only one call's delete
+ * matches a row, and the other sees `claimed === false` and no-ops. The
+ * tradeoff versus deleting last is that a crash mid-merge (after the
+ * claim, before all writes land) can no longer be retried — the guest
+ * cart is already gone — but that is preferable to the alternative of
+ * two concurrent callers both applying the same guest items and silently
+ * doubling quantities, which deleting last does not prevent.
  */
 export async function mergeGuestCartIntoUser(userId: string, guestCookieValue: string | undefined): Promise<void> {
   const guestToken = verifyCartCookieValue(guestCookieValue);
@@ -177,11 +184,14 @@ export async function mergeGuestCartIntoUser(userId: string, guestCookieValue: s
   const guestCart = await cartRepository.findCartByGuestToken(guestToken);
   if (!guestCart) return;
 
+  // Fetched before the claim below — deleting the Cart row cascades and
+  // removes its CartItems too, so this is the only chance to read them.
   const guestItems = await cartRepository.listCartItemsWithProduct(guestCart.id);
-  if (guestItems.length === 0) {
-    await cartRepository.deleteCart(guestCart.id);
-    return;
-  }
+
+  const claimed = await cartRepository.deleteGuestCartIfMatchesToken(guestCart.id, guestToken);
+  if (!claimed) return;
+
+  if (guestItems.length === 0) return;
 
   const { cart: userCart } = await resolveCartIdentity(userId, undefined);
   const userItems = await cartRepository.listCartItemsWithProduct(userCart.id);
@@ -191,7 +201,7 @@ export async function mergeGuestCartIntoUser(userId: string, guestCookieValue: s
     const existing = userItemByProductId.get(guestItem.productId);
     const combinedQuantity = (existing?.quantity ?? 0) + guestItem.quantity;
     const product = await findProductById(guestItem.productId);
-    if (!product || product.status !== "Published") continue; // dropped, same convention addItem's requireAvailableProduct enforces
+    if (!product || product.status !== "Published" || !product.inStock) continue; // dropped, same convention addItem's requireAvailableProduct enforces
     const cappedQuantity = Math.min(combinedQuantity, product.stockQuantity);
     if (cappedQuantity <= 0) continue;
 
@@ -205,6 +215,4 @@ export async function mergeGuestCartIntoUser(userId: string, guestCookieValue: s
       await cartRepository.upsertCartItem(userCart.id, guestItem.productId, cappedQuantity, unitPrice);
     }
   }
-
-  await cartRepository.deleteCart(guestCart.id);
 }

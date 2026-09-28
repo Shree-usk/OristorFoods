@@ -89,6 +89,13 @@ describe("GET /api/cart", () => {
     const body = (await second.json()) as { items: unknown[] };
     expect(body.items).toHaveLength(1);
   });
+
+  it("creates exactly one guest Cart row for a first-time visitor, not two", async () => {
+    const before = await prisma.cart.count();
+    await getCartRoute(new Request("http://localhost/api/cart"));
+    const after = await prisma.cart.count();
+    expect(after - before).toBe(1);
+  });
 });
 
 describe("POST /api/cart/items", () => {

@@ -133,6 +133,13 @@ describe("addItem / getCart", () => {
     const summary = await getCart(null, newCookieValue ?? undefined);
     expect(summary.items).toHaveLength(1);
   });
+
+  it("rejects adding a product marked inStock: false, even when stockQuantity is positive", async () => {
+    const user = await makeUser();
+    const product = await makeProduct({ inStock: false, stockQuantity: 50 });
+
+    await expect(addItem(user.id, null, product.id, 1)).rejects.toThrow(ProductUnavailableError);
+  });
 });
 
 describe("updateItemQuantity", () => {
@@ -242,6 +249,18 @@ describe("revalidation on read", () => {
     expect(summary.items[0]?.unavailable).toBe(true);
     expect(summary.items).toHaveLength(1);
   });
+
+  it("flags unavailable when the product is marked out of stock, without removing the line", async () => {
+    const user = await makeUser();
+    const product = await makeProduct();
+    await addItem(user.id, null, product.id, 1);
+
+    await prisma.product.update({ where: { id: product.id }, data: { inStock: false } });
+
+    const summary = await getCart(user.id, null);
+    expect(summary.items[0]?.unavailable).toBe(true);
+    expect(summary.items).toHaveLength(1);
+  });
 });
 
 describe("mergeGuestCartIntoUser", () => {
@@ -298,5 +317,18 @@ describe("mergeGuestCartIntoUser", () => {
     const user = await makeUser();
     await expect(mergeGuestCartIntoUser(user.id, undefined)).resolves.not.toThrow();
     expect((await getCart(user.id, null)).items).toHaveLength(0);
+  });
+
+  it("a repeated call with the same guest cookie after a successful merge is a safe no-op, never doubling the quantity", async () => {
+    const user = await makeUser();
+    const product = await makeProduct();
+    const { newCookieValue } = await addItem(null, undefined, product.id, 2);
+
+    await mergeGuestCartIntoUser(user.id, newCookieValue ?? undefined);
+    await mergeGuestCartIntoUser(user.id, newCookieValue ?? undefined);
+
+    const summary = await getCart(user.id, null);
+    expect(summary.items).toHaveLength(1);
+    expect(summary.items[0]?.quantity).toBe(2);
   });
 });

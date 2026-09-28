@@ -63,4 +63,32 @@ describe("CartLineItemRow", () => {
     render(<CartLineItemRow item={{ ...baseItem, quantityCapped: true, availableQuantity: 2, quantity: 5 }} onQuantityChange={vi.fn()} onRemove={vi.fn()} />);
     expect(screen.getByText(/only 2 left/i)).toBeInTheDocument();
   });
+
+  it("clamps a decrease straight down to availableQuantity when the line is capped by more than one unit", async () => {
+    const user = userEvent.setup();
+    const onQuantityChange = vi.fn();
+    render(
+      <CartLineItemRow
+        item={{ ...baseItem, quantityCapped: true, availableQuantity: 2, quantity: 5 }}
+        onQuantityChange={onQuantityChange}
+        onRemove={vi.fn()}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: /decrease quantity/i }));
+    expect(onQuantityChange).toHaveBeenCalledWith(2);
+  });
+
+  it("disables the quantity and remove controls while isMutating is true", () => {
+    render(<CartLineItemRow item={baseItem} onQuantityChange={vi.fn()} onRemove={vi.fn()} isMutating />);
+
+    expect(screen.getByRole("button", { name: /increase quantity/i })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /decrease quantity/i })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /remove/i })).toBeDisabled();
+  });
+
+  it("shows a mutation error message when one is passed", () => {
+    render(<CartLineItemRow item={baseItem} onQuantityChange={vi.fn()} onRemove={vi.fn()} error="Only 1 left in stock" />);
+    expect(screen.getByText("Only 1 left in stock")).toBeInTheDocument();
+  });
 });

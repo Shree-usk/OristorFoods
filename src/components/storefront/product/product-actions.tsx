@@ -17,27 +17,34 @@ export function ProductActions({ productId, inStock }: ProductActionsProps) {
   const wishlist = useWishlist(productId);
 
   return (
-    <div className="flex items-center gap-3">
-      <Button
-        type="button"
-        size="lg"
-        disabled={!inStock || !cart.isAvailable}
-        onClick={() => cart.addToCart()}
-      >
-        <ShoppingCart /> {inStock ? "Add to Cart" : "Out of Stock"}
-      </Button>
-      <Button
-        type="button"
-        variant="outline"
-        size="icon-lg"
-        disabled={!wishlist.isAvailable}
-        aria-pressed={wishlist.isWishlisted}
-        aria-label={wishlist.isWishlisted ? "Remove from wishlist" : "Add to wishlist"}
-        onClick={wishlist.toggle}
-      >
-        <Heart className={wishlist.isWishlisted ? "fill-current" : undefined} />
-      </Button>
-      <CompareToggle productId={productId} className="shrink-0" />
+    <div>
+      <div className="flex items-center gap-3">
+        <Button
+          type="button"
+          size="lg"
+          disabled={!inStock || !cart.isAvailable || cart.isAdding}
+          onClick={() => cart.addToCart()}
+        >
+          <ShoppingCart /> {inStock ? "Add to Cart" : "Out of Stock"}
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          size="icon-lg"
+          disabled={!wishlist.isAvailable}
+          aria-pressed={wishlist.isWishlisted}
+          aria-label={wishlist.isWishlisted ? "Remove from wishlist" : "Add to wishlist"}
+          onClick={wishlist.toggle}
+        >
+          <Heart className={wishlist.isWishlisted ? "fill-current" : undefined} />
+        </Button>
+        <CompareToggle productId={productId} className="shrink-0" />
+      </div>
+      {cart.error && (
+        <p role="alert" className="mt-2 text-small text-destructive">
+          {cart.error}
+        </p>
+      )}
     </div>
   );
 }

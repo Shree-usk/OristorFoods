@@ -60,6 +60,17 @@ test.describe("Shopping cart", () => {
     expect(body.availableQuantity).toBe(2);
   });
 
+  test("adding past stock through the real Add to Cart button shows a visible error message", async ({ page }) => {
+    const product = await seedProduct(4, "E2E Cart PDP Limited Stock", 1);
+
+    await page.goto(`/products/${product.slug}`);
+    const addToCart = page.getByRole("button", { name: "Add to Cart" });
+    await addToCart.click(); // consumes the only unit in stock
+    await addToCart.click(); // now exceeds stock
+
+    await expect(page.getByText(/only 1 left in stock/i)).toBeVisible();
+  });
+
   test("the cart page has no detectable accessibility violations", async ({ page }) => {
     const product = await seedProduct(3, "E2E Cart A11y Item", 10);
     await page.request.post("/api/cart/items", { data: { productId: product.id, quantity: 1 } });
