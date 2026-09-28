@@ -10,6 +10,7 @@ import { advanceRecipeReviewToApproved, changeRecipeReviewStatus, submitReview a
 import { addBookmark } from "../src/services/recipe-bookmark.service";
 import { seedBlog } from "./seed-blog";
 import { seedCookingTips } from "./seed-cooking-tips";
+import { seedDelivery } from "./seed-delivery";
 import { seedDownloads } from "./seed-downloads";
 import { seedFoodAcademy } from "./seed-food-academy";
 import { seedRecipes } from "./seed-recipes";
@@ -49,6 +50,7 @@ async function main() {
     publishedAt: new Date(),
     rewardPoints: 10,
     stockQuantity: 250,
+    weightGrams: 120,
     benefits: ["Rich in antioxidants", "No artificial preservatives"],
     servingSuggestions: ["Add to curries and stews", "Sprinkle over roasted vegetables"],
     brand: { connect: { id: brand.id } },
@@ -139,6 +141,7 @@ async function main() {
     publishedAt: new Date(),
     rewardPoints: 8,
     stockQuantity: 250,
+    weightGrams: 120,
     brand: { connect: { id: brand.id } },
     categories: { connect: [{ id: spices.id }] },
   });
@@ -156,6 +159,7 @@ async function main() {
     publishedAt: new Date(),
     rewardPoints: 25,
     stockQuantity: 60,
+    weightGrams: 850,
     brand: { connect: { id: brand.id } },
     categories: { connect: [{ id: giftSets.id }] },
   });
@@ -187,6 +191,7 @@ async function main() {
     publishedAt: new Date(),
     rewardPoints: 15,
     stockQuantity: 40,
+    weightGrams: 1000,
     brand: { connect: { id: brand.id } },
     collections: { connect: [{ id: avurudu.id }] },
   });
@@ -313,6 +318,9 @@ async function main() {
   // Downloads & Resources (STORY-023).
   const downloadsSeed = await seedDownloads();
 
+  // Delivery zones & shipping settings (STORY-025/027).
+  const deliverySeed = await seedDelivery();
+
   console.log("Seed complete:", {
     brand: brand.slug,
     categories: [spices.slug, giftSets.slug],
@@ -323,6 +331,7 @@ async function main() {
     foodAcademy: foodAcademySeed,
     blog: blogSeed,
     downloads: downloadsSeed,
+    delivery: deliverySeed,
   });
 }
 

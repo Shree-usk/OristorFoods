@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 
 import { Section } from "@/components/storefront/layout/section";
@@ -57,15 +58,9 @@ export default function CartPage() {
             <p className="mt-2 text-small text-charcoal/70">
               You&apos;ll earn <span className="font-number">{cart.rewardPointsEarned}</span> reward points with this purchase.
             </p>
-            <button
-              type="button"
-              disabled
-              aria-disabled="true"
-              title="Checkout isn't available yet"
-              className={buttonVariants({ variant: "default", className: "mt-6 w-full justify-center opacity-50" })}
-            >
+            <Link href="/checkout" className={buttonVariants({ variant: "default", className: "mt-6 w-full justify-center" })}>
               Proceed to Checkout
-            </button>
+            </Link>
           </div>
         </div>
       )}

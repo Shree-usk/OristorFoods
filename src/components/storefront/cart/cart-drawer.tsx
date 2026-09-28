@@ -66,8 +66,11 @@ export function CartDrawer({ open, onClose }: CartDrawerProps) {
                 {cart.currency} {cart.subtotal.toFixed(2)}
               </span>
             </div>
-            <Link href="/cart" className={buttonVariants({ variant: "default", className: "mt-4 w-full justify-center" })} onClick={onClose}>
+            <Link href="/cart" className={buttonVariants({ variant: "outline", className: "mt-4 w-full justify-center" })} onClick={onClose}>
               View Cart
+            </Link>
+            <Link href="/checkout" className={buttonVariants({ variant: "default", className: "mt-2 w-full justify-center" })} onClick={onClose}>
+              Proceed to Checkout
             </Link>
           </div>
         )}

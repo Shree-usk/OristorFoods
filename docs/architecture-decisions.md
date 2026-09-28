@@ -1923,3 +1923,104 @@ unsafe (produces `ChunkLoadError` from concurrent build-cache writes).
 Before trusting `reuseExistingServer` in a session that's touched more
 than one worktree, check `netstat -ano | grep :3000` and kill anything
 not launched from the worktree you're testing.
+
+---
+
+## 2026-09-28 — STORY-025 Checkout
+
+**Checkout ships thin, checkout-facing slices of its three unbuilt
+dependency stories** (confirmed with the user): the STORY-026
+`PaymentProvider` interface + `MockPaymentProvider` (synchronous
+intent → confirm only; webhooks/refunds stay in 026), STORY-027's
+city→zone rate resolution (read-only; admin CRUD stays in 055), and
+STORY-028's `Order` model + atomic creation (status pipeline,
+cancellation, ERP events stay in 028). The full design spec is
+`docs/superpowers/specs/2026-09-28-checkout-design.md`.
+
+**Checkout state machine.** Four steps, client-held in
+`src/lib/stores/checkout-store.ts` (Zustand, not persisted — **an
+unfinished checkout's step state is lost on refresh/browser close by
+design**; the server-side cart survives and the customer restarts at
+step 1). Allowed transitions: Address → Delivery → Payment → Review,
+with back-navigation from any step; changing the address voids the
+resolved delivery + intent, and a resolved delivery change voids the
+intent (each `set*` action clears everything downstream of it).
+Validation gates: each step's Zod schema
+(`src/validation/checkout.schema.ts`) is enforced by RHF client-side AND
+by the step's API route server-side; Delivery only advances on an "ok"
+zone resolution; Payment only advances on a `Succeeded` confirmation;
+`place-order` re-derives everything and is the final arbiter. There is
+deliberately **no `CheckoutSession` table** — the story's own task list
+prefers client state, and the guest-cart cookie already anchors
+server-side identity for every step API.
+
+**Server-side calculations are authoritative, everywhere.** No checkout
+request body carries an amount. The intent amount is computed from the
+live cart + freshly resolved delivery charge; `place-order` recomputes
+subtotal/charge/points/grand-total from the database and verifies the
+confirmed `Payment.amount` equals the recomputed grand total — a
+mismatch (price/stock/charge moved mid-checkout) is a typed
+`totals_changed` 409 that sends the customer back with a fresh intent
+required. The wizard's displayed numbers are display-only.
+
+**Idempotent order placement without a session table.** The client
+generates one `crypto.randomUUID()` idempotency key per checkout
+attempt; `Order.idempotencyKey` is DB-unique, and the unique constraint
+— not application logic — arbitrates concurrent duplicates
+(`order.service.ts` catches the P2002, re-reads the winner, and returns
+it after an ownership check against the session user or the order's
+snapshotted `guestToken`). The replay check runs *before* the cart
+checks, because the first request already cleared the cart. A
+`totals_changed` retry regenerates the key (it is a new attempt).
+
+**Order numbers are random, DB-unique, and retried — never `count+1`.**
+`ORS-YYYYMMDD-` + 6 chars of Crockford base-32 (no I/L/O/U),
+regenerated on a P2002 collision (5 attempts). A sequence/counter table
+would serialize order placement for cosmetic sequentiality nobody asked
+for.
+
+**Stock decrement is a conditional row update inside the order
+transaction.** `updateMany({ where: { id, stockQuantity: { gte: qty } },
+data: { stockQuantity: { decrement: qty } } })` per line; zero affected
+rows throws and rolls back the entire transaction (order + items +
+history + cart clear), so two customers racing the last unit cannot both
+succeed and no partial/ghost order can survive a failure at any point.
+
+**Shipping precedence (per `.claude/skills/delivery-zone-pricing`):
+campaign override → base zone rate → global free-shipping threshold
+applied LAST** (free shipping beats overrides too). Rate models per
+zone: `Flat` (`flatAmount`), `WeightBased`/`ValueBased`
+(`tiers: [{ upTo, amount }]` ascending, Zod-validated at read time;
+past the last tier the last tier's amount applies). Fail-safes, all
+typed and none a silent ₨0: unknown city → `no_zone`; weight-based zone
+with any cart line missing `Product.weightGrams` → `quote_required`;
+missing rate row / malformed tiers / override without an amount →
+`config_error`. City matching normalizes both sides (trim, collapse
+inner whitespace, lowercase — `normalizeCity()` in
+`shipping.service.ts`); an ambiguous city matching multiple active
+zones (admin misconfiguration) deterministically picks the
+alphabetically-first zone name and logs a warning.
+
+**The order's address is an immutable flattened snapshot** (`ship*`
+columns, plus `estimatedDaysMin/Max` and `deliveryZoneName`), and
+`OrderItem` snapshots name/SKU/price — later edits to a saved `Address`
+row or to products can never alter a historical order. Saved `Address`
+rows exist only for authenticated users (STORY-034 later owns their
+management); a guest's address lives nowhere but the order snapshot.
+
+**Guest confirmation authorization reuses the cart cookie.** Placing an
+order clears the cart's *items* but keeps the cart row and cookie; the
+verified guest token is snapshotted onto `Order.guestToken`, and the
+confirmation page authorizes by session user OR cookie-token match —
+a stranger's request 404s rather than confirming an order number
+exists. Payment intent references are unguessable UUIDs and are the
+only handle a client ever passes for a payment.
+
+**Open items this story explicitly does not solve:** taxes (nothing is
+modeled platform-wide; the Review/confirmation copy states "Prices
+include applicable taxes" and `Order.tax` stores 0 — revisit when a tax
+rule is confirmed), coupons (`discount`/`couponCode` columns are
+reserved for STORY-029; no coupon UI renders), and
+`PAYMENT_PROVIDER=mock` is the only valid provider value until the
+gateway decision (blueprint Section 10) is made — that is a business
+decision, not a technical gap.
