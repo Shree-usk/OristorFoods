@@ -30,6 +30,7 @@ model User {
   accounts          Account[]
   sessions          Session[]
   wishlist          Wishlist?
+  cart              Cart?
   reviews           Review[]   @relation("ReviewAuthor")
   moderatedReviews  Review[]   @relation("ReviewModerator")
   questions         Question[] @relation("QuestionAsker")
@@ -170,6 +171,7 @@ model Product {
   publishedAt        DateTime?
   rewardPoints       Int           @default(0)
   inStock            Boolean       @default(true)
+  stockQuantity      Int           @default(0)
   benefits           String[]      @default([])
   servingSuggestions String[]      @default([])
 
@@ -202,6 +204,7 @@ model Product {
   customerGroupPrices CustomerGroupPrice[]
   volumeDiscountTiers VolumeDiscountTier[]
   wishlistItems       WishlistItem[]
+  cartItems           CartItem[]
   reviews             Review[]
   ratingSummary       ProductRatingSummary?
   questions           Question[]
@@ -945,4 +948,32 @@ model DownloadResource {
   updatedAt     DateTime               @updatedAt
 
   @@index([status, categoryId])
+}
+
+// --- Shopping Cart (STORY-024) ---
+
+model Cart {
+  id         String     @id @default(cuid())
+  userId     String?    @unique
+  user       User?      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  guestToken String?    @unique
+  items      CartItem[]
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
+
+  @@index([guestToken])
+}
+
+model CartItem {
+  id                String   @id @default(cuid())
+  cartId            String
+  cart              Cart     @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  productId         String
+  product           Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  quantity          Int
+  unitPriceSnapshot Decimal  @db.Decimal(10, 2)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@unique([cartId, productId])
 }

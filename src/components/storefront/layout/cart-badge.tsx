@@ -4,10 +4,11 @@ import Link from "next/link";
 import { ShoppingCart } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
-import { useCartStore } from "@/lib/stores/cart-store";
+import { useCart } from "@/hooks/use-cart";
 
 export function CartBadge() {
-  const count = useCartStore((state) => state.count);
+  const { cart } = useCart();
+  const count = cart?.itemCount ?? 0;
 
   return (
     <Link

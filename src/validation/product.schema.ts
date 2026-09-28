@@ -35,6 +35,8 @@ export const productCreateSchema = z.object({
   story: z.string().optional(),
   status: z.enum(["Draft", "Review", "Published", "Archived", "Discontinued", "OutOfSeason"]),
   productType: z.enum(["Standard", "Bundle", "GiftPack", "Seasonal", "LimitedEdition"]),
+  inStock: z.boolean().default(true),
+  stockQuantity: z.number().int().nonnegative().default(0),
   brandId: z.string().optional(),
   categoryIds: z.array(z.string()).default([]),
   collectionIds: z.array(z.string()).default([]),
