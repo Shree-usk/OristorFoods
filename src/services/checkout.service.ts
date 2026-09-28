@@ -11,7 +11,6 @@ import {
   TotalsChangedError,
 } from "@/services/checkout.errors";
 import { createOrder, getOrderForConfirmation } from "@/services/order.service";
-import type { PlacedOrder } from "@/services/order.service";
 import { createPaymentIntent, getPaymentByReference } from "@/services/payment.service";
 import { resolveDelivery } from "@/services/shipping.service";
 import type { DeliveryResolution, OrderConfirmationSummary, PaymentIntentResult, SavedAddress } from "@/types/checkout";
@@ -220,7 +219,11 @@ export async function saveAddress(userId: string, address: CheckoutAddressInput)
   };
 }
 
-function toConfirmationSummary(order: PlacedOrder): OrderConfirmationSummary {
+// Derived from getOrderForConfirmation's actual return shape (includes
+// statusHistory) rather than order.service.ts's narrower PlacedOrder
+// (createOrder's own return, which doesn't select statusHistory) — this
+// function is only ever called with a getOrderForConfirmation result.
+function toConfirmationSummary(order: Awaited<ReturnType<typeof getOrderForConfirmation>>): OrderConfirmationSummary {
   return {
     orderNumber: order.orderNumber,
     status: order.status,
@@ -252,6 +255,15 @@ function toConfirmationSummary(order: PlacedOrder): OrderConfirmationSummary {
       quantity: item.quantity,
       lineTotal: item.lineTotal.toNumber(),
     })),
+    // STORY-028. findOrderByNumber orders statusHistory oldest-first.
+    statusHistory: order.statusHistory.map((entry) => ({
+      status: entry.status,
+      actor: entry.actor,
+      createdAt: entry.createdAt.toISOString(),
+    })),
+    erpSyncStatus: order.erpSyncStatus,
+    cancelledAt: order.cancelledAt?.toISOString() ?? null,
+    cancellationReason: order.cancellationReason,
   };
 }
 

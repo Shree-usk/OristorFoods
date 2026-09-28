@@ -2168,3 +2168,149 @@ for no current caller.
   with its own base rate and an active campaign override, proving the
   override beats that zone's base rate through the real checkout UI —
   the existing e2e coverage only exercised a single flat-rate zone.
+
+## 2026-09-28 — STORY-028 Order Management (status pipeline, cancellation, ERP hook)
+
+**Scope.** STORY-025/026/027 already shipped a thin slice of order
+handling — `Order`/`OrderItem`/`OrderStatusHistory` exist, and checkout can
+create an order atomically with a stock decrement — but every order was
+created `Confirmed` and stayed there forever; there was no status
+pipeline, no cancellation, and no ERP integration hook. This story adds
+all three, plus the read APIs STORY-036's future dashboard will consume.
+It does not touch coupons (STORY-029), reward-point ledgers (STORY-030),
+real notification delivery (STORY-032), or any admin UI (STORY-047) —
+none of those exist yet; this story only leaves the plug-in points they
+need. Confirmed via direct codebase search: **no admin console or RBAC
+exists at all** (`src/app/(admin)/layout.tsx` is an empty placeholder
+awaiting STORY-038, `User` has no `role` field, no `AuditLog` model
+exists) — so every route here is ownership-checked only (session user or
+guest-cookie-token match, the same pattern `getOrderForConfirmation`
+already used), and the transition capability an admin action will need
+later is a plain internal service function, not a route.
+
+**Status transition table**, in `order.service.ts`'s `isTransitionAllowed()`
+(pure, unit-tested against the full cross-product of the enum):
+
+| From | Allowed to |
+|---|---|
+| PendingConfirmation | Confirmed, Cancelled |
+| Confirmed | Processing, Cancelled |
+| Processing | Dispatched, Cancelled |
+| Dispatched | Delivered, Returned |
+| Delivered | Returned |
+| Cancelled | *(terminal)* |
+| Returned | *(terminal)* |
+
+Self-transitions are illegal everywhere (a repeated/duplicate transition
+request is rejected, not silently no-op'd, so a caller bug surfaces
+instead of hiding). Cancellation is only reachable through `Processing`
+— once `Dispatched`, the only forward path is `Returned`.
+
+**`PendingConfirmation` is currently unreachable.** Checkout only ever
+creates an order after payment is verified `Succeeded`
+(`checkout.service.ts::placeOrder`), so `createOrderWithStockDecrement`
+always writes `status: "Confirmed"` directly — the enum value is kept in
+place, reserved for a future pay-later/pay-on-delivery flow, not removed
+or forced into use prematurely.
+
+**`transitionOrderStatus(orderId, to, actor)` has no API route.** Per
+this story's own scope, an admin-usable capability with no admin auth to
+gate a route with is a plain service function — STORY-047 imports it
+directly once STORY-038 supplies RBAC. It's guarded twice: the transition
+table (`IllegalOrderTransitionError`) and an optimistic-concurrency check
+in `order.repository.ts::applyStatusTransition`
+(`updateMany({ where: { id, status: expectedCurrent } })`, `count === 0`
+throws `ConcurrentTransitionError`) — the same conditional-update pattern
+`createOrderWithStockDecrement` already uses for stock, so two concurrent
+transition attempts from different assumed starting states can't both
+silently succeed.
+
+**Cancellation** (`cancelOrder`) is ownership-checked, gated by the same
+`isTransitionAllowed(current, "Cancelled")` check (never a separate,
+independently-maintained eligibility list, so the two can't drift), then
+one transaction (`cancelOrderWithStockRelease`) that restocks every
+line — `stockQuantity: { increment }`, the direct inverse of checkout's
+conditional `decrement` — and writes `Cancelled` + `cancelledAt` +
+`cancellationReason`. It then calls the already-built
+`payment.service.ts::refundPayment(paymentId)` — no refund logic is
+reimplemented here.
+
+**Decision: a refund failure does not roll back the cancellation.** By
+the time `refundPayment` runs, stock has already been released and could
+be resold to another customer — reversing the cancellation at that point
+would silently undo something the customer was already told succeeded, a
+worse failure mode than a delayed refund. `cancelOrder` instead returns
+`refundOutcome: "refunded" | "refund_failed" | "skipped_no_payment"` so
+the caller can tell the customer "cancelled; your refund may take longer
+than usual" instead of falsely claiming an instant refund. No new schema
+field tracks a failed refund — `Payment.status` staying `Succeeded` while
+`Order.status` is `Cancelled` is itself the detectable condition a future
+admin reconciliation view (STORY-047) can query for.
+
+**No `refundedAt`/`refundReference` column on `Order`.** That state
+already lives on `Payment.status` (`Refunded`); duplicating it on `Order`
+would create a second source of truth.
+
+**ERP integration hook — a durable outbox, not a call to any named ERP's
+API.** Which ERP system is unconfirmed per `docs/blueprint.md` Section 10
+— the same treatment STORY-026 gives the payment gateway. New
+`OrderIntegrationEvent` model + `order-integration.service.ts`, shaped
+after `qa-notifications.ts`'s existing stub/registration pattern (default
+`console.info(...not wired yet)` consumer, swappable via a
+`globalThis`-held registration point for `instrumentation.ts` once a real
+subscriber exists) but backed by a real table, since the AC explicitly
+calls for one: `emitOrderEvent(type, orderId, payload)` writes the outbox
+row **before** invoking the registered consumer, so a future poll-based
+worker has a durable queue to replay from even if today's in-process
+consumer call fails. Called from `order.service.ts` only *after* its
+triggering transaction has committed (`order.confirmed` at the end of
+`createOrder`, `order.cancelled` at the end of `cancelOrder`, both
+wrapped so an outbox-write failure can never turn an already-successful
+order change into an error response) — never from inside a
+`$transaction`, since a side effect must not run against data that might
+still roll back. `eventType` is a plain string column (typed as a union
+only at the TypeScript boundary) so a future event type never needs a
+migration.
+
+**`Order.erpSyncStatus` (business-visible) is distinct from
+`OrderIntegrationEvent.status` (outbox-processing plumbing).** The
+former is what blueprint Section 7's admin dashboard reads; the latter
+just means "the registered consumer call didn't throw." The AC's
+"manual/mock sync-status update path" is proven by an exported (never
+auto-registered) `mockErpSyncConsumer` that flips `erpSyncStatus` to
+`"synced"`/`"sync_cancelled"`, opted into only by
+`registerOrderEventConsumer(mockErpSyncConsumer)` in tests.
+
+**API is customer-facing only, no admin route:** `GET /api/orders`
+(session-only — a guest has no durable identity to list across visits;
+each guest order stays reachable individually via its own cookie),
+`GET /api/orders/:orderNumber` (reuses `checkout.service.ts::getConfirmation`,
+now extended with `statusHistory`/`erpSyncStatus`/cancellation fields, so
+the confirmation page and this route share one mapper), and
+`POST /api/orders/:orderNumber/cancel`. Routes use the existing
+`orderNumber` convention (STORY-025 already established it everywhere);
+the story's own task list's `:id`/`[orderId]` wording is stale.
+
+**Frontend: extend, don't rebuild.** `order-status-timeline.tsx` is a new,
+purely presentational component (`{status, statusHistory}` in, pipeline UI
+out, no data fetching) so STORY-036's future dashboard can drop it in
+unmodified. It's added to the *existing* confirmation page
+(`checkout/confirmation/[orderNumber]/page.tsx`, STORY-025) as one new
+section — no new page is created. **Deliberately no cancel button on the
+confirmation page**: that screen is a one-time "you just paid" moment: a
+cancel affordance belongs next to full order detail, which is STORY-036's
+page, not this story's. The cancel API is fully built and tested; only
+its UI trigger is deferred.
+
+**Testing added:** a table-driven `isTransitionAllowed` test over the
+full legal/illegal transition matrix (including the AC's named
+`Delivered → PendingConfirmation` case and every self-transition);
+DB-integration coverage in `order-service.test.ts` for transitions
+(legal, illegal, unknown order), cancellation (restock + refund + history,
+rejected past `Dispatched`, stranger rejection, refund-failure-still-
+cancels), and integration-event emission (one event per lifecycle action,
+the mock ERP-sync path); `order-routes.test.ts` for ownership/401/403/404/409
+across all three routes; an e2e spec
+(`tests/e2e/order-cancellation.spec.ts`) covering the confirmation page's
+status display, a full cancel-and-restock cycle through the real API, and
+a stranger's cancellation attempt being rejected.

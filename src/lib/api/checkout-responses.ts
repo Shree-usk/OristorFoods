@@ -20,6 +20,9 @@ const orderStatusByCode: Record<OrderErrorCode, number> = {
   order_number_exhausted: 503,
   not_found: 404,
   forbidden: 403,
+  illegal_transition: 409,
+  concurrent_transition: 409,
+  cancellation_not_allowed: 409,
 };
 
 const paymentStatusByCode: Record<PaymentErrorCode, number> = {
