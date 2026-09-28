@@ -19,12 +19,12 @@ export function CheckoutStepIndicator({ currentStep }: { currentStep: CheckoutSt
                   "flex size-7 items-center justify-center rounded-full border text-small font-number",
                   isCurrent && "border-chilli bg-chilli text-white",
                   isComplete && "border-chilli text-chilli",
-                  !isCurrent && !isComplete && "border-input text-charcoal/50",
+                  !isCurrent && !isComplete && "border-input text-charcoal/70",
                 )}
               >
                 {isComplete ? "✓" : stepNumber}
               </span>
-              <span className={cn("text-small", isCurrent ? "font-semibold text-charcoal" : "text-charcoal/60")}>
+              <span className={cn("text-small", isCurrent ? "font-semibold text-charcoal" : "text-charcoal/70")}>
                 {label}
                 {isComplete && <span className="sr-only"> (completed)</span>}
               </span>

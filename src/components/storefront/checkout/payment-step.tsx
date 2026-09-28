@@ -78,7 +78,7 @@ export function PaymentStep() {
               />
               <span>
                 <span className="block text-body text-charcoal">{method.label}</span>
-                <span className="block text-small text-charcoal/60">{method.description}</span>
+                <span className="block text-small text-charcoal/70">{method.description}</span>
               </span>
             </label>
           ))}

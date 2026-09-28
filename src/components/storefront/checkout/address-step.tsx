@@ -133,7 +133,7 @@ export function AddressStep({ isAuthenticated }: { isAuthenticated: boolean }) {
               </li>
             ))}
           </ul>
-          <p className="mt-2 text-caption text-charcoal/60">Selecting one fills the form below — you can still edit it.</p>
+          <p className="mt-2 text-caption text-charcoal/70">Selecting one fills the form below — you can still edit it.</p>
         </fieldset>
       )}
 

@@ -81,9 +81,9 @@ export function DeliveryStep() {
               <p className="mt-1 text-small text-charcoal/70">Estimated delivery: {estimatedWindow(resolution)}</p>
             )}
             {resolution.campaignApplied && (
-              <p className="mt-1 text-small text-leaf">Campaign applied: {resolution.campaignApplied}</p>
+              <p className="mt-1 text-small text-leaf-dark">Campaign applied: {resolution.campaignApplied}</p>
             )}
-            {resolution.freeShippingApplied && <p className="mt-1 text-small text-leaf">You qualify for free shipping!</p>}
+            {resolution.freeShippingApplied && <p className="mt-1 text-small text-leaf-dark">You qualify for free shipping!</p>}
             {!resolution.freeShippingApplied && resolution.amountToFreeShipping !== null && (
               <p className="mt-1 text-small text-charcoal/70">
                 Add <span className="font-number">LKR {resolution.amountToFreeShipping.toFixed(2)}</span> more for free shipping.

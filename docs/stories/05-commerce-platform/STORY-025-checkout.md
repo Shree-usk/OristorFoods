@@ -1,6 +1,6 @@
 # STORY-025: Checkout
 
-**Status:** Draft
+**Status:** Done — see `docs/superpowers/specs/2026-09-28-checkout-design.md` and the STORY-025 entry in `docs/architecture-decisions.md`
 **Epic:** 05 — Commerce Platform
 **Priority:** High
 **Persona(s):** Home Cook, Busy Professional, Sri Lankan Expat, Gourmet Food Enthusiast, Distributor

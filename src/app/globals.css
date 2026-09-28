@@ -41,6 +41,7 @@
     --color-gold: var(--gold);
     --color-chilli: var(--chilli);
     --color-leaf: var(--leaf);
+    --color-leaf-dark: var(--leaf-dark);
     --color-cream: var(--cream);
     --color-beige: var(--beige);
     --color-gold-light: var(--gold-light);
@@ -98,6 +99,10 @@
     --gold: #CDAF52;
     --chilli: #B22222;
     --leaf: #2E8B57;
+    /* Darker leaf for SMALL text on ivory/cream: --leaf itself is 3.97:1
+       there, below WCAG AA's 4.5:1 for body-size text (fine for large
+       text and non-text UI). This shade is ~5.9:1. Added in STORY-025. */
+    --leaf-dark: #1E6A42;
     --cream: #FFFDF9;
     --beige: #F2ECE4;
     --gold-light: #E8D9A8;

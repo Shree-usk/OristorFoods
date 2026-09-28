@@ -51,7 +51,7 @@ export default async function OrderConfirmationPage({ params }: { params: Promis
   return (
     <Section>
       <div className="mx-auto max-w-2xl">
-        <p className="text-small font-semibold uppercase tracking-wide text-leaf">Order confirmed</p>
+        <p className="text-small font-semibold uppercase tracking-wide text-leaf-dark">Order confirmed</p>
         <h1 className="mt-2 text-h1 font-heading text-charcoal">Thank you for your order!</h1>
         <p className="mt-3 text-body text-charcoal">
           Your order number is <span className="font-number font-semibold">{order.orderNumber}</span>.
@@ -71,7 +71,7 @@ export default async function OrderConfirmationPage({ params }: { params: Promis
             {order.items.map((item) => (
               <li key={`${item.productSku}`} className="flex items-center justify-between gap-4 py-2 text-body text-charcoal">
                 <span>
-                  {item.productName} <span className="text-charcoal/60">× {item.quantity}</span>
+                  {item.productName} <span className="text-charcoal/70">× {item.quantity}</span>
                 </span>
                 <span className="font-number">
                   {order.currency} {item.lineTotal.toFixed(2)}

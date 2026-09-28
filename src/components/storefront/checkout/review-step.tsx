@@ -72,7 +72,7 @@ export function ReviewStep({ cart }: { cart: CartSummary }) {
             {cart.items.map((item) => (
               <li key={item.id} className="flex items-center justify-between gap-4 py-2 text-body text-charcoal">
                 <span>
-                  {item.productName} <span className="text-charcoal/60">× {item.quantity}</span>
+                  {item.productName} <span className="text-charcoal/70">× {item.quantity}</span>
                 </span>
                 <span className="font-number">
                   {item.currency} {item.lineTotal.toFixed(2)}

@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 
 import { AddressStep } from "@/components/storefront/checkout/address-step";
 import { CheckoutStepIndicator } from "@/components/storefront/checkout/checkout-step-indicator";
@@ -27,10 +27,19 @@ export function CheckoutWizard() {
   const cartIsEmpty = !isPending && (!cart || cart.items.length === 0);
   const orderJustPlaced = completedOrderNumber !== null;
 
-  // A previous visit finished an order: this is a fresh checkout attempt.
+  // A completed order left in the store at MOUNT time means a previous
+  // visit finished — reset for a fresh attempt. Checked via a ref so it
+  // never fires mid-flow: right after placing an order (no remount), the
+  // cart query is momentarily still non-empty, and resetting then would
+  // clear completedOrderNumber and let the empty-cart redirect win the
+  // race against the confirmation navigation.
+  const staleCompletionAtMount = useRef(completedOrderNumber !== null);
   useEffect(() => {
-    if (orderJustPlaced && cartIsEmpty === false) reset();
-  }, [orderJustPlaced, cartIsEmpty, reset]);
+    if (staleCompletionAtMount.current) {
+      staleCompletionAtMount.current = false;
+      reset();
+    }
+  }, [reset]);
 
   useEffect(() => {
     if (cartIsEmpty && !orderJustPlaced) router.replace("/cart");

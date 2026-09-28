@@ -24,10 +24,13 @@ async function seedZones() {
     update: { freeShippingThreshold: "7500.00" },
     create: { id: "global", freeShippingThreshold: "7500.00" },
   });
+  // A city no seeded zone covers — the seeded "Colombo Metro" zone also
+  // matches "Colombo", and ambiguity resolution would deterministically
+  // pick it (alphabetically first) over this fixture zone.
   await prisma.deliveryZone.create({
     data: {
       name: "E2E Western",
-      cities: ["Colombo"],
+      cities: ["E2E Colombo"],
       rate: { create: { rateType: "Flat", flatAmount: "350.00", estimatedDaysMin: 1, estimatedDaysMax: 2 } },
     },
   });
@@ -38,7 +41,7 @@ async function fillAddressStep(page: Page) {
   await page.getByLabel("Recipient name").fill("E2E Guest");
   await page.getByLabel("Phone number").fill("+94 77 123 4567");
   await page.getByLabel("Address line 1", { exact: true }).fill("42 Test Street");
-  await page.getByLabel("City", { exact: true }).fill("Colombo");
+  await page.getByLabel("City", { exact: true }).fill("E2E Colombo");
   await page.getByRole("button", { name: "Continue to Delivery" }).click();
 }
 
@@ -52,8 +55,8 @@ test.describe("Checkout", () => {
     await prisma.payment.deleteMany();
     await prisma.cartItem.deleteMany();
     await prisma.cart.deleteMany();
-    await prisma.deliveryRateOverride.deleteMany();
-    await prisma.deliveryRate.deleteMany();
+    // Scoped to fixture zones only — deleting the zone cascades its rate
+    // and overrides. Never wipe the seeded zone configuration.
     await prisma.deliveryZone.deleteMany({ where: { name: { startsWith: "E2E " } } });
     await prisma.standardPrice.deleteMany({ where: { product: { sku: { startsWith: SKU_PREFIX } } } });
     await prisma.product.deleteMany({ where: { sku: { startsWith: SKU_PREFIX } } });
@@ -162,6 +165,11 @@ test.describe("Checkout", () => {
   });
 
   test("the checkout steps and confirmation page have no detectable accessibility violations", async ({ page }) => {
+    // The storefront's page-transition fade (STORY-008) leaves text at
+    // partial opacity while animating, which axe reads as a contrast
+    // failure. The framework honours prefers-reduced-motion, so emulate
+    // it to audit the settled colors.
+    await page.emulateMedia({ reducedMotion: "reduce" });
     await seedZones();
     const product = await seedProduct(5, "E2E Checkout A11y Item", "1000.00");
     await page.request.post("/api/cart/items", { data: { productId: product.id, quantity: 1 } });
