@@ -9,6 +9,10 @@ export function findPaymentByReference(providerReference: string) {
   return prisma.payment.findUnique({ where: { providerReference } });
 }
 
+export function findPaymentById(id: string) {
+  return prisma.payment.findUnique({ where: { id } });
+}
+
 export function updatePaymentStatus(id: string, status: PaymentStatus) {
   return prisma.payment.update({ where: { id }, data: { status } });
 }

@@ -2024,3 +2024,84 @@ reserved for STORY-029; no coupon UI renders), and
 `PAYMENT_PROVIDER=mock` is the only valid provider value until the
 gateway decision (blueprint Section 10) is made — that is a business
 decision, not a technical gap.
+
+## 2026-09-28 — STORY-026 Payment Integration (payment-provider abstraction)
+
+**Scope and why.** `docs/blueprint.md` Section 10 lists the exact payment
+gateway provider as an unconfirmed open item, and `CLAUDE.md` says not to
+guess at unconfirmed integrations. STORY-025 already landed a checkout-facing
+thin slice of this story (the interface, `MockPaymentProvider`'s sync
+success/decline/timeout path, `payment.service.ts`'s create-intent/confirm,
+and the Payment Step UI). This story completes the remaining scope: refunds,
+the async webhook confirmation path, and the abstraction-boundary guard
+test — **no concrete gateway (Stripe, PayHere, WebXPay, or any other) is
+implemented here.** When the gateway decision is made, a follow-up story
+implements a concrete `PaymentProvider` adapter; checkout, cart, and order
+code need zero changes at that point — only `getActiveProvider()` in
+`payment.service.ts` gains a new branch, and `PAYMENT_PROVIDER=<name>` picks
+it.
+
+**`PaymentProvider` contract**
+(`src/services/payment/payment-provider.interface.ts`): `createIntent`,
+`confirmPayment` (sync), `handleWebhook` (async), `refund`. No method may
+ever accept, persist, or log raw card/credential data — any real adapter
+must use the gateway's hosted/tokenized flow, the same constraint the mock
+already honors by design (it never touches anything card-shaped).
+
+**Webhook signature verification runs over raw bytes, before anything is
+trusted.** `/api/payments/webhook`'s route reads the request body as text,
+never pre-parsed JSON, and hands the raw string plus the signature header
+straight to `PaymentProvider.handleWebhook`. The mock signs/verifies with
+HMAC-SHA256 over those exact bytes using `AUTH_SECRET` — reusing the secret
+NextAuth already requires rather than provisioning a mock-only one, the same
+reasoning `src/lib/cart-token.ts` already uses for the guest-cart cookie.
+Content is JSON-parsed and shape-validated (`mockWebhookPayloadSchema`) only
+*after* the signature check passes; a bad/missing signature is a 401 and the
+payment is left untouched, never assumed valid. This mirrors how a real
+provider's webhook verification works (e.g. Stripe's raw-body + signing-secret
+pattern) without adopting a specific vendor's SDK.
+
+**This route currently binds to the mock's callback scheme, deliberately.**
+Each real gateway defines its own webhook payload shape and signing scheme,
+and registers its own callback URL with that gateway — genericizing webhook
+ingestion ahead of knowing which gateway would be speculative design against
+an unconfirmed integration. When a concrete adapter lands, give it its own
+webhook route (e.g. `/api/payments/webhook/<provider>`) rather than
+overloading this one.
+
+**Idempotency is shared between the sync and async confirmation paths.**
+`payment.service.ts` factors the Succeeded/Failed transition rule into one
+internal `applyOutcome()` helper used by both `confirmPayment` and
+`handlePaymentWebhook`: an already-Succeeded payment stays Succeeded (a
+retried confirm or a duplicate webhook delivery must never flip a completed
+payment), and a Failed payment stays Failed — the customer creates a fresh
+intent rather than resurrecting either.
+
+**Refund is modeled but only the mock implements it.**
+`refundPayment(paymentId, amount?)` looks up the payment by its internal id
+(what `Order.paymentId` stores), rejects anything not currently `Succeeded`
+(`PaymentRefundNotAllowedError`) and any amount exceeding the original
+(`PaymentRefundAmountInvalidError`), then calls `PaymentProvider.refund()`
+and marks the row `Refunded`. `MockPaymentProvider.refund()` always succeeds
+(there's no external system to fail against) and returns a fake
+`mock_refund_...` reference. No route or UI calls this yet — it exists so
+STORY-028's return flow and the future admin refund action (STORY-047) have
+a stable contract, per this story's explicit scope.
+
+**No duplicate `/api/payments/intent` route.** The story's task list
+describes a generic intent-creation endpoint, but STORY-025 already built
+`POST /api/checkout/payment/intent`, which does exactly this (creates an
+intent via the configured provider, amount computed server-side from the
+live cart) and is checkout's only caller today. A second, generic route
+that accepted a client-supplied amount would duplicate that logic and
+undermine the "server always computes the amount" security decision
+checkout already made. If a non-checkout caller needs intent creation later,
+it calls `payment.service.createPaymentIntent()` directly or gets its own
+purpose-built route — not a bare passthrough to the provider.
+
+**Abstraction-boundary guard test**
+(`tests/unit/payment-service-boundary.test.ts`) reads `payment.service.ts`'s
+source and asserts every import is internal (`@/...`, relative, or a Node
+builtin) and that no known gateway name appears anywhere in the file. It
+fails the moment a concrete SDK is imported directly instead of going
+through a compliant `PaymentProvider` adapter file.

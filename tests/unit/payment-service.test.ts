@@ -2,8 +2,14 @@
 import { afterEach, describe, expect, it } from "vitest";
 
 import { prisma } from "@/lib/db";
-import { PaymentNotFoundError, PaymentProviderTimeoutError, PaymentProviderUnconfiguredError } from "@/services/payment.errors";
-import { confirmPayment, createPaymentIntent } from "@/services/payment.service";
+import {
+  PaymentNotFoundError,
+  PaymentProviderTimeoutError,
+  PaymentProviderUnconfiguredError,
+  PaymentRefundAmountInvalidError,
+  PaymentRefundNotAllowedError,
+} from "@/services/payment.errors";
+import { confirmPayment, createPaymentIntent, refundPayment } from "@/services/payment.service";
 
 afterEach(async () => {
   await prisma.payment.deleteMany({ where: { providerReference: { startsWith: "mock_" } } });
@@ -72,5 +78,46 @@ describe("confirmPayment", () => {
 
   it("throws PaymentNotFoundError for an unknown reference", async () => {
     await expect(confirmPayment("mock_does-not-exist", { outcome: "success" })).rejects.toBeInstanceOf(PaymentNotFoundError);
+  });
+});
+
+describe("refundPayment", () => {
+  it("refunds a Succeeded payment and marks it Refunded", async () => {
+    const intent = await createPaymentIntent(500, "LKR");
+    await confirmPayment(intent.providerReference, { outcome: "success" });
+    const row = await prisma.payment.findUniqueOrThrow({ where: { providerReference: intent.providerReference } });
+
+    const result = await refundPayment(row.id);
+    expect(result.status).toBe("Refunded");
+    expect(result.providerRefundReference).toMatch(/^mock_refund_/);
+
+    const updated = await prisma.payment.findUnique({ where: { id: row.id } });
+    expect(updated?.status).toBe("Refunded");
+  });
+
+  it("accepts a partial refund amount within the original payment", async () => {
+    const intent = await createPaymentIntent(500, "LKR");
+    await confirmPayment(intent.providerReference, { outcome: "success" });
+    const row = await prisma.payment.findUniqueOrThrow({ where: { providerReference: intent.providerReference } });
+
+    const result = await refundPayment(row.id, 200);
+    expect(result.status).toBe("Refunded");
+  });
+
+  it("rejects refunding a payment that never succeeded", async () => {
+    const intent = await createPaymentIntent(500, "LKR");
+    const row = await prisma.payment.findUniqueOrThrow({ where: { providerReference: intent.providerReference } });
+    await expect(refundPayment(row.id)).rejects.toBeInstanceOf(PaymentRefundNotAllowedError);
+  });
+
+  it("rejects a refund amount greater than the original payment", async () => {
+    const intent = await createPaymentIntent(500, "LKR");
+    await confirmPayment(intent.providerReference, { outcome: "success" });
+    const row = await prisma.payment.findUniqueOrThrow({ where: { providerReference: intent.providerReference } });
+    await expect(refundPayment(row.id, 501)).rejects.toBeInstanceOf(PaymentRefundAmountInvalidError);
+  });
+
+  it("throws PaymentNotFoundError for an unknown payment id", async () => {
+    await expect(refundPayment("does-not-exist")).rejects.toBeInstanceOf(PaymentNotFoundError);
   });
 });
