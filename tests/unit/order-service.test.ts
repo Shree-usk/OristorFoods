@@ -4,8 +4,22 @@ import { afterEach, describe, expect, it } from "vitest";
 import { prisma } from "@/lib/db";
 import { createProduct } from "@/repositories/product.repository";
 import type { CreateOrderInput } from "@/repositories/order.repository";
-import { InsufficientStockError, OrderForbiddenError, OrderNotFoundError } from "@/services/order.errors";
-import { createOrder, generateOrderNumber, getOrderForConfirmation } from "@/services/order.service";
+import { registerOrderEventConsumer, resetOrderEventConsumerForTesting, mockErpSyncConsumer } from "@/services/order-integration.service";
+import {
+  IllegalOrderTransitionError,
+  InsufficientStockError,
+  OrderCancellationNotAllowedError,
+  OrderForbiddenError,
+  OrderNotFoundError,
+} from "@/services/order.errors";
+import {
+  cancelOrder,
+  createOrder,
+  generateOrderNumber,
+  getOrderForConfirmation,
+  isTransitionAllowed,
+  transitionOrderStatus,
+} from "@/services/order.service";
 
 let sequence = 0;
 
@@ -68,6 +82,8 @@ function lineFor(product: { id: string; name: string; sku: string }, quantity: n
 }
 
 afterEach(async () => {
+  resetOrderEventConsumerForTesting();
+  // OrderIntegrationEvent cascades from Order, no separate cleanup needed.
   await prisma.orderStatusHistory.deleteMany();
   await prisma.orderItem.deleteMany();
   await prisma.order.deleteMany();
@@ -204,5 +220,166 @@ describe("getOrderForConfirmation", () => {
     await expect(getOrderForConfirmation(order.orderNumber, null, "wrong-token")).rejects.toBeInstanceOf(OrderForbiddenError);
     await expect(getOrderForConfirmation(order.orderNumber, null, null)).rejects.toBeInstanceOf(OrderForbiddenError);
     await expect(getOrderForConfirmation("ORS-00000000-000000", null, "ord-svc-guest")).rejects.toBeInstanceOf(OrderNotFoundError);
+  });
+});
+
+async function placeTestOrder(stockQuantity = 10, quantity = 2) {
+  const product = await makeProduct(stockQuantity);
+  const payment = await makePayment("150.00");
+  const cart = await makeCart();
+  const { order } = await createOrder(
+    orderInput({ idempotencyKey: crypto.randomUUID(), paymentId: payment.id, cartId: cart.id, items: [lineFor(product, quantity)] }),
+  );
+  return { order, product, payment };
+}
+
+describe("isTransitionAllowed", () => {
+  it("allows the happy-path pipeline in order", () => {
+    expect(isTransitionAllowed("PendingConfirmation", "Confirmed")).toBe(true);
+    expect(isTransitionAllowed("Confirmed", "Processing")).toBe(true);
+    expect(isTransitionAllowed("Processing", "Dispatched")).toBe(true);
+    expect(isTransitionAllowed("Dispatched", "Delivered")).toBe(true);
+  });
+
+  it("allows cancellation up through Processing, but not from Dispatched onward", () => {
+    expect(isTransitionAllowed("PendingConfirmation", "Cancelled")).toBe(true);
+    expect(isTransitionAllowed("Confirmed", "Cancelled")).toBe(true);
+    expect(isTransitionAllowed("Processing", "Cancelled")).toBe(true);
+    expect(isTransitionAllowed("Dispatched", "Cancelled")).toBe(false);
+    expect(isTransitionAllowed("Delivered", "Cancelled")).toBe(false);
+  });
+
+  it("allows Returned only from Dispatched or Delivered", () => {
+    expect(isTransitionAllowed("Dispatched", "Returned")).toBe(true);
+    expect(isTransitionAllowed("Delivered", "Returned")).toBe(true);
+    expect(isTransitionAllowed("Processing", "Returned")).toBe(false);
+  });
+
+  it("rejects the AC's named illegal jump and every terminal-state exit", () => {
+    expect(isTransitionAllowed("Delivered", "PendingConfirmation")).toBe(false);
+    expect(isTransitionAllowed("Cancelled", "Confirmed")).toBe(false);
+    expect(isTransitionAllowed("Returned", "Delivered")).toBe(false);
+  });
+
+  it("rejects every self-transition", () => {
+    const statuses = ["PendingConfirmation", "Confirmed", "Processing", "Dispatched", "Delivered", "Cancelled", "Returned"] as const;
+    for (const status of statuses) expect(isTransitionAllowed(status, status)).toBe(false);
+  });
+});
+
+describe("transitionOrderStatus", () => {
+  it("moves a legal transition and records history with the given actor", async () => {
+    const { order } = await placeTestOrder();
+    const updated = await transitionOrderStatus(order.id, "Processing", "admin:test-admin");
+    expect(updated.status).toBe("Processing");
+
+    const history = await prisma.orderStatusHistory.findMany({ where: { orderId: order.id }, orderBy: { createdAt: "asc" } });
+    expect(history.map((h) => h.status)).toEqual(["Confirmed", "Processing"]);
+    expect(history[1].actor).toBe("admin:test-admin");
+  });
+
+  it("rejects an illegal transition and leaves the order untouched", async () => {
+    const { order } = await placeTestOrder();
+    await expect(transitionOrderStatus(order.id, "Delivered", "system:test")).rejects.toBeInstanceOf(IllegalOrderTransitionError);
+
+    const untouched = await prisma.order.findUniqueOrThrow({ where: { id: order.id } });
+    expect(untouched.status).toBe("Confirmed");
+  });
+
+  it("throws OrderNotFoundError for an unknown order id", async () => {
+    await expect(transitionOrderStatus("does-not-exist", "Processing", "system:test")).rejects.toBeInstanceOf(OrderNotFoundError);
+  });
+});
+
+describe("cancelOrder", () => {
+  it("restocks, refunds, and records history for an eligible order", async () => {
+    const { order, product, payment } = await placeTestOrder(10, 3);
+    const before = await prisma.product.findUniqueOrThrow({ where: { id: product.id } });
+    expect(before.stockQuantity).toBe(7); // 10 - 3 decremented at order placement
+
+    const result = await cancelOrder(order.orderNumber, null, "ord-svc-guest", "Changed my mind");
+    expect(result.order.status).toBe("Cancelled");
+    expect(result.refundOutcome).toBe("refunded");
+
+    const restocked = await prisma.product.findUniqueOrThrow({ where: { id: product.id } });
+    expect(restocked.stockQuantity).toBe(10);
+
+    const updatedOrder = await prisma.order.findUniqueOrThrow({ where: { id: order.id } });
+    expect(updatedOrder.cancelledAt).not.toBeNull();
+    expect(updatedOrder.cancellationReason).toBe("Changed my mind");
+
+    const updatedPayment = await prisma.payment.findUniqueOrThrow({ where: { id: payment.id } });
+    expect(updatedPayment.status).toBe("Refunded");
+
+    const history = await prisma.orderStatusHistory.findMany({ where: { orderId: order.id }, orderBy: { createdAt: "asc" } });
+    expect(history.map((h) => h.status)).toEqual(["Confirmed", "Cancelled"]);
+    expect(history[1].actor).toBe("customer:guest");
+  });
+
+  it("rejects cancellation past Dispatched and leaves stock/payment untouched", async () => {
+    const { order, product, payment } = await placeTestOrder(10, 2);
+    await transitionOrderStatus(order.id, "Processing", "system:test");
+    await transitionOrderStatus(order.id, "Dispatched", "system:test");
+
+    await expect(cancelOrder(order.orderNumber, null, "ord-svc-guest", undefined)).rejects.toBeInstanceOf(OrderCancellationNotAllowedError);
+
+    const untouchedProduct = await prisma.product.findUniqueOrThrow({ where: { id: product.id } });
+    expect(untouchedProduct.stockQuantity).toBe(8);
+    const untouchedPayment = await prisma.payment.findUniqueOrThrow({ where: { id: payment.id } });
+    expect(untouchedPayment.status).toBe("Succeeded");
+  });
+
+  it("rejects a stranger's cancellation attempt", async () => {
+    const { order } = await placeTestOrder();
+    await expect(cancelOrder(order.orderNumber, null, "wrong-token", undefined)).rejects.toBeInstanceOf(OrderForbiddenError);
+  });
+
+  it("still cancels and restocks when the refund fails, reporting refund_failed", async () => {
+    const { order, product, payment } = await placeTestOrder(10, 2);
+    // Force refundPayment to fail deterministically: an already-Refunded
+    // payment is rejected by payment.service.ts's own guard, without
+    // needing to mock the payment provider.
+    await prisma.payment.update({ where: { id: payment.id }, data: { status: "Refunded" } });
+
+    const result = await cancelOrder(order.orderNumber, null, "ord-svc-guest", undefined);
+    expect(result.order.status).toBe("Cancelled");
+    expect(result.refundOutcome).toBe("refund_failed");
+
+    // Stock release still happened — cancellation is not rolled back by a refund failure.
+    const restocked = await prisma.product.findUniqueOrThrow({ where: { id: product.id } });
+    expect(restocked.stockQuantity).toBe(10);
+  });
+
+  it("throws OrderNotFoundError for an unknown order number", async () => {
+    await expect(cancelOrder("ORS-00000000-000000", null, "ord-svc-guest", undefined)).rejects.toBeInstanceOf(OrderNotFoundError);
+  });
+});
+
+describe("order-integration events", () => {
+  it("emits one order.confirmed event on creation, processed by the default logging consumer", async () => {
+    const { order } = await placeTestOrder();
+    const events = await prisma.orderIntegrationEvent.findMany({ where: { orderId: order.id } });
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({ eventType: "order.confirmed", status: "Processed" });
+  });
+
+  it("emits one order.cancelled event on cancellation", async () => {
+    const { order } = await placeTestOrder();
+    await cancelOrder(order.orderNumber, null, "ord-svc-guest", undefined);
+
+    const events = await prisma.orderIntegrationEvent.findMany({ where: { orderId: order.id }, orderBy: { createdAt: "asc" } });
+    expect(events.map((e) => e.eventType)).toEqual(["order.confirmed", "order.cancelled"]);
+  });
+
+  it("proves the mock ERP-sync consumer flips erpSyncStatus end to end", async () => {
+    registerOrderEventConsumer(mockErpSyncConsumer);
+    const { order } = await placeTestOrder();
+
+    const synced = await prisma.order.findUniqueOrThrow({ where: { id: order.id } });
+    expect(synced.erpSyncStatus).toBe("synced");
+
+    await cancelOrder(order.orderNumber, null, "ord-svc-guest", undefined);
+    const syncCancelled = await prisma.order.findUniqueOrThrow({ where: { id: order.id } });
+    expect(syncCancelled.erpSyncStatus).toBe("sync_cancelled");
   });
 });

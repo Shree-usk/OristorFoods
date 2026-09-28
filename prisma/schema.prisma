@@ -1115,6 +1115,12 @@ model Order {
   couponCode         String?
   rewardPointsEarned Int         @default(0)
   erpSyncStatus      String?
+  // Set together by order.service.ts's cancelOrder() (STORY-028). No
+  // separate refund-reference column — refund state lives on
+  // Payment.status (Refunded); duplicating it here would be a second
+  // source of truth.
+  cancelledAt        DateTime?
+  cancellationReason String?     @db.VarChar(500)
   paymentId          String?     @unique
   payment            Payment?    @relation(fields: [paymentId], references: [id], onDelete: SetNull)
   deliveryZoneName   String
@@ -1131,6 +1137,7 @@ model Order {
   shipPostalCode     String?
   items              OrderItem[]
   statusHistory      OrderStatusHistory[]
+  integrationEvents  OrderIntegrationEvent[]
   createdAt          DateTime    @default(now())
   updatedAt          DateTime    @updatedAt
 
@@ -1159,4 +1166,34 @@ model OrderStatusHistory {
   status    OrderStatus
   actor     String
   createdAt DateTime    @default(now())
+}
+
+// --- Order Management (STORY-028) ---
+// The ERP/warehouse integration hook: a durable outbox, not a call to any
+// named ERP's API. Which ERP system is unconfirmed per blueprint.md
+// Section 10 — same treatment STORY-026 gives the payment gateway. See
+// docs/architecture-decisions.md for the full contract.
+
+enum OrderIntegrationEventStatus {
+  Pending
+  Processed
+  Failed
+}
+
+model OrderIntegrationEvent {
+  id        String                      @id @default(cuid())
+  orderId   String
+  order     Order                       @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  // "order.confirmed" | "order.cancelled" at the TS layer
+  // (order-integration.service.ts's OrderEventType) — a plain string here
+  // so a future event type never needs a migration.
+  eventType String
+  payload   Json
+  status    OrderIntegrationEventStatus @default(Pending)
+  processedAt DateTime?
+  error     String?
+  createdAt DateTime                    @default(now())
+
+  @@index([orderId])
+  @@index([status, createdAt])
 }

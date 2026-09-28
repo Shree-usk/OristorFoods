@@ -1,4 +1,11 @@
-export type OrderErrorCode = "insufficient_stock" | "order_number_exhausted" | "not_found" | "forbidden";
+export type OrderErrorCode =
+  | "insufficient_stock"
+  | "order_number_exhausted"
+  | "not_found"
+  | "forbidden"
+  | "illegal_transition"
+  | "concurrent_transition"
+  | "cancellation_not_allowed";
 
 export class OrderServiceError extends Error {
   constructor(
@@ -31,5 +38,32 @@ export class OrderNotFoundError extends OrderServiceError {
 export class OrderForbiddenError extends OrderServiceError {
   constructor() {
     super("forbidden", "You do not have access to this order.");
+  }
+}
+
+export class IllegalOrderTransitionError extends OrderServiceError {
+  constructor(
+    public readonly from: string,
+    public readonly to: string,
+  ) {
+    super("illegal_transition", `Cannot move an order from "${from}" to "${to}".`);
+  }
+}
+
+/**
+ * A transition's optimistic-concurrency guard (updateMany matched zero
+ * rows) — another request already moved the order off the status this
+ * caller read. Mirrors InsufficientStockError's conditional-update
+ * pattern; the caller re-reads and retries or surfaces a 409.
+ */
+export class ConcurrentTransitionError extends OrderServiceError {
+  constructor() {
+    super("concurrent_transition", "This order's status changed while your request was processing. Please try again.");
+  }
+}
+
+export class OrderCancellationNotAllowedError extends OrderServiceError {
+  constructor(public readonly currentStatus: string) {
+    super("cancellation_not_allowed", `An order that is "${currentStatus}" can no longer be cancelled.`);
   }
 }

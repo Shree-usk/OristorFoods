@@ -50,6 +50,12 @@ export interface PaymentIntentResult {
   currency: string;
 }
 
+export interface OrderStatusHistoryEntry {
+  status: string;
+  actor: string;
+  createdAt: string;
+}
+
 export interface OrderConfirmationSummary {
   orderNumber: string;
   status: string;
@@ -73,4 +79,9 @@ export interface OrderConfirmationSummary {
     quantity: number;
     lineTotal: number;
   }>;
+  /** STORY-028: timestamped pipeline, oldest first. */
+  statusHistory: OrderStatusHistoryEntry[];
+  erpSyncStatus: string | null;
+  cancelledAt: string | null;
+  cancellationReason: string | null;
 }

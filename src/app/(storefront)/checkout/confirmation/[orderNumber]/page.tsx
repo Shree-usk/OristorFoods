@@ -4,6 +4,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { Section } from "@/components/storefront/layout/section";
+import { OrderStatusTimeline } from "@/components/storefront/orders/order-status-timeline";
 import { buttonVariants } from "@/components/ui/button";
 import { auth } from "@/lib/auth";
 import { CART_COOKIE_NAME } from "@/services/cart.service";
@@ -63,7 +64,16 @@ export default async function OrderConfirmationPage({ params }: { params: Promis
           )}
         </p>
 
-        <section aria-labelledby="confirmation-items" className="mt-8 rounded-lg border border-input p-6">
+        <section aria-labelledby="confirmation-status" className="mt-8 rounded-lg border border-input p-6">
+          <h2 id="confirmation-status" className="text-h4 font-heading text-charcoal">
+            Order status
+          </h2>
+          <div className="mt-3">
+            <OrderStatusTimeline status={order.status} statusHistory={order.statusHistory} />
+          </div>
+        </section>
+
+        <section aria-labelledby="confirmation-items" className="mt-6 rounded-lg border border-input p-6">
           <h2 id="confirmation-items" className="text-h4 font-heading text-charcoal">
             Order summary
           </h2>
