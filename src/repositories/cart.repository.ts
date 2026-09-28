@@ -6,15 +6,25 @@ import { prisma } from "@/lib/db";
 // mapping needs the product's primary image (a relation of Product, not a
 // scalar) for the thumbnail. Same ordering convention as
 // product.repository.ts's findProductDetailBySlug; `take: 1` since a cart
-// line only ever shows one thumbnail.
+// line only ever shows one thumbnail. `categories` (STORY-029) is needed
+// for coupon/promotion category-scope matching in discount.service.ts.
 const withProduct = {
-  product: { include: { images: { orderBy: [{ isPrimary: "desc" }, { sortOrder: "asc" }], take: 1 } } },
+  product: {
+    include: {
+      images: { orderBy: [{ isPrimary: "desc" }, { sortOrder: "asc" }], take: 1 },
+      categories: { select: { id: true } },
+    },
+  },
 } satisfies Prisma.CartItemInclude;
 
 export type CartItemWithProduct = Prisma.CartItemGetPayload<{ include: typeof withProduct }>;
 
 export function findCartByUserId(userId: string) {
   return prisma.cart.findUnique({ where: { userId } });
+}
+
+export function findCartById(id: string) {
+  return prisma.cart.findUnique({ where: { id } });
 }
 
 export function findCartByGuestToken(guestToken: string) {
@@ -81,6 +91,15 @@ export function listCartItemsWithProduct(cartId: string): Promise<CartItemWithPr
 
 export function deleteCart(id: string) {
   return prisma.cart.delete({ where: { id } });
+}
+
+/** STORY-029. Setting a coupon replaces any previously applied one — a cart holds at most one at a time. */
+export function setCartCoupon(cartId: string, couponId: string) {
+  return prisma.cart.update({ where: { id: cartId }, data: { couponId } });
+}
+
+export function clearCartCoupon(cartId: string) {
+  return prisma.cart.update({ where: { id: cartId }, data: { couponId: null } });
 }
 
 /**

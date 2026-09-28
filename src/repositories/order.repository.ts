@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/db";
+import { createRedemption } from "@/repositories/coupon.repository";
 import { ConcurrentTransitionError, InsufficientStockError } from "@/services/order.errors";
 import type { OrderStatus, Prisma } from "@/generated/prisma/client";
 
@@ -25,6 +26,13 @@ export interface CreateOrderInput {
   guestEmail: string | null;
   subtotal: string;
   deliveryCharge: string;
+  // STORY-029. discount/couponCode/discountLabel are always written
+  // (defaulting "0.00"/null/null when nothing applied) rather than left
+  // to the schema default, so every order snapshot is explicit about
+  // whether a discount was considered.
+  discount: string;
+  couponCode: string | null;
+  discountLabel: string | null;
   grandTotal: string;
   rewardPointsEarned: number;
   paymentId: string;
@@ -40,6 +48,8 @@ export interface CreateOrderInput {
   shipPostalCode: string | null;
   items: OrderLineInput[];
   cartId: string;
+  /** Present only when a coupon (not just a promotion) contributed to the discount — promotions aren't redemption-tracked, only coupons are. */
+  couponRedemption: { couponId: string; discountAmount: string } | null;
 }
 
 /**
@@ -72,6 +82,9 @@ export function createOrderWithStockDecrement(input: CreateOrderInput) {
         status: "Confirmed",
         subtotal: input.subtotal,
         deliveryCharge: input.deliveryCharge,
+        discount: input.discount,
+        couponCode: input.couponCode,
+        discountLabel: input.discountLabel,
         grandTotal: input.grandTotal,
         rewardPointsEarned: input.rewardPointsEarned,
         paymentId: input.paymentId,
@@ -104,6 +117,20 @@ export function createOrderWithStockDecrement(input: CreateOrderInput) {
     });
 
     await tx.cartItem.deleteMany({ where: { cartId: input.cartId } });
+    // The cart's applied coupon is scoped to that checkout attempt —
+    // clear it alongside the items so the customer starts their next
+    // cart fresh, mirroring how items themselves are cleared.
+    await tx.cart.update({ where: { id: input.cartId }, data: { couponId: null } });
+
+    if (input.couponRedemption) {
+      await createRedemption(tx, {
+        couponId: input.couponRedemption.couponId,
+        userId: input.userId,
+        guestEmail: input.guestEmail,
+        orderId: order.id,
+        discountAmount: input.couponRedemption.discountAmount,
+      });
+    }
 
     return order;
   });

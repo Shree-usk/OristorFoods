@@ -96,6 +96,14 @@ export default async function OrderConfirmationPage({ params }: { params: Promis
                 {order.currency} {order.subtotal.toFixed(2)}
               </dd>
             </div>
+            {order.discount > 0 && (
+              <div className="flex items-center justify-between text-leaf-dark">
+                <dt>{order.discountLabel ?? "Discount"}</dt>
+                <dd className="font-number">
+                  −{order.currency} {order.discount.toFixed(2)}
+                </dd>
+              </div>
+            )}
             <div className="flex items-center justify-between">
               <dt>Delivery ({order.deliveryZoneName})</dt>
               <dd className="font-number">

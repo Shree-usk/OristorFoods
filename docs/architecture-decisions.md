@@ -2314,3 +2314,130 @@ across all three routes; an e2e spec
 (`tests/e2e/order-cancellation.spec.ts`) covering the confirmation page's
 status display, a full cancel-and-restock cycle through the real API, and
 a stranger's cancellation attempt being rejected.
+
+## 2026-09-28 — STORY-029 Coupons & Promotions
+
+**Scope.** Unlike STORY-026–028, this story is genuinely greenfield — no
+prior story shipped a thin slice of coupon/promotion logic, though
+`Order.discount`/`Order.couponCode` existed as unpopulated placeholders
+since STORY-028. Coupon-code redemption and automatic campaign
+promotions, both customer-facing and re-validated at every step, are
+built here; admin *authoring* of `Coupon`/`Promotion` rows is STORY-050's
+concern — that story is designed to link to these models, not redefine
+them.
+
+**`Cart.couponId` is an FK, not a denormalized code.** A cart only ever
+needs one active coupon (the confirmed default is no stacking — see
+below), and an FK always reflects the coupon's live state rather than a
+stale snapshot. **A coupon is deliberately NOT carried over on a
+guest→user cart merge** (`mergeGuestCartIntoUser`) — merge already treats
+itself as "best effort, revalidate everything" (it silently drops
+unavailable/capped guest lines today), and a coupon's eligibility
+(min-order-value, scope) depends on the *combined* post-merge cart, which
+wasn't known at apply time. The customer sees the coupon input again and
+can re-apply.
+
+**A guest's per-customer redemption limit is checked in two phases,
+because a guest has no stable identity until the Address step's email —
+collected after a coupon could already be applied at the cart step.**
+`coupon.service.ts::applyCouponToCart` checks everything except the
+per-customer limit for a guest (existence, dates, scope, min-order-value,
+and the *global* limit are all enforced immediately — an authenticated
+user's per-customer limit IS checked at apply time, since `userId` is
+already known). `checkout.service.ts::placeOrder` re-runs the full,
+throwing `validateCoupon()` a second time once `guestEmail` exists,
+catching a guest who's exhausted their limit only there — the same
+"re-validation can still reject at the final step" pattern STORY-025
+already established for stock/price/delivery (`TotalsChangedError`,
+`CartInvalidError`).
+
+**Stacking/precedence is data-driven (`stackable: Boolean`,
+`priority: Int` on both `Coupon` and `Promotion`), not hardcoded** —
+STORY-050 doesn't exist yet to configure anything, but the AC demands the
+*rule* be configuration, not a redeploy. Default: take-best (the largest
+discount wins) between the coupon and every active promotion; multiple
+`stackable: true` sources sum instead (capped at the matching subtotal).
+Ties: the coupon always beats a promotion of equal value (a customer who
+entered a code should see it win, never get silently pre-empted by an
+invisible campaign); among tied promotions, lower `priority` wins.
+
+**A `FreeShipping` rule's comparable "value" is the current delivery
+charge** — `discount.service.ts::calculateDiscount` takes `deliveryCharge`
+as an input specifically so a free-shipping coupon/promotion can compete
+on the same numeric scale as a percentage/fixed discount for take-best
+purposes (0 if delivery is already free from the zone's own threshold —
+no double-dipping). This is a refinement discovered during
+implementation, not originally planned as a `calculateDiscount` parameter
+— the alternative (treating free-shipping as an orthogonal, always-wins
+track) was rejected as needless complexity with no real-world case to
+justify it yet.
+
+**Discount is computed parallel to delivery, not inside it — an explicit
+scope boundary.** `shipping.service.ts`'s free-shipping-threshold and
+weight-tier logic keeps using the cart's *pre-discount* subtotal,
+completely untouched by this story. `checkout.service.ts` calls
+`resolveDiscountForCart` alongside `resolveDelivery`, the same
+independent-step pattern it already uses for payment. When a
+`FreeShipping` rule wins, the checkout orchestrator (not
+`shipping.service.ts`) zeroes the delivery charge actually billed —
+matching how the zone's own global threshold already sets `charge = 0`
+directly rather than modeling shipping waivers as a subtotal discount
+line; `Order.deliveryCharge` reflects the real (possibly zeroed) amount,
+and `Order.discount` never double-counts a waived delivery charge.
+
+**Composition with STORY-009 tier pricing**: discounts are computed
+against cart lines' already tier-priced `lineTotal` — `cart.service.ts`'s
+`buildSummary` has already called `resolvePrice()` (campaign > sale >
+customerGroup > volumeDiscount > standard) by the time a line reaches
+`discount.service.ts`. A distributor's coupon therefore discounts their
+already-discounted total, not the retail price — this falls out of where
+the calculation reads its input, with no special-casing and no new
+restriction on which customer groups may use coupons (nothing in the
+story or blueprint asks for one).
+
+**`CampaignPrice` (STORY-009, per-product price override resolved in
+`pricing.service.ts`) and `Promotion` (this story, cart-level discount)
+are related but operate at different layers — do not conflate them.**
+`CampaignPrice` feeds into a line's `unitPrice`/`lineTotal` before
+discount calculation ever runs; `Promotion` is evaluated against the
+(already `CampaignPrice`-adjusted, if applicable) cart as a whole.
+
+**Scope (all products / category / product) uses join tables**
+(`CouponScopeProduct`/`CouponScopeCategory`, mirrored for `Promotion`),
+not a single nullable FK — a real coupon needs to cover several
+categories/products at once. A scoped discount is computed only against
+matching lines' total, never the full subtotal, and is capped so it can
+never exceed that matching sum.
+
+**Redemption is recorded only when the coupon actually won a non-zero
+share of the applied discount(s).** A coupon that was validly applied but
+lost to a better promotion under take-best contributes nothing — counting
+it as "redeemed" would consume the customer's usage allowance for a
+discount they never received. `order.repository.ts::createOrderWithStockDecrement`
+writes the `CouponRedemption` row inside the same transaction as stock
+decrement and order creation (extending, not duplicating, the existing
+single-transaction pattern) — a rollback (e.g. insufficient stock) can
+never leave an orphaned redemption. The cart's `couponId` is cleared
+alongside its items once an order is placed, so the next cart starts
+fresh.
+
+**No `refundedAt`-style extra column, no speculative STORY-050 fields.**
+`Order` gains exactly one new column, `discountLabel` (a plain
+display-string snapshot — "Coupon SAVE10" or "Weekend Sale, Coupon
+SAVE10" if stacked — not an FK, so it survives a later-deleted/
+deactivated `Coupon`/`Promotion` row unchanged).
+
+**Testing:** `discount-calc.test.ts` — the pure `calculateDiscount()`
+function against all three discount types, scope filtering, the
+min-order-value boundary, stacking vs. take-best, every tie-break rule,
+and over-discount clamping. `coupon-service.test.ts` — every apply-time
+validation failure mode, live recalculation on cart change (no re-apply
+needed), the guest two-phase limit check end-to-end, redemption-
+transaction atomicity, tier-pricing composition, and merge-drops-the-
+coupon. `promotion-service.test.ts` — active-window and scope filtering.
+`coupon-routes.test.ts` — `POST`/`DELETE /api/cart/coupon` for both
+session and guest identities. `tests/e2e/coupon-checkout.spec.ts` — below
+minimum rejected with a specific, actionable reason → crosses the
+threshold → applies → carries through checkout unchanged → confirmation
+page shows the discount and its label; a second scenario proves removal
+reverts the total.
