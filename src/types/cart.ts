@@ -25,10 +25,30 @@ export interface CartLineItem {
   availableQuantity: number;
 }
 
+/** STORY-029. One entry per applied discount source (never more than one coupon; zero or more promotions). */
+export interface AppliedDiscountLine {
+  sourceType: "coupon" | "promotion";
+  label: string;
+  amount: number;
+  isFreeShipping: boolean;
+}
+
+export interface CartDiscount {
+  amount: number;
+  applied: AppliedDiscountLine[];
+  freeShippingApplied: boolean;
+}
+
 export interface CartSummary {
   items: CartLineItem[];
   itemCount: number;
   subtotal: number;
   currency: string;
   rewardPointsEarned: number;
+  /** null when no coupon is applied AND no promotion is active. */
+  discount: CartDiscount | null;
+  /** The applied coupon's code, or null — set even when the coupon currently contributes $0 (see couponInvalidReason). */
+  couponCode: string | null;
+  /** Why an applied coupon isn't (or is no longer) contributing — e.g. cart dropped below its minimum. Null when there's no issue. */
+  couponInvalidReason: string | null;
 }

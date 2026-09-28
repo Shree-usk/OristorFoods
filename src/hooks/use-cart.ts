@@ -68,6 +68,32 @@ export function useCart() {
     onSuccess: invalidate,
   });
 
+  // STORY-029. Applying/removing a coupon changes the total, so — like
+  // every other cart mutation here — it invalidates ["cart"] rather than
+  // trying to locally patch the cached summary; any component reading
+  // the cart (cart drawer, checkout Review step) picks up the new
+  // discount automatically.
+  const applyCouponMutation = useMutation({
+    mutationFn: async (code: string) => {
+      const response = await fetch("/api/cart/coupon", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code }),
+      });
+      if (!response.ok) await throwWithServerMessage(response, "This coupon couldn't be applied.");
+    },
+    onSuccess: invalidate,
+  });
+
+  const removeCouponMutation = useMutation({
+    mutationFn: async () => {
+      const response = await fetch("/api/cart/coupon", { method: "DELETE", credentials: "include" });
+      if (!response.ok) await throwWithServerMessage(response, "Failed to remove coupon");
+    },
+    onSuccess: invalidate,
+  });
+
   return {
     cart: query.data,
     isPending: query.isPending,
@@ -80,5 +106,9 @@ export function useCart() {
     updateQuantityError: updateQuantityMutation.isError ? { itemId: updateQuantityMutation.variables?.itemId, message: updateQuantityMutation.error.message } : null,
     isRemovingItemId: removeItemMutation.isPending ? removeItemMutation.variables : undefined,
     removeItemError: removeItemMutation.isError ? { itemId: removeItemMutation.variables, message: removeItemMutation.error.message } : null,
+    applyCoupon: (code: string) => applyCouponMutation.mutateAsync(code),
+    removeCoupon: () => removeCouponMutation.mutateAsync(),
+    isApplyingCoupon: applyCouponMutation.isPending,
+    isRemovingCoupon: removeCouponMutation.isPending,
   };
 }

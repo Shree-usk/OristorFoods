@@ -64,6 +64,9 @@ export interface OrderConfirmationSummary {
   subtotal: number;
   deliveryCharge: number;
   discount: number;
+  /** STORY-029. "Coupon SAVE10" or "Weekend Sale" — null when nothing discounted the order. */
+  discountLabel: string | null;
+  couponCode: string | null;
   tax: number;
   grandTotal: number;
   currency: string;

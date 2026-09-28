@@ -5,6 +5,7 @@ import { useState } from "react";
 
 import { Button, buttonVariants } from "@/components/ui/button";
 import { CartLineItemRow } from "@/components/storefront/cart/cart-line-item";
+import { CouponInput } from "@/components/storefront/cart/coupon-input";
 import { EmptyCart } from "@/components/storefront/cart/empty-cart";
 import { useCart } from "@/hooks/use-cart";
 
@@ -60,10 +61,21 @@ export function CartDrawer({ open, onClose }: CartDrawerProps) {
 
         {cart && cart.items.length > 0 && (
           <div className="mt-4 border-t border-input pt-4">
-            <div className="flex items-center justify-between text-body font-medium text-charcoal">
+            <CouponInput cart={cart} />
+            {cart.discount && (
+              <div className="mt-3 flex flex-col gap-1 text-small text-leaf-dark">
+                {cart.discount.applied.map((entry, index) => (
+                  <div key={`${entry.sourceType}-${index}`} className="flex items-center justify-between">
+                    <span>{entry.label}</span>
+                    <span>{entry.isFreeShipping ? "Free shipping" : `−${cart.currency} ${entry.amount.toFixed(2)}`}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+            <div className="mt-3 flex items-center justify-between text-body font-medium text-charcoal">
               <span>Subtotal</span>
               <span>
-                {cart.currency} {cart.subtotal.toFixed(2)}
+                {cart.currency} {(cart.subtotal - (cart.discount?.amount ?? 0)).toFixed(2)}
               </span>
             </div>
             <Link href="/cart" className={buttonVariants({ variant: "outline", className: "mt-4 w-full justify-center" })} onClick={onClose}>

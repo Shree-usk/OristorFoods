@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
+import { CouponInput } from "@/components/storefront/cart/coupon-input";
 import { ApiError } from "@/lib/api/api-error";
 import { placeOrder } from "@/lib/api/checkout-client";
 import { useCheckoutStore } from "@/lib/stores/checkout-store";
@@ -15,6 +16,13 @@ import type { CartSummary } from "@/types/cart";
  * here come from the live cart query + the server-resolved delivery
  * charge; place-order re-derives all of them server-side and rejects with
  * totals_changed if anything moved since payment was confirmed.
+ *
+ * STORY-029: applying/removing a coupon here updates the DISPLAYED total
+ * immediately (["cart"] invalidation), but does not proactively reset the
+ * already-confirmed payment intent — if the customer then places the
+ * order with a now-stale intent, the existing totals_changed handling
+ * below (already built for price/stock drift) sends them back to Payment
+ * with a fresh total, exactly like any other mid-checkout change.
  */
 export function ReviewStep({ cart }: { cart: CartSummary }) {
   const router = useRouter();
@@ -26,7 +34,9 @@ export function ReviewStep({ cart }: { cart: CartSummary }) {
 
   if (!address || delivery?.status !== "ok" || !intent) return null;
 
-  const grandTotal = Math.round((cart.subtotal + delivery.charge) * 100) / 100;
+  const discountAmount = cart.discount?.amount ?? 0;
+  const deliveryCharge = cart.discount?.freeShippingApplied ? 0 : delivery.charge;
+  const grandTotal = Math.round((cart.subtotal - discountAmount + deliveryCharge) * 100) / 100;
 
   async function handlePlaceOrder() {
     if (!address || !intent) return;
@@ -102,16 +112,25 @@ export function ReviewStep({ cart }: { cart: CartSummary }) {
           <h3 id="review-totals-heading" className="text-h4 font-heading text-charcoal">
             Total
           </h3>
-          <dl className="mt-2 flex flex-col gap-1 text-body text-charcoal">
+          <div className="mt-3">
+            <CouponInput cart={cart} />
+          </div>
+          <dl className="mt-3 flex flex-col gap-1 text-body text-charcoal">
             <div className="flex items-center justify-between">
               <dt>Subtotal</dt>
               <dd className="font-number">
                 {cart.currency} {cart.subtotal.toFixed(2)}
               </dd>
             </div>
+            {cart.discount?.applied.map((entry, index) => (
+              <div key={`${entry.sourceType}-${index}`} className="flex items-center justify-between text-leaf-dark">
+                <dt>{entry.label}</dt>
+                <dd className="font-number">{entry.isFreeShipping ? "Free shipping" : `−${cart.currency} ${entry.amount.toFixed(2)}`}</dd>
+              </div>
+            ))}
             <div className="flex items-center justify-between">
               <dt>Delivery</dt>
-              <dd className="font-number">{delivery.charge === 0 ? "Free" : `${cart.currency} ${delivery.charge.toFixed(2)}`}</dd>
+              <dd className="font-number">{deliveryCharge === 0 ? "Free" : `${cart.currency} ${deliveryCharge.toFixed(2)}`}</dd>
             </div>
             <div className="flex items-center justify-between border-t border-input pt-2 font-semibold">
               <dt>Grand total</dt>

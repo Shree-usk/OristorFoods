@@ -5,6 +5,7 @@ import { useState } from "react";
 
 import { Section } from "@/components/storefront/layout/section";
 import { CartLineItemRow } from "@/components/storefront/cart/cart-line-item";
+import { CouponInput } from "@/components/storefront/cart/coupon-input";
 import { EmptyCart } from "@/components/storefront/cart/empty-cart";
 import { buttonVariants } from "@/components/ui/button";
 import { useCart } from "@/hooks/use-cart";
@@ -49,10 +50,23 @@ export default function CartPage() {
           </div>
           <div className="rounded-lg border border-input p-6">
             <h2 className="text-h4 font-heading text-charcoal">Order Summary</h2>
-            <div className="mt-4 flex items-center justify-between text-body text-charcoal">
+            <div className="mt-4">
+              <CouponInput cart={cart} />
+            </div>
+            {cart.discount && (
+              <div className="mt-3 flex flex-col gap-1 text-small text-leaf-dark">
+                {cart.discount.applied.map((entry, index) => (
+                  <div key={`${entry.sourceType}-${index}`} className="flex items-center justify-between">
+                    <span>{entry.label}</span>
+                    <span>{entry.isFreeShipping ? "Free shipping" : `−${cart.currency} ${entry.amount.toFixed(2)}`}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+            <div className="mt-3 flex items-center justify-between text-body text-charcoal">
               <span>Subtotal</span>
               <span className="font-number">
-                {cart.currency} {cart.subtotal.toFixed(2)}
+                {cart.currency} {(cart.subtotal - (cart.discount?.amount ?? 0)).toFixed(2)}
               </span>
             </div>
             <p className="mt-2 text-small text-charcoal/70">

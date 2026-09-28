@@ -40,6 +40,7 @@ model User {
   recipeBookmarks   RecipeBookmark[]
   addresses         Address[]
   orders            Order[]
+  couponRedemptions CouponRedemption[]
   createdAt         DateTime   @default(now())
   updatedAt         DateTime   @updatedAt
 }
@@ -107,6 +108,8 @@ model Category {
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
   products  Product[]
+  couponScopeRefs    CouponScopeCategory[]
+  promotionScopeRefs PromotionScopeCategory[]
 
   @@index([parentId])
 }
@@ -211,6 +214,8 @@ model Product {
   wishlistItems       WishlistItem[]
   cartItems           CartItem[]
   orderItems          OrderItem[]
+  couponScopeRefs     CouponScopeProduct[]
+  promotionScopeRefs  PromotionScopeProduct[]
   reviews             Review[]
   ratingSummary       ProductRatingSummary?
   questions           Question[]
@@ -964,6 +969,11 @@ model Cart {
   user       User?      @relation(fields: [userId], references: [id], onDelete: Cascade)
   guestToken String?    @unique
   items      CartItem[]
+  // STORY-029. An FK, not a denormalized code, so it always reflects the
+  // coupon's live state. Deliberately NOT copied over on a guest->user
+  // merge (mergeGuestCartIntoUser) — see docs/architecture-decisions.md.
+  couponId   String?
+  coupon     Coupon?    @relation(fields: [couponId], references: [id], onDelete: SetNull)
   createdAt  DateTime   @default(now())
   updatedAt  DateTime   @updatedAt
 
@@ -982,6 +992,159 @@ model CartItem {
   updatedAt         DateTime @updatedAt
 
   @@unique([cartId, productId])
+}
+
+// --- Coupons & Promotions (STORY-029) ---
+// Customer-facing redemption/evaluation engine. Coupon/Promotion
+// AUTHORING (an admin UI to create/edit these rows) is STORY-050's
+// concern — this story only defines the schema STORY-050 will later
+// write to, plus the service layer that reads it. `CampaignPrice`
+// (STORY-009, per-product price override resolved in pricing.service.ts)
+// and `Promotion` (cart-level discount, here) are related but distinct
+// mechanisms operating at different layers — see
+// docs/architecture-decisions.md, which also covers the stacking/
+// precedence rule and the composition rule with tier pricing.
+
+enum CouponDiscountType {
+  PercentageOff
+  FixedAmountOff
+  FreeShipping
+}
+
+enum CouponScope {
+  AllProducts
+  Category
+  Product
+}
+
+model Coupon {
+  id           String             @id @default(cuid())
+  code         String             @unique
+  discountType CouponDiscountType
+  // Used when discountType is PercentageOff (0-100). Null otherwise.
+  percentOff   Decimal?           @db.Decimal(5, 2)
+  // Used when discountType is FixedAmountOff. Null otherwise.
+  amountOff    Decimal?           @db.Decimal(10, 2)
+  currency     String             @default("LKR")
+  startDate    DateTime
+  endDate      DateTime
+  minOrderValue Decimal?          @db.Decimal(10, 2)
+  // Null = unlimited.
+  usageLimitGlobal      Int?
+  usageLimitPerCustomer Int?
+  scope        CouponScope        @default(AllProducts)
+  // Can this stack with other stackable coupons/promotions instead of
+  // take-best? Default false matches the confirmed business default (no
+  // stacking) — see docs/architecture-decisions.md.
+  stackable    Boolean            @default(false)
+  isActive     Boolean            @default(true)
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+
+  scopeProducts   CouponScopeProduct[]
+  scopeCategories CouponScopeCategory[]
+  redemptions     CouponRedemption[]
+  carts           Cart[]
+
+  @@index([code, isActive])
+  @@index([startDate, endDate])
+}
+
+model CouponScopeProduct {
+  couponId  String
+  coupon    Coupon  @relation(fields: [couponId], references: [id], onDelete: Cascade)
+  productId String
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@id([couponId, productId])
+  @@index([productId])
+}
+
+model CouponScopeCategory {
+  couponId   String
+  coupon     Coupon   @relation(fields: [couponId], references: [id], onDelete: Cascade)
+  categoryId String
+  category   Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@id([couponId, categoryId])
+  @@index([categoryId])
+}
+
+// One row per successful redemption, written atomically with order
+// creation (order.repository.ts's createOrderWithStockDecrement). The
+// sole source of truth for usage-limit enforcement: the global limit is
+// COUNT(*) WHERE couponId; the per-customer limit is COUNT(*) WHERE
+// couponId AND (userId = X OR guestEmail = X) — see
+// docs/architecture-decisions.md for why a guest's per-customer limit can
+// only be enforced once an email exists, at place-order time.
+model CouponRedemption {
+  id             String   @id @default(cuid())
+  couponId       String
+  coupon         Coupon   @relation(fields: [couponId], references: [id], onDelete: Restrict)
+  userId         String?
+  user           User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  guestEmail     String?
+  orderId        String   @unique
+  order          Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  discountAmount Decimal  @db.Decimal(10, 2)
+  createdAt      DateTime @default(now())
+
+  @@index([couponId])
+  @@index([couponId, userId])
+  @@index([couponId, guestEmail])
+}
+
+// Automatic, no-code discount ("10% off all products this week"). Never
+// "applied" to a Cart row like a Coupon — evaluated fresh on every read,
+// since by definition it requires no customer action.
+model Promotion {
+  id           String             @id @default(cuid())
+  name         String
+  // Customer-facing label shown in the order summary, e.g. "Weekend Sale
+  // — 10% off all products" — distinct from `name` (admin-facing), same
+  // convention as DeliveryRateOverride.campaignName being customer-visible.
+  displayLabel String
+  discountType CouponDiscountType
+  percentOff   Decimal?           @db.Decimal(5, 2)
+  amountOff    Decimal?           @db.Decimal(10, 2)
+  currency     String             @default("LKR")
+  startDate    DateTime
+  endDate      DateTime
+  minOrderValue Decimal?          @db.Decimal(10, 2)
+  scope        CouponScope        @default(AllProducts)
+  stackable    Boolean            @default(false)
+  // Tie-break among simultaneously-eligible promotions, and against a
+  // non-stackable coupon of equal discount amount (the coupon always
+  // wins that tie) — lower priority wins. See docs/architecture-decisions.md.
+  priority     Int                @default(0)
+  isActive     Boolean            @default(true)
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+
+  scopeProducts   PromotionScopeProduct[]
+  scopeCategories PromotionScopeCategory[]
+
+  @@index([isActive, startDate, endDate])
+}
+
+model PromotionScopeProduct {
+  promotionId String
+  promotion   Promotion @relation(fields: [promotionId], references: [id], onDelete: Cascade)
+  productId   String
+  product     Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@id([promotionId, productId])
+  @@index([productId])
+}
+
+model PromotionScopeCategory {
+  promotionId String
+  promotion   Promotion @relation(fields: [promotionId], references: [id], onDelete: Cascade)
+  categoryId  String
+  category    Category  @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@id([promotionId, categoryId])
+  @@index([categoryId])
 }
 
 // --- Checkout (STORY-025) ---
@@ -1113,6 +1276,10 @@ model Order {
   tax                Decimal     @db.Decimal(10, 2) @default(0)
   grandTotal         Decimal     @db.Decimal(10, 2)
   couponCode         String?
+  // STORY-029. A plain display-string snapshot of what discounted the
+  // order ("Coupon SAVE10" or "Weekend Sale") — not an FK, so it survives
+  // a later-deleted/deactivated Coupon or Promotion row unchanged.
+  discountLabel      String?
   rewardPointsEarned Int         @default(0)
   erpSyncStatus      String?
   // Set together by order.service.ts's cancelOrder() (STORY-028). No
@@ -1138,6 +1305,7 @@ model Order {
   items              OrderItem[]
   statusHistory      OrderStatusHistory[]
   integrationEvents  OrderIntegrationEvent[]
+  couponRedemption   CouponRedemption?
   createdAt          DateTime    @default(now())
   updatedAt          DateTime    @updatedAt
 

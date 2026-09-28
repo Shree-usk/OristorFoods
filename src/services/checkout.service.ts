@@ -1,5 +1,6 @@
 import { verifyCartCookieValue } from "@/lib/cart-token";
 import * as addressRepository from "@/repositories/address.repository";
+import * as couponRepository from "@/repositories/coupon.repository";
 import { findOrderByIdempotencyKey } from "@/repositories/order.repository";
 import { getCartForCheckout } from "@/services/cart.service";
 import {
@@ -10,6 +11,10 @@ import {
   PaymentNotConfirmedError,
   TotalsChangedError,
 } from "@/services/checkout.errors";
+import { CouponNotFoundError } from "@/services/coupon.errors";
+import { validateCoupon } from "@/services/coupon.service";
+import { resolveDiscountForCart } from "@/services/discount.service";
+import type { DiscountableLine } from "@/services/discount.service";
 import { createOrder, getOrderForConfirmation } from "@/services/order.service";
 import { createPaymentIntent, getPaymentByReference } from "@/services/payment.service";
 import { resolveDelivery } from "@/services/shipping.service";
@@ -18,10 +23,11 @@ import type { CheckoutAddressInput, PlaceOrderInput } from "@/validation/checkou
 
 /**
  * Checkout orchestration (STORY-025). This service owns NO pricing, zone,
- * or payment-provider logic — it sequences cart.service (STORY-024),
- * shipping.service (STORY-027 slice), payment.service (STORY-026 slice),
- * and order.service (STORY-028 slice). Every amount is recomputed
- * server-side here; client-supplied totals are never read.
+ * discount, or payment-provider logic — it sequences cart.service
+ * (STORY-024), discount.service (STORY-029), shipping.service (STORY-027
+ * slice), payment.service (STORY-026 slice), and order.service (STORY-028
+ * slice). Every amount is recomputed server-side here; client-supplied
+ * totals are never read.
  */
 
 const roundMoney = (value: number) => Math.round(value * 100) / 100;
@@ -29,6 +35,7 @@ const roundMoney = (value: number) => Math.round(value * 100) / 100;
 interface CheckoutCartState {
   cartId: string;
   guestToken: string | null;
+  couponId: string | null;
   subtotal: number;
   currency: string;
   rewardPointsEarned: number;
@@ -38,6 +45,7 @@ interface CheckoutCartState {
     productId: string;
     productName: string;
     productSku: string;
+    categoryIds: string[];
     unitPrice: number;
     quantity: number;
     lineTotal: number;
@@ -69,6 +77,7 @@ export async function requireCheckoutableCart(userId: string | null, guestCookie
   return {
     cartId: cart.id,
     guestToken: cart.guestToken,
+    couponId: cart.couponId,
     subtotal: summary.subtotal,
     currency: summary.currency,
     rewardPointsEarned: summary.rewardPointsEarned,
@@ -77,12 +86,17 @@ export async function requireCheckoutableCart(userId: string | null, guestCookie
       productId: line.productId,
       productName: line.productName,
       productSku: productById.get(line.productId)?.sku ?? "",
+      categoryIds: productById.get(line.productId)?.categories.map((category) => category.id) ?? [],
       unitPrice: line.unitPrice,
       quantity: line.quantity,
       lineTotal: line.lineTotal,
       rewardPointsEarned: line.rewardPointsEarned,
     })),
   };
+}
+
+function toDiscountableLines(cart: CheckoutCartState): DiscountableLine[] {
+  return cart.lines.map((line) => ({ productId: line.productId, categoryIds: line.categoryIds, lineTotal: line.lineTotal }));
 }
 
 /** Step 2: resolve the delivery charge for the caller's live cart. */
@@ -97,7 +111,13 @@ export async function resolveDeliveryForCart(
 
 /**
  * Step 3: create a payment intent for the server-computed grand total
- * (live cart subtotal + freshly resolved delivery charge for the city).
+ * (live cart subtotal + freshly resolved delivery charge for the city,
+ * less any applied coupon/promotion discount — STORY-029). Discount is
+ * resolved independently of delivery (shipping.service.ts's own
+ * free-shipping-threshold logic keeps using the pre-discount subtotal,
+ * untouched by this story — see docs/architecture-decisions.md); a
+ * FreeShipping-type discount only zeroes the charge actually billed here,
+ * after shipping.service.ts has already computed it.
  */
 export async function createIntentForCart(
   userId: string | null,
@@ -107,7 +127,9 @@ export async function createIntentForCart(
   const cart = await requireCheckoutableCart(userId, guestCookieValue);
   const delivery = await resolveDelivery(city, cart.subtotal, cart.totalWeightGrams);
   if (delivery.status !== "ok") throw new DeliveryUnavailableError(delivery.status);
-  const grandTotal = roundMoney(cart.subtotal + delivery.charge);
+  const discount = await resolveDiscountForCart({ couponId: cart.couponId }, toDiscountableLines(cart), cart.subtotal, delivery.charge, userId);
+  const deliveryCharge = discount.freeShippingApplied ? 0 : delivery.charge;
+  const grandTotal = roundMoney(cart.subtotal - discount.totalAmount + deliveryCharge);
   return createPaymentIntent(grandTotal, cart.currency);
 }
 
@@ -142,13 +164,39 @@ export async function placeOrder(
   if (!userId && !input.guestEmail) throw new GuestEmailRequiredError();
 
   const cart = await requireCheckoutableCart(userId, guestCookieValue);
+  const guestEmailForValidation = userId ? null : (input.guestEmail ?? null);
+
+  // Final, THROWING coupon re-validation — distinct from
+  // resolveDiscountForCart's silent-skip read below. This is the one
+  // point a guest's per-customer usage limit can be enforced (their
+  // email only exists from here on), and the only point an
+  // exhausted/expired coupon is rejected outright rather than silently
+  // contributing $0. See docs/architecture-decisions.md.
+  const discountableLines = toDiscountableLines(cart);
+  let appliedCoupon: Awaited<ReturnType<typeof couponRepository.findCouponById>> = null;
+  if (cart.couponId) {
+    appliedCoupon = await couponRepository.findCouponById(cart.couponId);
+    if (!appliedCoupon) throw new CouponNotFoundError();
+    await validateCoupon(appliedCoupon, discountableLines, cart.subtotal, userId, guestEmailForValidation);
+  }
+
   const delivery = await resolveDelivery(input.address.city, cart.subtotal, cart.totalWeightGrams);
   if (delivery.status !== "ok") throw new DeliveryUnavailableError(delivery.status);
-  const grandTotal = roundMoney(cart.subtotal + delivery.charge);
+  const discount = await resolveDiscountForCart({ couponId: cart.couponId }, discountableLines, cart.subtotal, delivery.charge, userId);
+  const deliveryCharge = discount.freeShippingApplied ? 0 : delivery.charge;
+  const grandTotal = roundMoney(cart.subtotal - discount.totalAmount + deliveryCharge);
 
   const payment = await getPaymentByReference(input.providerReference);
   if (!payment || payment.status !== "Succeeded") throw new PaymentNotConfirmedError();
   if (payment.amount.toFixed(2) !== grandTotal.toFixed(2)) throw new TotalsChangedError();
+
+  // Only record a redemption when the coupon actually won a non-zero
+  // share of the applied discount(s) — a validly-applied coupon that lost
+  // to a better promotion under take-best shouldn't consume the
+  // customer's usage allowance for a discount they never received.
+  const couponContribution = discount.applied.find((entry) => entry.sourceType === "coupon");
+  const couponRedemption = appliedCoupon && couponContribution ? { couponId: appliedCoupon.id, discountAmount: couponContribution.amount.toFixed(2) } : null;
+  const discountLabel = discount.applied.length > 0 ? discount.applied.map((entry) => entry.label).join(", ") : null;
 
   const { order, replayed: wasReplay } = await createOrder({
     idempotencyKey: input.idempotencyKey,
@@ -156,7 +204,10 @@ export async function placeOrder(
     guestToken,
     guestEmail: userId ? null : (input.guestEmail ?? null),
     subtotal: cart.subtotal.toFixed(2),
-    deliveryCharge: delivery.charge.toFixed(2),
+    deliveryCharge: deliveryCharge.toFixed(2),
+    discount: discount.totalAmount.toFixed(2),
+    couponCode: discount.couponCode,
+    discountLabel,
     grandTotal: grandTotal.toFixed(2),
     rewardPointsEarned: cart.rewardPointsEarned,
     paymentId: payment.id,
@@ -180,6 +231,7 @@ export async function placeOrder(
       rewardPointsEarned: line.rewardPointsEarned,
     })),
     cartId: cart.cartId,
+    couponRedemption,
   });
 
   if (userId && input.save) {
@@ -232,6 +284,8 @@ function toConfirmationSummary(order: Awaited<ReturnType<typeof getOrderForConfi
     subtotal: order.subtotal.toNumber(),
     deliveryCharge: order.deliveryCharge.toNumber(),
     discount: order.discount.toNumber(),
+    discountLabel: order.discountLabel,
+    couponCode: order.couponCode,
     tax: order.tax.toNumber(),
     grandTotal: order.grandTotal.toNumber(),
     currency: "LKR",

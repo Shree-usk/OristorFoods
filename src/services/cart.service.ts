@@ -9,6 +9,8 @@ import {
   ProductUnavailableError,
   StockExceededError,
 } from "@/services/cart.errors";
+import { resolveDiscountForCart } from "@/services/discount.service";
+import type { DiscountableLine } from "@/services/discount.service";
 import { resolvePrice } from "@/services/pricing.service";
 import type { CartLineItem, CartSummary } from "@/types/cart";
 
@@ -87,9 +89,19 @@ function toLineItem(item: CartItemWithProduct, resolvedUnitPrice: number, curren
  * returned totals are always current (never stale) while the caller still
  * sees a one-time notice for exactly the read where it changed. See
  * design spec decision #6.
+ *
+ * STORY-029: also resolves the cart's applied coupon + any active
+ * promotions on every read — discount recalculates live as the cart
+ * changes for free, the same way price-change detection already does.
+ * `deliveryCharge` is 0 here (delivery only resolves at checkout's
+ * Delivery step, given a city) — a FreeShipping coupon/promotion shows no
+ * savings yet at a plain cart read, only once a real delivery charge
+ * exists to waive; `couponCode` stays set regardless, so the UI can show
+ * "applied — savings shown at checkout" rather than treating it as absent.
  */
-async function buildSummary(cartId: string, items: CartItemWithProduct[]): Promise<CartSummary> {
+async function buildSummary(cart: Prisma.CartGetPayload<object>, items: CartItemWithProduct[], userId: string | null): Promise<CartSummary> {
   const lineItems: CartLineItem[] = [];
+  const discountableLines: DiscountableLine[] = [];
   for (const item of items) {
     const resolved = await resolvePrice({ productId: item.productId, customerGroup: "Retail", quantity: item.quantity });
     const liveUnitPrice = resolved?.price.toNumber() ?? item.unitPriceSnapshot.toNumber();
@@ -98,22 +110,47 @@ async function buildSummary(cartId: string, items: CartItemWithProduct[]): Promi
     if (priceChanged) {
       await cartRepository.updateCartItemSnapshot(item.id, liveUnitPrice.toFixed(2));
     }
-    lineItems.push(toLineItem(item, liveUnitPrice, currency, priceChanged));
+    const line = toLineItem(item, liveUnitPrice, currency, priceChanged);
+    lineItems.push(line);
+    discountableLines.push({ productId: item.productId, categoryIds: item.product.categories.map((category) => category.id), lineTotal: line.lineTotal });
   }
+
+  const subtotal = Math.round(lineItems.reduce((sum, item) => sum + item.lineTotal, 0) * 100) / 100;
+  const discount = await resolveDiscountForCart({ couponId: cart.couponId }, discountableLines, subtotal, 0, userId);
 
   return {
     items: lineItems,
     itemCount: lineItems.reduce((sum, item) => sum + item.quantity, 0),
-    subtotal: Math.round(lineItems.reduce((sum, item) => sum + item.lineTotal, 0) * 100) / 100,
+    subtotal,
     currency: lineItems[0]?.currency ?? "LKR",
     rewardPointsEarned: lineItems.reduce((sum, item) => sum + item.rewardPointsEarned, 0),
+    discount:
+      discount.applied.length > 0
+        ? { amount: discount.totalAmount, applied: discount.applied, freeShippingApplied: discount.freeShippingApplied }
+        : null,
+    couponCode: discount.couponCode,
+    couponInvalidReason: discount.couponInvalidReason,
   };
 }
 
 export async function getCart(userId: string | null, guestCookieValue: string | null | undefined): Promise<CartSummary> {
   const { cart } = await resolveCartIdentity(userId, guestCookieValue ?? undefined);
   const items = await cartRepository.listCartItemsWithProduct(cart.id);
-  return buildSummary(cart.id, items);
+  return buildSummary(cart, items, userId);
+}
+
+/**
+ * Re-reads a cart already identified by id (STORY-029: used by
+ * coupon.service.ts to return a fresh summary after mutating
+ * Cart.couponId, without a second resolveCartIdentity call — that would
+ * risk creating a SECOND guest cart within the same request if the
+ * caller's cookie header hadn't been re-issued yet).
+ */
+export async function getCartSummaryById(cartId: string, userId: string | null): Promise<CartSummary> {
+  const cart = await cartRepository.findCartById(cartId);
+  if (!cart) throw new CartItemNotFoundError();
+  const items = await cartRepository.listCartItemsWithProduct(cart.id);
+  return buildSummary(cart, items, userId);
 }
 
 /**
@@ -123,10 +160,10 @@ export async function getCart(userId: string | null, guestCookieValue: string | 
  * re-implementing the revalidation logic here.
  */
 export async function getCartForCheckout(userId: string | null, guestCookieValue: string | null | undefined) {
-  const { cart } = await resolveCartIdentity(userId, guestCookieValue ?? undefined);
+  const { cart, newCookieValue } = await resolveCartIdentity(userId, guestCookieValue ?? undefined);
   const items = await cartRepository.listCartItemsWithProduct(cart.id);
-  const summary = await buildSummary(cart.id, items);
-  return { cart, items, summary };
+  const summary = await buildSummary(cart, items, userId);
+  return { cart, items, summary, newCookieValue };
 }
 
 export async function addItem(
@@ -189,6 +226,13 @@ export async function removeItem(userId: string | null, guestCookieValue: string
  * cart is already gone — but that is preferable to the alternative of
  * two concurrent callers both applying the same guest items and silently
  * doubling quantities, which deleting last does not prevent.
+ *
+ * STORY-029: a coupon applied to the guest cart is deliberately NOT
+ * carried over — only `guestItems` are read/copied below, never
+ * `guestCart.couponId`. A coupon's eligibility (min-order-value, scope)
+ * depends on the *combined* post-merge cart, which wasn't known at apply
+ * time; the customer sees a clear notice and can re-apply. See
+ * docs/architecture-decisions.md.
  */
 export async function mergeGuestCartIntoUser(userId: string, guestCookieValue: string | undefined): Promise<void> {
   const guestToken = verifyCartCookieValue(guestCookieValue);

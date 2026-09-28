@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { CartServiceError, StockExceededError } from "@/services/cart.errors";
 import { CheckoutServiceError, DeliveryUnavailableError, type CheckoutErrorCode } from "@/services/checkout.errors";
+import { CouponMinOrderValueNotMetError, CouponServiceError, type CouponErrorCode } from "@/services/coupon.errors";
 import { OrderServiceError, type OrderErrorCode } from "@/services/order.errors";
 import { PaymentServiceError, type PaymentErrorCode } from "@/services/payment.errors";
 
@@ -35,12 +36,39 @@ const paymentStatusByCode: Record<PaymentErrorCode, number> = {
   refund_amount_invalid: 400,
 };
 
+const couponStatusByCode: Record<CouponErrorCode, number> = {
+  not_found: 404,
+  not_yet_active: 409,
+  expired: 409,
+  inactive: 409,
+  usage_limit_exceeded: 409,
+  customer_limit_exceeded: 409,
+  min_order_value_not_met: 409,
+  scope_not_met: 409,
+  already_applied: 409,
+};
+
+/**
+ * placeOrder's final coupon re-validation (checkout.service.ts) throws a
+ * CouponServiceError directly — this dispatcher handles it the same way
+ * cart-responses.ts does for /api/cart/coupon, so the status-mapping
+ * logic isn't duplicated between the two route families.
+ */
 export function checkoutErrorResponse(error: unknown) {
   if (error instanceof DeliveryUnavailableError) {
     return NextResponse.json(
       { error: error.message, code: error.code, resolutionStatus: error.resolutionStatus },
       { status: checkoutStatusByCode[error.code] },
     );
+  }
+  if (error instanceof CouponMinOrderValueNotMetError) {
+    return NextResponse.json(
+      { error: error.message, code: error.code, minOrderValue: error.minOrderValue, shortfall: error.shortfall },
+      { status: couponStatusByCode[error.code] },
+    );
+  }
+  if (error instanceof CouponServiceError) {
+    return NextResponse.json({ error: error.message, code: error.code }, { status: couponStatusByCode[error.code] });
   }
   if (error instanceof CheckoutServiceError) {
     return NextResponse.json({ error: error.message, code: error.code }, { status: checkoutStatusByCode[error.code] });

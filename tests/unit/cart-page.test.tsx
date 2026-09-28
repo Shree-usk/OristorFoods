@@ -30,6 +30,9 @@ const cartWithItem: CartSummary = {
   subtotal: 25,
   currency: "LKR",
   rewardPointsEarned: 5,
+  discount: null,
+  couponCode: null,
+  couponInvalidReason: null,
 };
 
 function renderPage() {
