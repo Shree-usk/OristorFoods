@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useState } from "react";
 
 import { Button, buttonVariants } from "@/components/ui/button";
 import { CartLineItemRow } from "@/components/storefront/cart/cart-line-item";
@@ -14,6 +15,12 @@ interface CartDrawerProps {
 
 export function CartDrawer({ open, onClose }: CartDrawerProps) {
   const { cart, updateQuantity, removeItem } = useCart();
+  const [announcement, setAnnouncement] = useState("");
+
+  function handleRemove(itemId: string, productName: string) {
+    removeItem(itemId);
+    setAnnouncement(`Removed ${productName} from cart.`);
+  }
 
   if (!open) return null;
 
@@ -26,6 +33,9 @@ export function CartDrawer({ open, onClose }: CartDrawerProps) {
             ×
           </Button>
         </div>
+        <div aria-live="polite" className="sr-only">
+          {announcement}
+        </div>
 
         <div className="mt-4 flex-1 overflow-y-auto">
           {!cart || cart.items.length === 0 ? (
@@ -36,7 +46,7 @@ export function CartDrawer({ open, onClose }: CartDrawerProps) {
                 key={item.id}
                 item={item}
                 onQuantityChange={(quantity) => updateQuantity(item.id, quantity)}
-                onRemove={() => removeItem(item.id)}
+                onRemove={() => handleRemove(item.id, item.productName)}
               />
             ))
           )}

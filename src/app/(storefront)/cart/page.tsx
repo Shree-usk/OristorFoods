@@ -1,5 +1,7 @@
 "use client";
 
+import { useState } from "react";
+
 import { Section } from "@/components/storefront/layout/section";
 import { CartLineItemRow } from "@/components/storefront/cart/cart-line-item";
 import { EmptyCart } from "@/components/storefront/cart/empty-cart";
@@ -8,10 +10,19 @@ import { useCart } from "@/hooks/use-cart";
 
 export default function CartPage() {
   const { cart, isPending, updateQuantity, removeItem } = useCart();
+  const [announcement, setAnnouncement] = useState("");
+
+  function handleRemove(itemId: string, productName: string) {
+    removeItem(itemId);
+    setAnnouncement(`Removed ${productName} from cart.`);
+  }
 
   return (
     <Section>
       <h1 className="text-h1 font-heading text-charcoal">Your Cart</h1>
+      <div aria-live="polite" className="sr-only">
+        {announcement}
+      </div>
 
       {isPending ? (
         <p className="mt-8 text-body text-charcoal/70">Loading your cart…</p>
@@ -25,7 +36,7 @@ export default function CartPage() {
                 key={item.id}
                 item={item}
                 onQuantityChange={(quantity) => updateQuantity(item.id, quantity)}
-                onRemove={() => removeItem(item.id)}
+                onRemove={() => handleRemove(item.id, item.productName)}
               />
             ))}
           </div>
