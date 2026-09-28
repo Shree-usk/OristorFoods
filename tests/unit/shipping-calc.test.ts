@@ -143,6 +143,11 @@ describe("calculateDeliveryCharge", () => {
     expect(result).toMatchObject({ status: "ok", charge: 350, freeShippingApplied: false, amountToFreeShipping: 0.5 });
   });
 
+  it("applies free shipping just above the threshold, with no zone override involved", () => {
+    const result = calculateDeliveryCharge({ zone: flatZone(), subtotal: 7500.01, totalWeightGrams: 500, freeShippingThreshold: 7500 });
+    expect(result).toMatchObject({ status: "ok", charge: 0, freeShippingApplied: true, amountToFreeShipping: null });
+  });
+
   it("fails safe with config_error on malformed configuration", () => {
     const noRate = flatZone({ rate: null });
     expect(calculateDeliveryCharge({ zone: noRate, subtotal: 1000, totalWeightGrams: 500, freeShippingThreshold: null })).toEqual({ status: "config_error" });

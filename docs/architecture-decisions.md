@@ -2105,3 +2105,66 @@ source and asserts every import is internal (`@/...`, relative, or a Node
 builtin) and that no known gateway name appears anywhere in the file. It
 fails the moment a concrete SDK is imported directly instead of going
 through a compliant `PaymentProvider` adapter file.
+
+## 2026-09-28 — STORY-027 Shipping & Delivery Zone Pricing (storefront-facing consumer)
+
+**Scope and status.** Like STORY-026, the STORY-025 checkout merge already
+shipped a thin slice of this story: `shipping.service.ts` (zone resolution
+by city, all three rate models, free-shipping threshold, campaign-override
+precedence), `shipping.repository.ts` (read-only access to `DeliveryZone`/
+`DeliveryRate`/`DeliveryRateOverride`/`ShippingSetting`), the checkout
+Delivery step UI, and the precedence rule itself are all documented in
+detail in the STORY-025 entry above ("Shipping precedence…") — that writeup
+is the source of truth for the rate-model and precedence rules and isn't
+repeated here. This story's remaining work was closing test-coverage gaps
+against STORY-027's specific acceptance criteria, not new application code.
+
+**`.claude/skills/delivery-zone-pricing/SKILL.md` — now reconciled.** The
+story's own text flagged this file as missing at authoring time. It exists
+now (added alongside/after STORY-025) and was cross-checked line-by-line
+against the shipped implementation: city-based zone matching, per-zone rate
+type, the global (not per-zone) free-shipping threshold, and
+override-beats-base-rate/free-shipping-beats-override precedence all match.
+No reconciliation changes were needed.
+
+**Mid-checkout recalculation (AC: "delivery charge recalculates
+automatically if the customer changes their address or cart contents")
+is satisfied by the existing architecture, not a new mechanism.** Address
+changes: `checkout-store.ts`'s `setAddress` action voids `delivery`/`intent`
+downstream, and the Delivery step's TanStack Query key is `["checkout-delivery",
+city]`, so a new city always refetches. Cart-content changes: there is no
+inline cart-editing UI inside the checkout wizard itself (`review-step.tsx`
+only displays quantities) — the only way to change the cart mid-checkout is
+to navigate to `/cart` (e.g. via the header's cart badge), which fully
+unmounts the checkout page. The Zustand checkout store is a module-level
+singleton that survives that client-side navigation (step/address aren't
+lost), and the Delivery step's query has `staleTime: 0`, so returning to
+`/checkout` remounts it and it refetches immediately against the now-current
+cart. Combined with `checkout.service.ts` re-deriving the cart/delivery from
+the database on every subsequent step (payment intent, place-order), a
+stale-looking number on screen can never become a stale charged amount.
+
+**No generic `POST /api/shipping/resolve` route, matching the STORY-026
+payments-intent decision.** The story's task list describes an endpoint
+that accepts a client-supplied cart summary (subtotal, weight). STORY-025's
+`POST /api/checkout/delivery` already resolves delivery for the caller's
+*live server-side cart* — it accepts only a city and re-derives subtotal/
+weight from the database, the same "server always computes the amount"
+posture checkout uses everywhere else. A route that trusted a client-sent
+subtotal/weight would be strictly less safe and would duplicate this logic
+for no current caller.
+
+**New test coverage added by this story:**
+- `tests/unit/shipping-calc.test.ts`: a boundary case just *above* the
+  free-shipping threshold with no override involved (the existing tests
+  covered exactly-at and just-below).
+- `tests/unit/shipping-resolve.test.ts` (new): DB-integration coverage for
+  `resolveDelivery()` proving the repository's date-range filter actually
+  excludes expired and not-yet-started campaign overrides (falling back to
+  the base rate), applies a currently-active one, and excludes an inactive
+  zone entirely — `shipping-calc.test.ts` only exercised the pure
+  calculation function with hand-built inputs, never the real query.
+- `tests/e2e/checkout.spec.ts`: a second delivery zone ("E2E Hill Country")
+  with its own base rate and an active campaign override, proving the
+  override beats that zone's base rate through the real checkout UI —
+  the existing e2e coverage only exercised a single flat-rate zone.

@@ -34,6 +34,23 @@ async function seedZones() {
       rate: { create: { rateType: "Flat", flatAmount: "350.00", estimatedDaysMin: 1, estimatedDaysMax: 2 } },
     },
   });
+  // A second zone, with an active campaign override beating its own base
+  // rate (STORY-027: at least two zones, one with an active override).
+  await prisma.deliveryZone.create({
+    data: {
+      name: "E2E Hill Country",
+      cities: ["E2E Kandy"],
+      rate: { create: { rateType: "Flat", flatAmount: "600.00", estimatedDaysMin: 2, estimatedDaysMax: 4 } },
+      overrides: {
+        create: {
+          campaignName: "E2E Avurudu Free Delivery",
+          startsAt: new Date(Date.now() - 24 * 60 * 60 * 1000),
+          endsAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+          freeShipping: true,
+        },
+      },
+    },
+  });
 }
 
 async function fillAddressStep(page: Page) {
@@ -145,6 +162,27 @@ test.describe("Checkout", () => {
 
     await expect(page.getByText("You qualify for free shipping!")).toBeVisible();
     await expect(page.getByText("Free", { exact: true })).toBeVisible();
+  });
+
+  test("a second zone with an active campaign override shows the overridden charge, beating its own base rate", async ({ page }) => {
+    await seedZones();
+    const product = await seedProduct(6, "E2E Checkout Tea Pack", "1000.00");
+    await page.request.post("/api/cart/items", { data: { productId: product.id, quantity: 1 } });
+
+    await page.goto("/checkout");
+    await page.getByLabel("Email address").fill("guest@e2e-chk.test");
+    await page.getByLabel("Recipient name").fill("E2E Guest");
+    await page.getByLabel("Phone number").fill("+94 77 123 4567");
+    await page.getByLabel("Address line 1", { exact: true }).fill("42 Test Street");
+    await page.getByLabel("City", { exact: true }).fill("E2E Kandy");
+    await page.getByRole("button", { name: "Continue to Delivery" }).click();
+
+    // Zone's own base rate is 600 — the active campaign override (free
+    // delivery) applies instead, distinct from the Western zone's plain
+    // 350 flat rate exercised by the other tests.
+    await expect(page.getByText("E2E Hill Country")).toBeVisible();
+    await expect(page.getByText("Free", { exact: true })).toBeVisible();
+    await expect(page.getByText("Campaign applied: E2E Avurudu Free Delivery")).toBeVisible();
   });
 
   test("a city with no zone shows the fail-safe message and blocks progress", async ({ page }) => {
