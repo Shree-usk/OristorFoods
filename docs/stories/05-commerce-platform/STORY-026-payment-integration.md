@@ -1,6 +1,6 @@
 # STORY-026: Payment Integration
 
-**Status:** Draft
+**Status:** Done — the checkout-facing sync path shipped with STORY-025; this story completed refunds, the async webhook path, and the abstraction-boundary guard test. See the STORY-026 entry in `docs/architecture-decisions.md`.
 **Epic:** 05 — Commerce Platform
 **Priority:** High
 **Persona(s):** Home Cook, Busy Professional, Sri Lankan Expat, Gourmet Food Enthusiast, Distributor
@@ -14,32 +14,32 @@ As a developer building checkout, I want a payment-provider-agnostic service int
 `docs/blueprint.md` Section 10 explicitly lists "exact payment gateway provider(s)" as an unconfirmed open item — the source spec only says "Payment Gateway" generically. Per `CLAUDE.md`'s instruction not to guess at unconfirmed integrations, **this story does not implement a named payment gateway.** Instead it builds the payment-service abstraction — a provider-agnostic interface (create payment intent, confirm payment, handle webhook/callback, refund) — plus a mock/sandbox provider implementing that interface for local development, testing, and demoing the checkout flow end to end. When the gateway decision is made, a follow-up story implements a concrete provider adapter against this interface; no other module (checkout, cart, order) should need to change at that point.
 
 ## Acceptance Criteria
-- [ ] **This story is explicitly scoped to the payment-service abstraction and a mock/sandbox provider — concrete gateway integration (Stripe, PayHere, WebXPay, or any other named provider) is BLOCKED pending the provider decision referenced in blueprint Section 10, and is out of scope here.**
-- [ ] A `PaymentProvider` TypeScript interface is defined (e.g. `createIntent`, `confirmPayment`, `handleWebhook`, `refund`, `getStatus`) that any future concrete gateway adapter must implement, independent of any specific provider's SDK shape.
-- [ ] A `MockPaymentProvider` implements the interface fully: it can simulate a successful payment, a declined payment, and a timeout/error scenario (selectable in dev/test via a query param or config flag), without calling any external network service.
-- [ ] `payment.service.ts` depends only on the `PaymentProvider` interface (dependency-injected/configured, not hardcoded), so swapping `MockPaymentProvider` for a real adapter later requires no changes to `checkout.service.ts` or `order.service.ts`.
-- [ ] A `Payment` record is persisted per order-attempt (provider used, intent/reference id, status, amount, currency, timestamps) regardless of which provider is active, giving order management (STORY-028) a consistent payment status to read.
-- [ ] Payment status transitions (pending → succeeded / failed / refunded) are modeled explicitly and exposed to `order.service.ts` so order status (STORY-028) can react to them.
-- [ ] No raw card/payment credential data is ever persisted or logged by the platform — the mock provider design reflects the same "we never touch raw card data" pattern a real hosted-checkout/tokenized gateway integration would require, so the real integration doesn't have to retrofit this later.
-- [ ] A webhook/callback endpoint pattern exists (`/api/payments/webhook`) that the mock provider can call to simulate an async provider confirmation, proving the checkout flow correctly handles both synchronous and asynchronous payment confirmation without code changes at real-gateway-integration time.
-- [ ] Checkout (STORY-025) can complete an end-to-end order using only the mock provider in local/dev/test environments, with no environment variable pointing at a real payment gateway required to develop or demo the rest of the commerce flow.
-- [ ] Refund is modeled at the interface level (`refund(paymentId, amount?)`) even though only the mock implements it in this story, so STORY-028's return/refund flow and the future admin refund action (STORY-047) have a stable contract to call.
-- [ ] The Dependencies section of this story and any code comments in `payment.service.ts` clearly flag that concrete gateway selection is an open business decision, not a technical gap, so future contributors don't assume the mock is a bug.
+- [x] **This story is explicitly scoped to the payment-service abstraction and a mock/sandbox provider — concrete gateway integration (Stripe, PayHere, WebXPay, or any other named provider) is BLOCKED pending the provider decision referenced in blueprint Section 10, and is out of scope here.**
+- [x] A `PaymentProvider` TypeScript interface is defined (e.g. `createIntent`, `confirmPayment`, `handleWebhook`, `refund`, `getStatus`) that any future concrete gateway adapter must implement, independent of any specific provider's SDK shape.
+- [x] A `MockPaymentProvider` implements the interface fully: it can simulate a successful payment, a declined payment, and a timeout/error scenario (selectable in dev/test via a query param or config flag), without calling any external network service.
+- [x] `payment.service.ts` depends only on the `PaymentProvider` interface (dependency-injected/configured, not hardcoded), so swapping `MockPaymentProvider` for a real adapter later requires no changes to `checkout.service.ts` or `order.service.ts`.
+- [x] A `Payment` record is persisted per order-attempt (provider used, intent/reference id, status, amount, currency, timestamps) regardless of which provider is active, giving order management (STORY-028) a consistent payment status to read.
+- [x] Payment status transitions (pending → succeeded / failed / refunded) are modeled explicitly and exposed to `order.service.ts` so order status (STORY-028) can react to them.
+- [x] No raw card/payment credential data is ever persisted or logged by the platform — the mock provider design reflects the same "we never touch raw card data" pattern a real hosted-checkout/tokenized gateway integration would require, so the real integration doesn't have to retrofit this later.
+- [x] A webhook/callback endpoint pattern exists (`/api/payments/webhook`) that the mock provider can call to simulate an async provider confirmation, proving the checkout flow correctly handles both synchronous and asynchronous payment confirmation without code changes at real-gateway-integration time.
+- [x] Checkout (STORY-025) can complete an end-to-end order using only the mock provider in local/dev/test environments, with no environment variable pointing at a real payment gateway required to develop or demo the rest of the commerce flow.
+- [x] Refund is modeled at the interface level (`refund(paymentId, amount?)`) even though only the mock implements it in this story, so STORY-028's return/refund flow and the future admin refund action (STORY-047) have a stable contract to call.
+- [x] The Dependencies section of this story and any code comments in `payment.service.ts` clearly flag that concrete gateway selection is an open business decision, not a technical gap, so future contributors don't assume the mock is a bug.
 
 ## Tasks
-- [ ] **Database:** Add a `Payment` model to `prisma/schema.prisma` (`orderId`/`checkoutSessionId`, `provider`, `providerReference`, `status`, `amount`, `currency`, `createdAt`, `updatedAt`) with an enum for payment status (`PENDING`, `SUCCEEDED`, `FAILED`, `REFUNDED`).
-- [ ] **API:** `POST /api/payments/intent` — creates a payment intent via the configured `PaymentProvider`, returns a client-usable reference/token.
-- [ ] **API:** `POST /api/payments/confirm` — confirms a payment (used by the mock provider's synchronous path).
-- [ ] **API:** `POST /api/payments/webhook` — receives async provider callbacks, verifies/simulates signature validation, updates `Payment` status.
-- [ ] **Service/Backend:** Define `src/services/payment/payment-provider.interface.ts` (the `PaymentProvider` contract).
-- [ ] **Service/Backend:** Implement `src/services/payment/mock-payment.provider.ts` (`MockPaymentProvider`) with configurable success/decline/timeout simulation.
-- [ ] **Service/Backend:** Implement `src/services/payment.service.ts` — provider-agnostic orchestration (create intent, confirm, handle webhook, refund), selecting the active provider via config/env (`PAYMENT_PROVIDER=mock`), never importing a concrete provider directly outside the provider-selection point.
-- [ ] **Service/Backend:** `payment.repository.ts` — the only place the `Payment` Prisma model is queried/mutated.
-- [ ] **Frontend:** A payment-method selection UI component in the checkout Payment step (STORY-025) that renders provider-agnostic method options (in dev/test: "Mock — Success", "Mock — Decline") so the review/confirm flow can be exercised visually.
-- [ ] **Validation:** Zod schema for payment-intent creation and webhook payload shape (`src/validation/payment.schema.ts`).
-- [ ] **Testing:** Vitest unit tests for `payment.service.ts` against `MockPaymentProvider` covering success, decline, timeout, and refund paths.
-- [ ] **Testing:** Vitest test asserting `payment.service.ts` has zero direct references to any concrete gateway SDK/package (guards the abstraction boundary).
-- [ ] **Documentation:** Document the `PaymentProvider` interface contract and how to add a real adapter later in `docs/architecture-decisions.md`, explicitly cross-referencing blueprint Section 10's open item.
+- [x] **Database:** Add a `Payment` model to `prisma/schema.prisma` (`orderId`/`checkoutSessionId`, `provider`, `providerReference`, `status`, `amount`, `currency`, `createdAt`, `updatedAt`) with an enum for payment status (`PENDING`, `SUCCEEDED`, `FAILED`, `REFUNDED`). *(Shipped with STORY-025.)*
+- [x] **API:** `POST /api/payments/intent` — creates a payment intent via the configured `PaymentProvider`, returns a client-usable reference/token. *(Fulfilled by `POST /api/checkout/payment/intent`, shipped with STORY-025 — a second generic route would duplicate it and accept a client-supplied amount, undermining checkout's server-computed-amount rule. See the architecture-decisions.md entry.)*
+- [x] **API:** `POST /api/payments/confirm` — confirms a payment (used by the mock provider's synchronous path). *(Shipped with STORY-025.)*
+- [x] **API:** `POST /api/payments/webhook` — receives async provider callbacks, verifies/simulates signature validation, updates `Payment` status.
+- [x] **Service/Backend:** Define `src/services/payment/payment-provider.interface.ts` (the `PaymentProvider` contract).
+- [x] **Service/Backend:** Implement `src/services/payment/mock-payment.provider.ts` (`MockPaymentProvider`) with configurable success/decline/timeout simulation.
+- [x] **Service/Backend:** Implement `src/services/payment.service.ts` — provider-agnostic orchestration (create intent, confirm, handle webhook, refund), selecting the active provider via config/env (`PAYMENT_PROVIDER=mock`), never importing a concrete provider directly outside the provider-selection point.
+- [x] **Service/Backend:** `payment.repository.ts` — the only place the `Payment` Prisma model is queried/mutated.
+- [x] **Frontend:** A payment-method selection UI component in the checkout Payment step (STORY-025) that renders provider-agnostic method options (in dev/test: "Mock — Success", "Mock — Decline") so the review/confirm flow can be exercised visually. *(Shipped with STORY-025.)*
+- [x] **Validation:** Zod schema for payment-intent creation and webhook payload shape (`src/validation/payment.schema.ts`).
+- [x] **Testing:** Vitest unit tests for `payment.service.ts` against `MockPaymentProvider` covering success, decline, timeout, and refund paths.
+- [x] **Testing:** Vitest test asserting `payment.service.ts` has zero direct references to any concrete gateway SDK/package (guards the abstraction boundary).
+- [x] **Documentation:** Document the `PaymentProvider` interface contract and how to add a real adapter later in `docs/architecture-decisions.md`, explicitly cross-referencing blueprint Section 10's open item.
 
 ## Dependencies
 - STORY-024 (Shopping Cart), STORY-025 (Checkout) — payment is invoked from the checkout payment step.

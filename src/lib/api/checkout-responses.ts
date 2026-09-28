@@ -26,6 +26,10 @@ const paymentStatusByCode: Record<PaymentErrorCode, number> = {
   not_found: 404,
   provider_timeout: 504,
   provider_unconfigured: 500,
+  webhook_invalid_signature: 401,
+  webhook_invalid_payload: 400,
+  refund_not_allowed: 409,
+  refund_amount_invalid: 400,
 };
 
 export function checkoutErrorResponse(error: unknown) {
