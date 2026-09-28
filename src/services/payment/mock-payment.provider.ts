@@ -3,7 +3,6 @@ import { randomUUID } from "node:crypto";
 import { PaymentProviderTimeoutError } from "@/services/payment.errors";
 import type {
   PaymentConfirmation,
-  PaymentIntentRequest,
   PaymentIntentResponse,
   PaymentProvider,
 } from "@/services/payment/payment-provider.interface";
@@ -17,7 +16,9 @@ import type {
 export class MockPaymentProvider implements PaymentProvider {
   readonly name = "mock";
 
-  async createIntent(_request: PaymentIntentRequest): Promise<PaymentIntentResponse> {
+  // The mock needs nothing from the request — a real adapter would send
+  // amount/currency to its gateway here.
+  async createIntent(): Promise<PaymentIntentResponse> {
     return { providerReference: `mock_${randomUUID()}` };
   }
 
