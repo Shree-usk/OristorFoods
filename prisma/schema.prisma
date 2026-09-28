@@ -38,6 +38,8 @@ model User {
   blogComments      BlogComment[]
   recipeReviews     RecipeReview[]
   recipeBookmarks   RecipeBookmark[]
+  addresses         Address[]
+  orders            Order[]
   createdAt         DateTime   @default(now())
   updatedAt         DateTime   @updatedAt
 }
@@ -172,6 +174,9 @@ model Product {
   rewardPoints       Int           @default(0)
   inStock            Boolean       @default(true)
   stockQuantity      Int           @default(0)
+  // Nullable on purpose: a weight-based delivery zone fails safe with a
+  // "contact us for a quote" result when any cart line lacks a weight.
+  weightGrams        Int?
   benefits           String[]      @default([])
   servingSuggestions String[]      @default([])
 
@@ -205,6 +210,7 @@ model Product {
   volumeDiscountTiers VolumeDiscountTier[]
   wishlistItems       WishlistItem[]
   cartItems           CartItem[]
+  orderItems          OrderItem[]
   reviews             Review[]
   ratingSummary       ProductRatingSummary?
   questions           Question[]
@@ -976,4 +982,181 @@ model CartItem {
   updatedAt         DateTime @updatedAt
 
   @@unique([cartId, productId])
+}
+
+// --- Checkout (STORY-025) ---
+// Thin slices of STORY-026 (Payment), STORY-027 (Shipping), and STORY-028
+// (Orders) live here too — see docs/superpowers/specs/2026-09-28-checkout-design.md.
+
+// Saved addresses exist only for authenticated users (managed fully by
+// STORY-034 later). Guest addresses are never stored here — only as the
+// immutable ship* snapshot on Order.
+model Address {
+  id            String   @id @default(cuid())
+  userId        String
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  recipientName String
+  phone         String
+  line1         String
+  line2         String?
+  city          String
+  district      String?
+  postalCode    String?
+  isDefault     Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([userId])
+}
+
+enum DeliveryRateType {
+  Flat
+  WeightBased
+  ValueBased
+}
+
+model DeliveryZone {
+  id        String                 @id @default(cuid())
+  name      String                 @unique
+  // Matched case/whitespace-insensitively via normalizeCity(); stored
+  // values keep their display casing.
+  cities    String[]
+  isActive  Boolean                @default(true)
+  rate      DeliveryRate?
+  overrides DeliveryRateOverride[]
+  createdAt DateTime               @default(now())
+  updatedAt DateTime               @updatedAt
+}
+
+model DeliveryRate {
+  id               String           @id @default(cuid())
+  zoneId           String           @unique
+  zone             DeliveryZone     @relation(fields: [zoneId], references: [id], onDelete: Cascade)
+  rateType         DeliveryRateType
+  flatAmount       Decimal?         @db.Decimal(10, 2)
+  // [{ upTo: number, amount: string }] ascending — grams for WeightBased,
+  // subtotal for ValueBased. Zod-validated at read time; malformed tiers
+  // fail safe as config_error, never a silent 0 charge.
+  tiers            Json?
+  estimatedDaysMin Int?
+  estimatedDaysMax Int?
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+}
+
+model DeliveryRateOverride {
+  id             String       @id @default(cuid())
+  zoneId         String
+  zone           DeliveryZone @relation(fields: [zoneId], references: [id], onDelete: Cascade)
+  campaignName   String
+  startsAt       DateTime
+  endsAt         DateTime
+  freeShipping   Boolean      @default(false)
+  overrideAmount Decimal?     @db.Decimal(10, 2)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@index([zoneId, startsAt, endsAt])
+}
+
+// Singleton row (id "global") — the platform-wide free-shipping threshold
+// is deliberately not a per-zone field (confirmed business decision).
+model ShippingSetting {
+  id                    String   @id @default("global")
+  freeShippingThreshold Decimal  @db.Decimal(10, 2)
+  updatedAt             DateTime @updatedAt
+}
+
+enum PaymentStatus {
+  Pending
+  Succeeded
+  Failed
+  Refunded
+}
+
+model Payment {
+  id                String        @id @default(cuid())
+  provider          String
+  providerReference String        @unique
+  status            PaymentStatus @default(Pending)
+  amount            Decimal       @db.Decimal(10, 2)
+  currency          String        @default("LKR")
+  order             Order?
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+}
+
+enum OrderStatus {
+  PendingConfirmation
+  Confirmed
+  Processing
+  Dispatched
+  Delivered
+  Cancelled
+  Returned
+}
+
+model Order {
+  id                 String      @id @default(cuid())
+  orderNumber        String      @unique
+  idempotencyKey     String      @unique
+  userId             String?
+  user               User?       @relation(fields: [userId], references: [id], onDelete: SetNull)
+  // Verified guest-cart token snapshot: authorizes the guest's
+  // confirmation view and idempotent-replay ownership check.
+  guestToken         String?
+  guestEmail         String?
+  status             OrderStatus @default(Confirmed)
+  subtotal           Decimal     @db.Decimal(10, 2)
+  deliveryCharge     Decimal     @db.Decimal(10, 2)
+  discount           Decimal     @db.Decimal(10, 2) @default(0)
+  tax                Decimal     @db.Decimal(10, 2) @default(0)
+  grandTotal         Decimal     @db.Decimal(10, 2)
+  couponCode         String?
+  rewardPointsEarned Int         @default(0)
+  erpSyncStatus      String?
+  paymentId          String?     @unique
+  payment            Payment?    @relation(fields: [paymentId], references: [id], onDelete: SetNull)
+  deliveryZoneName   String
+  estimatedDaysMin   Int?
+  estimatedDaysMax   Int?
+  // Immutable address snapshot — flattened copies, no relation, so later
+  // edits to a saved Address can never alter historical orders.
+  shipRecipientName  String
+  shipPhone          String
+  shipLine1          String
+  shipLine2          String?
+  shipCity           String
+  shipDistrict       String?
+  shipPostalCode     String?
+  items              OrderItem[]
+  statusHistory      OrderStatusHistory[]
+  createdAt          DateTime    @default(now())
+  updatedAt          DateTime    @updatedAt
+
+  @@index([userId])
+}
+
+model OrderItem {
+  id                 String   @id @default(cuid())
+  orderId            String
+  order              Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId          String?
+  product            Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
+  // Snapshots at time of purchase — never rely on live product data.
+  productName        String
+  productSku         String
+  unitPrice          Decimal  @db.Decimal(10, 2)
+  quantity           Int
+  lineTotal          Decimal  @db.Decimal(10, 2)
+  rewardPointsEarned Int      @default(0)
+}
+
+model OrderStatusHistory {
+  id        String      @id @default(cuid())
+  orderId   String
+  order     Order       @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  status    OrderStatus
+  actor     String
+  createdAt DateTime    @default(now())
 }

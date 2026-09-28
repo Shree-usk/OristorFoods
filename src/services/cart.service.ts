@@ -116,6 +116,19 @@ export async function getCart(userId: string | null, guestCookieValue: string | 
   return buildSummary(cart.id, items);
 }
 
+/**
+ * Checkout's view of the cart (STORY-025): the same revalidated summary
+ * getCart returns, plus the resolved Cart row and raw line rows so the
+ * checkout service can read guestToken, product weights, and SKUs without
+ * re-implementing the revalidation logic here.
+ */
+export async function getCartForCheckout(userId: string | null, guestCookieValue: string | null | undefined) {
+  const { cart } = await resolveCartIdentity(userId, guestCookieValue ?? undefined);
+  const items = await cartRepository.listCartItemsWithProduct(cart.id);
+  const summary = await buildSummary(cart.id, items);
+  return { cart, items, summary };
+}
+
 export async function addItem(
   userId: string | null,
   guestCookieValue: string | null | undefined,
