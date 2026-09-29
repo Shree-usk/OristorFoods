@@ -33,6 +33,8 @@ const cartWithItem: CartSummary = {
   discount: null,
   couponCode: null,
   couponInvalidReason: null,
+  pointsBalance: 0,
+  pointsRedemption: null,
 };
 
 function renderPage() {

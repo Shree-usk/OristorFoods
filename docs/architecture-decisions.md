@@ -2441,3 +2441,185 @@ minimum rejected with a specific, actionable reason → crosses the
 threshold → applies → carries through checkout unchanged → confirmation
 page shows the discount and its label; a second scenario proves removal
 reverts the total.
+
+## 2026-09-28 — STORY-030 Rewards / Loyalty Club
+
+**Scope.** Like STORY-029, this is genuinely greenfield — `Product.rewardPoints`
+and `Order.rewardPointsEarned`/`OrderItem.rewardPointsEarned` already exist
+and are already correctly computed and snapshotted by checkout
+(STORY-024/025/028), but nothing turned that number into a real loyalty
+program: no ledger, no tier progression, no badges, no earn/clawback
+wiring into STORY-028's order-event hook. The "admin-configured rules"
+the AC keeps referencing belong to STORY-049 (Rewards & Referrals
+Campaign Management), which doesn't exist yet — following the same
+precedent STORY-027/029 already established, this story builds the real,
+data-driven configuration schema itself (seeded with sensible defaults)
+rather than hardcoding values or blocking on an admin story that isn't
+scheduled yet.
+
+**1. The ledger is signed and split into two distinct derived sums that
+must never be conflated.** `RewardTransaction.points` is signed
+(`Earned` > 0, everything else ≤ 0), so balance is a trivial `SUM(points)`.
+Two sums matter: **spendable balance** = sum across all transaction
+types, and **lifetime achievement** (what tier is evaluated against) =
+sum of `Earned` + `Reversed` only. This means redeeming or letting points
+expire never demotes a customer's tier — only an actual order
+cancellation (which nets its `Earned`/`Reversed` pair to zero) can move
+achievement, exactly as a real loyalty program should behave.
+`rewards.repository.ts::getBalances` computes both sums from one
+`groupBy` query rather than two separate queries.
+
+**2. Redemption is written inside the same order-creation transaction as
+stock decrement**, mirroring STORY-029's `CouponRedemption` exactly — a
+rollback (insufficient stock) rolls back the points debit too, so "a
+failed order never leaves points debited with nothing to show" is true
+by construction, not by a compensating fix-up
+(`order.repository.ts::createOrderWithStockDecrement` calls
+`rewards.repository.ts::createRedeemedTransaction` inside the same
+`$transaction`, right after the coupon-redemption write). A
+`@@unique([orderId, type])` constraint on the ledger makes both this and
+event-driven earning idempotent — an order can legitimately hold at most
+one `Earned`, one `Reversed`, and one `Redeemed` row (an order can
+validly have both an `Earned` and a `Redeemed` row: points it earns on
+confirmation, and separately, points the customer spent at that same
+order's checkout).
+
+**3. Earning stays on STORY-028's async event hook, redemption doesn't.**
+Earning is a downstream consequence of an order reaching `Confirmed`
+(fired via `order.confirmed`), so it goes through the decoupled
+`order-integration.service.ts` pipeline that already exists for exactly
+this purpose — `rewards.service.ts` exports `rewardsConsumer`, registered
+in `instrumentation.ts` alongside the review/QA/recipe providers.
+Redemption gates the order the customer is placing right now, so it's
+synchronous and transactional, called directly from
+`checkout.service.ts::createIntentForCart`/`placeOrder`. This asymmetry
+is deliberate: an event consumer can't reject the checkout it's reacting
+to, but redemption must be able to.
+
+**A real architectural gap, surfaced rather than silently worked
+around: `order-integration.service.ts` only supports one registered
+consumer at a time.** This story becomes that one consumer. STORY-031
+(referral payouts) and a future notifications story will also want the
+same `order.confirmed`/`order.cancelled` hook and will collide with this
+registration. Turning the single slot into a proper fan-out list is a
+real fix, but it's out of scope for this story to build pre-emptively —
+recorded here as a known gap for whichever story hits it next.
+
+**`order.service.ts` gained a two-line payload addition** (`userId:
+order.userId`) at both existing `emitOrderEvent` call sites — the only
+gap found in the existing hook, since a reward consumer needs to know
+who to credit and only `orderId` was passed to the consumer separately
+before this story.
+
+**4. Redemption is authenticated-only — there is no guest points UI or
+logic at all.** A guest has no ledger to redeem from. The redemption
+control (`PointsRedemptionInput`, parallel to STORY-029's `CouponInput`)
+lives only in the checkout **Review** step, not the cart page or drawer —
+the amount worth redeeming depends on the final payable total, which
+isn't settled until delivery is resolved. It layers as an *additional*
+reduction on top of whatever coupon/promotion discount already won:
+`grandTotal = (subtotal − couponPromoDiscount + delivery) − pointsRedemptionValue`
+— never competing with coupons/promotions for take-best/stacking, since
+spending your own balance isn't a marketing discount.
+
+**Two-tier validation, mirroring coupon.service.ts exactly.**
+`resolvePointsRedemptionForCart` is a silent-skip read (never throws —
+a guest, a zero request, or an unconfigured rate all just mean "no
+redemption applies"), used for the payment-intent amount.
+`validateRedemptionAtPlaceOrder` is the throwing final check at
+`placeOrder`'s last word, re-validating balance/cap/rate exactly as
+coupon re-validation already does for price/stock/delivery drift.
+
+**5. Expiry is real but deliberately simplified, not perfect FIFO batch
+accounting.** Each `Earned` row gets its own `expiresAt` (from an
+admin-configurable `RewardSetting.pointsExpiryDays`, null = never
+expires — off by default, since no admin UI exists yet to turn it on). A
+lazy, on-read sweep (`rewards.service.ts::sweepExpiredPointsForUser`,
+run before every balance read and before place-order redemption
+validation) closes out any batch past its expiry with a linked `Expired`
+transaction, **capped at the customer's current spendable balance** so
+it can never drive the balance negative even if some of that batch was
+already spent. This is an explicit, documented simplification (not
+batch-level "which points were spent first" tracking) — justified
+because the feature is off by default today and the AC itself frames
+expiry as conditional.
+
+**6. Badges, once earned, are never revoked on order cancellation** —
+unlike points. A milestone badge reflects behavior that happened;
+clawing it back because an unrelated later order cancelled would be
+customer-hostile and isn't asked for by the AC. Only the points
+themselves reverse. `evaluateTierAndBadges` re-evaluates tier on every
+credit/reversal (which can legitimately demote it) but only ever adds
+`CustomerBadge` rows, never removes one.
+
+**Badge criteria is an extensible string (`Badge.criteriaType`), not an
+enum** — mirrors `OrderIntegrationEvent.eventType`'s precedent, so a new
+criteria type never needs a migration. `badgeCriteriaMet()` dispatches on
+it and fails safe (badge not awarded) for an unrecognized value, the same
+fail-safe treatment the AC asks for missing/unavailable admin config.
+Two criteria types ship seeded (`first_order`, `order_count`); a third,
+`lifetime_points`, is implemented and ready but has no seeded badge using
+it yet.
+
+**Badge milestone counting deliberately uses a looser rule than the
+points ledger.** `order.repository.ts::countOrdersByUserId` counts ALL
+orders regardless of status (including later-cancelled ones) — a
+customer who genuinely placed 5 orders earned a "loyal customer" badge
+for that behavior even if one of the five was later cancelled, whereas
+the points ledger's strict `Earned`+`Reversed` clawback exists
+specifically to prevent point-farming via buy-then-cancel. These are
+different concerns with intentionally different strictness.
+
+**7. No second, order-value-based earning formula is built.** The AC's
+"and/or" wording allows for one, but the existing per-product
+calculation (STORY-024/025) is already shipped, tested, and the sole
+mechanism in production. `RewardSetting.orderValuePointsRate` is reserved
+for later but unread by any code here — building real dual-mode
+selection logic without a concrete admin UI to configure it would be
+speculative.
+
+**Tier evaluation is a global, unscoped ladder by design.**
+`evaluateTierAndBadges` reads every active `RewardTier` row
+(`listTiersAscending`) and assigns the highest one whose
+`minLifetimePoints` the customer's lifetime achievement meets or
+exceeds — there is one tier ladder for the whole business, not one per
+segment/customer-group, matching how the AC and blueprint describe
+tiers. Seeded defaults: Bronze (0), Silver (1000), Gold (5000).
+
+**Layering note, to prevent an import cycle:** `rewards.service.ts` may
+import `cart.service.ts` (for `getCartSummaryById`, used by
+`applyPointsToCart`/`removePointsFromCart`). `cart.service.ts`, in turn,
+reads `rewards.repository.ts` + `rewards-calc.ts` **directly** for its
+own points-preview computation in `buildSummary` — never through
+`rewards.service.ts` — so the two services can never form a cycle. This
+mirrors exactly how `discount.service.ts` is the shared lower-level
+dependency both `cart.service.ts` and `coupon.service.ts` depend on
+without those two importing each other.
+
+**No `RewardSetting` row is seeded by default.** Its absence, not a
+schema default, is what keeps redemption and expiry off — an admin
+turning on the loyalty program (once STORY-049 exists) does so by
+creating the row, not by flipping a boolean. Seeded `RewardTier`/`Badge`
+rows are the exception: tier progression needs *some* thresholds to mean
+anything, unlike redemption/expiry, which are meaningfully "off" by
+absence.
+
+**Testing:** `rewards-calc.test.ts` — the pure `calculatePointsRedemption()`
+function against disabled/invalid input, every individual cap, several
+simultaneous caps together, fractional flooring, and rounding.
+`rewards-service.test.ts` — earn-on-confirm and clawback-on-cancel
+idempotency (via the `@@unique([orderId, type])` constraint), tier
+boundary transitions (exactly at the threshold vs. one point under),
+clawback-driven tier demotion, badge award triggers and no-double-award
+and no-revocation-on-cancel, every redemption-validation error path, the
+expiry sweep's capping behavior, and redemption-transaction atomicity (a
+forced stock failure leaves zero ledger rows — the core AC).
+`rewards-routes.test.ts` — all four endpoints' auth/validation/error
+paths. `order-service.test.ts` extended with an assertion that both
+`order.confirmed` and `order.cancelled` payloads now carry `userId`.
+`tests/e2e/rewards-redemption.spec.ts` — place an order as a signed-in
+customer, confirm points credited via the balance API, redeem on a
+second order through the real checkout Review-step UI, confirm the
+discount, grand total, and post-order balance all land correctly.
+`tests/e2e/order-cancellation.spec.ts` gained one assertion that
+cancelling an order claws back its points and can demote a tier.

@@ -86,6 +86,9 @@ export async function createOrder(input: Omit<CreateOrderInput, "orderNumber">):
         await emitOrderEvent("order.confirmed", order.id, {
           orderNumber: order.orderNumber,
           rewardPointsEarned: order.rewardPointsEarned,
+          // STORY-030: the rewards consumer needs to know who to credit —
+          // only orderId is passed to the consumer separately, no userId.
+          userId: order.userId,
         });
       } catch (emitError) {
         console.error(`[order-integration] failed to record order.confirmed for order ${order.orderNumber}`, emitError);
@@ -240,6 +243,7 @@ export async function cancelOrder(
       orderNumber: order.orderNumber,
       rewardPointsEarned: order.rewardPointsEarned,
       refundOutcome,
+      userId: order.userId, // STORY-030
     });
   } catch (emitError) {
     console.error(`[order-integration] failed to record order.cancelled for order ${order.orderNumber}`, emitError);

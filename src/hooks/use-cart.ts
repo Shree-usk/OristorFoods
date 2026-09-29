@@ -94,6 +94,29 @@ export function useCart() {
     onSuccess: invalidate,
   });
 
+  // STORY-030. Same invalidate-and-refetch shape as the coupon mutations
+  // above — redeeming points changes the total.
+  const applyPointsMutation = useMutation({
+    mutationFn: async (points: number) => {
+      const response = await fetch("/api/cart/points", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ points }),
+      });
+      if (!response.ok) await throwWithServerMessage(response, "These points couldn't be applied.");
+    },
+    onSuccess: invalidate,
+  });
+
+  const removePointsMutation = useMutation({
+    mutationFn: async () => {
+      const response = await fetch("/api/cart/points", { method: "DELETE", credentials: "include" });
+      if (!response.ok) await throwWithServerMessage(response, "Failed to remove points");
+    },
+    onSuccess: invalidate,
+  });
+
   return {
     cart: query.data,
     isPending: query.isPending,
@@ -110,5 +133,9 @@ export function useCart() {
     removeCoupon: () => removeCouponMutation.mutateAsync(),
     isApplyingCoupon: applyCouponMutation.isPending,
     isRemovingCoupon: removeCouponMutation.isPending,
+    applyPoints: (points: number) => applyPointsMutation.mutateAsync(points),
+    removePoints: () => removePointsMutation.mutateAsync(),
+    isApplyingPoints: applyPointsMutation.isPending,
+    isRemovingPoints: removePointsMutation.isPending,
   };
 }

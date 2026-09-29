@@ -41,6 +41,9 @@ model User {
   addresses         Address[]
   orders            Order[]
   couponRedemptions CouponRedemption[]
+  rewardAccount      RewardAccount?
+  rewardTransactions RewardTransaction[]
+  badges             CustomerBadge[]
   createdAt         DateTime   @default(now())
   updatedAt         DateTime   @updatedAt
 }
@@ -974,6 +977,12 @@ model Cart {
   // merge (mergeGuestCartIntoUser) — see docs/architecture-decisions.md.
   couponId   String?
   coupon     Coupon?    @relation(fields: [couponId], references: [id], onDelete: SetNull)
+  // STORY-030. Parallel to couponId, but a plain value, not an FK — a
+  // redemption "request" isn't a durable row until order placement.
+  // Requires an authenticated identity (a guest cart never meaningfully
+  // sets this); enforced in rewards.service.ts and the /api/cart/points
+  // route, not as a DB constraint.
+  pointsToRedeem Int?   @default(0)
   createdAt  DateTime   @default(now())
   updatedAt  DateTime   @updatedAt
 
@@ -1147,6 +1156,156 @@ model PromotionScopeCategory {
   @@index([categoryId])
 }
 
+// --- Rewards / Loyalty Club (STORY-030) ---
+// Ledger-backed points wallet + tier/badge progression. Admin authoring of
+// rule VALUES (point amounts, tier cutoffs, conversion rate, expiry
+// window, badge criteria) is STORY-049's concern; the customer-facing
+// wallet dashboard is STORY-035's. This story defines the schema/config
+// those will later manage/read, and owns the earn/redeem/reverse/expire
+// mechanics — same "build the real schema before the owning admin story
+// exists" pattern STORY-027 (ShippingSetting) and STORY-029
+// (Coupon/Promotion) already established. Product.rewardPoints and
+// Order(Item).rewardPointsEarned (STORY-009/024/025/028) already compute
+// and snapshot the EARNED AMOUNT — untouched here; this section is what
+// happens to that number afterward.
+
+enum RewardTransactionType {
+  Earned
+  Redeemed
+  Reversed
+  Expired
+}
+
+// One row per user. Caches ONLY currentTierId — never a balance, which
+// stays ledger-derived per the confirmed "auditable ledger, not a single
+// mutable counter" requirement (docs/architecture-decisions.md).
+model RewardAccount {
+  id            String      @id @default(cuid())
+  userId        String      @unique
+  user          User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  currentTierId String?
+  currentTier   RewardTier? @relation(fields: [currentTierId], references: [id], onDelete: SetNull)
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+}
+
+// The ledger — sole source of truth. `points` is SIGNED: Earned > 0;
+// Redeemed/Reversed/Expired <= 0. Two derived sums matter and must never
+// be conflated (see docs/architecture-decisions.md):
+//   spendableBalance    = SUM(points) over ALL types
+//   lifetimeAchievement = SUM(points) WHERE type IN (Earned, Reversed)
+// A cancelled-and-clawed-back order nets its Earned+Reversed pair to
+// zero in BOTH sums. Redeeming or letting points expire reduces
+// spendableBalance only — never lifetimeAchievement, so spending points
+// can never demote a customer's tier.
+model RewardTransaction {
+  id     String                @id @default(cuid())
+  userId String
+  user   User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type   RewardTransactionType
+  points Int
+  orderId String?
+  order   Order?               @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  // Set only on an Earned row, only when RewardSetting.pointsExpiryDays
+  // was configured at write time. Null = this batch never expires.
+  expiresAt DateTime?
+  // Set ONLY on an Expired row: points back to the Earned row it closes
+  // out. @@unique means at most one Expired row can ever close a given
+  // Earned batch — the lazy sweep (rewards.service.ts) is idempotent, a
+  // re-run can never double-expire the same batch.
+  expiresEarnedTransactionId String?            @unique
+  expiresEarnedTransaction   RewardTransaction? @relation("EarnedExpiry", fields: [expiresEarnedTransactionId], references: [id], onDelete: SetNull)
+  expiredBy                  RewardTransaction? @relation("EarnedExpiry")
+  note   String?
+  createdAt DateTime @default(now())
+
+  // At most one Earned, one Redeemed, one Reversed row per order — the
+  // idempotency guard for event-driven earning/clawback (a replayed
+  // order.confirmed/cancelled can't double-credit/debit) and for
+  // transactional redemption. An order CAN legitimately hold both a
+  // Redeemed row (points spent at that order's own checkout) and later
+  // an Earned row (points that same purchase earns on confirmation) —
+  // different (orderId, type) pairs, so this permits it correctly.
+  // Expired rows are never order-linked (orderId null; Postgres treats
+  // NULL as distinct in a unique index, so many can share it).
+  @@unique([orderId, type])
+  @@index([userId, createdAt])
+  @@index([userId, type])
+}
+
+// Admin-configurable thresholds (STORY-049 will own the authoring UI);
+// seeded here with defaults so the feature works before that UI exists.
+model RewardTier {
+  id                String          @id @default(cuid())
+  name              String          @unique
+  minLifetimePoints Int             @default(0)
+  sortOrder         Int             @default(0)
+  isActive          Boolean         @default(true)
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+  accounts          RewardAccount[]
+
+  @@index([minLifetimePoints])
+}
+
+// Extensible criteria — a plain string, not an enum, mirroring
+// OrderIntegrationEvent.eventType's precedent, so a future criteria type
+// never needs a migration. Evaluated by rewards.service.ts's dispatch; an
+// unrecognized criteriaType fails safe (never awarded), never throws.
+model Badge {
+  id           String          @id @default(cuid())
+  code         String          @unique
+  name         String
+  description  String?
+  // "first_order" | "order_count" | "lifetime_points"
+  criteriaType String
+  // Interpreted per criteriaType; null for first_order.
+  threshold    Int?
+  isActive     Boolean         @default(true)
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+  customers    CustomerBadge[]
+}
+
+// Badges, once earned, are never revoked on order cancellation (unlike
+// points) — see docs/architecture-decisions.md.
+model CustomerBadge {
+  id       String   @id @default(cuid())
+  userId   String
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  badgeId  String
+  badge    Badge    @relation(fields: [badgeId], references: [id], onDelete: Cascade)
+  earnedAt DateTime @default(now())
+  orderId  String?
+  order    Order?   @relation(fields: [orderId], references: [id], onDelete: SetNull)
+
+  @@unique([userId, badgeId])
+  @@index([userId])
+}
+
+// Singleton row (id "global") — mirrors ShippingSetting's precedent.
+// Every value is nullable: absence means that behavior is OFF (fails
+// safe — no award/redeem, checkout still completes), never a schema
+// default silently turning a feature on.
+model RewardSetting {
+  id                          String   @id @default("global")
+  // Currency units of discount per 1 redeemed point. Null = redemption
+  // disabled entirely.
+  pointsToCurrencyRate        Decimal? @db.Decimal(10, 4)
+  // Absolute per-order redemption cap, independent of balance. Null = no
+  // separate cap (balance remains the only bound).
+  maxRedeemablePointsPerOrder Int?
+  // Days after which an Earned batch expires. Null = points never expire
+  // (current default — no admin UI exists yet to set this).
+  pointsExpiryDays            Int?
+  // Reserved for a future order-value-based earning mode (the AC's
+  // "and/or" wording) — NOT read by any code in this story. See
+  // docs/architecture-decisions.md for why a second earning formula
+  // isn't built now.
+  orderValuePointsRate        Decimal? @db.Decimal(10, 4)
+  updatedAt                   DateTime @updatedAt
+}
+
 // --- Checkout (STORY-025) ---
 // Thin slices of STORY-026 (Payment), STORY-027 (Shipping), and STORY-028
 // (Orders) live here too — see docs/superpowers/specs/2026-09-28-checkout-design.md.
@@ -1281,6 +1440,10 @@ model Order {
   // a later-deleted/deactivated Coupon or Promotion row unchanged.
   discountLabel      String?
   rewardPointsEarned Int         @default(0)
+  // STORY-030. Immutable snapshots of a points redemption applied at this
+  // order's checkout — mirrors the discount/discountLabel pattern.
+  pointsRedeemed        Int     @default(0)
+  pointsRedemptionValue Decimal @db.Decimal(10, 2) @default(0)
   erpSyncStatus      String?
   // Set together by order.service.ts's cancelOrder() (STORY-028). No
   // separate refund-reference column — refund state lives on
@@ -1306,6 +1469,8 @@ model Order {
   statusHistory      OrderStatusHistory[]
   integrationEvents  OrderIntegrationEvent[]
   couponRedemption   CouponRedemption?
+  rewardTransactions RewardTransaction[]
+  badgesAwarded      CustomerBadge[]
   createdAt          DateTime    @default(now())
   updatedAt          DateTime    @updatedAt
 

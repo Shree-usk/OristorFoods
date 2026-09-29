@@ -6,7 +6,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useCart } from "@/hooks/use-cart";
 import type { CartSummary } from "@/types/cart";
 
-const emptyCart: CartSummary = { items: [], itemCount: 0, subtotal: 0, currency: "LKR", rewardPointsEarned: 0, discount: null, couponCode: null, couponInvalidReason: null };
+const emptyCart: CartSummary = { items: [], itemCount: 0, subtotal: 0, currency: "LKR", rewardPointsEarned: 0, discount: null, couponCode: null, couponInvalidReason: null, pointsBalance: 0, pointsRedemption: null };
 
 function wrapper({ children }: { children: React.ReactNode }) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });

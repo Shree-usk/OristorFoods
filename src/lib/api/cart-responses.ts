@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { CartServiceError, type CartErrorCode } from "@/services/cart.errors";
 import { StockExceededError } from "@/services/cart.errors";
 import { CouponMinOrderValueNotMetError, CouponServiceError, type CouponErrorCode } from "@/services/coupon.errors";
+import { RewardsInsufficientBalanceError, RewardsExceedsPerOrderCapError, RewardsServiceError, type RewardsErrorCode } from "@/services/rewards.errors";
 
 const statusByCode: Record<CartErrorCode, number> = {
   not_found: 404,
@@ -23,6 +24,14 @@ const couponStatusByCode: Record<CouponErrorCode, number> = {
   already_applied: 409,
 };
 
+const rewardsStatusByCode: Record<RewardsErrorCode, number> = {
+  not_authenticated: 401,
+  insufficient_balance: 409,
+  exceeds_per_order_cap: 409,
+  redemption_unavailable: 409,
+  invalid_amount: 400,
+};
+
 export function cartErrorResponse(error: unknown) {
   if (error instanceof StockExceededError) {
     return NextResponse.json({ error: error.message, availableQuantity: error.availableQuantity }, { status: 409 });
@@ -35,6 +44,21 @@ export function cartErrorResponse(error: unknown) {
   }
   if (error instanceof CouponServiceError) {
     return NextResponse.json({ error: error.message, code: error.code }, { status: couponStatusByCode[error.code] });
+  }
+  if (error instanceof RewardsInsufficientBalanceError) {
+    return NextResponse.json(
+      { error: error.message, code: error.code, requested: error.requested, available: error.available },
+      { status: rewardsStatusByCode[error.code] },
+    );
+  }
+  if (error instanceof RewardsExceedsPerOrderCapError) {
+    return NextResponse.json(
+      { error: error.message, code: error.code, requested: error.requested, cap: error.cap },
+      { status: rewardsStatusByCode[error.code] },
+    );
+  }
+  if (error instanceof RewardsServiceError) {
+    return NextResponse.json({ error: error.message, code: error.code }, { status: rewardsStatusByCode[error.code] });
   }
   if (error instanceof CartServiceError) {
     return NextResponse.json({ error: error.message }, { status: statusByCode[error.code] });
