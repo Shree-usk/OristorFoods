@@ -3379,3 +3379,126 @@ ReferralWelcomeBonus. `tests/e2e/rewards-referrals-dashboard.spec.ts` —
 both pages' empty states, balance + point history + the redemption
 preview dialog's live calculation, and the referral link's copy-to-
 clipboard action with a referred friend's status visible.
+
+## 2026-09-29 — STORY-036 Order History & Support
+
+Customer-facing order list/detail/reorder/return-request/support-ticket
+system, nested under STORY-033's `/account` shell and built entirely on
+STORY-028's Order Management engine. Several places where the story's own
+task list was stale or contradicted established convention were resolved
+before writing anything, matching the precedent STORY-028 and STORY-035
+both set for their own docs:
+
+**The real `OrderStatus` enum, not the AC's wording.** The AC lists
+`Pending/Processing/Dispatched/Delivered/Returned/Cancelled`; the actual
+enum (`prisma/schema.prisma`) is `PendingConfirmation | Confirmed |
+Processing | Dispatched | Delivered | Cancelled | Returned`. The status
+filter (`order.schema.ts::orderStatusFilterSchema`, `OrderFilterBar`) uses
+the real seven values.
+
+**Route param is `orderNumber`, not `id`.** STORY-028's own entry already
+flagged the codebase-wide convention; this story's new routes
+(`/api/orders/[orderNumber]/reorder`, `.../return-request`,
+`.../invoice`) and page (`/account/orders/[orderNumber]`) follow it, not
+the task list's `[id]` wording.
+
+**`src/validation/` stayed flat.** No `account/` subfolder exists
+anywhere in that directory; `return-request.schema.ts` and
+`support-ticket.schema.ts` sit alongside every other domain's schema
+file, not in a new subfolder the task list implied.
+
+**`GET /api/orders` was extended in place, not duplicated as
+`/api/account/orders`.** Nothing outside this story's own tests consumed
+its previous response shape (verified by grepping the codebase), so
+adding optional `status`/`dateFrom`/`dateTo` query params and switching
+its backing call to this story's `getOrderListPage` (thumbnails +
+filters) was a safe, additive change — the existing
+`order-routes.test.ts` assertions on `orders`/`total`/`page` still pass
+unchanged. `GET /api/orders/[orderNumber]` (STORY-028) was left as-is;
+the order-detail *page* calls `customer-order-history.service.ts::
+getOrderDetail` directly (Server Components call services, not their own
+JSON routes) rather than extending that route's `OrderConfirmationSummary`
+contract, which the checkout confirmation page also depends on unchanged.
+
+**`OrderStatusTimeline` (`src/components/storefront/orders/
+order-status-timeline.tsx`) is reused unmodified**, exactly as STORY-028's
+own doc comment on it anticipated — not rebuilt, despite the task list
+asking for a new one.
+
+**No `TicketMessage` reply-thread model.** Confirmed with the user before
+building: no acceptance criterion requires viewing or sending replies
+(admin-side ticket moderation is explicitly out of scope for this story,
+and no admin console exists yet to reply from), so `SupportTicket` stores
+the initial message + status only. A future admin console (STORY-047)
+can add threading without migrating this story's data.
+
+**Fixed a dangling `/support` nav link.** `account-nav.tsx` and
+STORY-033's `quick-links-card.tsx` both already linked to `/support`,
+which existed nowhere in the app (confirmed — zero matches for that
+route). Both now point at `/account/support`.
+
+**Tracking (`carrier`/`trackingNumber`/`trackingUrl`) and a payment
+summary didn't exist on `Order` before this story** — both are additive,
+nullable fields/reads this story owns jointly with STORY-028, per that
+story's own hedge that a not-yet-built piece of the Order model becomes a
+joint extension rather than a competing table. Nothing writes tracking
+fields yet (STORY-047's admin console will); the detail page shows "not
+yet available" when null. `order.repository.ts::
+findOrderByNumberWithPayment` is a new, additive sibling of
+`findOrderByNumber` (adds a `payment` include) so STORY-028's existing
+callers keep their exact return shape.
+
+**Reorder has no existing bulk-add-to-cart primitive to call.**
+`cart.service.ts::addItem` only ever added one product at a time; the
+closest precedent, `mergeGuestCartIntoUser`, is guest-cart-specific and
+silent about what it drops. `customer-order-history.service.ts::
+filterReorderableItems` is a new **pure** function (unit-tested without a
+database) that gates on the same three fields cart.service.ts's own
+`requireAvailableProduct`/`mergeGuestCartIntoUser` already use
+(`status === "Published"`, `inStock`, `stockQuantity`), so "still
+purchasable" can't drift into a second definition; its async wrapper,
+`reorderPastOrder`, then calls the existing `cart.repository.ts::
+upsertCartItem`/`updateCartItemQuantity` primitives per line, mirroring
+`mergeGuestCartIntoUser`'s own combined-quantity-capped-at-stock math.
+Skipped items are reported back to the caller (`{productName, reason}`)
+rather than silently dropped, since (unlike a guest-cart merge) the
+customer is actively watching this action.
+
+**A return request only allows a `Delivered` order** (AC), enforced in
+`createReturnRequest` via a new `OrderReturnNotAllowedError` (added to
+`order.errors.ts`'s existing `OrderServiceError` family, since this is
+fundamentally an order-ownership-and-state operation, not a separate
+error hierarchy). Requested quantities are validated against the order's
+own snapshot lines (`InvalidReturnQuantityError`) — a return can never
+claim more of an item than was actually ordered. `ReturnRequest.items` is
+a JSON snapshot (`{orderItemId, productName, quantity}`), mirroring
+`OrderItem`'s own point-in-time-snapshot convention rather than a live
+join.
+
+**No invoice/packing-slip PDF generation existed anywhere in the
+codebase before this route** (confirmed by grepping `src/` for
+"invoice"/"packing" — zero hits outside docs' own forward-references to
+this story). `invoice-pdf.service.tsx` is a new file built on the same
+`@react-pdf/renderer` + `@fontsource` + brand-color pattern as
+`recipe-pdf.service.tsx` (the only precedent for PDF generation in this
+app) — same font-registration approach, `.tsx` extension requirement
+(the file contains JSX), `renderToBuffer` return.
+
+**`ReturnRequestStatus` lifecycle** (for STORY-047's future admin
+console): `Requested` (customer submitted, this story's only writer) →
+`Approved` / `Rejected` (admin decision, not built here) → `Completed`
+(refund/exchange processed, not built here). **`SupportTicketStatus`
+lifecycle**: `Open` (default, this story's only writer) → `InProgress` →
+`Resolved` / `Closed` (all three are admin-side transitions, not built
+here).
+
+**Testing:** `customer-order-history-service.test.ts` — the pure
+`filterReorderableItems` function (in-stock, deleted-product,
+unpublished-product, zero-stock, and partial-stock-cap cases) and
+`getOrderListPage`'s status filter and thumbnail lookup.
+`support-ticket-service.test.ts` — ticket creation with and without an
+order reference, an ownership check rejecting another customer's order
+number, and paginated listing. `tests/e2e/order-history-support.spec.ts`
+— empty states, order detail with status timeline and tracking, a
+reorder, a return-request submission on a delivered order, and a
+support-ticket submission both with and without an order pre-fill.

@@ -56,6 +56,8 @@ model User {
   // STORY-032.
   notificationPreference NotificationPreference?
   notificationLogs       NotificationLog[]
+  // STORY-036.
+  supportTickets          SupportTicket[]
   // STORY-034.
   phone                   String?
   dateOfBirth             DateTime?
@@ -1526,6 +1528,11 @@ model Order {
   deliveryZoneName   String
   estimatedDaysMin   Int?
   estimatedDaysMax   Int?
+  // STORY-036. Nothing writes these yet — admin console (STORY-047) will;
+  // this story only reads/displays them when present.
+  carrier            String?
+  trackingNumber     String?
+  trackingUrl        String?
   // Immutable address snapshot — flattened copies, no relation, so later
   // edits to a saved Address can never alter historical orders.
   shipRecipientName  String
@@ -1544,6 +1551,9 @@ model Order {
   // STORY-031. The referral this order qualified (if any) — set on the
   // attribution, not here; this is just the inverse relation.
   referralAttributions ReferralAttribution[]
+  // STORY-036.
+  returnRequests     ReturnRequest[]
+  supportTickets     SupportTicket[]
   createdAt          DateTime    @default(now())
   updatedAt          DateTime    @updatedAt
 
@@ -1572,6 +1582,66 @@ model OrderStatusHistory {
   status    OrderStatus
   actor     String
   createdAt DateTime    @default(now())
+}
+
+// --- Order History & Support (STORY-036) ---
+// Customer-facing presentation layer on top of STORY-028's Order model.
+// ReturnRequest/SupportTicket are request records only — admin-side
+// moderation/reply UI is out of scope here (STORY-047). See
+// docs/architecture-decisions.md for the full contract.
+
+enum ReturnRequestStatus {
+  Requested
+  Approved
+  Rejected
+  Completed
+}
+
+model ReturnRequest {
+  id        String              @id @default(cuid())
+  orderId   String
+  order     Order               @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  // Snapshot of the affected lines at request time — mirrors OrderItem's
+  // own snapshot convention, never joins live: [{orderItemId, productName, quantity}]
+  items     Json
+  reason    String              @db.VarChar(1000)
+  status    ReturnRequestStatus @default(Requested)
+  createdAt DateTime            @default(now())
+  updatedAt DateTime            @updatedAt
+
+  @@index([orderId])
+}
+
+enum SupportTicketCategory {
+  OrderIssue
+  Product
+  Delivery
+  Billing
+  Other
+}
+
+enum SupportTicketStatus {
+  Open
+  InProgress
+  Resolved
+  Closed
+}
+
+model SupportTicket {
+  id        String                 @id @default(cuid())
+  userId    String
+  user      User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  orderId   String?
+  order     Order?                 @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  category  SupportTicketCategory
+  subject   String
+  message   String                 @db.VarChar(4000)
+  status    SupportTicketStatus    @default(Open)
+  createdAt DateTime               @default(now())
+  updatedAt DateTime               @updatedAt
+
+  @@index([userId])
+  @@index([userId, status])
 }
 
 // --- Order Management (STORY-028) ---
