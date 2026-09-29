@@ -76,6 +76,19 @@ export function createExpiredTransaction(tx: Prisma.TransactionClient, input: { 
   });
 }
 
+/**
+ * STORY-035. Every transaction, oldest first, un-paginated — the account
+ * page's history table needs a running balance per row, which only a
+ * complete ordered read can produce cheaply without a raw-SQL window
+ * function (see customer-rewards-dashboard.service.ts::getPointHistoryPage,
+ * which computes the cumulative sum and paginates in memory). Fine at
+ * this app's scale — a personal ledger, not a shared table — but not a
+ * pattern to reuse for anything larger.
+ */
+export function listAllTransactionsAscending(userId: string, client: Client = prisma) {
+  return client.rewardTransaction.findMany({ where: { userId }, orderBy: [{ createdAt: "asc" }, { id: "asc" }] });
+}
+
 export async function listTransactionsForUser(userId: string, page: number, pageSize: number) {
   const [rows, total] = await Promise.all([
     prisma.rewardTransaction.findMany({
@@ -119,6 +132,20 @@ export function findExpiredUnclosedEarnedBatches(userId: string, asOf: Date, cli
     where: { userId, type: "Earned", expiresAt: { lte: asOf }, expiredBy: null },
     orderBy: { createdAt: "asc" },
   });
+}
+
+/** STORY-035. Same shape as findExpiredUnclosedEarnedBatches but for a future window — the "points expiring soon" banner's read, not a new expiry rule. */
+export function findUpcomingUnclosedEarnedBatches(userId: string, from: Date, to: Date, client: Client = prisma) {
+  return client.rewardTransaction.findMany({
+    where: { userId, type: "Earned", expiresAt: { gt: from, lte: to }, expiredBy: null },
+    orderBy: { expiresAt: "asc" },
+  });
+}
+
+/** STORY-035. Net signed sum across the given types — e.g. ReferralBonus + ReferralBonusReversed for "total referral rewards earned" on the /account/referrals page. */
+export async function sumPointsByTypes(userId: string, types: RewardTransactionType[], client: Client = prisma): Promise<number> {
+  const rows = await client.rewardTransaction.groupBy({ by: ["type"], where: { userId, type: { in: types } }, _sum: { points: true } });
+  return rows.reduce((sum, row) => sum + (row._sum.points ?? 0), 0);
 }
 
 export function getAccountWithTier(userId: string) {
