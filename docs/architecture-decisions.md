@@ -2782,3 +2782,180 @@ auth/validation paths. `tests/e2e/referral-signup.spec.ts` — the full
 real-browser path: land via `?ref=<code>` → register → auto-sign-in →
 place a qualifying order → confirm the referrer's ledger balance
 increased by the configured bonus.
+
+## 2026-09-29 — STORY-032 Notifications (Email/SMS/WhatsApp)
+
+**Scope.** Every prior commerce story (STORY-028/030/031) fires the
+business event a notification would key off of, but nothing sent
+anything — there was no email/SMS/WhatsApp capability anywhere in this
+codebase. `newsletter.service.ts::subscribe()` (confirmed by reading it)
+is a pure `console.log`-and-return stub with no persistence and no real
+send — not a foundation to build on. This story builds the real,
+provider-agnostic transactional notification service, mirroring
+STORY-026's `payment.service.ts`/`src/services/payment/` mock-provider
+pattern exactly, since that is this codebase's own established
+precedent for "swappable provider behind a common interface, mock by
+default." Transactional (event-triggered, one-to-one) only — bulk
+marketing campaigns are STORY-050's.
+
+**A real gap closed as part of this story, not a pre-existing feature
+reused: order dispatched/delivered had no event to trigger on at all.**
+`order.service.ts::transitionOrderStatus` — the only place `Dispatched`/
+`Delivered` are ever reached — never called `emitOrderEvent` before this
+story; only `createOrder`/`cancelOrder` did. `OrderEventType` is a plain
+string union with no other coupling (the `OrderIntegrationEvent.eventType`
+column is untyped `String` by design, so a new value never needs a
+migration), so widening it to include `"order.dispatched"`/
+`"order.delivered"` and emitting both from `transitionOrderStatus`
+(after `applyStatusTransition`'s own transaction has already committed,
+matching the existing confirmed/cancelled emission point exactly) was a
+small, safe addition — not new architecture.
+
+**1. Two different trigger mechanisms, chosen per how the underlying
+fact is actually observed — deliberately not "route everything through
+one event bus."** Order-lifecycle notifications (confirmed/dispatched/
+delivered/cancelled) are genuinely event-driven: `notificationsConsumer`
+(a new `OrderEventConsumer`) subscribes to `order-integration.service.ts`'s
+fan-out, exactly like STORY-030/031's `rewardsConsumer`/`referralConsumer`
+— zero changes to `order.service.ts`'s business logic beyond the two new
+`emitOrderEvent` calls dispatched/delivered needed anyway. Points-earned
+and referral-qualified are different in a way that matters:
+`rewards.service.ts::creditPointsForConfirmedOrder` and
+`referral.service.ts::handleQualifyingCheck` **already run inside their
+own order-event consumers**, and only they know whether a given
+`order.confirmed` delivery was a genuine new credit/qualification or an
+idempotent no-op replay — the bare event payload can't tell a third,
+independent consumer that without redundantly re-deriving the same
+computation (real drift risk, and duplicate logic). So for these two,
+`sendNotification` is called directly, synchronously, from inside the
+success path of those existing functions — never the idempotent-replay
+catch branch — which is exactly what the AC's task list literally asks
+for ("wire notification triggers into rewards.service.ts... calling
+notification.service.ts"), not a second consumer on the same bus.
+
+**2. The duplicate-send guard's `triggeringEventId` deliberately spans
+multiple source tables as a plain string, not a strict FK** — mirroring
+`OrderIntegrationEvent.eventType`'s own "plain string for future
+extensibility" precedent. For order-lifecycle notifications it's
+`OrderIntegrationEvent.id`; for points-earned it's the new
+`RewardTransaction.id`; for referral-qualified it's
+`ReferralAttribution.id`. A real bug caught and fixed during
+implementation: `NotificationLog`'s original unique constraint was
+`(triggeringEventId, templateKey, recipient)` — **missing `channel`** —
+which meant two different channels resolving to the same recipient value
+(most concretely: SMS and WhatsApp both falling back to the same
+`"(none)"` no-contact placeholder when neither has a phone on file)
+collided with each other, silently dropping the second channel's log row
+entirely. The constraint is `(triggeringEventId, templateKey, channel,
+recipient)`. `notification.service.ts::sendNotification` checks for an
+existing log row first (a clean idempotent short-circuit — no provider
+call at all on a repeat) with the unique constraint as defense-in-depth,
+matching this codebase's established "primary guard + P2002 catch"
+idiom.
+
+**3. A real, working email adapter — Nodemailer, auto-falling-back to an
+Ethereal sandbox account when no SMTP is configured.** No email library
+existed in this codebase before this story (confirmed: not in
+`package.json`, no SMTP vars in `.env`) — `nodemailer`
+(+`@types/nodemailer`) is a new dependency, noted here explicitly.
+`src/services/notification/email.provider.ts` reads `SMTP_HOST` — if
+set, uses a real SMTP transport; if unset, calls
+`nodemailer.createTestAccount()` to auto-provision a free Ethereal
+sandbox inbox and logs the preview URL for every send. Verified working
+end to end during implementation (both a standalone script and the
+`tests/e2e/order-notifications.spec.ts` real-browser test actually send
+through Ethereal — this is the one test in the suite that deliberately
+exercises the real network-backed adapter; every other test mocks
+`EmailProvider` via `vi.hoisted`, since a unit/DB-integration test
+should not depend on external network availability). SMS/WhatsApp
+providers stay mock-only (`sms.provider.ts`/`whatsapp.provider.ts`,
+mirroring `MockPaymentProvider`'s shape) — no provider is named in the
+blueprint; `notification.service.ts::getProviderForChannel` still reads
+a `SMS_PROVIDER`/`WHATSAPP_PROVIDER` env var (default `"mock"`, mirrors
+`payment.service.ts::getActiveProvider` exactly, including throwing
+`NotificationProviderUnconfiguredError` for anything else) so a real
+provider slots in later without touching call sites. Provider instances
+are cached per channel at module scope in `notification.service.ts`
+(not re-constructed per send) — re-provisioning a fresh Ethereal test
+account on every single email would be needlessly slow and would
+scatter previews across many different throwaway inboxes.
+
+**4. Email is default-on for transactional notifications; SMS/WhatsApp
+require both an explicit opt-in AND a phone number on file.** This
+matches the AC's own example wording ("opted in to SMS/WhatsApp **or
+email-only**" — implying email is the always-available baseline) and
+ordinary transactional-email norms (order confirmations aren't typically
+subject to marketing opt-out). A guest order (`Order.guestEmail`, no
+`User` row) still gets its confirmation email — there's no preference to
+consult and no marketing-consent concern for a one-time transactional
+receipt — but can never receive SMS/WhatsApp: there is no mechanism to
+collect consent or a phone number during guest checkout, a deliberate
+scope boundary, not an oversight. `resolveChannelTargets` always returns
+a target for all three channels (recipient `null` when ineligible)
+rather than omitting ineligible channels outright, so a `SkippedNoConsent`
+row is written explaining why — satisfying the AC's explicit third
+status value and the "can a support agent look this up" requirement,
+rather than leaving silence where an answer should be. `NotificationPreference`
+is a new one-per-user satellite table (`phone`, `emailOptIn` default
+`true`, `smsOptIn`/`whatsappOptIn` default `false`), mirroring how
+`RewardAccount`/`ReferralCode` are satellite tables rather than `User`
+columns.
+
+**5. Message copy is a `NotificationTemplate` row, not a hardcoded
+string — seeded with real, working (if plain) copy for all 6 types × 3
+channels (18 rows), not left as an unusable abstract contract.** No
+admin template-management system exists yet (Section 7's future
+capability). Per CLAUDE.md's own Admin Console Principle ("could a
+non-technical admin change this later without redeploying?"), template
+content belongs in the DB from day one — exactly the content STORY-054's
+future authoring UI will edit, the same "build the real thing before the
+admin story exists" pattern STORY-027/029/030/031 already established.
+`renderTemplate` is a plain `{{key}}` substitution — no templating engine
+needed for this story's scope.
+
+**Variable contract** (per the AC's explicit "documented" requirement):
+
+| Notification type | Trigger source | Variables |
+|---|---|---|
+| `order.confirmed` | `order.service.ts::createOrder` → `order.confirmed` event | `orderNumber`, `grandTotal`, `currency` |
+| `order.dispatched` | `order.service.ts::transitionOrderStatus` (`to: "Dispatched"`) → `order.dispatched` event | `orderNumber`, `grandTotal`, `currency` |
+| `order.delivered` | `order.service.ts::transitionOrderStatus` (`to: "Delivered"`) → `order.delivered` event | `orderNumber`, `grandTotal`, `currency` |
+| `order.cancelled` | `order.service.ts::cancelOrder` → `order.cancelled` event | `orderNumber`, `grandTotal`, `currency` |
+| `rewards.points_earned` | `rewards.service.ts::creditPointsForConfirmedOrder` (direct call, success path only) | `points` |
+| `referral.qualified` | `referral.service.ts::handleQualifyingCheck` (direct call, success path only) | `points` |
+
+**6. No retry infrastructure — fire-and-forget with a durable log row,
+matching this codebase's own existing precedent.** Confirmed during
+planning: no cron, no job runner, no generic retry mechanism exists
+anywhere in `src/`, and `OrderIntegrationEvent` itself (the closest
+precedent) is write-then-best-effort-call, never re-polled. `NotificationLog`
+follows the same shape deliberately — a failed send is fully visible
+(status `Failed`, `error` populated) for a future admin/ops view to act
+on, but this story does not add a poller. `sendNotification` never
+throws outward (mirrors `referral.service.ts::attributeReferralAtRegistration`'s
+"best-effort side effect" pattern) — for order-lifecycle notifications
+this sits inside `emitOrderEvent`'s own per-consumer try/catch; for the
+two direct-call triggers, `sendNotification`'s internal per-channel
+try/catch in its own for-loop is the only guard needed, since it's a
+plain function call, not a second consumer registration.
+
+**Testing:** `notification-service.test.ts` — template rendering with
+real substitution, a guest order-confirmation email with no `User`/
+preference row involved, consent gating (opted-out/no-contact →
+`SkippedNoConsent`, no provider call; email's default-on behavior even
+with zero preference row), the duplicate-send guard (including the
+cross-channel placeholder-collision scenario the schema fix above
+addresses), provider-failure and missing/inactive-template paths logged
+as `Failed` without throwing. `EmailProvider` is mocked via `vi.hoisted`
+in every unit/DB-integration test that touches it (rewards-service,
+referral-service, notification-service test files) so none of them
+depend on network availability — `order-notifications.spec.ts` is the
+sole test that deliberately exercises the real Ethereal-backed adapter,
+in the e2e suite where a real browser and a running dev server are
+already required. `order-service.test.ts` gained one test proving
+`transitionOrderStatus` now emits `order.dispatched`/`order.delivered`
+exactly once each. `rewards-service.test.ts`/`referral-service.test.ts`
+each gained one focused test proving a notification lands on a genuine
+credit/qualification and never a second time for a replay.
+`notification-routes.test.ts` — the preferences GET/POST auth/validation/
+merge-semantics paths.

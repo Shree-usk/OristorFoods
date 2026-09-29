@@ -298,6 +298,16 @@ describe("transitionOrderStatus", () => {
   it("throws OrderNotFoundError for an unknown order id", async () => {
     await expect(transitionOrderStatus("does-not-exist", "Processing", "system:test")).rejects.toBeInstanceOf(OrderNotFoundError);
   });
+
+  it("emits order.dispatched and order.delivered exactly once each (STORY-032) — previously no event fired for these at all", async () => {
+    const { order } = await placeTestOrder();
+    await transitionOrderStatus(order.id, "Processing", "system:test");
+    await transitionOrderStatus(order.id, "Dispatched", "system:test");
+    await transitionOrderStatus(order.id, "Delivered", "system:test");
+
+    const events = await prisma.orderIntegrationEvent.findMany({ where: { orderId: order.id }, orderBy: { createdAt: "asc" } });
+    expect(events.map((e) => e.eventType)).toEqual(["order.confirmed", "order.dispatched", "order.delivered"]);
+  });
 });
 
 describe("cancelOrder", () => {

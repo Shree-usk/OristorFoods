@@ -13,6 +13,7 @@ import { seedCookingTips } from "./seed-cooking-tips";
 import { seedDelivery } from "./seed-delivery";
 import { seedDownloads } from "./seed-downloads";
 import { seedFoodAcademy } from "./seed-food-academy";
+import { seedNotificationTemplates } from "./seed-notifications";
 import { seedRecipes } from "./seed-recipes";
 import { seedReferrals } from "./seed-referrals";
 import { seedRewards } from "./seed-rewards";
@@ -329,6 +330,9 @@ async function main() {
   // Referral Programme settings (STORY-031).
   const referralsSeed = await seedReferrals();
 
+  // Notification templates (STORY-032).
+  const notificationsSeed = await seedNotificationTemplates();
+
   console.log("Seed complete:", {
     brand: brand.slug,
     categories: [spices.slug, giftSets.slug],
@@ -342,6 +346,7 @@ async function main() {
     delivery: deliverySeed,
     rewards: rewardsSeed,
     referrals: referralsSeed,
+    notifications: notificationsSeed,
   });
 }
 

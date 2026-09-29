@@ -12,6 +12,7 @@ export async function register() {
       { registerOrderEventConsumer },
       { rewardsConsumer },
       { referralConsumer },
+      { notificationsConsumer },
     ] = await Promise.all([
       import("@/services/review.service"),
       import("@/services/qa.service"),
@@ -19,6 +20,7 @@ export async function register() {
       import("@/services/order-integration.service"),
       import("@/services/rewards.service"),
       import("@/services/referral.service"),
+      import("@/services/notification.service"),
     ]);
     registerReviewProviders();
     registerQaProviders();
@@ -27,5 +29,6 @@ export async function register() {
     // (STORY-031 turned what used to be a single slot into a list).
     registerOrderEventConsumer(rewardsConsumer);
     registerOrderEventConsumer(referralConsumer);
+    registerOrderEventConsumer(notificationsConsumer);
   }
 }

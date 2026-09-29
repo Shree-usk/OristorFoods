@@ -48,6 +48,9 @@ model User {
   referralCode       ReferralCode?
   referralsMade      ReferralAttribution[] @relation("Referrer")
   referredBy         ReferralAttribution?  @relation("Referred")
+  // STORY-032.
+  notificationPreference NotificationPreference?
+  notificationLogs       NotificationLog[]
   createdAt         DateTime   @default(now())
   updatedAt         DateTime   @updatedAt
 }
@@ -1622,4 +1625,93 @@ model ReferralSetting {
   // registration. Null = no welcome bonus (genuinely optional per the AC).
   referredWelcomeBonusPoints Int?
   updatedAt                  DateTime @updatedAt
+}
+
+// --- Notifications (STORY-032) ---
+// Transactional (event-triggered, one-to-one) email/SMS/WhatsApp only —
+// bulk marketing campaigns are STORY-050. Message COPY is a
+// NotificationTemplate row, not a hardcoded string, per CLAUDE.md's
+// Admin Console Principle — seeded with real working defaults
+// (prisma/seed-notifications.ts) ahead of STORY-054's future authoring
+// UI, the same "build the real thing before the admin story exists"
+// pattern STORY-027/029/030/031 already established. See
+// docs/architecture-decisions.md for the full design.
+
+enum NotificationChannel {
+  Email
+  SMS
+  WhatsApp
+}
+
+enum NotificationStatus {
+  Sent
+  Failed
+  SkippedNoConsent
+}
+
+model NotificationTemplate {
+  id         String              @id @default(cuid())
+  // "order.confirmed" | "order.dispatched" | "order.delivered" |
+  // "order.cancelled" | "rewards.points_earned" | "referral.qualified" —
+  // a plain string, not an enum, mirroring OrderIntegrationEvent.eventType's
+  // precedent, so a future notification type never needs a migration.
+  templateKey String
+  channel    NotificationChannel
+  // Email only — null for SMS/WhatsApp.
+  subject    String?
+  // {{variableName}} placeholders, substituted by notification.service.ts.
+  body       String
+  isActive   Boolean             @default(true)
+  createdAt  DateTime            @default(now())
+  updatedAt  DateTime            @updatedAt
+
+  @@unique([templateKey, channel])
+}
+
+// One row per user — mirrors RewardAccount/ReferralCode as a satellite
+// table rather than bloating User with columns. Email is deliberately
+// NOT gated here (see NotificationLog/notification.service.ts) — this
+// table only governs the two consent-requiring channels.
+model NotificationPreference {
+  id            String   @id @default(cuid())
+  userId        String   @unique
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  phone         String?
+  emailOptIn    Boolean  @default(true)
+  smsOptIn      Boolean  @default(false)
+  whatsappOptIn Boolean  @default(false)
+  updatedAt     DateTime @updatedAt
+}
+
+// One row per attempted send. `triggeringEventId` deliberately spans
+// multiple source tables (OrderIntegrationEvent.id for order-lifecycle
+// notifications, RewardTransaction.id for points-earned,
+// ReferralAttribution.id for referral-qualified) rather than being a
+// strict FK to any one of them — same "plain string for extensibility"
+// treatment as OrderIntegrationEvent.eventType. @@unique below is the
+// duplicate-send guard: the same fact can never notify the same
+// recipient on the same channel twice.
+model NotificationLog {
+  id                String              @id @default(cuid())
+  // Null for a guest order-confirmation email — there is no User row to link.
+  userId            String?
+  user              User?               @relation(fields: [userId], references: [id], onDelete: SetNull)
+  recipient         String
+  channel           NotificationChannel
+  templateKey       String
+  status            NotificationStatus
+  // "smtp" | "ethereal" | "mock-sms" | "mock-whatsapp".
+  provider          String?
+  providerReference String?
+  error             String?
+  triggeringEventId String
+  createdAt         DateTime            @default(now())
+
+  // channel is part of the key deliberately — two different channels for
+  // the same event/template can otherwise share an identical recipient
+  // value (e.g. both fall back to the "no contact" placeholder when
+  // neither SMS nor WhatsApp has a phone on file), which would wrongly
+  // collide without it.
+  @@unique([triggeringEventId, templateKey, channel, recipient])
+  @@index([userId])
 }

@@ -16,7 +16,10 @@ import * as orderRepository from "@/repositories/order.repository";
  * to replay from even if today's in-process consumer call fails.
  */
 
-export type OrderEventType = "order.confirmed" | "order.cancelled";
+// STORY-032 added "order.dispatched"/"order.delivered" — order.service.ts's
+// transitionOrderStatus is the only place those statuses are ever reached,
+// and previously emitted no event at all.
+export type OrderEventType = "order.confirmed" | "order.cancelled" | "order.dispatched" | "order.delivered";
 
 /** Must stay JSON-serializable — this is written straight to the OrderIntegrationEvent.payload Json column. */
 export interface OrderIntegrationEventPayload {

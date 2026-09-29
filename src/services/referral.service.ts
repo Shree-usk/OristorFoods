@@ -7,6 +7,7 @@ import { verifyReferralToken } from "@/lib/referral-token";
 import * as orderRepository from "@/repositories/order.repository";
 import * as referralRepository from "@/repositories/referral.repository";
 import * as rewardsRepository from "@/repositories/rewards.repository";
+import { sendNotification } from "@/services/notification.service";
 import type { OrderEventConsumer } from "@/services/order-integration.service";
 
 /**
@@ -125,6 +126,14 @@ async function handleQualifyingCheck(orderId: string, referredUserId: string): P
         await rewardsRepository.getOrCreateAccount(tx, attribution.referrerUserId);
         await rewardsRepository.createTransaction(tx, { userId: attribution.referrerUserId, type: "ReferralBonus", points: bonusPoints, orderId });
       }
+    });
+    // STORY-032: only on a genuine new qualification — never the
+    // idempotent-replay branch below.
+    await sendNotification({
+      userId: attribution.referrerUserId,
+      templateKey: "referral.qualified",
+      variables: { points: bonusPoints },
+      triggeringEventId: attribution.id,
     });
   } catch (error) {
     // Already qualified for this order (a replayed event) — idempotent

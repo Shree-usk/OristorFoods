@@ -190,7 +190,22 @@ export async function transitionOrderStatus(orderId: string, to: OrderStatus, ac
   if (!order) throw new OrderNotFoundError();
   if (!isTransitionAllowed(order.status, to)) throw new IllegalOrderTransitionError(order.status, to);
 
-  return orderRepository.applyStatusTransition(orderId, order.status, to, actor);
+  const updated = await orderRepository.applyStatusTransition(orderId, order.status, to, actor);
+
+  // STORY-032: dispatched/delivered notifications hook off these two
+  // events — called only after the transition's own transaction has
+  // committed, same emission point as createOrder/cancelOrder use for
+  // confirmed/cancelled.
+  if (to === "Dispatched" || to === "Delivered") {
+    const type = to === "Dispatched" ? "order.dispatched" : "order.delivered";
+    try {
+      await emitOrderEvent(type, updated.id, { orderNumber: updated.orderNumber, userId: updated.userId });
+    } catch (emitError) {
+      console.error(`[order-integration] failed to record ${type} for order ${updated.orderNumber}`, emitError);
+    }
+  }
+
+  return updated;
 }
 
 export interface CancelOrderResult {
