@@ -3266,3 +3266,116 @@ version; an incorrect current password changes nothing;
 address through the real UI, and a full change-password →
 forced-sign-out → old-password-rejected → new-password-accepted round
 trip.
+
+## 2026-09-29 — STORY-035 Reward Wallet & Referral Dashboard
+
+**Presentation-only, confirmed by reading both engines in full before
+writing anything.** `/account/rewards` and `/account/referrals` read
+STORY-030's `rewards.service.ts` and STORY-031's `referral.service.ts` —
+no point-earning, tier-threshold, expiry, or referral-crediting rule is
+defined here. **Zero schema changes** — this story added no migration
+and no `db push` either. Future changes to point values, tier
+thresholds, expiry windows, or referral payout amounts belong in
+STORY-030/031, not here.
+
+**No standalone (cart-independent) redemption exists — the redemption
+dialog is a preview, not a mutation. Confirmed with the user before
+building.** Every redemption path in `rewards.service.ts`
+(`applyPointsToCart`, `validateRedemptionAtPlaceOrder`, etc.) requires an
+active `Cart` row; there is no "redeem points for store credit/a
+voucher" mechanism anywhere in this app, and building one would be new
+STORY-030-owned business logic, not presentation. `RedeemPointsDialog`
+instead calls `rewards-calc.ts::calculatePointsRedemption` — the same
+pure, DB-free calculation checkout itself uses — directly from the
+client, with `payableBeforePoints: Number.MAX_SAFE_INTEGER` so only the
+balance and per-order-cap constraints bind (there's no real order to cap
+against for a preview). The dialog tells the customer redemption
+actually happens at checkout and links to `/products`. The task list's
+suggested `POST /api/account/rewards/redeem` was dropped along with
+this — there is nothing for it to call.
+
+**"Available redemption options" is a rate + cap, not a catalog.**
+`RewardSetting` has no table of named redemption tiers ("Rs 500 off")
+— confirmed by reading the model — only `pointsToCurrencyRate` and
+`maxRedeemablePointsPerOrder`. The AC's "view available redemption
+options" is interpreted as seeing that rate/cap against the customer's
+own balance (the preview dialog above), not choosing from a list.
+
+**Reused STORY-030/031's existing API routes directly** —
+`/api/rewards/balance`, `/api/referral/code`, `/api/referral/status` —
+rather than building `/api/account/rewards/summary` /
+`/api/account/referrals/summary` as the task list suggested. Each
+already carried a doc comment anticipating this
+("consumed by STORY-035's future ... dashboard"), the same pattern
+STORY-034 already followed for STORY-032's `/api/notifications/
+preferences`. One genuinely new route was needed:
+**`GET /api/account/rewards/history`** — STORY-030's own
+`/api/rewards/transactions` has no running-balance column (the AC wants
+one), and extending that response would mean changing a contract
+STORY-030 owns for a STORY-035-only need. `POST /api/account/referrals/
+link` (regenerate the code) was dropped entirely — no
+regenerate/rotate-code function exists in `referral.service.ts`
+(`ReferralCode.userId` is `@unique`; `getOrCreateReferralCode` never
+overwrites), and adding one would be new STORY-031-owned capability.
+
+**Running balance is computed in memory, not with a raw-SQL window
+function.** `RewardTransaction` stores only a signed `points` delta per
+row, no `balanceAfter` column. `rewards.repository.ts::
+listAllTransactionsAscending` (new) fetches a customer's entire ledger
+ordered oldest-first; `customer-rewards-dashboard.service.ts::
+getPointHistoryPage` accumulates a running sum, reverses to newest-first,
+and paginates the resulting array in memory. This app already uses
+`$queryRaw` elsewhere (`recipe-review.repository.ts`,
+`review.repository.ts`, `search.repository.ts`), so a window-function
+query was a real option, but a personal reward ledger is bounded by one
+customer's own activity — realistically hundreds of rows, not millions —
+so the simpler, dependency-free approach was preferred. Documented here
+as a scale assumption specific to this one read path, not a pattern to
+copy for a shared/larger table.
+
+**"Points expiring soon" needed one new, purely additive repository
+query** — nothing existing surfaced this.
+`rewards.repository.ts::findUpcomingUnclosedEarnedBatches` mirrors the
+existing `findExpiredUnclosedEarnedBatches` (STORY-030's own expiry
+sweep) exactly, just with a future date window instead of a past one —
+same filter shape (`type: "Earned"`, `expiredBy: null`), no new rule
+about what counts as expiring. The banner's total is capped at the
+customer's current spendable balance, mirroring the sweep's own
+conservative cap, since points aren't tracked FIFO-per-batch against
+spend.
+
+**"Total referral rewards earned" sums `ReferralBonus` minus
+`ReferralBonusReversed` for the viewing user AS REFERRER — not
+`ReferralWelcomeBonus`, which is a different fact (what this user
+received for being referred by someone else).** Needed a new
+`rewards.repository.ts::sumPointsByTypes` (a small, generic, additive
+`groupBy` aggregator, same shape as the existing `getBalances`) — lives
+in `rewards.repository.ts`, not `referral.repository.ts`, since the
+points themselves are `RewardTransaction` rows, not a field on
+`ReferralAttribution`.
+
+**The referred-friends list shows two states, not the AC's four.**
+`ReferralAttributionStatus` only has `Registered`/`Qualified`/`Excluded`
+— qualification and the bonus credit happen atomically together
+(`referral.service.ts::handleQualifyingCheck`), so there is no
+"first purchase completed but reward not yet earned" state distinct
+from "reward earned" in the data model. Mapped as: Registered → "Signed
+Up", Qualified → "Reward Earned". "Invited" (a link sent but not yet
+acted on) has no row at all — nothing to list. `Excluded` (self-referral)
+attributions are filtered out of the customer-facing list entirely
+rather than shown with an explanation, since it never happened as far as
+the customer should see.
+
+**Testing:** `customer-rewards-dashboard-service.test.ts` — the pure
+`computeTierProgress` function (mid-tier progress, top-tier/no-next-tier,
+below-every-threshold, and no-tiers-configured cases), the running-balance
+computation and its pagination, and the expiring-soon window (capped at
+balance, empty when nothing qualifies, and the no-expiry-configured
+case). `customer-referrals-dashboard-service.test.ts` — the
+Registered/Qualified → Signed Up/Reward Earned mapping, Excluded
+filtering, email masking, the generic-name fallback, and the
+ReferralBonus-minus-ReferralBonusReversed total excluding
+ReferralWelcomeBonus. `tests/e2e/rewards-referrals-dashboard.spec.ts` —
+both pages' empty states, balance + point history + the redemption
+preview dialog's live calculation, and the referral link's copy-to-
+clipboard action with a referred friend's status visible.
