@@ -737,6 +737,9 @@ model RecipeBookmark {
 
   @@unique([recipeId, customerId])
   @@index([customerId])
+  // STORY-037. listBookmarkedRecipeIdsForCustomer filters on customerId and
+  // sorts by createdAt desc — this covers that query.
+  @@index([customerId, createdAt])
 }
 
 // --- Cooking Tips (STORY-019) ---

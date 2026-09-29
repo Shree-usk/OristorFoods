@@ -3502,3 +3502,105 @@ number, and paginated listing. `tests/e2e/order-history-support.spec.ts`
 — empty states, order detail with status timeline and tracking, a
 reorder, a return-request submission on a delivered order, and a
 support-ticket submission both with and without an order pre-fill.
+
+## 2026-09-29 — STORY-037 Saved Recipes & Sync
+
+Customer-facing `/account/saved-recipes` list/unsave page, built entirely
+on STORY-022's existing bookmark engine (`recipe-bookmark.service.ts`,
+`RecipeBookmark`). Per that story's own doc comment ("the one method
+STORY-037 is expected to call/reuse rather than reimplement"), this story
+touches no bookmark data model, toggle mechanism, or save/unsave rule.
+
+**No new API routes, and no new validation schema — deliberately, not an
+oversight.** The story's own task list proposed `GET /api/account/
+saved-recipes` and `DELETE /api/account/saved-recipes/[recipeId]`, but
+STORY-022 already built everything this page needs, and building a
+second, differently-shaped route/response would have created a *second*
+cache entry that the corner-icon bookmark toggle used everywhere else on
+the site (`RecipeBookmarkButton` → `useRecipeBookmark` →
+TanStack Query key `["recipe-bookmarks"]`, hitting `GET /api/recipes/
+bookmarks` and `POST`/`DELETE /api/recipes/[slug]/bookmark`) would know
+nothing about — the opposite of the AC's "single source of truth, no
+locally-diverging state." Instead:
+
+- The page's Server Component calls `customer-saved-recipes.service.ts::
+  getSavedRecipesForCustomer`, a one-line wrapper over `recipe-bookmark.
+  service.ts::listBookmarksForCustomer`, and passes the result as
+  `initialData` into a Client Component (`saved-recipes-view.tsx`) that
+  reads the *same* `["recipe-bookmarks"]` query key `RecipeBookmarkButton`
+  writes to. Dropping the existing `<RecipeCard recipe={r} />` (via the
+  existing `RecipeGrid`) into this page's grid gets "remove a bookmark
+  directly from this list, reflected immediately everywhere else" for
+  free — its built-in corner bookmark button already toggles the exact
+  shared cache entry. No bespoke unsave route, handler, or button was
+  written for this story.
+- Filtering/sorting/pagination are done client-side over the
+  already-fetched array (a personal bookmark list — bounded by one
+  customer's own activity, same "realistically hundreds of rows, not
+  millions" reasoning STORY-035 documented for reward-point history, not
+  a pattern to copy for a shared/larger table). A "Show more" button
+  reveals more of the filtered array client-side rather than a real
+  pagination API, satisfying the AC's explicit "(or infinite-scroll)"
+  allowance.
+- No request/query params cross a trust boundary (there's no new route),
+  so no new Zod schema was needed — the story's task-list-suggested
+  `src/validation/account/saved-recipes-query.schema.ts` was dropped
+  entirely, not merely relocated (also: `src/validation/` has no
+  `account/` subfolder anywhere in this codebase, same finding STORY-036
+  already made).
+
+**`SavedRecipesSort` is a new, small type (`dateSaved | alphabetical`),
+not a reuse of the domain's `RecipeSort`.** `recipeSortValues`
+(`newest/popular/rating/time`, `buildRecipeOrderBy` in
+`recipe.repository.ts`) sorts by `publishedAt`/`viewCount`/`avgRating`/
+`totalTimeMinutes` — none of which is "date bookmarked" or "title A–Z,"
+which is what this story's AC asks for. `dateSaved` is simply the input
+array's own order (`listBookmarksForCustomer` already returns
+most-recently-bookmarked-first); `alphabetical` sorts by
+`title.localeCompare`. Both live in a new, pure, unit-tested function,
+`src/lib/saved-recipes-filter.ts::filterAndSortSavedRecipes` — deliberately
+its **own file**, not part of `customer-saved-recipes.service.ts`: that
+service file's other export (`getSavedRecipesForCustomer`) transitively
+imports Prisma/`pg` via `recipe-bookmark.service.ts` →
+`recipe-bookmark.repository.ts` → `lib/db.ts`. The saved-recipes page's
+Client Component needs the pure filter function, and Next.js resolves a
+file's imports as a unit at the client/server boundary (not per named
+export) — importing anything from the service file from a Client
+Component pulled the whole Prisma/`pg` module graph into the browser
+bundle and failed to build (`Module not found: Can't resolve 'dns'`,
+caught while running the e2e suite). Splitting the pure logic into its
+own zero-server-import file fixed it.
+
+**Category filtering matches on `RecipeCard.categoryName` (a string),
+not a slug.** `RecipeCard` (the shared type in `types/recipe.ts`, reused
+as-is) carries no `categorySlug` field. Filter options are the distinct
+category names actually present in the customer's own saved list, not
+the site-wide facet list (`listRecipeFacets()`), which would otherwise
+show categories with zero results for this customer.
+
+**`RecipeBookmark` gained one additive index, `@@index([customerId,
+createdAt])`** — the story's own task list flagged the gap (only
+`@@index([customerId])` existed); this is the first story to actually
+need `createdAt`-ordered reads at any real cardinality, so it's added
+here rather than by STORY-022 speculatively. No field or relation
+changed.
+
+**Dashboard widget count (`getSavedRecipesCountForDashboard`) was added
+to STORY-033's existing `customer-dashboard.service.ts`, not to the new
+full-page service file** — that file's own header comment scopes it to
+"aggregation only... for the dashboard's summary widgets," exactly
+mirroring the existing `getSavedItemsForDashboard`'s one-line "call the
+owning domain service, derive count from `.length`" shape. This is
+deliberately the *same* underlying call (`listBookmarksForCustomer`) the
+full page uses, so the dashboard count and the page's own count can
+never independently drift, per the AC.
+
+**Testing:** `tests/unit/saved-recipes-filter.test.ts` — the pure
+`filterAndSortSavedRecipes` function (empty input, dateSaved order
+preserved, alphabetical sort, category filter, and both combined).
+`tests/e2e/saved-recipes.spec.ts` — the empty state, a recipe bookmarked
+on its detail page appearing on `/account/saved-recipes` and in the
+dashboard's count, unsaving from the saved-recipes page syncing back to
+both the page (now empty) and the detail page (shows unbookmarked again
+after a fresh navigation, confirming real DB persistence rather than
+only a client-cache effect), and the category filter.

@@ -7,6 +7,7 @@ import { QuickLinksCard } from "@/components/storefront/account/quick-links-card
 import { RecentOrdersCard } from "@/components/storefront/account/recent-orders-card";
 import { RewardsSummaryCard } from "@/components/storefront/account/rewards-summary-card";
 import { SavedItemsCard } from "@/components/storefront/account/saved-items-card";
+import { SavedRecipesCard } from "@/components/storefront/account/saved-recipes-card";
 
 export const metadata: Metadata = {
   title: "My Account",
@@ -36,6 +37,9 @@ export default async function AccountDashboardPage() {
         </Suspense>
         <Suspense fallback={<DashboardCardSkeleton title="Saved items" />}>
           <SavedItemsCard userId={userId} />
+        </Suspense>
+        <Suspense fallback={<DashboardCardSkeleton title="Saved recipes" />}>
+          <SavedRecipesCard userId={userId} />
         </Suspense>
         <QuickLinksCard />
       </div>

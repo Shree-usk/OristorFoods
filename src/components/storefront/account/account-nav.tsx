@@ -12,6 +12,7 @@ const ACCOUNT_NAV_ITEMS = [
   { href: "/account/orders", label: "Orders" },
   { href: "/account/rewards", label: "Rewards" },
   { href: "/account/referrals", label: "Referrals" },
+  { href: "/account/saved-recipes", label: "Saved Recipes" },
   { href: "/account/support", label: "Support" },
 ] as const;
 
