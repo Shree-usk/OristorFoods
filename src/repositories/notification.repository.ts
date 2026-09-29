@@ -18,6 +18,7 @@ export interface UpsertPreferenceInput {
   emailOptIn?: boolean;
   smsOptIn?: boolean;
   whatsappOptIn?: boolean;
+  rewardUpdatesOptIn?: boolean;
 }
 
 export function upsertPreference(userId: string, input: UpsertPreferenceInput, client: Client = prisma) {

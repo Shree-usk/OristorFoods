@@ -8,6 +8,7 @@ import { useForm } from "react-hook-form";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { toastManager } from "@/lib/toast";
 import { updatePreferencesSchema, type UpdatePreferencesInput } from "@/validation/notification.schema";
 
 async function fetchPreferences(): Promise<UpdatePreferencesInput> {
@@ -16,14 +17,22 @@ async function fetchPreferences(): Promise<UpdatePreferencesInput> {
   return response.json() as Promise<UpdatePreferencesInput>;
 }
 
+const DEFAULT_VALUES: UpdatePreferencesInput = {
+  phone: "",
+  emailOptIn: true,
+  marketingOptIn: false,
+  smsOptIn: false,
+  whatsappOptIn: false,
+  rewardUpdatesOptIn: true,
+};
+
 /**
- * Email/SMS/WhatsApp opt-in toggles + phone number (STORY-032). This is
- * the base component only — embedding it into a full account-settings
- * page is STORY-034's job. Not rendered on any page yet; import it from
- * wherever that settings page lands. Email has no opt-out toggle here on
- * purpose: it's default-on for transactional notifications (see
- * notification.service.ts's doc comment) — this form only controls the
- * two consent-requiring channels.
+ * STORY-032's channel toggles (SMS/WhatsApp/phone), extended by STORY-034
+ * with the AC's full toggle set: order-update emails (`emailOptIn`),
+ * promotional emails (`marketingOptIn` — actually User.marketingOptIn,
+ * not a NotificationPreference field; see notification.schema.ts), and
+ * reward/referral updates (`rewardUpdatesOptIn`). Mounted on
+ * /account/notifications (STORY-034).
  */
 export function NotificationPreferencesForm() {
   const queryClient = useQueryClient();
@@ -37,11 +46,11 @@ export function NotificationPreferencesForm() {
     formState: { errors, isSubmitting },
   } = useForm<UpdatePreferencesInput>({
     resolver: zodResolver(updatePreferencesSchema),
-    defaultValues: { phone: "", smsOptIn: false, whatsappOptIn: false },
+    defaultValues: DEFAULT_VALUES,
   });
 
   useEffect(() => {
-    if (data) reset({ phone: data.phone ?? "", smsOptIn: data.smsOptIn, whatsappOptIn: data.whatsappOptIn });
+    if (data) reset({ ...DEFAULT_VALUES, ...data });
   }, [data, reset]);
 
   const onSubmit = handleSubmit(async (values) => {
@@ -56,6 +65,7 @@ export function NotificationPreferencesForm() {
       return;
     }
     await queryClient.invalidateQueries({ queryKey: ["notification-preferences"] });
+    toastManager.add({ title: "Notification preferences saved" });
   });
 
   if (isPending) return <p className="text-small text-charcoal/70">Loading your notification preferences…</p>;
@@ -65,6 +75,27 @@ export function NotificationPreferencesForm() {
       <div>
         <Label htmlFor="notification-phone">Phone number</Label>
         <Input id="notification-phone" type="tel" autoComplete="tel" {...register("phone")} />
+      </div>
+
+      <div className="flex items-center gap-2">
+        <input id="notification-order-updates" type="checkbox" className="size-4 accent-chilli" {...register("emailOptIn")} />
+        <Label htmlFor="notification-order-updates" className="font-normal">
+          Order update emails
+        </Label>
+      </div>
+
+      <div className="flex items-center gap-2">
+        <input id="notification-promotions" type="checkbox" className="size-4 accent-chilli" {...register("marketingOptIn")} />
+        <Label htmlFor="notification-promotions" className="font-normal">
+          Promotional emails
+        </Label>
+      </div>
+
+      <div className="flex items-center gap-2">
+        <input id="notification-rewards" type="checkbox" className="size-4 accent-chilli" {...register("rewardUpdatesOptIn")} />
+        <Label htmlFor="notification-rewards" className="font-normal">
+          Reward &amp; referral updates
+        </Label>
       </div>
 
       <div className="flex items-center gap-2">

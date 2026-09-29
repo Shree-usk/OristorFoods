@@ -52,9 +52,17 @@ describe("GET /api/notifications/preferences", () => {
     mockAuth.mockResolvedValue(sessionFor(user.id));
 
     const response = await getPreferences();
-    const body = (await response.json()) as { phone: string | null; emailOptIn: boolean; smsOptIn: boolean; whatsappOptIn: boolean };
+    const body = (await response.json()) as {
+      phone: string | null;
+      emailOptIn: boolean;
+      smsOptIn: boolean;
+      whatsappOptIn: boolean;
+      rewardUpdatesOptIn: boolean;
+      marketingOptIn: boolean;
+    };
     expect(response.status).toBe(200);
-    expect(body).toEqual({ phone: null, emailOptIn: true, smsOptIn: false, whatsappOptIn: false });
+    // STORY-034 extended this response with rewardUpdatesOptIn (NotificationPreference) and marketingOptIn (User) — both default-on/off per their own model defaults.
+    expect(body).toEqual({ phone: null, emailOptIn: true, smsOptIn: false, whatsappOptIn: false, rewardUpdatesOptIn: true, marketingOptIn: false });
   });
 });
 

@@ -31,7 +31,17 @@ import { signReferralToken } from "@/lib/referral-token";
  * below as a whole.
  */
 
-const PUBLIC_ACCOUNT_PREFIXES = ["/account/login", "/account/register", "/account/forgot-password", "/account/reset-password", "/account/wishlist"];
+const PUBLIC_ACCOUNT_PREFIXES = [
+  "/account/login",
+  "/account/register",
+  "/account/forgot-password",
+  "/account/reset-password",
+  "/account/wishlist",
+  // STORY-034: the email-change confirmation link may be opened on a
+  // different, unauthenticated browser/device — same reasoning as
+  // password reset. The API route it calls is unauthenticated-allowed too.
+  "/account/profile/verify-email",
+];
 
 function isPublicAccountPath(pathname: string): boolean {
   return PUBLIC_ACCOUNT_PREFIXES.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`));

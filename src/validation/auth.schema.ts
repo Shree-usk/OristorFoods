@@ -7,8 +7,8 @@ export const credentialsSchema = z.object({
 
 export type CredentialsInput = z.infer<typeof credentialsSchema>;
 
-/** STORY-033. Shared rule for any password a customer sets themselves (register, reset) — same minimum as credentialsSchema's. */
-const passwordSchema = z.string().min(8, "Password must be at least 8 characters");
+/** STORY-033/034. Shared rule for any password a customer sets themselves (register, reset, change) — same minimum as credentialsSchema's. */
+export const passwordSchema = z.string().min(8, "Password must be at least 8 characters");
 
 /** STORY-033 extends STORY-031's minimal registration with a marketing opt-in checkbox. */
 export const registerSchema = z.object({

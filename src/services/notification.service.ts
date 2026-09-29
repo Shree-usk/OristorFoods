@@ -66,6 +66,19 @@ interface ChannelTarget {
 }
 
 /**
+ * STORY-034: order-lifecycle emails and reward/referral emails are gated
+ * by two different toggles (`emailOptIn` vs `rewardUpdatesOptIn`) — the
+ * "order." vs "rewards."/"referral." templateKey prefix is the only signal
+ * available here that tells them apart, since sendNotification's callers
+ * (the order-event consumer, rewards.service.ts, referral.service.ts)
+ * don't otherwise pass a category. Anything else defaults to the
+ * order-update toggle, the safer of the two to fail open on.
+ */
+function emailOptInFieldFor(templateKey: string): "emailOptIn" | "rewardUpdatesOptIn" {
+  return templateKey.startsWith("rewards.") || templateKey.startsWith("referral.") ? "rewardUpdatesOptIn" : "emailOptIn";
+}
+
+/**
  * Email is default-on for a registered user (not gated by an opt-in
  * flag) and always attempted for a guest order's own email — transactional
  * receipts aren't subject to marketing opt-out, and a guest has no
@@ -73,7 +86,7 @@ interface ChannelTarget {
  * opt-in AND a phone on file; a guest can never receive either — there's
  * no mechanism to collect consent/a phone number during guest checkout.
  */
-async function resolveChannelTargets(userId: string | null, recipientOverrideEmail: string | null | undefined): Promise<ChannelTarget[]> {
+async function resolveChannelTargets(userId: string | null, recipientOverrideEmail: string | null | undefined, templateKey: string): Promise<ChannelTarget[]> {
   if (!userId) {
     // A guest can never receive SMS/WhatsApp (no mechanism to collect
     // consent/a phone number during guest checkout) — still returned as
@@ -91,7 +104,7 @@ async function resolveChannelTargets(userId: string | null, recipientOverrideEma
     notificationRepository.findPreferenceByUserId(userId),
   ]);
 
-  const emailOptIn = preference?.emailOptIn ?? true;
+  const emailOptIn = (preference?.[emailOptInFieldFor(templateKey)] ?? true) as boolean;
   return [
     { channel: "Email", recipient: emailOptIn ? (user?.email ?? null) : null },
     { channel: "SMS", recipient: preference?.smsOptIn && preference.phone ? preference.phone : null },
@@ -178,7 +191,7 @@ async function sendToChannel(channel: NotificationChannel, recipient: string | n
  * channel failing doesn't stop another from being attempted.
  */
 export async function sendNotification(input: SendNotificationInput): Promise<void> {
-  const targets = await resolveChannelTargets(input.userId, input.recipientOverrideEmail);
+  const targets = await resolveChannelTargets(input.userId, input.recipientOverrideEmail, input.templateKey);
   for (const target of targets) {
     try {
       await sendToChannel(target.channel, target.recipient, input);
