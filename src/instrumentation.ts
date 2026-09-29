@@ -5,22 +5,27 @@
  */
 export async function register() {
   if (process.env.NEXT_RUNTIME === "nodejs") {
-    const [{ registerReviewProviders }, { registerQaProviders }, { registerRecipeProviders }, { registerOrderEventConsumer }, { rewardsConsumer }] =
-      await Promise.all([
-        import("@/services/review.service"),
-        import("@/services/qa.service"),
-        import("@/services/recipe.service"),
-        import("@/services/order-integration.service"),
-        import("@/services/rewards.service"),
-      ]);
+    const [
+      { registerReviewProviders },
+      { registerQaProviders },
+      { registerRecipeProviders },
+      { registerOrderEventConsumer },
+      { rewardsConsumer },
+      { referralConsumer },
+    ] = await Promise.all([
+      import("@/services/review.service"),
+      import("@/services/qa.service"),
+      import("@/services/recipe.service"),
+      import("@/services/order-integration.service"),
+      import("@/services/rewards.service"),
+      import("@/services/referral.service"),
+    ]);
     registerReviewProviders();
     registerQaProviders();
     registerRecipeProviders();
-    // STORY-030: registers this process's ONE order-event consumer slot
-    // (order-integration.service.ts supports exactly one at a time — see
-    // rewards.service.ts's own header comment and
-    // docs/architecture-decisions.md for the known gap this leaves for
-    // whichever future story next needs the same hook).
+    // order-integration.service.ts fans out to every registered consumer
+    // (STORY-031 turned what used to be a single slot into a list).
     registerOrderEventConsumer(rewardsConsumer);
+    registerOrderEventConsumer(referralConsumer);
   }
 }

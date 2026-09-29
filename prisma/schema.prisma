@@ -44,6 +44,10 @@ model User {
   rewardAccount      RewardAccount?
   rewardTransactions RewardTransaction[]
   badges             CustomerBadge[]
+  // STORY-031.
+  referralCode       ReferralCode?
+  referralsMade      ReferralAttribution[] @relation("Referrer")
+  referredBy         ReferralAttribution?  @relation("Referred")
   createdAt         DateTime   @default(now())
   updatedAt         DateTime   @updatedAt
 }
@@ -1174,6 +1178,20 @@ enum RewardTransactionType {
   Redeemed
   Reversed
   Expired
+  // STORY-031. Distinct from Earned/Reversed on purpose: a referral bonus
+  // is written with orderId = the REFERRED customer's qualifying order
+  // (not the referrer's own order), and reversePointsForCancelledOrder
+  // (STORY-030) already writes its own `Reversed` row against that same
+  // orderId when the referred customer's own earned points are clawed
+  // back — reusing `Reversed` here would collide with @@unique([orderId,
+  // type]). Neither of these two count toward lifetimeAchievement (only
+  // Earned/Reversed do) — referring others doesn't advance the referrer's
+  // own tier.
+  ReferralBonus
+  ReferralBonusReversed
+  // Credited once at registration (orderId null) — see
+  // docs/architecture-decisions.md.
+  ReferralWelcomeBonus
 }
 
 // One row per user. Caches ONLY currentTierId — never a balance, which
@@ -1471,6 +1489,9 @@ model Order {
   couponRedemption   CouponRedemption?
   rewardTransactions RewardTransaction[]
   badgesAwarded      CustomerBadge[]
+  // STORY-031. The referral this order qualified (if any) — set on the
+  // attribution, not here; this is just the inverse relation.
+  referralAttributions ReferralAttribution[]
   createdAt          DateTime    @default(now())
   updatedAt          DateTime    @updatedAt
 
@@ -1529,4 +1550,76 @@ model OrderIntegrationEvent {
 
   @@index([orderId])
   @@index([status, createdAt])
+}
+
+// --- Referral Programme (STORY-031) ---
+// Every registered customer gets a shareable code (lazily generated on
+// first request, or eagerly at registration). Attribution before
+// registration lives ONLY in a signed cookie (src/lib/referral-token.ts)
+// — no DB row until a referred visitor actually registers, mirroring the
+// guest-cart pattern (no write on a mere click). ReferralAttribution is
+// then created exactly once per referred customer (unique on
+// referredUserId), never re-attributable afterward. Reward VALUES
+// (bonus amount, minimum qualifying order value, attribution window) are
+// admin-configurable (STORY-049 will own the authoring UI) — this story
+// builds the real ReferralSetting schema, seeded with working defaults,
+// same "build the real thing before the owning admin story exists"
+// pattern STORY-027/029/030 already established. See
+// docs/architecture-decisions.md for the full design.
+
+enum ReferralAttributionStatus {
+  Registered
+  Qualified
+  Excluded
+}
+
+model ReferralCode {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  code      String   @unique
+  createdAt DateTime @default(now())
+}
+
+// One row per referred customer (never per click) — created at
+// registration from whatever attribution cookie was present, if any.
+model ReferralAttribution {
+  id             String                    @id @default(cuid())
+  referrerUserId String
+  referrer       User                      @relation("Referrer", fields: [referrerUserId], references: [id], onDelete: Cascade)
+  // @unique: structurally impossible to attribute the same customer
+  // twice, from this or a later visit via a different referral link.
+  referredUserId String                    @unique
+  referred       User                      @relation("Referred", fields: [referredUserId], references: [id], onDelete: Cascade)
+  status         ReferralAttributionStatus @default(Registered)
+  // Free-text, extensible — e.g. "self_referral". Mirrors
+  // Badge.criteriaType's "plain string, not enum" precedent.
+  excludedReason String?
+  qualifyingOrderId String?
+  qualifyingOrder   Order?  @relation(fields: [qualifyingOrderId], references: [id], onDelete: SetNull)
+  qualifiedAt    DateTime?
+  createdAt      DateTime                  @default(now())
+  updatedAt      DateTime                  @updatedAt
+
+  @@index([referrerUserId])
+  @@index([status])
+}
+
+// Singleton row (id "global"). Unlike RewardSetting, this one is NOT left
+// absent by default — an unconfigured referral program does nothing at
+// all, so it ships seeded with real working defaults (prisma/seed-referrals.ts).
+model ReferralSetting {
+  id                         String   @id @default("global")
+  // Points credited to the REFERRER when a referral qualifies.
+  referrerBonusPoints        Int?
+  // Minimum order subtotal (any currency unit the storefront uses) a
+  // referred customer's order must reach to qualify. Null = any
+  // confirmed order qualifies.
+  minQualifyingOrderValue    Decimal? @db.Decimal(10, 2)
+  // Null = falls back to a 30-day default (referral.service.ts).
+  attributionWindowDays      Int?
+  // Optional signup bonus for the REFERRED customer, credited once at
+  // registration. Null = no welcome bonus (genuinely optional per the AC).
+  referredWelcomeBonusPoints Int?
+  updatedAt                  DateTime @updatedAt
 }

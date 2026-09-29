@@ -14,6 +14,7 @@ import { seedDelivery } from "./seed-delivery";
 import { seedDownloads } from "./seed-downloads";
 import { seedFoodAcademy } from "./seed-food-academy";
 import { seedRecipes } from "./seed-recipes";
+import { seedReferrals } from "./seed-referrals";
 import { seedRewards } from "./seed-rewards";
 
 async function main() {
@@ -325,6 +326,9 @@ async function main() {
   // Rewards / Loyalty Club tiers & badges (STORY-030).
   const rewardsSeed = await seedRewards();
 
+  // Referral Programme settings (STORY-031).
+  const referralsSeed = await seedReferrals();
+
   console.log("Seed complete:", {
     brand: brand.slug,
     categories: [spices.slug, giftSets.slug],
@@ -337,6 +341,7 @@ async function main() {
     downloads: downloadsSeed,
     delivery: deliverySeed,
     rewards: rewardsSeed,
+    referrals: referralsSeed,
   });
 }
 
