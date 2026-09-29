@@ -72,7 +72,9 @@ export function SupportTicketForm() {
         <Label htmlFor="ticket-category">Category</Label>
         <Select value={category} onValueChange={(value) => setCategory(value as SupportTicketInput["category"])}>
           <SelectTrigger id="ticket-category" aria-label="Category">
-            <SelectValue />
+            <SelectValue>
+              {(selected: SupportTicketInput["category"] | null) => CATEGORY_OPTIONS.find((option) => option.value === selected)?.label ?? selected}
+            </SelectValue>
           </SelectTrigger>
           <SelectContent>
             {CATEGORY_OPTIONS.map((option) => (
