@@ -74,7 +74,8 @@ test.describe("Coupons at checkout (STORY-029)", () => {
 
     await page.getByPlaceholder("Coupon code").fill(CODE);
     await page.getByRole("button", { name: "Apply" }).click();
-    await expect(page.getByRole("alert")).toContainText(/add.*more/i);
+    // Filtered by text: Next.js's own route-announcer also carries role="alert" (always present, normally empty).
+    await expect(page.getByRole("alert").filter({ hasText: /add.*more/i })).toContainText(/add.*more/i);
 
     // Cross the threshold.
     await page.request.post("/api/cart/items", { data: { productId: product.id, quantity: 1 } }); // now 2000
@@ -92,7 +93,8 @@ test.describe("Coupons at checkout (STORY-029)", () => {
     await page.getByRole("button", { name: "Pay now" }).click();
 
     await expect(page.getByRole("heading", { name: "Review & Place Order" })).toBeVisible();
-    await expect(page.getByText(`Coupon ${CODE}`)).toBeVisible();
+    // Exact "applied" text: the Review step also shows a discount-line <dt> with the same "Coupon <code>" substring.
+    await expect(page.getByText(`Coupon ${CODE} applied`)).toBeVisible();
     // Subtotal 2000 - discount 200 + delivery 350 = 2150.
     await expect(page.getByText("LKR 2150.00")).toBeVisible();
 
@@ -119,7 +121,8 @@ test.describe("Coupons at checkout (STORY-029)", () => {
     await page.getByRole("button", { name: "Apply" }).click();
     await expect(page.getByText(`Coupon ${CODE} applied`)).toBeVisible();
 
-    await page.getByRole("button", { name: "Remove" }).click();
+    // Exact match: the cart's own "Remove <product> from cart" button also contains "Remove" as a substring.
+    await page.getByRole("button", { name: "Remove", exact: true }).click();
     await expect(page.getByPlaceholder("Coupon code")).toBeVisible();
     await expect(page.getByText(`Coupon ${CODE} applied`)).not.toBeVisible();
   });

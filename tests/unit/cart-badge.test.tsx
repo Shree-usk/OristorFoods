@@ -18,13 +18,13 @@ function renderWithCart(cart: CartSummary) {
 
 describe("CartBadge", () => {
   it("shows no badge for an empty cart", async () => {
-    renderWithCart({ items: [], itemCount: 0, subtotal: 0, currency: "LKR", rewardPointsEarned: 0, discount: null, couponCode: null, couponInvalidReason: null });
+    renderWithCart({ items: [], itemCount: 0, subtotal: 0, currency: "LKR", rewardPointsEarned: 0, discount: null, couponCode: null, couponInvalidReason: null, pointsBalance: 0, pointsRedemption: null });
     expect(await screen.findByRole("link", { name: "Cart" })).toBeInTheDocument();
     expect(screen.queryByText("0")).not.toBeInTheDocument();
   });
 
   it("shows the item count once the cart loads", async () => {
-    renderWithCart({ items: [], itemCount: 3, subtotal: 100, currency: "LKR", rewardPointsEarned: 5, discount: null, couponCode: null, couponInvalidReason: null });
+    renderWithCart({ items: [], itemCount: 3, subtotal: 100, currency: "LKR", rewardPointsEarned: 5, discount: null, couponCode: null, couponInvalidReason: null, pointsBalance: 0, pointsRedemption: null });
     expect(await screen.findByText("3")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Cart, 3 items" })).toBeInTheDocument();
   });

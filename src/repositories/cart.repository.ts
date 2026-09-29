@@ -102,6 +102,11 @@ export function clearCartCoupon(cartId: string) {
   return prisma.cart.update({ where: { id: cartId }, data: { couponId: null } });
 }
 
+/** STORY-030. Points redemption is authenticated-only — see rewards.service.ts. */
+export function setCartPointsToRedeem(cartId: string, points: number) {
+  return prisma.cart.update({ where: { id: cartId }, data: { pointsToRedeem: points } });
+}
+
 /**
  * Deletes a guest cart only if its guestToken still matches, and reports
  * whether this call was the one that deleted it. Used to atomically

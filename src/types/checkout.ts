@@ -67,6 +67,9 @@ export interface OrderConfirmationSummary {
   /** STORY-029. "Coupon SAVE10" or "Weekend Sale" — null when nothing discounted the order. */
   discountLabel: string | null;
   couponCode: string | null;
+  /** STORY-030. 0 when no points were redeemed at this order's checkout. */
+  pointsRedeemed: number;
+  pointsRedemptionValue: number;
   tax: number;
   grandTotal: number;
   currency: string;

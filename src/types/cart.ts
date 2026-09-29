@@ -51,4 +51,13 @@ export interface CartSummary {
   couponCode: string | null;
   /** Why an applied coupon isn't (or is no longer) contributing — e.g. cart dropped below its minimum. Null when there's no issue. */
   couponInvalidReason: string | null;
+  /** STORY-030. The signed-in customer's current spendable reward-points balance — always 0 for a guest cart. */
+  pointsBalance: number;
+  /**
+   * Preview only, computed against subtotal-minus-discount (no delivery
+   * term — the true final amount is always recomputed at checkout,
+   * same precedent as the coupon FreeShipping cart-level preview). Null
+   * when nothing is set to redeem or redemption isn't currently valid.
+   */
+  pointsRedemption: { points: number; value: number } | null;
 }

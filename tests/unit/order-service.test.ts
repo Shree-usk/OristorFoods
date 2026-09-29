@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { prisma } from "@/lib/db";
 import { createProduct } from "@/repositories/product.repository";
 import type { CreateOrderInput } from "@/repositories/order.repository";
+import type { OrderIntegrationEventPayload } from "@/services/order-integration.service";
 import { registerOrderEventConsumer, resetOrderEventConsumerForTesting, mockErpSyncConsumer } from "@/services/order-integration.service";
 import {
   IllegalOrderTransitionError,
@@ -57,6 +58,9 @@ function orderInput(overrides: Partial<Omit<CreateOrderInput, "orderNumber">> & 
     couponCode: null,
     discountLabel: null,
     couponRedemption: null,
+    pointsRedeemed: 0,
+    pointsRedemptionValue: "0.00",
+    pointsRedemption: null,
     grandTotal: "150.00",
     rewardPointsEarned: 10,
     deliveryZoneName: "Western",
@@ -95,6 +99,7 @@ afterEach(async () => {
   await prisma.cartItem.deleteMany();
   await prisma.cart.deleteMany({ where: { guestToken: { startsWith: "ord-svc-token-" } } });
   await prisma.product.deleteMany({ where: { sku: { startsWith: "ORD-SVC-SKU-" } } });
+  await prisma.user.deleteMany({ where: { email: { startsWith: "ord-svc-user-" } } });
 });
 
 describe("generateOrderNumber", () => {
@@ -373,6 +378,28 @@ describe("order-integration events", () => {
 
     const events = await prisma.orderIntegrationEvent.findMany({ where: { orderId: order.id }, orderBy: { createdAt: "asc" } });
     expect(events.map((e) => e.eventType)).toEqual(["order.confirmed", "order.cancelled"]);
+  });
+
+  it("includes the order's userId in both events' payloads — STORY-030's rewards consumer keys off this", async () => {
+    const user = await prisma.user.create({ data: { email: `ord-svc-user-${sequence + 1}@test.com` } });
+    const payloads: OrderIntegrationEventPayload[] = [];
+    registerOrderEventConsumer({
+      async onOrderEvent(_eventId, _type, _orderId, payload) {
+        payloads.push(payload);
+      },
+    });
+
+    const product = await makeProduct(10);
+    const payment = await makePayment("150.00");
+    const cart = await makeCart();
+    const { order } = await createOrder(
+      orderInput({ userId: user.id, idempotencyKey: crypto.randomUUID(), paymentId: payment.id, cartId: cart.id, items: [lineFor(product, 2)] }),
+    );
+    await cancelOrder(order.orderNumber, user.id, null, undefined);
+
+    expect(payloads).toHaveLength(2);
+    expect(payloads[0].userId).toBe(user.id);
+    expect(payloads[1].userId).toBe(user.id);
   });
 
   it("proves the mock ERP-sync consumer flips erpSyncStatus end to end", async () => {

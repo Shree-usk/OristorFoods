@@ -17,6 +17,7 @@ import { resolveDiscountForCart } from "@/services/discount.service";
 import type { DiscountableLine } from "@/services/discount.service";
 import { createOrder, getOrderForConfirmation } from "@/services/order.service";
 import { createPaymentIntent, getPaymentByReference } from "@/services/payment.service";
+import { resolvePointsRedemptionForCart, validateRedemptionAtPlaceOrder } from "@/services/rewards.service";
 import { resolveDelivery } from "@/services/shipping.service";
 import type { DeliveryResolution, OrderConfirmationSummary, PaymentIntentResult, SavedAddress } from "@/types/checkout";
 import type { CheckoutAddressInput, PlaceOrderInput } from "@/validation/checkout.schema";
@@ -36,6 +37,7 @@ interface CheckoutCartState {
   cartId: string;
   guestToken: string | null;
   couponId: string | null;
+  pointsToRedeem: number;
   subtotal: number;
   currency: string;
   rewardPointsEarned: number;
@@ -78,6 +80,7 @@ export async function requireCheckoutableCart(userId: string | null, guestCookie
     cartId: cart.id,
     guestToken: cart.guestToken,
     couponId: cart.couponId,
+    pointsToRedeem: cart.pointsToRedeem ?? 0,
     subtotal: summary.subtotal,
     currency: summary.currency,
     rewardPointsEarned: summary.rewardPointsEarned,
@@ -112,10 +115,12 @@ export async function resolveDeliveryForCart(
 /**
  * Step 3: create a payment intent for the server-computed grand total
  * (live cart subtotal + freshly resolved delivery charge for the city,
- * less any applied coupon/promotion discount — STORY-029). Discount is
+ * less any applied coupon/promotion discount — STORY-029 — and any
+ * points redemption — STORY-030, layered as an additional reduction on
+ * top, never competing with the coupon/promotion result). Discount is
  * resolved independently of delivery (shipping.service.ts's own
  * free-shipping-threshold logic keeps using the pre-discount subtotal,
- * untouched by this story — see docs/architecture-decisions.md); a
+ * untouched by either story — see docs/architecture-decisions.md); a
  * FreeShipping-type discount only zeroes the charge actually billed here,
  * after shipping.service.ts has already computed it.
  */
@@ -129,7 +134,14 @@ export async function createIntentForCart(
   if (delivery.status !== "ok") throw new DeliveryUnavailableError(delivery.status);
   const discount = await resolveDiscountForCart({ couponId: cart.couponId }, toDiscountableLines(cart), cart.subtotal, delivery.charge, userId);
   const deliveryCharge = discount.freeShippingApplied ? 0 : delivery.charge;
-  const grandTotal = roundMoney(cart.subtotal - discount.totalAmount + deliveryCharge);
+  const payableBeforePoints = roundMoney(cart.subtotal - discount.totalAmount + deliveryCharge);
+  // STORY-030: points layer as an ADDITIONAL reduction on top of the
+  // coupon/promotion result — never part of that take-best competition,
+  // since spending your own balance isn't a marketing discount. Silent
+  // read (never throws) — mirrors resolveDiscountForCart's relationship
+  // to placeOrder's throwing re-validation below.
+  const points = await resolvePointsRedemptionForCart(userId, cart.pointsToRedeem, payableBeforePoints);
+  const grandTotal = roundMoney(payableBeforePoints - points.discountValue);
   return createPaymentIntent(grandTotal, cart.currency);
 }
 
@@ -184,7 +196,16 @@ export async function placeOrder(
   if (delivery.status !== "ok") throw new DeliveryUnavailableError(delivery.status);
   const discount = await resolveDiscountForCart({ couponId: cart.couponId }, discountableLines, cart.subtotal, delivery.charge, userId);
   const deliveryCharge = discount.freeShippingApplied ? 0 : delivery.charge;
-  const grandTotal = roundMoney(cart.subtotal - discount.totalAmount + deliveryCharge);
+  const payableBeforePoints = roundMoney(cart.subtotal - discount.totalAmount + deliveryCharge);
+
+  // Final, THROWING points re-validation — mirrors the coupon
+  // re-validation above (balance/cap enforced server-side even though
+  // the client already constrains input).
+  const points =
+    userId && cart.pointsToRedeem > 0
+      ? await validateRedemptionAtPlaceOrder(userId, cart.pointsToRedeem, payableBeforePoints)
+      : { pointsToRedeem: 0, discountValue: 0 };
+  const grandTotal = roundMoney(payableBeforePoints - points.discountValue);
 
   const payment = await getPaymentByReference(input.providerReference);
   if (!payment || payment.status !== "Succeeded") throw new PaymentNotConfirmedError();
@@ -197,6 +218,7 @@ export async function placeOrder(
   const couponContribution = discount.applied.find((entry) => entry.sourceType === "coupon");
   const couponRedemption = appliedCoupon && couponContribution ? { couponId: appliedCoupon.id, discountAmount: couponContribution.amount.toFixed(2) } : null;
   const discountLabel = discount.applied.length > 0 ? discount.applied.map((entry) => entry.label).join(", ") : null;
+  const pointsRedemption = points.pointsToRedeem > 0 && userId ? { userId, points: points.pointsToRedeem } : null;
 
   const { order, replayed: wasReplay } = await createOrder({
     idempotencyKey: input.idempotencyKey,
@@ -208,6 +230,9 @@ export async function placeOrder(
     discount: discount.totalAmount.toFixed(2),
     couponCode: discount.couponCode,
     discountLabel,
+    pointsRedeemed: points.pointsToRedeem,
+    pointsRedemptionValue: points.discountValue.toFixed(2),
+    pointsRedemption,
     grandTotal: grandTotal.toFixed(2),
     rewardPointsEarned: cart.rewardPointsEarned,
     paymentId: payment.id,
@@ -286,6 +311,8 @@ function toConfirmationSummary(order: Awaited<ReturnType<typeof getOrderForConfi
     discount: order.discount.toNumber(),
     discountLabel: order.discountLabel,
     couponCode: order.couponCode,
+    pointsRedeemed: order.pointsRedeemed,
+    pointsRedemptionValue: order.pointsRedemptionValue.toNumber(),
     tax: order.tax.toNumber(),
     grandTotal: order.grandTotal.toNumber(),
     currency: "LKR",

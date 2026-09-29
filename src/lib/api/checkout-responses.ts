@@ -5,6 +5,7 @@ import { CheckoutServiceError, DeliveryUnavailableError, type CheckoutErrorCode 
 import { CouponMinOrderValueNotMetError, CouponServiceError, type CouponErrorCode } from "@/services/coupon.errors";
 import { OrderServiceError, type OrderErrorCode } from "@/services/order.errors";
 import { PaymentServiceError, type PaymentErrorCode } from "@/services/payment.errors";
+import { RewardsInsufficientBalanceError, RewardsExceedsPerOrderCapError, RewardsServiceError, type RewardsErrorCode } from "@/services/rewards.errors";
 
 const checkoutStatusByCode: Record<CheckoutErrorCode, number> = {
   empty_cart: 409,
@@ -48,11 +49,20 @@ const couponStatusByCode: Record<CouponErrorCode, number> = {
   already_applied: 409,
 };
 
+const rewardsStatusByCode: Record<RewardsErrorCode, number> = {
+  not_authenticated: 401,
+  insufficient_balance: 409,
+  exceeds_per_order_cap: 409,
+  redemption_unavailable: 409,
+  invalid_amount: 400,
+};
+
 /**
- * placeOrder's final coupon re-validation (checkout.service.ts) throws a
- * CouponServiceError directly — this dispatcher handles it the same way
- * cart-responses.ts does for /api/cart/coupon, so the status-mapping
- * logic isn't duplicated between the two route families.
+ * placeOrder's final coupon/rewards re-validation (checkout.service.ts)
+ * throws a CouponServiceError/RewardsServiceError directly — this
+ * dispatcher handles both the same way cart-responses.ts does for
+ * /api/cart/coupon and /api/cart/points, so the status-mapping logic
+ * isn't duplicated between the two route families.
  */
 export function checkoutErrorResponse(error: unknown) {
   if (error instanceof DeliveryUnavailableError) {
@@ -69,6 +79,21 @@ export function checkoutErrorResponse(error: unknown) {
   }
   if (error instanceof CouponServiceError) {
     return NextResponse.json({ error: error.message, code: error.code }, { status: couponStatusByCode[error.code] });
+  }
+  if (error instanceof RewardsInsufficientBalanceError) {
+    return NextResponse.json(
+      { error: error.message, code: error.code, requested: error.requested, available: error.available },
+      { status: rewardsStatusByCode[error.code] },
+    );
+  }
+  if (error instanceof RewardsExceedsPerOrderCapError) {
+    return NextResponse.json(
+      { error: error.message, code: error.code, requested: error.requested, cap: error.cap },
+      { status: rewardsStatusByCode[error.code] },
+    );
+  }
+  if (error instanceof RewardsServiceError) {
+    return NextResponse.json({ error: error.message, code: error.code }, { status: rewardsStatusByCode[error.code] });
   }
   if (error instanceof CheckoutServiceError) {
     return NextResponse.json({ error: error.message, code: error.code }, { status: checkoutStatusByCode[error.code] });

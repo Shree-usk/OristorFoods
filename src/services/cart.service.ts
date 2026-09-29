@@ -3,6 +3,7 @@ import { signCartToken, verifyCartCookieValue } from "@/lib/cart-token";
 import { findProductById } from "@/repositories/product.repository";
 import * as cartRepository from "@/repositories/cart.repository";
 import type { CartItemWithProduct } from "@/repositories/cart.repository";
+import * as rewardsRepository from "@/repositories/rewards.repository";
 import {
   CartItemForbiddenError,
   CartItemNotFoundError,
@@ -12,6 +13,7 @@ import {
 import { resolveDiscountForCart } from "@/services/discount.service";
 import type { DiscountableLine } from "@/services/discount.service";
 import { resolvePrice } from "@/services/pricing.service";
+import { calculatePointsRedemption } from "@/services/rewards-calc";
 import type { CartLineItem, CartSummary } from "@/types/cart";
 
 export const CART_COOKIE_NAME = "oristor-cart-token";
@@ -98,6 +100,13 @@ function toLineItem(item: CartItemWithProduct, resolvedUnitPrice: number, curren
  * savings yet at a plain cart read, only once a real delivery charge
  * exists to waive; `couponCode` stays set regardless, so the UI can show
  * "applied — savings shown at checkout" rather than treating it as absent.
+ *
+ * STORY-030: reads rewards.repository.ts + rewards-calc.ts directly for
+ * the points-preview (never rewards.service.ts — that would create an
+ * import cycle, since rewards.service.ts itself calls into this file's
+ * getCartSummaryById for its own apply/remove-points mutations; see
+ * rewards.service.ts's header comment). A guest (userId null) always
+ * gets pointsBalance: 0, pointsRedemption: null — no ledger to read.
  */
 async function buildSummary(cart: Prisma.CartGetPayload<object>, items: CartItemWithProduct[], userId: string | null): Promise<CartSummary> {
   const lineItems: CartLineItem[] = [];
@@ -118,6 +127,23 @@ async function buildSummary(cart: Prisma.CartGetPayload<object>, items: CartItem
   const subtotal = Math.round(lineItems.reduce((sum, item) => sum + item.lineTotal, 0) * 100) / 100;
   const discount = await resolveDiscountForCart({ couponId: cart.couponId }, discountableLines, subtotal, 0, userId);
 
+  let pointsBalance = 0;
+  let pointsRedemption: { points: number; value: number } | null = null;
+  if (userId) {
+    const [setting, balances] = await Promise.all([rewardsRepository.getSetting(), rewardsRepository.getBalances(userId)]);
+    pointsBalance = balances.spendable;
+    if (cart.pointsToRedeem && cart.pointsToRedeem > 0) {
+      const calc = calculatePointsRedemption({
+        pointsRequested: cart.pointsToRedeem,
+        spendableBalance: balances.spendable,
+        pointsToCurrencyRate: setting?.pointsToCurrencyRate?.toNumber() ?? null,
+        maxRedeemablePointsPerOrder: setting?.maxRedeemablePointsPerOrder ?? null,
+        payableBeforePoints: Math.round((subtotal - discount.totalAmount) * 100) / 100,
+      });
+      if (calc.pointsToRedeem > 0) pointsRedemption = { points: calc.pointsToRedeem, value: calc.discountValue };
+    }
+  }
+
   return {
     items: lineItems,
     itemCount: lineItems.reduce((sum, item) => sum + item.quantity, 0),
@@ -128,6 +154,8 @@ async function buildSummary(cart: Prisma.CartGetPayload<object>, items: CartItem
       discount.applied.length > 0
         ? { amount: discount.totalAmount, applied: discount.applied, freeShippingApplied: discount.freeShippingApplied }
         : null,
+    pointsBalance,
+    pointsRedemption,
     couponCode: discount.couponCode,
     couponInvalidReason: discount.couponInvalidReason,
   };

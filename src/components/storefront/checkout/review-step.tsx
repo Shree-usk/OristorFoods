@@ -6,6 +6,7 @@ import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { CouponInput } from "@/components/storefront/cart/coupon-input";
+import { PointsRedemptionInput } from "@/components/storefront/checkout/points-redemption-input";
 import { ApiError } from "@/lib/api/api-error";
 import { placeOrder } from "@/lib/api/checkout-client";
 import { useCheckoutStore } from "@/lib/stores/checkout-store";
@@ -36,7 +37,8 @@ export function ReviewStep({ cart }: { cart: CartSummary }) {
 
   const discountAmount = cart.discount?.amount ?? 0;
   const deliveryCharge = cart.discount?.freeShippingApplied ? 0 : delivery.charge;
-  const grandTotal = Math.round((cart.subtotal - discountAmount + deliveryCharge) * 100) / 100;
+  const pointsRedemptionValue = cart.pointsRedemption?.value ?? 0;
+  const grandTotal = Math.round((cart.subtotal - discountAmount + deliveryCharge - pointsRedemptionValue) * 100) / 100;
 
   async function handlePlaceOrder() {
     if (!address || !intent) return;
@@ -112,8 +114,9 @@ export function ReviewStep({ cart }: { cart: CartSummary }) {
           <h3 id="review-totals-heading" className="text-h4 font-heading text-charcoal">
             Total
           </h3>
-          <div className="mt-3">
+          <div className="mt-3 flex flex-col gap-3">
             <CouponInput cart={cart} />
+            <PointsRedemptionInput cart={cart} />
           </div>
           <dl className="mt-3 flex flex-col gap-1 text-body text-charcoal">
             <div className="flex items-center justify-between">
@@ -132,6 +135,14 @@ export function ReviewStep({ cart }: { cart: CartSummary }) {
               <dt>Delivery</dt>
               <dd className="font-number">{deliveryCharge === 0 ? "Free" : `${cart.currency} ${deliveryCharge.toFixed(2)}`}</dd>
             </div>
+            {cart.pointsRedemption && (
+              <div className="flex items-center justify-between text-leaf-dark">
+                <dt>{cart.pointsRedemption.points} reward points</dt>
+                <dd className="font-number">
+                  −{cart.currency} {pointsRedemptionValue.toFixed(2)}
+                </dd>
+              </div>
+            )}
             <div className="flex items-center justify-between border-t border-input pt-2 font-semibold">
               <dt>Grand total</dt>
               <dd className="font-number">

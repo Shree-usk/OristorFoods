@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/db";
 import { createRedemption } from "@/repositories/coupon.repository";
+import { createRedeemedTransaction } from "@/repositories/rewards.repository";
 import { ConcurrentTransitionError, InsufficientStockError } from "@/services/order.errors";
 import type { OrderStatus, Prisma } from "@/generated/prisma/client";
 
@@ -33,6 +34,11 @@ export interface CreateOrderInput {
   discount: string;
   couponCode: string | null;
   discountLabel: string | null;
+  // STORY-030. Always written (0/"0.00" when nothing redeemed), same
+  // "explicit snapshot, never left to the schema default" reasoning as
+  // discount/couponCode/discountLabel above.
+  pointsRedeemed: number;
+  pointsRedemptionValue: string;
   grandTotal: string;
   rewardPointsEarned: number;
   paymentId: string;
@@ -50,6 +56,8 @@ export interface CreateOrderInput {
   cartId: string;
   /** Present only when a coupon (not just a promotion) contributed to the discount — promotions aren't redemption-tracked, only coupons are. */
   couponRedemption: { couponId: string; discountAmount: string } | null;
+  /** Present only when the customer redeemed points at this order's checkout. userId is required here (redemption is authenticated-only). */
+  pointsRedemption: { userId: string; points: number } | null;
 }
 
 /**
@@ -85,6 +93,8 @@ export function createOrderWithStockDecrement(input: CreateOrderInput) {
         discount: input.discount,
         couponCode: input.couponCode,
         discountLabel: input.discountLabel,
+        pointsRedeemed: input.pointsRedeemed,
+        pointsRedemptionValue: input.pointsRedemptionValue,
         grandTotal: input.grandTotal,
         rewardPointsEarned: input.rewardPointsEarned,
         paymentId: input.paymentId,
@@ -117,10 +127,11 @@ export function createOrderWithStockDecrement(input: CreateOrderInput) {
     });
 
     await tx.cartItem.deleteMany({ where: { cartId: input.cartId } });
-    // The cart's applied coupon is scoped to that checkout attempt —
-    // clear it alongside the items so the customer starts their next
-    // cart fresh, mirroring how items themselves are cleared.
-    await tx.cart.update({ where: { id: input.cartId }, data: { couponId: null } });
+    // The cart's applied coupon/points-redemption request are scoped to
+    // that checkout attempt — clear them alongside the items so the
+    // customer starts their next cart fresh, mirroring how items
+    // themselves are cleared.
+    await tx.cart.update({ where: { id: input.cartId }, data: { couponId: null, pointsToRedeem: 0 } });
 
     if (input.couponRedemption) {
       await createRedemption(tx, {
@@ -130,6 +141,14 @@ export function createOrderWithStockDecrement(input: CreateOrderInput) {
         orderId: order.id,
         discountAmount: input.couponRedemption.discountAmount,
       });
+    }
+
+    if (input.pointsRedemption) {
+      // Written inside this same transaction — a rollback (e.g.
+      // InsufficientStockError above) rolls back the points debit too,
+      // so a failed order can never leave points debited with nothing
+      // to show. See rewards.repository.ts::createRedeemedTransaction.
+      await createRedeemedTransaction(tx, { userId: input.pointsRedemption.userId, orderId: order.id, points: input.pointsRedemption.points });
     }
 
     return order;
@@ -149,6 +168,16 @@ export function findOrderByNumber(orderNumber: string) {
 
 export function findOrderById(orderId: string) {
   return prisma.order.findUnique({ where: { id: orderId }, include: { items: true } });
+}
+
+/**
+ * STORY-030. Counts ALL orders regardless of status (including
+ * later-cancelled ones) — badge milestone counting is a deliberately
+ * looser rule than the points ledger's strict clawback; see
+ * docs/architecture-decisions.md.
+ */
+export function countOrdersByUserId(userId: string) {
+  return prisma.order.count({ where: { userId } });
 }
 
 export async function listOrdersByUserId(userId: string, page: number, pageSize: number) {
