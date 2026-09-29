@@ -41,12 +41,9 @@ function isUniqueConstraintViolation(error: unknown): boolean {
 
 // --- order.confirmed / order.cancelled consumer (STORY-028's hook) ---
 //
-// IMPORTANT: registerOrderEventConsumer (order-integration.service.ts)
-// holds only ONE consumer slot at a time. This module becomes that slot
-// via instrumentation.ts. Future stories needing the same hook (STORY-031
-// referral payouts, a future notifications story) will collide with this
-// registration — turning the slot into a proper fan-out list is a real
-// fix but out of scope here; see docs/architecture-decisions.md.
+// registerOrderEventConsumer (order-integration.service.ts) fans out to
+// every registered consumer (STORY-031 fixed the single-slot design this
+// comment used to warn about) — this module is one of possibly several.
 
 export const rewardsConsumer: OrderEventConsumer = {
   async onOrderEvent(_eventId, type, orderId, payload) {

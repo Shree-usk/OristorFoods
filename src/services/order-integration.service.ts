@@ -30,38 +30,54 @@ export interface OrderEventConsumer {
 
 const loggingConsumer: OrderEventConsumer = {
   async onOrderEvent(eventId, type, orderId) {
-    console.info(`[order-integration] ${type} order=${orderId} event=${eventId} — no subscriber wired yet (STORY-032/030 not wired yet)`);
+    console.info(`[order-integration] ${type} order=${orderId} event=${eventId} — no subscriber wired yet`);
   },
 };
 
-const globalForOrderEvents = globalThis as unknown as { __oristorOrderEventConsumer?: { consumer: OrderEventConsumer } };
-const holder = (globalForOrderEvents.__oristorOrderEventConsumer ??= { consumer: loggingConsumer });
+// STORY-031. Was a single `{ consumer }` slot — STORY-030's rewardsConsumer
+// occupied it, and STORY-031's referralConsumer needs the same hook, so
+// this is now a fan-out list. `loggingConsumer` only runs when nothing
+// real has been registered yet (never alongside real consumers).
+const globalForOrderEvents = globalThis as unknown as { __oristorOrderEventConsumers?: { consumers: OrderEventConsumer[] } };
+const holder = (globalForOrderEvents.__oristorOrderEventConsumers ??= { consumers: [] });
 
-/** Swap-point for a real subscriber (registered once from instrumentation.ts) or a test's mock consumer. */
+/** Registers an additional subscriber (called once per real consumer from instrumentation.ts, or by a test). */
 export function registerOrderEventConsumer(consumer: OrderEventConsumer): void {
-  holder.consumer = consumer;
+  holder.consumers.push(consumer);
 }
 
-/** Test-only: restores the default logging consumer. */
+/** Test-only: clears every registered consumer, restoring the default logging fallback. */
 export function resetOrderEventConsumerForTesting(): void {
-  holder.consumer = loggingConsumer;
+  holder.consumers = [];
 }
 
 /**
- * Writes the outbox row, then best-effort invokes whatever consumer is
- * registered. A failing/absent consumer never throws back to the caller
- * — order.service.ts calls this AFTER its triggering transaction
- * commits, never from inside one, so a consumer failure can't roll back
- * an order change it merely observes.
+ * Writes the outbox row, then best-effort invokes every registered
+ * consumer independently — one consumer's failure never blocks another.
+ * The event is marked Processed only if every consumer succeeded; Failed
+ * (with the first error) otherwise. A failing/absent consumer never
+ * throws back to the caller — order.service.ts calls this AFTER its
+ * triggering transaction commits, never from inside one, so a consumer
+ * failure can't roll back an order change it merely observes.
  */
 export async function emitOrderEvent(type: OrderEventType, orderId: string, payload: OrderIntegrationEventPayload): Promise<void> {
   const event = await orderRepository.createIntegrationEvent(orderId, type, payload);
-  try {
-    await holder.consumer.onOrderEvent(event.id, type, orderId, payload);
+  const consumers = holder.consumers.length > 0 ? holder.consumers : [loggingConsumer];
+
+  let firstError: unknown = null;
+  for (const consumer of consumers) {
+    try {
+      await consumer.onOrderEvent(event.id, type, orderId, payload);
+    } catch (error) {
+      firstError ??= error;
+      console.error(`[order-integration] a consumer failed for event ${event.id}`, error);
+    }
+  }
+
+  if (firstError === null) {
     await orderRepository.markIntegrationEventProcessed(event.id);
-  } catch (error) {
-    await orderRepository.markIntegrationEventFailed(event.id, error instanceof Error ? error.message : String(error));
-    console.error(`[order-integration] consumer failed for event ${event.id}`, error);
+  } else {
+    await orderRepository.markIntegrationEventFailed(event.id, firstError instanceof Error ? firstError.message : String(firstError));
   }
 }
 

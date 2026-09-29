@@ -2623,3 +2623,162 @@ second order through the real checkout Review-step UI, confirm the
 discount, grand total, and post-order balance all land correctly.
 `tests/e2e/order-cancellation.spec.ts` gained one assertion that
 cancelling an order claws back its points and can demote a tier.
+
+## 2026-09-29 — STORY-031 Referral Programme
+
+**A hard blocker, resolved before any referral mechanics could be
+built: no customer registration flow existed anywhere in this
+codebase.** `src/lib/auth.ts` only ever *checked* an existing
+`passwordHash` via its Credentials provider — there was no
+`/api/auth/register` route, no sign-up page, no Zod schema for it, and
+every seeded demo user had `passwordHash: null` (uncreatable via login).
+Since this story's central AC — "a new customer registers while
+carrying a referral attribution" — is literally impossible to exercise
+without a registration flow, the user explicitly confirmed building a
+small, deliberately unpolished one now rather than deferring it:
+`POST /api/auth/register` (email+password, `bcrypt.hash` reusing the
+same `bcryptjs` dependency `auth.ts` already depends on, no email
+verification, no password reset) plus bare `/account/register` and
+`/account/login` pages (React Hook Form + Zod, mirroring
+`address-step.tsx`'s form pattern). The client signs the customer in via
+`next-auth/react`'s `signIn()` right after registration succeeds —
+session creation itself is untouched, still entirely NextAuth's
+Credentials flow. Full account management (profile editing, password
+reset, email verification) is explicitly not this story's job.
+
+**1. Attribution lives only in a signed cookie until registration — no
+DB row on a mere click**, mirroring the guest-cart pattern exactly
+(cheap, spam-proof, no write fires on every referral-link visit).
+`src/proxy.ts` (Next.js 16 renamed `middleware.ts` → `proxy.ts` in
+v16.0.0 — using the old name/export produces a deprecation warning and,
+per the framework's own migration notes, is on a path to removal) reads
+`?ref=<code>` on **every** entry page, not just the homepage, and signs
++ sets the cookie via `src/lib/referral-token.ts`. Unlike the guest-cart
+token (an opaque random value looked up in the DB), this cookie carries
+meaningful data directly — `{code, ts}` — so registration-time code can
+independently enforce the *admin-configured* attribution window without
+a DB round trip from inside the proxy. The signer deliberately uses the
+Web Crypto API (`crypto.subtle`) rather than `node:crypto` like
+`cart-token.ts`: Next.js 16 defaults Proxy to the Node.js runtime (a
+change from Edge-by-default in earlier versions, discovered mid-story
+via a genuine "Failed to open database" startup error traced to a
+corrupted Turbopack cache, not Prisma), and Web Crypto works correctly
+under either runtime — not coupled to whichever one happens to be the
+current default. A later `?ref=` visit overwrites the cookie (last-touch
+attribution); a plain visit with no query param leaves any existing
+cookie untouched. Whether the code actually resolves to a real, active
+customer is checked only at registration (a Node.js route) — an
+unknown/expired code silently produces no attribution, per the AC.
+
+**2. `ReferralAttribution` is created exactly once, at registration**,
+with a unique FK on `referredUserId` — structurally impossible to
+double-attribute the same customer later, satisfying the AC's "not
+re-attributable afterward" requirement by construction rather than by a
+runtime check. Status starts `Registered`, moves to `Qualified` when a
+qualifying order confirms, or `Excluded` (with a free-text
+`excludedReason`, mirroring `Badge.criteriaType`'s "extensible string,
+not enum" precedent) if the self-referral guard trips.
+
+**3. The referral bonus reuses STORY-030's existing idempotency
+mechanism instead of inventing a new one — and this required two new
+`RewardTransactionType` values, not one, to avoid a real collision.**
+`ReferralBonus` is written with `orderId` set to the *referred
+customer's* qualifying order (even though the transaction's `userId` is
+the *referrer* — nothing in the schema requires those to match).
+Because `@@unique([orderId, type])` is global, this makes "at most one
+referral bonus per qualifying order" true by construction. Reversing it
+on cancellation could not reuse the existing `Reversed` type: STORY-030's
+own `reversePointsForCancelledOrder` already writes a `type: "Reversed"`
+row against that *same* `orderId` (to claw back the referred customer's
+own order-earned points) — reusing `Reversed` for the referral-bonus
+reversal would collide on that unique constraint. Hence
+`ReferralBonusReversed` as its own type. A third new type,
+`ReferralWelcomeBonus`, covers the referred customer's optional signup
+bonus, credited once at registration (inside the same transaction that
+creates the `ReferralAttribution` row) — no separate idempotency guard
+needed since registration itself only happens once. None of the three
+new types count toward `lifetimeAchievement`/tier progression (only
+`Earned`/`Reversed` do, per STORY-030's existing `getBalances` — no code
+change was needed there, since the achievement sum already ignores any
+type it doesn't explicitly list): a deliberate choice to keep tier
+progression tied to a customer's own purchase behavior, not bonuses
+earned by referring others or a signup gift.
+
+**4. Qualification is checked on every `order.confirmed` for a still-
+`Registered` attribution, not hardcoded to "first order."** The AC's
+"e.g. first order... above a minimum value" is an example, not a
+mandate; the qualifying check (`referral.service.ts::handleQualifyingCheck`)
+compares the confirmed order's `subtotal` against
+`ReferralSetting.minQualifyingOrderValue` (null = any order qualifies)
+every time, until the attribution's own status guard (`!== "Registered"`)
+makes it a no-op — this status check is the *primary* idempotency
+guard; the `@@unique([orderId, type])`-driven P2002 catch alongside it
+is defense-in-depth against a genuine race, not the main mechanism.
+Cancelling the qualifying order reverses the bonus
+(`handleCancellationReversal`, subscribed to `order.cancelled` too) and
+reverts the attribution back to `Registered` — mirroring STORY-030's own
+clawback discipline; buy-then-cancel shouldn't pay out here either. The
+reversal reads the *original* credited amount back from the ledger
+(`rewardsRepository.findTransactionByOrderAndType`) rather than
+re-reading current settings, so a later admin config change can never
+alter the size of a reversal for a bonus already paid.
+
+**5. Payout is points-only for now.** `coupon.repository.ts` has no
+function to programmatically create a new `Coupon` row — confirmed
+during planning, and building one is real, separate scope. Mirrors
+STORY-030's own "no second earning mode without a concrete admin UI to
+configure it" precedent (see its decision 7): the AC's "points and/or a
+coupon, per admin configuration" is satisfied by the points path;
+coupon-type payout is left unbuilt, not silently implied to exist.
+
+**6. `ReferralSetting` is seeded with real working defaults — unlike
+`RewardSetting`, deliberately not left absent.** An unconfigured
+referral program pays out nothing at all, so `prisma/seed-referrals.ts`
+ships a `referrerBonusPoints: 100, attributionWindowDays: 30` row by
+default (minimum order value and the referred customer's welcome bonus
+stay null — genuinely optional per the AC's own "if any" wording). The
+admin CRUD for these values is STORY-049's.
+
+**7. Self-referral guard is exactly what the AC asks for "at minimum":
+same-email.** Since `User.email` is already unique-constrained, the
+only realistic way to exercise this is a referrer's own email matching
+the newly-registering account's email at the point of comparison (tested
+directly rather than via two real colliding rows, which the DB
+constraint itself would reject). Payment-method fingerprinting, which
+the AC also mentions as a possible signal, would need new infrastructure
+this story doesn't otherwise touch — out of scope, noted here rather
+than silently ignored.
+
+**8. `order-integration.service.ts`'s single-consumer slot became a
+fan-out list — the exact fix STORY-030's own docs flagged as the next
+story's problem.** `holder.consumer: OrderEventConsumer` (a plain
+overwrite) became `holder.consumers: OrderEventConsumer[]`;
+`registerOrderEventConsumer` now appends; `emitOrderEvent` loops every
+registered consumer independently try/caught (one consumer's failure
+never blocks another) and falls back to the logging consumer only when
+the array is empty (never alongside real consumers). The event is
+marked `Processed` only if every consumer succeeded, `Failed` with the
+first error otherwise. Neither `registerOrderEventConsumer`'s nor
+`resetOrderEventConsumerForTesting`'s signature changed, so no existing
+call site needed updating — `instrumentation.ts` simply gained one more
+registration call (`referralConsumer`, alongside STORY-030's
+`rewardsConsumer`).
+
+**Testing:** `referral-service.test.ts` — code generation and
+per-user uniqueness, valid/expired-window/unknown-code/self-referral
+attribution outcomes, qualifying-order payout issued exactly once
+(including a second qualifying order for the same referred customer
+never double-paying), the minimum-order-value gate, and — the test that
+most directly proves decision 3 — cancelling a qualifying order reverses
+the bonus without colliding with the referred customer's own points
+clawback on that same order, with both registered consumers
+(`rewardsConsumer` + `referralConsumer`) active simultaneously, matching
+production. `order-integration-fanout.test.ts` — every registered
+consumer invoked for the same event, one consumer's failure not blocking
+another (but still marking the event `Failed`), and the logging fallback
+when nothing is registered. `auth-register-routes.test.ts` and
+`referral-routes.test.ts` — the registration and read-endpoint
+auth/validation paths. `tests/e2e/referral-signup.spec.ts` — the full
+real-browser path: land via `?ref=<code>` → register → auto-sign-in →
+place a qualifying order → confirm the referrer's ledger balance
+increased by the configured bonus.
