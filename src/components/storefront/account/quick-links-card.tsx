@@ -9,7 +9,7 @@ const QUICK_LINKS = [
   { href: "/account/orders", label: "Order History", icon: Package },
   { href: "/account/rewards", label: "Rewards", icon: Gift },
   { href: "/account/referrals", label: "Referrals", icon: Users },
-  { href: "/support", label: "Support", icon: HelpCircle },
+  { href: "/account/support", label: "Support", icon: HelpCircle },
 ] as const;
 
 /**

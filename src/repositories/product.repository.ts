@@ -17,6 +17,21 @@ export function findProductById(id: string) {
   return prisma.product.findUnique({ where: { id } });
 }
 
+// STORY-036. Same include shape as cart.repository.ts's `withProduct` —
+// one primary-image thumbnail per product, batched by id for order-history
+// list/detail rendering and the reorder stock/status check, so both never
+// need a second query per line item.
+const withPrimaryImage = {
+  images: { orderBy: [{ isPrimary: "desc" }, { sortOrder: "asc" }], take: 1 },
+} satisfies Prisma.ProductInclude;
+
+export type ProductWithPrimaryImage = Prisma.ProductGetPayload<{ include: typeof withPrimaryImage }>;
+
+export function findProductsByIdsWithPrimaryImage(ids: string[]): Promise<ProductWithPrimaryImage[]> {
+  if (ids.length === 0) return Promise.resolve([]);
+  return prisma.product.findMany({ where: { id: { in: ids } }, include: withPrimaryImage });
+}
+
 export function findProductDetailBySlug(slug: string) {
   return prisma.product.findUnique({
     where: { slug },

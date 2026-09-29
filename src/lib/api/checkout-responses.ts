@@ -25,6 +25,8 @@ const orderStatusByCode: Record<OrderErrorCode, number> = {
   illegal_transition: 409,
   concurrent_transition: 409,
   cancellation_not_allowed: 409,
+  return_not_allowed: 409,
+  invalid_return_quantity: 400,
 };
 
 const paymentStatusByCode: Record<PaymentErrorCode, number> = {

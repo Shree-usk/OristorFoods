@@ -166,6 +166,20 @@ export function findOrderByNumber(orderNumber: string) {
   });
 }
 
+/**
+ * STORY-036. Additive — same include as findOrderByNumber plus `payment`,
+ * for the order-detail page's payment summary. A separate function rather
+ * than widening findOrderByNumber's own include, so STORY-028's existing
+ * callers (checkout.service.ts::getConfirmation) keep their exact return
+ * shape unchanged.
+ */
+export function findOrderByNumberWithPayment(orderNumber: string) {
+  return prisma.order.findUnique({
+    where: { orderNumber },
+    include: { items: true, statusHistory: { orderBy: { createdAt: "asc" } }, payment: true },
+  });
+}
+
 export function findOrderById(orderId: string) {
   return prisma.order.findUnique({ where: { id: orderId }, include: { items: true } });
 }
@@ -190,6 +204,39 @@ export async function listOrdersByUserId(userId: string, page: number, pageSize:
       include: { items: true },
     }),
     prisma.order.count({ where: { userId } }),
+  ]);
+  return { orders, total };
+}
+
+export interface OrderListFilters {
+  status?: OrderStatus;
+  dateFrom?: Date;
+  dateTo?: Date;
+}
+
+/**
+ * STORY-036. Additive sibling of listOrdersByUserId with optional
+ * status/date-range filters for the order-history page — kept separate so
+ * STORY-028's own unfiltered callers (customer-dashboard.service.ts's
+ * "recent orders" widget) are unaffected.
+ */
+export async function listOrdersByUserIdFiltered(userId: string, page: number, pageSize: number, filters: OrderListFilters) {
+  const where: Prisma.OrderWhereInput = {
+    userId,
+    ...(filters.status ? { status: filters.status } : {}),
+    ...(filters.dateFrom || filters.dateTo
+      ? { createdAt: { ...(filters.dateFrom ? { gte: filters.dateFrom } : {}), ...(filters.dateTo ? { lte: filters.dateTo } : {}) } }
+      : {}),
+  };
+  const [orders, total] = await Promise.all([
+    prisma.order.findMany({
+      where,
+      orderBy: { createdAt: "desc" },
+      skip: (page - 1) * pageSize,
+      take: pageSize,
+      include: { items: true },
+    }),
+    prisma.order.count({ where }),
   ]);
   return { orders, total };
 }

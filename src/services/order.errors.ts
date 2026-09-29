@@ -5,7 +5,9 @@ export type OrderErrorCode =
   | "forbidden"
   | "illegal_transition"
   | "concurrent_transition"
-  | "cancellation_not_allowed";
+  | "cancellation_not_allowed"
+  | "return_not_allowed"
+  | "invalid_return_quantity";
 
 export class OrderServiceError extends Error {
   constructor(
@@ -65,5 +67,19 @@ export class ConcurrentTransitionError extends OrderServiceError {
 export class OrderCancellationNotAllowedError extends OrderServiceError {
   constructor(public readonly currentStatus: string) {
     super("cancellation_not_allowed", `An order that is "${currentStatus}" can no longer be cancelled.`);
+  }
+}
+
+/** STORY-036. Only a Delivered order can have a return requested. */
+export class OrderReturnNotAllowedError extends OrderServiceError {
+  constructor(public readonly currentStatus: string) {
+    super("return_not_allowed", `An order that is "${currentStatus}" cannot be returned.`);
+  }
+}
+
+/** STORY-036. A requested return quantity exceeds what was actually ordered on that line. */
+export class InvalidReturnQuantityError extends OrderServiceError {
+  constructor() {
+    super("invalid_return_quantity", "A requested return quantity exceeds the quantity originally ordered.");
   }
 }
