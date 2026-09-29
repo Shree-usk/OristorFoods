@@ -21,10 +21,11 @@ afterEach(async () => {
   await prisma.user.deleteMany({ where: { email: { startsWith: EMAIL_PREFIX } } });
 });
 
-function registerRequest(body: unknown, cookieValue?: string) {
+// STORY-033 added a required `marketingOptIn` field to the register payload — defaulted here so existing call sites don't need to repeat it.
+function registerRequest(body: Record<string, unknown>, cookieValue?: string) {
   const headers = new Headers({ "content-type": "application/json" });
   if (cookieValue) headers.set("cookie", `${REFERRAL_COOKIE_NAME}=${cookieValue}`);
-  return new Request("http://localhost/api/auth/register", { method: "POST", headers, body: JSON.stringify(body) });
+  return new Request("http://localhost/api/auth/register", { method: "POST", headers, body: JSON.stringify({ marketingOptIn: false, ...body }) });
 }
 
 describe("POST /api/auth/register", () => {

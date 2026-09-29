@@ -2959,3 +2959,150 @@ each gained one focused test proving a notification lands on a genuine
 credit/qualification and never a second time for a replay.
 `notification-routes.test.ts` — the preferences GET/POST auth/validation/
 merge-semantics paths.
+
+## 2026-09-29 — STORY-033 Customer Dashboard (auth, session guard, dashboard)
+
+**Scope.** Registration/login (`/api/auth/register`, `src/lib/auth.ts`)
+already existed as STORY-031's prerequisite, deliberately bare ("no email
+verification, no password reset" per that route's own doc comment). This
+story adds the missing pieces: forgot/reset-password, a durable
+`/account/*` auth guard (nothing existed before this — the wishlist page
+had no guard at all), and the `/account` dashboard landing page. Order,
+reward, and wishlist business logic are NOT owned here —
+`customer-dashboard.service.ts` only composes `order.service.ts`'s
+`listOrdersForUser`, `rewards.service.ts`'s `getBalanceForUser`, and
+`wishlist.service.ts`'s `getWishlist` into summary shapes.
+
+**Session invalidation on password reset, under a stateless (Credentials)
+JWT strategy.** The AC requires old sessions to stop working after a
+reset. Auth.js v5's Credentials provider forces `session.strategy: "jwt"`
+(no DB session row to delete), so "invalidate" has to mean "the JWT no
+longer verifies." `User.passwordChangedAt` is the mechanism: its
+millisecond timestamp ("password version") is embedded in the JWT at
+sign-in (`token.pwv`, via the `user` object `authorize()`/
+`auth.service.ts::verifyCredentials` returns) and re-checked against the
+DB on every subsequent token refresh (`src/lib/auth.ts`'s `jwt` callback,
+the `else` branch where `user` is absent). A mismatch throws inside the
+callback — confirmed by reading `node_modules/@auth/core/lib/actions/session.js`:
+the `session()` action's `try/catch` around `callbacks.jwt` treats a
+thrown error as "clear the session cookie, return a null body," which is
+exactly how `auth()` (server) and `useSession()` (client) both observe an
+invalidated session going forward. `auth.service.ts::resetPassword` bumps
+`passwordChangedAt` via `user.repository.ts::updatePassword`, which is
+what actually triggers the mismatch on the customer's other tabs/devices.
+`tests/e2e/helpers/auth.ts`'s `signInAs` (used by every prior story's e2e
+suite) was updated to embed a matching `pwv` claim — reading the user's
+real `passwordChangedAt` at cookie-mint time — so this change doesn't
+silently break every existing e2e test that signs in via a hand-crafted
+cookie.
+
+**Reset tokens reuse Auth.js's `VerificationToken` model, hashed at
+rest.** No new table — `VerificationToken` (`identifier`/`token`/
+`expires`) has existed unused since STORY-001's Prisma adapter setup and
+is exactly the shape a reset token needs. `password-reset.repository.ts`
+stores a SHA-256 hash of the mailed token (never the raw value) in the
+`token` column, matching how `passwordHash` itself is never stored raw —
+a DB read alone can never yield a usable token. `requestPasswordReset`
+always resolves the same way (200, generic body) whether or not the
+email is registered, and deletes any of the identifier's outstanding
+tokens before issuing a new one and again on a successful reset, so an
+old, unused link can never be replayed after a newer request or a
+completed reset.
+
+**Reset emails use STORY-032's real notification service, not a stub.**
+The story text allowed stubbing this ("per STORY-001's auth scaffold"),
+but STORY-032 shipped a working, provider-agnostic email adapter in the
+interim, so stubbing would be regressive. `sendNotification` itself
+doesn't fit, though: it's gated by `NotificationPreference.emailOptIn`
+(wrong for a security-critical, always-must-send email) and keys its
+duplicate-send guard on a `triggeringEventId` that must be an
+Order/RewardTransaction/ReferralAttribution id — a password reset has
+none of those. `notification.service.ts::sendTransactionalEmail` is a
+new, narrow export that reuses the file's own cached
+`getProviderForChannel("Email")` (so it doesn't spin up a second Ethereal
+sandbox account) while bypassing the opt-in/template/log machinery
+entirely — each reset token is already single-use and unique, so no
+separate dedup layer is needed.
+
+**The auth guard lives in `src/proxy.ts`, not a shared `/account/layout.tsx`
+alone — Next 16 renamed `middleware.ts` to `proxy.ts`, and only one is
+allowed per project.** STORY-031's referral-attribution proxy already
+occupied that file; this story's guard was added alongside it rather than
+creating a second file, which Next 16 doesn't support
+(`node_modules/next/dist/docs/01-app/01-getting-started/16-proxy.md`
+confirms the rename and the one-file limit). The guard only runs `auth()`
+for `/account/*` paths (excluding the public auth pages and `/account/
+wishlist`, which STORY-013 deliberately supports for guests too via a
+client-side Zustand store) — it does not touch every page the way the
+referral logic does, preserving that code's original "this proxy never
+touches the DB" property for the ~everything-else case. Per Next's own
+authentication guide's "optimistic vs. secure checks" distinction
+(`.../02-guides/authentication.md`), this is the optimistic layer:
+correct callbackUrl on the common case (a direct/bookmarked hit on a
+protected page while logged out), cheap because it usually runs with no
+session cookie at all (the `session()` action short-circuits before
+`callbacks.jwt` even runs). `(storefront)/account/(dashboard)/layout.tsx`
+is the secure layer — same `auth()` call, redirects without a
+callbackUrl — needed because the same guide warns a shared layout
+doesn't re-render on sibling client-side navigation, so it can't be the
+*only* check; each guarded page fetching its own data via `auth()` (as
+the dashboard page does) is what actually closes that gap on navigation
+within the section.
+
+**Two sibling route groups under `/account/`, not one shared layout.**
+`(public)/` holds `login`, `register`, `forgot-password`, `reset-password`
+(login/register moved here unchanged — same URLs, `git mv` only);
+`(dashboard)/` holds the guard `layout.tsx` and the new dashboard
+`page.tsx`. Route groups are URL-transparent and Next explicitly
+documents "opting specific route segments into sharing a layout, while
+keeping others out" as a supported use case
+(`node_modules/next/dist/docs/.../route-groups.md`) — a single
+`account/layout.tsx` would have wrapped the public auth pages too,
+redirect-looping an unauthenticated visitor on `/account/login` itself.
+`account/wishlist/page.tsx` stays a direct sibling of both groups,
+untouched — it's intentionally usable while logged out.
+
+**Dashboard widgets stream independently, per the AC.** Each widget
+(`RecentOrdersCard`, `RewardsSummaryCard`, `SavedItemsCard`) is its own
+`async` Server Component awaited inside its own `<Suspense>` boundary on
+the dashboard page — not one aggregating function `Promise.all`'d and
+awaited once, which would tie every widget's paint to the slowest one.
+`QuickLinksCard` has no data fetch, so it renders immediately without a
+boundary of its own.
+
+**No new migration file — `db push` only, matching every story since
+STORY-025.** Tried to produce one per the documented STORY-001 recovery
+procedure (wipe `%LOCALAPPDATA%\prisma-dev-nodejs\Data` entirely, restart
+`prisma dev`, pre-seed `_prisma_migrations`, run `migrate dev` as that
+server session's first call) — it still fails applying the very first
+migration (`P3018`/`42710`, `type "ContentStatus" already exists`) on a
+database that was, moments earlier, provably empty. `git log -- prisma/
+migrations` confirms no migration has been committed since STORY-025's
+`20260928050000_add_checkout_orders`, despite STORY-026 through STORY-032
+each adding real schema (payments, shipping, orders, coupons, rewards,
+referrals, notifications) — this is an ongoing, unresolved instance of
+the same upstream PGlite bug, not something specific to this story's
+change, and every story in that range has evidently already been living
+with it via `db push` alone. `schema.prisma`'s `passwordChangedAt`/
+`marketingOptIn` additions are applied and verified via `db push`; a real
+migration for the accumulated STORY-026→033 drift is a separate cleanup,
+out of this story's scope.
+
+**Rate limiting is in-memory, single-process — no Redis/queue exists in
+this stack yet.** `src/lib/rate-limit.ts`'s fixed-window counter is
+applied to login attempts (keyed by email, in
+`auth.service.ts::verifyCredentials`) and reset requests (keyed by
+email, in `requestPasswordReset`). Documented as a known limitation:
+this resets on every process restart and won't coordinate across
+instances — fine for the current single-instance deployment, revisit
+with a shared store before running more than one.
+
+**Testing:** `auth-service.test.ts` — registration (including the
+duplicate-email rejection), credential verification (wrong password,
+unknown email, and rate-limiting all return the same `null`, so the
+route/provider can't leak which one occurred), and the full
+request-reset → reset → old-token-rejected → new-session-required
+lifecycle. `tests/e2e/account-dashboard.spec.ts` — register → land on
+`/account` → see the dashboard's empty states → sign out → confirm
+`/account` redirects to `/account/login?callbackUrl=%2Faccount` while
+signed out.

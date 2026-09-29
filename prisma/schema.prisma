@@ -27,6 +27,11 @@ model User {
   emailVerified     DateTime?
   image             String?
   passwordHash      String?
+  // STORY-033. `passwordChangedAt` doubles as the JWT session's
+  // invalidation stamp (see src/lib/auth.ts) — a reset bumps it so
+  // sessions issued before the reset stop verifying.
+  passwordChangedAt DateTime?
+  marketingOptIn    Boolean    @default(false)
   accounts          Account[]
   sessions          Session[]
   wishlist          Wishlist?
