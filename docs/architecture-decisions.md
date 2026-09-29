@@ -3106,3 +3106,163 @@ lifecycle. `tests/e2e/account-dashboard.spec.ts` — register → land on
 `/account` → see the dashboard's empty states → sign out → confirm
 `/account` redirects to `/account/login?callbackUrl=%2Faccount` while
 signed out.
+
+## 2026-09-29 — STORY-034 Profile, Addresses & Account Settings
+
+**Scope.** `/account/profile`, `/account/addresses`, `/account/security`,
+`/account/notifications` nested under STORY-033's guarded `(dashboard)`
+route group, plus `/account/profile/verify-email` in the public group
+(email-change confirmation, opened possibly unauthenticated). Extends,
+rather than recreates, two models that already existed in minimal form:
+`Address` (STORY-025, checkout-only) and `NotificationPreference`
+(STORY-032, a single blanket `emailOptIn`) — both confirmed via reading
+the actual schema before writing a line of code, since the story's own
+task list described them as if new.
+
+**`Address`: default-billing/default-shipping split, not a second
+"isDefault" column.** The pre-existing model had one `isDefault` boolean.
+STORY-034 needs independent defaults per the AC ("customer can
+independently set a default billing address and a default shipping
+address"), so `isDefault` became `isDefaultBilling` + `isDefaultShipping`
+(migration; `db push`, no new migration file — see below). `country`,
+`label` (`AddressLabel` enum), `type` (`AddressType` enum),
+`companyName`, `taxId` are new columns. `address.repository.ts` is now
+pure CRUD (list/count/create/update/delete/clearDefaultBilling/
+clearDefaultShipping/setDefaultBilling/setDefaultShipping); the
+default-swap invariant (exactly one default of each kind, atomically) and
+the 10-address cap live in the new `address.service.ts`, inside a
+`prisma.$transaction`. `checkout.service.ts` (STORY-025) no longer calls
+the repository directly — it calls `address.service.ts`'s
+`saveAddressFromCheckout`/`listAddresses` wrappers, so the business rules
+aren't duplicated between checkout's save-during-checkout flow and the
+new account address book. A checkout customer who already has 10 saved
+addresses can still place the order — the save is best-effort, catching
+`AddressLimitExceededError` specifically (mirrors this codebase's other
+"never block the primary action on a saved-address side effect"
+precedent).
+
+**The AC's "deleting an address referenced by a pending/in-progress order
+is blocked" guard is not implemented — confirmed inapplicable, not
+skipped.** `Order` stores an immutable, flattened `ship*` snapshot taken
+at placement time (`shipRecipientName`, `shipLine1`, etc.) — there is no
+foreign key from `Order` to `Address` at all (confirmed by reading
+`prisma/schema.prisma` and `order.repository.ts` before deciding this).
+Deleting a saved address can never affect an existing order's record,
+because nothing references it. Implementing a guard against a
+relationship that doesn't exist would be dead code.
+
+**"Promotional emails" is `User.marketingOptIn`, not a new
+`NotificationPreference` field.** STORY-033's registration checkbox
+already captures this exact concept. The AC's toggle list (order-update
+emails / promotional emails / SMS / WhatsApp / reward-referral updates)
+maps to: `NotificationPreference.emailOptIn` (kept its original STORY-032
+name — it already means "order-lifecycle email," the only category this
+app sent before this story; renaming it would be a needless migration),
+a new `NotificationPreference.rewardUpdatesOptIn`, `smsOptIn`/
+`whatsappOptIn` (unchanged), and `User.marketingOptIn` (reused). The
+settings page's single form PATCHes both models in one request;
+`/api/notifications/preferences`'s route handler is what splits
+`marketingOptIn` out to `profile.service.ts::updateProfile` from the rest
+of the payload, which goes to `notification.service.ts`'s existing
+preference upsert. `notification.service.ts::resolveChannelTargets` now
+picks `emailOptIn` vs `rewardUpdatesOptIn` by the `templateKey` prefix
+(`"order."` vs `"rewards."`/`"referral."`) — the only signal available,
+since `sendNotification`'s callers (the order-event consumer,
+`rewards.service.ts`, `referral.service.ts`) don't otherwise pass a
+category.
+
+**Profile photo is a URL string — no upload infrastructure exists
+anywhere in this app, confirmed by searching the whole codebase.** Every
+other image field (`ProductImage.url`, `BlogPost.heroImageUrl`, etc.) is
+already a plain URL entered directly; `ReviewImage`'s own doc comment
+calls this out as a deliberately deferred STORY (a storage provider isn't
+chosen yet — `docs/blueprint.md` Section 10). Rather than guess a
+provider, the profile photo field reuses the pattern: a URL, stored in
+`User.image` (the Auth.js-standard field, already flowing into the
+session via `auth.service.ts`'s `AuthenticatedUser.image` since
+STORY-033 — no new column). Real upload is future scope once a provider
+is chosen. Confirmed with the user before implementing (not guessed).
+
+**Session revocation is global-only ("this session too"), not
+per-device — confirmed with the user before implementing.** Sessions are
+JWT-only with no per-session identifier or DB-backed session table
+(STORY-033's `passwordChangedAt`/`pwv` mechanism invalidates *every*
+session at once, including the one making the request — there's no way
+to distinguish "this device" from "other devices" without adding a
+session-id claim and a new sessions table, which is real new
+architecture, not an extension). Both "change password" AND "log out of
+all devices" reuse that same mechanism:
+`security.service.ts::changePassword` calls
+`user.repository.ts::updatePassword` (already bumps `passwordChangedAt`);
+`logOutAllDevices` calls a new `bumpSessionVersion` that does the same
+bump without touching the hash. Both the change-password form and the
+logout-all-devices button sign the browser out and redirect to login
+immediately after, since the current session is invalidated too.
+
+**Email-change verification reuses password-reset.repository.ts's
+`VerificationToken` wrapper, with a prefixed identifier to avoid
+cross-flow collisions.** `VerificationToken.identifier` was, until now,
+always a user's email (password reset). Email-change tokens use
+`email-verify:${userId}` as the identifier instead of the email itself —
+first, because the email being verified is the *new*, not-yet-active one
+(the old email is still what the user might reset their password with
+concurrently), and second, because `deleteAllForIdentifier` is
+scoped to one identifier: a same-user password-reset request and an
+email-change request in flight at the same time would otherwise delete
+each other's token the moment either flow's `create()` call runs.
+`User.pendingEmail` holds the new address from request time; `email`
+itself, and `emailVerified`, only change once `confirmEmailChange`
+verifies the mailed link — matching the AC ("changing email requires
+re-verification before the new email becomes active"). Confirmed via
+`tests/unit/profile-service.test.ts`'s "a concurrent password-reset
+request... does not invalidate the email-verify token" case.
+
+**Account deactivation is a request, not an enforced state.** `POST
+/api/account/deactivate` flips `User.status` to `DeactivationRequested`
+and records the reason — it does not sign the customer out, block future
+logins, or delete anything. The AC asks for a request flow ("soft-delete
+flag on User, not a hard delete"); actually enforcing deactivation
+(blocking login, hiding the account) reads as a staff/admin action this
+story doesn't own — the `Deactivated` status value exists in the
+`AccountStatus` enum for that future use, unused by any code today.
+
+**Toasts use `@base-ui/react`'s own `Toast` module, not a new
+dependency.** The AC wants a success toast with no full-page reload on
+every settings save. `@base-ui/react` (already a dependency — every other
+`src/components/ui/*.tsx` wraps it) ships a complete, unstyled Toast
+primitive (`Provider`/`Portal`/`Viewport`/`Root`/`Title`/`Description`/
+`Close`, plus a framework-level `createToastManager()` singleton),
+confirmed by checking `node_modules/@base-ui/react/toast/` before adding
+anything — no need for `sonner` or another library. `src/lib/toast.ts`
+exports the one global manager; `src/components/ui/toast.tsx` wraps the
+primitive parts in this codebase's usual `data-slot` + `cn()` style;
+`<Toaster />` is mounted once in `src/app/providers.tsx`. Any client
+component calls `toastManager.add({ title, description })` directly —
+no hook or context needed at the call site.
+
+**No new migration file — same `db push`-only situation as STORY-033.**
+Re-attempted the documented recovery (wipe
+`%LOCALAPPDATA%\prisma-dev-nodejs\Data` entirely, restart `prisma dev`,
+pre-seed `_prisma_migrations`, run `migrate dev` as that session's first
+call) — it still fails applying the very first migration (`P3018`/
+`42710`) against a database that was, moments earlier, provably empty.
+Unresolved upstream PGlite bug, not specific to this story's schema
+change. `schema.prisma`'s STORY-034 additions are applied and verified
+via `db push`.
+
+**Testing:** `address-service.test.ts` — first-address-becomes-both-
+defaults, a second address does not auto-default, the default-billing/
+default-shipping swap (atomically un-defaults the previous holder,
+independently per kind), the 10-address cap, ownership checks on
+update/delete/set-default. `profile-service.test.ts` — profile field
+updates, the full email-change lifecycle (request → pendingEmail set,
+email untouched → confirm → email swapped, pendingEmail cleared →
+duplicate-email rejection → invalid-token rejection → the
+concurrent-password-reset non-collision case). `security-service.test.ts`
+— password change invalidates the old password and bumps the session
+version; an incorrect current password changes nothing;
+`logOutAllDevices` bumps the session version without touching the hash.
+`tests/e2e/account-settings.spec.ts` — add/edit/set-default/delete an
+address through the real UI, and a full change-password →
+forced-sign-out → old-password-rejected → new-password-accepted round
+trip.

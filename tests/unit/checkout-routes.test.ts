@@ -97,7 +97,7 @@ describe("GET /api/checkout/addresses", () => {
   it("lists the caller's saved addresses", async () => {
     const user = await makeUser();
     mockAuth.mockResolvedValue(sessionFor(user.id));
-    await prisma.address.create({ data: { userId: user.id, recipientName: "Me", phone: "+94 77 000 0000", line1: "1 Home Rd", city: "Colombo", isDefault: true } });
+    await prisma.address.create({ data: { userId: user.id, recipientName: "Me", phone: "+94 77 000 0000", line1: "1 Home Rd", city: "Colombo", isDefaultBilling: true, isDefaultShipping: true } });
 
     const response = await getAddresses();
     const body = (await response.json()) as { addresses: Array<{ city: string }> };

@@ -1,7 +1,8 @@
 import { verifyCartCookieValue } from "@/lib/cart-token";
-import * as addressRepository from "@/repositories/address.repository";
 import * as couponRepository from "@/repositories/coupon.repository";
 import { findOrderByIdempotencyKey } from "@/repositories/order.repository";
+import { AddressLimitExceededError } from "@/services/address.errors";
+import { listAddresses, saveAddressFromCheckout } from "@/services/address.service";
 import { getCartForCheckout } from "@/services/cart.service";
 import {
   CartInvalidError,
@@ -260,14 +261,21 @@ export async function placeOrder(
   });
 
   if (userId && input.save) {
-    await addressRepository.createAddress(userId, input.address);
+    // Best-effort, same as this codebase's other checkout-adjacent side
+    // effects — a customer who already has 10 saved addresses (STORY-034's
+    // cap) can still complete the order; the address just isn't saved.
+    try {
+      await saveAddressFromCheckout(userId, input.address);
+    } catch (error) {
+      if (!(error instanceof AddressLimitExceededError)) throw error;
+    }
   }
 
   return { orderNumber: order.orderNumber, replayed: wasReplay };
 }
 
 export async function listSavedAddresses(userId: string): Promise<SavedAddress[]> {
-  const rows = await addressRepository.listAddressesByUserId(userId);
+  const rows = await listAddresses(userId);
   return rows.map((row) => ({
     id: row.id,
     recipientName: row.recipientName,
@@ -277,12 +285,12 @@ export async function listSavedAddresses(userId: string): Promise<SavedAddress[]
     city: row.city,
     district: row.district ?? undefined,
     postalCode: row.postalCode ?? undefined,
-    isDefault: row.isDefault,
+    isDefault: row.isDefaultShipping,
   }));
 }
 
 export async function saveAddress(userId: string, address: CheckoutAddressInput): Promise<SavedAddress> {
-  const row = await addressRepository.createAddress(userId, address);
+  const row = await saveAddressFromCheckout(userId, address);
   return {
     id: row.id,
     recipientName: row.recipientName,
@@ -292,7 +300,7 @@ export async function saveAddress(userId: string, address: CheckoutAddressInput)
     city: row.city,
     district: row.district ?? undefined,
     postalCode: row.postalCode ?? undefined,
-    isDefault: row.isDefault,
+    isDefault: row.isDefaultShipping,
   };
 }
 

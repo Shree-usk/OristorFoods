@@ -56,8 +56,25 @@ model User {
   // STORY-032.
   notificationPreference NotificationPreference?
   notificationLogs       NotificationLog[]
+  // STORY-034.
+  phone                   String?
+  dateOfBirth             DateTime?
+  // Set at email-change request time, swapped into `email` only once the
+  // mailed verification link is confirmed (auth.service.ts-style token
+  // flow) — `email` itself never changes until then. See
+  // docs/architecture-decisions.md.
+  pendingEmail            String?
+  status                  AccountStatus @default(Active)
+  deactivationReason      String?
+  deactivationRequestedAt DateTime?
   createdAt         DateTime   @default(now())
   updatedAt         DateTime   @updatedAt
+}
+
+enum AccountStatus {
+  Active
+  DeactivationRequested
+  Deactivated
 }
 
 model Account {
@@ -1336,25 +1353,52 @@ model RewardSetting {
 // Thin slices of STORY-026 (Payment), STORY-027 (Shipping), and STORY-028
 // (Orders) live here too — see docs/superpowers/specs/2026-09-28-checkout-design.md.
 
-// Saved addresses exist only for authenticated users (managed fully by
-// STORY-034 later). Guest addresses are never stored here — only as the
-// immutable ship* snapshot on Order.
+// Saved addresses exist only for authenticated users. STORY-025 (checkout)
+// created this model minimally; STORY-034 owns full management (add/edit/
+// delete, independent default-billing/default-shipping, business/
+// distributor fields). Guest addresses are never stored here — only as the
+// immutable ship* snapshot on Order (no FK from Order to Address at all —
+// see docs/architecture-decisions.md's STORY-034 entry for why the AC's
+// "deleting an address referenced by an order" guard doesn't apply here).
 model Address {
-  id            String   @id @default(cuid())
-  userId        String
-  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  recipientName String
-  phone         String
-  line1         String
-  line2         String?
-  city          String
-  district      String?
-  postalCode    String?
-  isDefault     Boolean  @default(false)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  id                String       @id @default(cuid())
+  userId            String
+  user              User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  label             AddressLabel @default(Home)
+  type              AddressType  @default(Both)
+  recipientName     String
+  phone             String
+  line1             String
+  line2             String?
+  city              String
+  // Doubles as Sri Lanka's "district" and international "state/province" —
+  // same administrative-region concept, one column, label picked by
+  // country in the UI. See STORY-034's architecture-decisions.md entry.
+  district          String?
+  postalCode        String?
+  country           String       @default("LK")
+  // Distributor persona (STORY-034 AC): present only when `type` covers a
+  // business use; never validated as required, since most addresses aren't.
+  companyName       String?
+  taxId             String?
+  isDefaultBilling  Boolean      @default(false)
+  isDefaultShipping Boolean      @default(false)
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
 
   @@index([userId])
+}
+
+enum AddressLabel {
+  Home
+  Work
+  Other
+}
+
+enum AddressType {
+  Shipping
+  Billing
+  Both
 }
 
 enum DeliveryRateType {
@@ -1682,9 +1726,18 @@ model NotificationPreference {
   userId        String   @unique
   user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   phone         String?
+  // Order-lifecycle transactional emails (confirmed/dispatched/etc). Named
+  // `emailOptIn` (not `orderUpdatesOptIn`) since it's the only email
+  // category this app currently sends — kept the original STORY-032 name
+  // to avoid an unnecessary rename migration; STORY-034's "promotional
+  // emails" toggle is `User.marketingOptIn` instead (same concept already
+  // captured at registration — no second field for it). See
+  // docs/architecture-decisions.md.
   emailOptIn    Boolean  @default(true)
   smsOptIn      Boolean  @default(false)
   whatsappOptIn Boolean  @default(false)
+  // STORY-034. Points-earned / referral-qualified notifications.
+  rewardUpdatesOptIn Boolean @default(true)
   updatedAt     DateTime @updatedAt
 }
 

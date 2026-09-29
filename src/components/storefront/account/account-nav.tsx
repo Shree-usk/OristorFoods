@@ -7,13 +7,15 @@ const ACCOUNT_NAV_ITEMS = [
   { href: "/account", label: "Dashboard" },
   { href: "/account/profile", label: "Profile" },
   { href: "/account/addresses", label: "Addresses" },
+  { href: "/account/security", label: "Security" },
+  { href: "/account/notifications", label: "Notifications" },
   { href: "/account/orders", label: "Orders" },
   { href: "/account/rewards", label: "Rewards" },
   { href: "/account/referrals", label: "Referrals" },
   { href: "/support", label: "Support" },
 ] as const;
 
-/** STORY-033. The guarded account area's tab nav — several targets are later Customer Platform stories, not yet built. */
+/** STORY-033/034. The guarded account area's tab nav — several targets are later Customer Platform stories, not yet built. */
 export function AccountNav() {
   const pathname = usePathname();
 
