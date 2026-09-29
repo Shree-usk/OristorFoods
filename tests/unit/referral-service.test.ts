@@ -1,5 +1,16 @@
 // @vitest-environment node
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+const { mockEmailSend } = vi.hoisted(() => ({ mockEmailSend: vi.fn() }));
+
+// STORY-032: a qualifying referral now sends a notification on genuine
+// qualification — mocked here so these tests never touch the network.
+vi.mock("@/services/notification/email.provider", () => ({
+  EmailProvider: class {
+    name = "mock-email-for-test";
+    send = mockEmailSend;
+  },
+}));
 
 import { prisma } from "@/lib/db";
 import { createProduct } from "@/repositories/product.repository";
@@ -113,11 +124,15 @@ async function cleanupReferralTables() {
 
 beforeEach(async () => {
   await cleanupReferralTables();
+  mockEmailSend.mockReset();
+  mockEmailSend.mockResolvedValue({ status: "sent", providerReference: "mock-email-ref" });
 });
 
 afterEach(async () => {
   resetOrderEventConsumerForTesting();
   await cleanupReferralTables();
+  await prisma.notificationLog.deleteMany();
+  await prisma.notificationTemplate.deleteMany();
   await prisma.orderStatusHistory.deleteMany();
   await prisma.orderItem.deleteMany();
   await prisma.order.deleteMany();
@@ -213,6 +228,25 @@ describe("referralConsumer — qualifying order and payout", () => {
 
     const bonus = await prisma.rewardTransaction.findFirst({ where: { userId: referrer.id, type: "ReferralBonus" } });
     expect(bonus?.points).toBe(100);
+  });
+
+  it("sends a referral.qualified notification to the referrer on genuine qualification, and never twice for a second qualifying order (STORY-032)", async () => {
+    await prisma.notificationTemplate.create({ data: { templateKey: "referral.qualified", channel: "Email", subject: "s", body: "Points: {{points}}" } });
+    await prisma.referralSetting.create({ data: { id: "global", referrerBonusPoints: 75 } });
+    registerOrderEventConsumer(referralConsumer);
+
+    const referrer = await makeUser();
+    const referred = await makeUser();
+    await prisma.referralAttribution.create({ data: { referrerUserId: referrer.id, referredUserId: referred.id, status: "Registered" } });
+
+    await placeOrderFor(referred.id, "1000.00");
+    await placeOrderFor(referred.id, "1000.00"); // a second order must not re-notify
+
+    expect(mockEmailSend).toHaveBeenCalledTimes(1);
+    expect(mockEmailSend).toHaveBeenCalledWith(referrer.email, "s", "Points: 75");
+    const logs = await prisma.notificationLog.findMany({ where: { userId: referrer.id, templateKey: "referral.qualified", channel: "Email" } });
+    expect(logs).toHaveLength(1);
+    expect(logs[0].status).toBe("Sent");
   });
 
   it("does not qualify below the configured minimum order value", async () => {

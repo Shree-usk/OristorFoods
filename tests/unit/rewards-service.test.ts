@@ -1,5 +1,16 @@
 // @vitest-environment node
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+const { mockEmailSend } = vi.hoisted(() => ({ mockEmailSend: vi.fn() }));
+
+// STORY-032: creditPointsForConfirmedOrder now sends a notification on a
+// genuine credit — mocked here so these tests never touch the network.
+vi.mock("@/services/notification/email.provider", () => ({
+  EmailProvider: class {
+    name = "mock-email-for-test";
+    send = mockEmailSend;
+  },
+}));
 
 import { prisma } from "@/lib/db";
 import { createProduct } from "@/repositories/product.repository";
@@ -93,10 +104,14 @@ beforeEach(async () => {
   // test from a clean slate regardless of any ambient seed data (tier
   // evaluation reads ALL active RewardTier rows, unscoped by design).
   await cleanupRewardsTables();
+  mockEmailSend.mockReset();
+  mockEmailSend.mockResolvedValue({ status: "sent", providerReference: "mock-email-ref" });
 });
 
 afterEach(async () => {
   await cleanupRewardsTables();
+  await prisma.notificationLog.deleteMany();
+  await prisma.notificationTemplate.deleteMany();
   await prisma.orderStatusHistory.deleteMany();
   await prisma.orderItem.deleteMany();
   await prisma.order.deleteMany({ where: { orderNumber: { startsWith: "ORS-RWD-SVC-" } } });
@@ -116,6 +131,21 @@ describe("creditPointsForConfirmedOrder", () => {
     const rows = await prisma.rewardTransaction.findMany({ where: { userId: user.id } });
     expect(rows).toHaveLength(1);
     expect(rows[0]).toMatchObject({ type: "Earned", points: 50, orderId: order.id });
+  });
+
+  it("sends a points_earned notification on a genuine credit, and never twice for a replayed event (STORY-032)", async () => {
+    await prisma.notificationTemplate.create({ data: { templateKey: "rewards.points_earned", channel: "Email", subject: "s", body: "You earned {{points}}" } });
+    const user = await makeUser();
+    const order = await makeOrder(user.id);
+
+    await creditPointsForConfirmedOrder(order.id, user.id, 50);
+    await creditPointsForConfirmedOrder(order.id, user.id, 50); // replay
+
+    expect(mockEmailSend).toHaveBeenCalledTimes(1);
+    expect(mockEmailSend).toHaveBeenCalledWith(user.email, "s", "You earned 50");
+    const logs = await prisma.notificationLog.findMany({ where: { userId: user.id, templateKey: "rewards.points_earned", channel: "Email" } });
+    expect(logs).toHaveLength(1);
+    expect(logs[0].status).toBe("Sent");
   });
 
   it("is idempotent — a replayed event for the same order writes only one Earned row", async () => {

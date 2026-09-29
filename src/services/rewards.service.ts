@@ -4,6 +4,7 @@ import * as cartRepository from "@/repositories/cart.repository";
 import * as orderRepository from "@/repositories/order.repository";
 import * as rewardsRepository from "@/repositories/rewards.repository";
 import { getCartSummaryById } from "@/services/cart.service";
+import { sendNotification } from "@/services/notification.service";
 import type { OrderEventConsumer } from "@/services/order-integration.service";
 import { calculatePointsRedemption } from "@/services/rewards-calc";
 import type { PointsRedemptionCalcResult } from "@/services/rewards-calc";
@@ -63,9 +64,18 @@ export async function creditPointsForConfirmedOrder(orderId: string, userId: str
     const setting = await rewardsRepository.getSetting();
     const expiresAt = setting?.pointsExpiryDays ? addDays(new Date(), setting.pointsExpiryDays) : null;
     try {
-      await prisma.$transaction(async (tx) => {
+      const transaction = await prisma.$transaction(async (tx) => {
         await rewardsRepository.getOrCreateAccount(tx, userId);
-        await rewardsRepository.createTransaction(tx, { userId, type: "Earned", points, orderId, expiresAt });
+        return rewardsRepository.createTransaction(tx, { userId, type: "Earned", points, orderId, expiresAt });
+      });
+      // STORY-032: only on a genuine new credit — never the idempotent-
+      // replay branch below, so a retried event never double-notifies
+      // (on top of the NotificationLog dedup guard itself).
+      await sendNotification({
+        userId,
+        templateKey: "rewards.points_earned",
+        variables: { points },
+        triggeringEventId: transaction.id,
       });
     } catch (error) {
       // Already credited (a replayed event) — idempotent no-op, matches
