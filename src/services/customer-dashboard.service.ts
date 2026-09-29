@@ -1,5 +1,6 @@
 import { getBalanceForUser, type RewardsBalance } from "@/services/rewards.service";
 import { listOrdersForUser } from "@/services/order.service";
+import { listBookmarksForCustomer } from "@/services/recipe-bookmark.service";
 import { getWishlist } from "@/services/wishlist.service";
 import type { OrderListSummary } from "@/types/order";
 import type { ProductListItem } from "@/types/product";
@@ -34,4 +35,10 @@ export interface SavedItemsSummary {
 export async function getSavedItemsForDashboard(userId: string): Promise<SavedItemsSummary> {
   const items = await getWishlist(userId);
   return { count: items.length, preview: items.slice(0, SAVED_ITEMS_PREVIEW_LIMIT) };
+}
+
+/** STORY-037. Same source listBookmarksForCustomer as /account/saved-recipes itself, so this count can never drift from the page's own count. */
+export async function getSavedRecipesCountForDashboard(userId: string): Promise<number> {
+  const recipes = await listBookmarksForCustomer(userId);
+  return recipes.length;
 }

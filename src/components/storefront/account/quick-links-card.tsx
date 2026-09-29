@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Gift, HelpCircle, MapPin, Package, User as UserIcon, Users } from "lucide-react";
+import { Bookmark, Gift, HelpCircle, MapPin, Package, User as UserIcon, Users } from "lucide-react";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
@@ -9,16 +9,16 @@ const QUICK_LINKS = [
   { href: "/account/orders", label: "Order History", icon: Package },
   { href: "/account/rewards", label: "Rewards", icon: Gift },
   { href: "/account/referrals", label: "Referrals", icon: Users },
+  { href: "/account/saved-recipes", label: "Saved Recipes", icon: Bookmark },
   { href: "/account/support", label: "Support", icon: HelpCircle },
 ] as const;
 
 /**
  * STORY-033. Static — no data fetch, so it renders immediately alongside
  * the other widgets' <Suspense> fallbacks rather than needing its own.
- * Several targets belong to later Customer Platform stories (STORY-034
- * through STORY-037) and aren't built yet — same forward-linking
- * convention the header nav (STORY-004) already uses for /account/orders
- * and /account/rewards.
+ * Several targets belong to later Customer Platform stories and aren't
+ * built yet — same forward-linking convention the header nav (STORY-004)
+ * already uses for /account/orders and /account/rewards.
  */
 export function QuickLinksCard() {
   return (

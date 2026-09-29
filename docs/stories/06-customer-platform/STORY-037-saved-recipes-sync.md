@@ -1,6 +1,6 @@
 # STORY-037: Saved Recipes & Sync
 
-**Status:** Draft
+**Status:** Done — see the STORY-037 entry in `docs/architecture-decisions.md`.
 **Epic:** 06 — Customer Platform
 **Priority:** Low
 **Persona(s):** Home Cook, Gourmet Food Enthusiast, Sri Lankan Expat
@@ -16,24 +16,24 @@ As a Sri Lankan Expat, I want the recipes I save on one device to show up when I
 This story is the account-area presentation layer for the recipe bookmarking mechanism built in STORY-022 (Recipe Reviews & Bookmarks). It adds `/account/saved-recipes` under the account shell from STORY-033, and a "Saved Recipes" count on the Customer Dashboard's quick links. It deliberately does not build a new bookmark data model, a new toggle mechanism, or new save/unsave business logic — all of that is owned by STORY-022. This story only lists, filters, paginates, and unsaves against the model STORY-022 already exposes. Maps to `docs/blueprint.md` Section 4 (Recipes) and Section 9 item 6 (Customer Platform — "saved recipes" listed as part of self-service completeness).
 
 ## Acceptance Criteria
-- [ ] `/account/saved-recipes` lists every recipe the logged-in customer has bookmarked, newest-bookmarked first, showing thumbnail, title, category, and prep time
-- [ ] Customer can remove a bookmark directly from this list; the removal is persisted through STORY-022's bookmark service, so the recipe immediately shows as unbookmarked on the recipe detail page and recipe listing/cards elsewhere on the site (single source of truth — no locally-diverging state)
-- [ ] List supports filtering by recipe category and sorting by date-saved or alphabetically
-- [ ] List is paginated (or infinite-scroll) for customers with a large number of saved recipes
-- [ ] Empty state ("You haven't saved any recipes yet") includes a CTA linking to the Recipe Centre (STORY-017)
-- [ ] The saved-recipes count shown as a quick-link widget on the Customer Dashboard (STORY-033) always matches the count on this page (both read from the same service, not independently cached/computed)
-- [ ] Bookmarking a recipe on one device/session and logging in on another device shows the same saved list — the data is server-persisted against the customer's account, not stored in `localStorage` or browser-only state
-- [ ] Page reuses the existing recipe card component from the Recipes epic rather than introducing a second, diverging recipe-card implementation
-- [ ] Layout is responsive at 375px–1440px, consistent with recipe card styling used elsewhere on the site
+- [x] `/account/saved-recipes` lists every recipe the logged-in customer has bookmarked, newest-bookmarked first, showing thumbnail, title, category, and time. *`RecipeCard` (reused as-is) has no standalone "prep time" field — the type carries `totalTimeMinutes` (prep+cook combined), the same field used everywhere else the card renders, so that's what's shown here too.*
+- [x] Customer can remove a bookmark directly from this list; the removal is persisted through STORY-022's bookmark service, so the recipe immediately shows as unbookmarked on the recipe detail page and recipe listing/cards elsewhere on the site (single source of truth — no locally-diverging state). *`RecipeCard`'s own built-in bookmark button already does this — see `docs/architecture-decisions.md`.*
+- [x] List supports filtering by recipe category and sorting by date-saved or alphabetically
+- [x] List is paginated (or infinite-scroll) for customers with a large number of saved recipes. *A client-side "Show more" button, per the AC's own "(or infinite-scroll)" allowance — see architecture-decisions.md for why no new paginated API was built.*
+- [x] Empty state ("You haven't saved any recipes yet") includes a CTA linking to the Recipe Centre (STORY-017)
+- [x] The saved-recipes count shown as a quick-link widget on the Customer Dashboard (STORY-033) always matches the count on this page (both read from the same service, not independently cached/computed)
+- [x] Bookmarking a recipe on one device/session and logging in on another device shows the same saved list — the data is server-persisted against the customer's account, not stored in `localStorage` or browser-only state *(already true of STORY-022's bookmark model for signed-in customers)*
+- [x] Page reuses the existing recipe card component from the Recipes epic rather than introducing a second, diverging recipe-card implementation
+- [x] Layout is responsive at 375px–1440px, consistent with recipe card styling used elsewhere on the site *(reuses `RecipeGrid`'s own responsive grid classes unmodified)*
 
 ## Tasks
-- [ ] **Database:** None new. This story reuses the bookmark/save model owned by STORY-022. Its only database task is confirming (or adding, if missing) an index on `(userId, createdAt)` on that model so this page's paginated, newest-first query is efficient — that index change belongs to STORY-022's schema, coordinated here since this is the consumer that needs it.
-- [ ] **API:** `GET /api/account/saved-recipes` (paginated, filterable by category, sortable), `DELETE /api/account/saved-recipes/[recipeId]` (unbookmark) — both routes delegate to STORY-022's bookmark service rather than querying the bookmark table directly.
-- [ ] **Service:** `customer-saved-recipes.service.ts` — thin composition only, calling `recipe-bookmark.service.ts` (owned by STORY-022) for both the listing query and the unsave action. No new bookmarking business logic is introduced in this story.
-- [ ] **Frontend:** `src/app/(storefront)/account/saved-recipes/page.tsx`; reuse the existing `RecipeCard` component (from the Recipes & Food Academy epic) inside an account-scoped grid; `SavedRecipesFilterBar` under `src/components/storefront/account/`.
-- [ ] **Validation:** `src/validation/account/saved-recipes-query.schema.ts` (category filter, sort, and pagination query params).
-- [ ] **Testing:** Playwright e2e verifying a bookmark made from a recipe detail page appears on `/account/saved-recipes`, and that unsaving from either location keeps both in sync within the same session; Vitest unit test for the filter/sort/pagination query builder.
-- [ ] **Documentation:** Note in `docs/architecture-decisions.md` that saved-recipes is a read-and-unsave view over STORY-022's bookmark model — any new bookmark fields or save-source tracking must be added in STORY-022, not duplicated here.
+- [x] **Database:** Added the one missing index, `@@index([customerId, createdAt])`, to STORY-022's `RecipeBookmark` model (the field is `customerId`, not `userId`) — no other schema change.
+- [x] **API:** None new. `GET /api/recipes/bookmarks` and `POST`/`DELETE /api/recipes/[slug]/bookmark` (both STORY-022) already cover listing and unsave, and reusing them (rather than building the task list's suggested `/api/account/saved-recipes*` routes) is what makes cross-page sync automatic — see `docs/architecture-decisions.md`.
+- [x] **Service:** `customer-saved-recipes.service.ts` — thin composition only, calling `recipe-bookmark.service.ts::listBookmarksForCustomer` (owned by STORY-022) for the listing query. `src/lib/saved-recipes-filter.ts::filterAndSortSavedRecipes` — a separate, client-safe pure function for category/sort (kept out of the service file so the Client Component using it doesn't pull Prisma into the browser bundle — see `docs/architecture-decisions.md`). `customer-dashboard.service.ts::getSavedRecipesCountForDashboard` (STORY-033's file) added for the dashboard widget. No new bookmarking business logic anywhere.
+- [x] **Frontend:** `src/app/(storefront)/account/(dashboard)/saved-recipes/page.tsx`; reuses the existing `RecipeGrid`/`RecipeCard` components as-is; `saved-recipes-view.tsx` (client, filter/sort/show-more) under `src/components/storefront/account/`; new `saved-recipes-card.tsx` dashboard widget; nav-link additions to `account-nav.tsx`/`quick-links-card.tsx`.
+- [x] **Validation:** None new — no new route/request boundary exists to validate. See `docs/architecture-decisions.md`.
+- [x] **Testing:** `tests/e2e/saved-recipes.spec.ts` — empty state, a bookmark made from a recipe detail page appearing on `/account/saved-recipes` and the dashboard count, unsaving syncing back to both the page and the detail page, and category filtering. `customer-saved-recipes-service.test.ts` — the pure filter/sort function.
+- [x] **Documentation:** `docs/architecture-decisions.md` documents the no-new-API/no-new-validation decision and every other deviation above.
 
 ## Dependencies
 - STORY-001 (Project Foundation Setup)
