@@ -22,7 +22,8 @@ const TERMINAL_LABELS: Record<string, string> = {
   Returned: "This item was returned.",
 };
 
-const STATUS_LABELS: Record<string, string> = {
+/** Exported for other order-status displays (e.g. STORY-033's dashboard) so the label mapping isn't duplicated. */
+export const STATUS_LABELS: Record<string, string> = {
   ...Object.fromEntries(PIPELINE_STEPS.map((step) => [step.status, step.label])),
   ...TERMINAL_LABELS,
 };

@@ -219,6 +219,21 @@ export const notificationsConsumer: OrderEventConsumer = {
   },
 };
 
+/**
+ * STORY-033. A security-critical, always-send email (password reset)
+ * doesn't fit sendNotification's model: it isn't gated by marketing
+ * opt-in (emailOptIn is default-on for that too, but a reset must never
+ * be skippable), and it has no OrderIntegrationEvent/RewardTransaction/
+ * ReferralAttribution id to key triggeringEventId's dedup on — each
+ * reset token is already unique, so no dedup is needed. Reuses this
+ * file's own provider cache (getProviderForChannel) rather than
+ * constructing a second EmailProvider/Ethereal sandbox account.
+ */
+export async function sendTransactionalEmail(recipient: string, subject: string, body: string): Promise<void> {
+  const provider = getProviderForChannel("Email");
+  await provider.send(recipient, subject, body);
+}
+
 export function getPreferenceForUser(userId: string) {
   return notificationRepository.findPreferenceByUserId(userId);
 }

@@ -3,7 +3,7 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { signIn } from "next-auth/react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useForm } from "react-hook-form";
 
 import { Button } from "@/components/ui/button";
@@ -11,8 +11,15 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { credentialsSchema, type CredentialsInput } from "@/validation/auth.schema";
 
+/** Only ever a same-origin relative path — never redirect to an attacker-supplied absolute URL. */
+function safeCallbackUrl(raw: string | null): string {
+  return raw && raw.startsWith("/") && !raw.startsWith("//") ? raw : "/";
+}
+
 export function LoginForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const callbackUrl = safeCallbackUrl(searchParams.get("callbackUrl"));
   const {
     register,
     handleSubmit,
@@ -26,7 +33,7 @@ export function LoginForm() {
       setError("root", { message: "Incorrect email or password." });
       return;
     }
-    router.push("/");
+    router.push(callbackUrl);
   });
 
   return (
@@ -49,7 +56,12 @@ export function LoginForm() {
       </div>
 
       <div>
-        <Label htmlFor="login-password">Password</Label>
+        <div className="flex items-baseline justify-between">
+          <Label htmlFor="login-password">Password</Label>
+          <Link href="/account/forgot-password" className="text-small text-chilli underline-offset-2 hover:underline">
+            Forgot password?
+          </Link>
+        </div>
         <Input
           id="login-password"
           type="password"

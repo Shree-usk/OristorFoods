@@ -26,7 +26,10 @@ export function RegisterForm() {
     handleSubmit,
     setError,
     formState: { errors, isSubmitting },
-  } = useForm<RegisterInput>({ resolver: zodResolver(registerSchema), defaultValues: { name: "", email: "", password: "" } });
+  } = useForm<RegisterInput>({
+    resolver: zodResolver(registerSchema),
+    defaultValues: { name: "", email: "", password: "", marketingOptIn: false },
+  });
 
   const onSubmit = handleSubmit(async (data) => {
     const response = await fetch("/api/auth/register", {
@@ -89,6 +92,14 @@ export function RegisterForm() {
             {errors.password.message}
           </p>
         )}
+      </div>
+
+      <div className="flex items-center gap-2">
+        {/* Native checkbox: the Radix Checkbox isn't a form input, so RHF's register() can't drive it without a Controller. */}
+        <input id="register-marketing-opt-in" type="checkbox" className="size-4 accent-chilli" {...register("marketingOptIn")} />
+        <Label htmlFor="register-marketing-opt-in" className="font-normal">
+          Send me recipes, offers, and product news
+        </Label>
       </div>
 
       {errors.root && (

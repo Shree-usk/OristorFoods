@@ -2,12 +2,13 @@
 
 import Link from "next/link";
 import { signOut, useSession } from "next-auth/react";
-import { LogOut, Package, User as UserIcon } from "lucide-react";
+import { LayoutDashboard, LogOut, User as UserIcon } from "lucide-react";
 
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
@@ -52,16 +53,19 @@ export function AccountMenu() {
         </Avatar>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
-        <DropdownMenuLabel>{user?.name ?? user?.email ?? "My Account"}</DropdownMenuLabel>
+        {/* Base UI requires GroupLabel to have a Group ancestor — DropdownMenuLabel is otherwise a no-op-turned-crash. */}
+        <DropdownMenuGroup>
+          <DropdownMenuLabel>{user?.name ?? user?.email ?? "My Account"}</DropdownMenuLabel>
+        </DropdownMenuGroup>
         <DropdownMenuSeparator />
-        <DropdownMenuItem render={<Link href="/account/orders" />}>
-          <Package /> Orders
-        </DropdownMenuItem>
         <DropdownMenuItem render={<Link href="/account" />}>
+          <LayoutDashboard /> Dashboard
+        </DropdownMenuItem>
+        <DropdownMenuItem render={<Link href="/account/profile" />}>
           <UserIcon /> Profile
         </DropdownMenuItem>
         <DropdownMenuSeparator />
-        <DropdownMenuItem variant="destructive" onClick={() => signOut()}>
+        <DropdownMenuItem variant="destructive" onClick={() => signOut({ callbackUrl: "/" })}>
           <LogOut /> Sign Out
         </DropdownMenuItem>
       </DropdownMenuContent>
