@@ -248,6 +248,11 @@ export function findProductsForCompareByIds(ids: string[]) {
   });
 }
 
+/** STORY-039. Dashboard's Low Stock Alerts widget — Published products only; a Draft/Archived product's stock isn't actionable inventory. */
+export function countLowStockProducts(threshold: number) {
+  return prisma.product.count({ where: { status: "Published", stockQuantity: { lte: threshold } } });
+}
+
 export function listAllergens() {
   return prisma.allergen.findMany({ orderBy: { name: "asc" } });
 }

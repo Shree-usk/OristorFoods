@@ -3800,3 +3800,103 @@ the protected area, wrong-password rejection, lockout with the distinct
 message, sign-out, and confirmation that an admin session cannot reach
 `/account` (and, by the customer e2e suite's own unaffected passing
 tests, that a customer session cannot reach admin either).
+
+## 2026-09-30 — STORY-039 Admin Dashboard
+
+The admin console's landing screen — 11 widgets per blueprint.md Section 7,
+gated by STORY-038's RBAC. Two research passes confirmed no admin-wide
+aggregation function existed anywhere yet (every existing repository
+function is scoped to a single user/product/recipe), and, more
+importantly, that of the 11 widgets **8 have real underlying data to
+aggregate honestly and 3 do not** — Live Visitors, Export Enquiries, and
+System Health have zero backing infrastructure (no session/pageview
+tracking, no B2B enquiry model, no uptime/error-rate tracking), confirmed
+by exhaustive grep, not just "not built yet." Per AC #13 ("if a widget's
+source isn't implemented yet, render a placeholder rather than erroring"),
+these three render a shared `coming-soon-card.tsx`, never fabricated data.
+
+**Widget → `AdminModule` mapping** (all gated on the `View` action):
+Today's Revenue & Orders → `Orders`; Pending Moderation (reviews/recipe
+reviews/blog comments) → `Reviews`; Pending Product Q&A → `QA`; Low Stock
+Alerts → `Products`; Rewards & Referrals (redemptions + signups) →
+`RewardsReferrals`; Support Tickets → `Customers` (blueprint groups
+support history under Customers); Failed Payments → `Orders`; ERP Sync
+Status → `ERPIntegration`; Export Enquiries → `ExportPortal`; System
+Health → `UsersRolesAudit` (blueprint groups "Users, Roles, Audit Logs,
+System Health" together); Live Visitors → `CRMAnalytics`. The three
+placeholder widgets are gated exactly like the real ones — an admin
+without `ExportPortal:View`, for instance, never sees even a "coming
+soon" card for Export Enquiries, so the placeholder can never leak that a
+module exists to someone unauthorized for it.
+
+**Permission checks are batched, not per-widget.**
+`permission.service.ts::getPermissionsForAdminUser` already returns the
+admin's full permission `Set` in one DB read;
+`admin-dashboard.service.ts::getDashboardSummary` fetches it once and
+checks `.has()` locally for all 11 widgets, rather than 11 separate
+`hasPermission` calls (11 separate DB reads). Each real widget's data
+fetch is independently wrapped in a `safe()` helper that logs and
+degrades that one key to omitted on failure, never fails the whole
+response — the same "don't let one broken data source take down the
+dashboard" spirit as AC #13's placeholder requirement, extended to real
+sources that error unexpectedly. Keys for ungranted widgets are omitted
+from the JSON entirely (true server-side omission), not sent with a zero
+value and hidden client-side.
+
+**Two narrower AC deviations, both documented inline in the touched
+files:** `SupportTicket` has no `priority` field, so AC #8's "broken down
+by priority" is substituted with a breakdown by `status`
+(`Open`/`InProgress`/`Resolved`/`Closed`, a real field) —
+`support-ticket.repository.ts::countTicketsByStatus`. AC #3's fifth
+sub-count ("recipe Q&A") doesn't exist as a distinct feature (only
+product Q&A exists), so `pendingProductQuestions` covers product
+questions only — `pending-product-qa-card.tsx`'s own doc comment.
+
+**Low Stock threshold is a documented constant
+(`LOW_STOCK_THRESHOLD = 10` in `admin-dashboard.service.ts`), not a new
+`Product` field.** A real System Settings-backed threshold has no admin
+UI home yet (STORY-040/054's turf) — adding the field now with nothing to
+manage it would be speculative. `countLowStockProducts` also filters to
+`status: "Published"` — a Draft/Archived product's stock isn't actionable
+inventory for this widget.
+
+**Recharts was dropped from the task list's frontend bullet.** No AC
+actually requires a chart — AC #1 only needs a number and a same-day
+order count, no trend sparkline. Adding a full charting library (not
+installed, zero existing precedent anywhere in this codebase) for one
+decorative element was disproportionate; the revenue card is a plain
+number.
+
+**No separate `GET /api/admin/dashboard/live-visitors` endpoint**, despite
+the task list naming one — there's no real data to poll. The Live
+Visitors card is a static "coming soon" card with no backing fetch.
+
+**Every "linking into the [X] console" AC clause is deferred**, same
+reasoning as STORY-038's own Out of Scope: every target console
+(STORY-040 Products, STORY-045/046 Reviews/QA, STORY-047 Orders,
+STORY-048 Support, STORY-049 Rewards/Referrals, STORY-056 ERP, STORY-057
+System Health, STORY-058 Export) is unbuilt, so a link would 404. Cards
+are informational-only for now; navigation gets added as each target
+ships, exactly as the story's own Dependencies section anticipates.
+
+**First `refetchInterval` usage in this codebase** —
+`admin-dashboard-view.tsx`'s `useQuery({ refetchInterval: 60_000 })`, a
+hard AC #10 requirement with no existing polling precedent to mirror. The
+Server Component's own `getDashboardSummary` call seeds `initialData`, so
+the first paint never shows a loading state; the client then polls the
+same `GET /api/admin/dashboard/summary` route every 60s.
+
+**Testing:** `tests/unit/admin-dashboard-service.test.ts` — a role
+granted every real-widget module, seeded with one representative row per
+widget, asserting the full shape and correct math (Cancelled orders
+excluded from revenue, low-stock threshold, support-ticket
+status breakdown, ERP pending/failed/last-synced); a role with zero
+permissions gets back only the (all-false) placeholder flags; a role
+granted only two placeholder modules (`CRMAnalytics`, `ExportPortal`)
+gets exactly those two placeholder flags and no real widgets; a role
+granted only `Orders` sees revenue and failed payments and nothing else.
+`tests/e2e/admin-dashboard.spec.ts` — a fixture granted every widget
+module sees every real widget plus all three placeholders; a fixture
+granted only `Orders` sees a visibly reduced set; a fixture with no
+permissions sees the dashboard's own empty-state message rather than an
+error or a blank grid.

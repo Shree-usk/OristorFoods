@@ -151,3 +151,8 @@ export async function sumPointsByTypes(userId: string, types: RewardTransactionT
 export function getAccountWithTier(userId: string) {
   return prisma.rewardAccount.findUnique({ where: { userId }, include: { currentTier: true } });
 }
+
+/** STORY-039. Dashboard's Rewards & Referrals widget. */
+export function countRedemptionsSince(from: Date, client: Client = prisma) {
+  return client.rewardTransaction.count({ where: { type: "Redeemed", createdAt: { gte: from } } });
+}

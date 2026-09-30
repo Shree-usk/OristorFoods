@@ -1,21 +1,25 @@
 import type { Metadata } from "next";
+import { redirect } from "next/navigation";
+
+import { AdminDashboardView } from "@/components/admin/dashboard/admin-dashboard-view";
+import { adminAuth } from "@/lib/admin-auth";
+import { getDashboardSummary } from "@/services/admin-dashboard.service";
 
 export const metadata: Metadata = {
-  title: "Admin",
+  title: "Admin Dashboard",
   robots: { index: false, follow: false },
 };
 
 /**
- * STORY-038. A minimal landing page proving the auth/RBAC foundation
- * works end to end — the live dashboard with widgets/modules is
- * STORY-039's scope, not this story's. (admin)/layout.tsx above already
- * guarantees a resolved session before this renders.
+ * STORY-039. Replaces STORY-038's placeholder landing page. (admin)/layout.tsx
+ * already guarantees a resolved session before this renders; re-checked here
+ * only because getDashboardSummary needs the admin user id, not to re-gate
+ * access.
  */
-export default function AdminHomePage() {
-  return (
-    <div>
-      <h1 className="text-h2 font-heading text-charcoal">Welcome to the Oristor admin console</h1>
-      <p className="mt-2 text-body text-charcoal/70">The full dashboard and console modules are built in later stories.</p>
-    </div>
-  );
+export default async function AdminHomePage() {
+  const session = await adminAuth();
+  if (!session?.user?.id) redirect("/admin/login");
+
+  const initialData = await getDashboardSummary(session.user.id);
+  return <AdminDashboardView initialData={initialData} />;
 }

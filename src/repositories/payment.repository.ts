@@ -16,3 +16,8 @@ export function findPaymentById(id: string) {
 export function updatePaymentStatus(id: string, status: PaymentStatus) {
   return prisma.payment.update({ where: { id }, data: { status } });
 }
+
+/** STORY-039. Dashboard's Failed Payments widget. */
+export function countFailedPaymentsSince(from: Date) {
+  return prisma.payment.count({ where: { status: "Failed", createdAt: { gte: from } } });
+}
