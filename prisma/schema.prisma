@@ -1846,3 +1846,127 @@ model NotificationLog {
   @@unique([triggeringEventId, templateKey, channel, recipient])
   @@index([userId])
 }
+
+// --- Admin Auth & RBAC (STORY-038) ---
+// A deliberately separate authentication system from User/Account/Session
+// above — a different NextAuth instance, a different session cookie, a
+// different secret (ADMIN_AUTH_SECRET). No admin session can read a
+// customer session or vice versa. See docs/architecture-decisions.md for
+// the full design (permission matrix, cookie/secret separation, why
+// RolePermission is sparse/existence-based, why Role has a separate stable
+// `key` from its editable `name`).
+//
+// This pass ships the core only (separate auth, 12 seeded roles, the full
+// permission matrix + server-side enforcement, audit logging, route
+// guarding). Self-service email invite, admin password reset, and TOTP 2FA
+// are explicitly deferred — see architecture-decisions.md — so AdminUser
+// carries no invite/2FA fields yet; adding unused columns now would be
+// speculative.
+
+model Role {
+  id            String           @id @default(cuid())
+  // Stable machine identifier (e.g. "super_administrator"), separate from
+  // `name` because the Super-Admin-floor and last-Super-Administrator
+  // guards must key off something that survives a future rename via
+  // STORY-057's role-editing UI.
+  key           String           @unique
+  name          String           @unique
+  createdAt     DateTime         @default(now())
+  adminUsers    AdminUser[]
+  permissions   RolePermission[]
+}
+
+enum AdminModule {
+  Products
+  MediaLibrary
+  HomepageBuilder
+  Recipes
+  Blog
+  Reviews
+  QA
+  Orders
+  Customers
+  RewardsReferrals
+  Marketing
+  SEO
+  Navigation
+  CMSWorkflow
+  SystemSettings
+  DeliveryZones
+  ERPIntegration
+  UsersRolesAudit
+  ExportPortal
+  CRMAnalytics
+}
+
+enum AdminAction {
+  View
+  Edit
+  Delete
+  Approve
+  Export
+  Audit
+}
+
+// Sparse/existence-based: a row's presence means granted, absence means
+// denied. Avoids seeding ~1,440 explicit "false" rows while still
+// satisfying "independently configurable per module × action cell" and
+// "stored in the database, not hardcoded."
+model RolePermission {
+  id        String      @id @default(cuid())
+  roleId    String
+  role      Role        @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  module    AdminModule
+  action    AdminAction
+  createdAt DateTime    @default(now())
+
+  @@unique([roleId, module, action])
+  @@index([roleId])
+}
+
+enum AdminUserStatus {
+  Active
+  Locked
+  Deactivated
+}
+
+model AdminUser {
+  id                 String          @id @default(cuid())
+  email              String          @unique
+  name               String
+  passwordHash       String
+  // Mirrors User.passwordChangedAt's role exactly — the JWT session-version
+  // stamp checked on every request (see src/lib/admin-auth.ts). Bumping
+  // this force-signs-out every outstanding session for this admin.
+  passwordChangedAt  DateTime        @default(now())
+  roleId             String
+  role               Role            @relation(fields: [roleId], references: [id])
+  status             AdminUserStatus @default(Active)
+  failedLoginAttempts Int            @default(0)
+  lockedUntil        DateTime?
+  auditLogs          AuditLog[]
+  createdAt          DateTime        @default(now())
+  updatedAt          DateTime        @updatedAt
+}
+
+// Minimal but real: used now for login/lockout/permission-denied events.
+// Future admin-module stories (STORY-039+) call the same writeAuditLog
+// helper for their own create/edit/delete/approve actions — this is the
+// shared table, not a STORY-038-only log.
+model AuditLog {
+  id         String       @id @default(cuid())
+  actorId    String?
+  actor      AdminUser?   @relation(fields: [actorId], references: [id], onDelete: SetNull)
+  // Free string, not the AdminAction enum — audit covers auth events
+  // ("login_succeeded", "login_failed", "permission_denied",
+  // "account_locked") as well as future module CRUD actions.
+  action     String
+  module     AdminModule?
+  targetType String?
+  targetId   String?
+  metadata   Json?
+  createdAt  DateTime     @default(now())
+
+  @@index([actorId])
+  @@index([createdAt])
+}

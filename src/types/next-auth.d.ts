@@ -14,8 +14,15 @@ declare module "next-auth" {
 }
 
 declare module "next-auth/jwt" {
-  /** STORY-033. Compared against the DB's current version to invalidate sessions after a password reset. */
+  /**
+   * STORY-033/038. Module augmentation is global, not per-NextAuth-instance
+   * — `pwv` (customer) and `aupv` (admin, STORY-038) both live here even
+   * though only one is ever populated on a given real token, since the two
+   * systems use different secrets/cookies and can never read each other's
+   * tokens anyway.
+   */
   interface JWT {
     pwv?: number;
+    aupv?: number;
   }
 }

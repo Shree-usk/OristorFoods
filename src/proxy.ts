@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 
 import { auth } from "@/lib/auth";
+import { adminAuth } from "@/lib/admin-auth";
 import { setReferralCookie } from "@/lib/api/referral-cookie";
 import { signReferralToken } from "@/lib/referral-token";
 
@@ -29,6 +30,13 @@ import { signReferralToken } from "@/lib/referral-token";
  * does read the DB (for the password-reset session-invalidation check),
  * but only for that subset of requests, never the broad referral matcher
  * below as a whole.
+ *
+ * STORY-038 adds the admin-area guard the same way, using the fully
+ * separate adminAuth() (src/lib/admin-auth.ts — its own session cookie,
+ * its own secret). This is a UX-level redirect only — the real security
+ * boundary for any specific action is permission.service.ts's
+ * requirePermission(), called server-side in the Service layer; a signed-in
+ * admin reaching a page here is not the same as being authorized to use it.
  */
 
 const PUBLIC_ACCOUNT_PREFIXES = [
@@ -47,6 +55,12 @@ function isPublicAccountPath(pathname: string): boolean {
   return PUBLIC_ACCOUNT_PREFIXES.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`));
 }
 
+const PUBLIC_ADMIN_PREFIXES = ["/admin/login"];
+
+function isPublicAdminPath(pathname: string): boolean {
+  return PUBLIC_ADMIN_PREFIXES.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`));
+}
+
 export async function proxy(request: NextRequest) {
   const { pathname, search } = request.nextUrl;
 
@@ -54,6 +68,15 @@ export async function proxy(request: NextRequest) {
     const session = await auth();
     if (!session?.user?.id) {
       const loginUrl = new URL("/account/login", request.url);
+      loginUrl.searchParams.set("callbackUrl", pathname + search);
+      return NextResponse.redirect(loginUrl);
+    }
+  }
+
+  if (pathname.startsWith("/admin") && !isPublicAdminPath(pathname)) {
+    const session = await adminAuth();
+    if (!session?.user?.id) {
+      const loginUrl = new URL("/admin/login", request.url);
       loginUrl.searchParams.set("callbackUrl", pathname + search);
       return NextResponse.redirect(loginUrl);
     }

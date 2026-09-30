@@ -3604,3 +3604,199 @@ dashboard's count, unsaving from the saved-recipes page syncing back to
 both the page (now empty) and the detail page (shows unbookmarked again
 after a fresh navigation, confirming real DB persistence rather than
 only a client-cache effect), and the category filter.
+
+## 2026-09-29 — STORY-038 Admin Auth & RBAC (core scope)
+
+The security foundation for the whole Enterprise/Admin Platform epic —
+every future admin story depends on a resolved admin session, role, and a
+real server-side permission check. **This pass ships the core only**:
+separate admin auth, the 12-role seed, the full permission matrix +
+server-side enforcement, audit logging, and route guarding. Self-service
+email invite, admin password reset, and TOTP 2FA are explicitly deferred
+to follow-up work — confirmed with the user before starting — since
+neither blocks any other admin story, which only needs a resolved role
+and a working `hasPermission`/`requirePermission` check. The initial Super
+Administrator is created by `prisma/seed-admin.ts`, not an invite flow.
+
+**Fully separate from customer auth — cookie, secret, and session all
+independent, not just cookie-name-different.** `src/lib/admin-auth.ts` is
+a second, standalone NextAuth v5 instance: its own Credentials provider
+(`admin-auth.service.ts::verifyAdminCredentials`, never touching `User`),
+its own JWT claim (`aupv`, not the customer instance's `pwv` — both live
+in the same global `next-auth/jwt` module augmentation since TypeScript
+declaration merging is global, not per-instance, but the two values are
+never cross-read since the instances use different secrets), its own
+cookie names (`admin-authjs.session-token` etc., since Auth.js's default
+`authjs.session-token` would otherwise silently collide with the customer
+instance), and its own secret (`ADMIN_AUTH_SECRET`, not `AUTH_SECRET` —
+real cryptographic separation). No `PrismaAdapter` on the admin instance:
+Credentials + JWT sessions need none, and unlike the customer instance
+(which keeps the adapter for a future OAuth provider), no OAuth admin
+provider is planned, so wiring one up now would be speculative and risks
+the adapter writing to the wrong tables (`User`/`Account`, not
+`AdminUser`).
+
+**`AdminUser` is a separate model from `User`, not a `role` field bolted
+onto it** — `User`'s own header comment already said as much before this
+story existed. Verified genuinely greenfield (no `Role`/`Permission`/
+`AdminUser` anywhere, `(admin)/layout.tsx` an empty placeholder).
+
+**A real bug, found only by running the e2e suite, not by type-checking:**
+Auth.js defaults `basePath` to `/api/auth` (`next-auth/lib/env.js`) unless
+told otherwise. Without an explicit `basePath: "/api/admin/auth"` on the
+second instance, every request to `/api/admin/auth/*` failed with
+`UnknownAction: Cannot parse action` — the instance silently assumed it
+was mounted at the customer instance's path. `tsc`/lint had nothing to
+say about this; only actually driving the real login form through
+Playwright surfaced it.
+
+**No `next-auth/react` client helpers for admin login/logout** — this
+app has one global `SessionProvider` (`src/app/providers.tsx`), bound to
+the customer instance's default `/api/auth` basePath, with no per-call
+override exposed in this version. `admin-login-form.tsx`/
+`admin-sign-out-button.tsx` instead replicate `next-auth/react`'s own
+`signIn()`/`signOut()` request contract by hand (read directly from
+`node_modules/next-auth/react.js`: fetch the CSRF token, POST to
+`/api/admin/auth/callback/credentials` with `X-Auth-Return-Redirect: 1`),
+pointed at the admin routes. This is also, incidentally, a stronger test
+of the hand-rolled admin auth wiring than a cookie-injection test helper
+(like the customer `signInAs` e2e helper) would have been.
+
+**Lockout state is distinguished from a plain wrong password via
+`CredentialsSignin`'s documented `code` mechanism** (`@auth/core/errors`),
+not a raw thrown error (which Auth.js would collapse into a generic
+`CallbackRouteError`, losing the distinction). A real behavior gap was
+found and fixed during testing: the attempt that actually crosses the
+lockout threshold originally just returned `null` (indistinguishable from
+any other wrong password) even though it had just locked the account —
+fixed to throw immediately on that attempt instead, so the admin is told
+they're locked out right away rather than being confused by a
+subsequently-still-failing "correct" password. Lockout itself is
+DB-persisted (`AdminUser.failedLoginAttempts`/`lockedUntil`), not the
+in-memory `src/lib/rate-limit.ts` limiter customer login uses — an admin
+lockout must survive a process restart. Threshold (5 attempts) and window
+(15 minutes) mirror `auth.service.ts`'s existing customer login rate
+limit as the documented anchor, since blueprint.md specifies no concrete
+number (see below).
+
+**blueprint.md Section 7 gives the exact 12 role names and module
+descriptions verbatim, but zero per-role permission detail and zero
+concrete lockout/2FA numbers.** Its own closing section explicitly
+disclaims this: "This file intentionally leaves out ... detailed
+security/compliance chapters ... When a task needs that level of detail,
+pull the relevant section from the source document rather than
+guessing." The default permission matrix below and the lockout numbers
+above are this story's own documented design choices, not blueprint
+requirements — adjustable later via STORY-057's role-editing UI.
+(Also: STORY-038's own "References" section citing "Section 8 enterprise
+security standards" is stale — the actual current Section 8 is
+"Development Governance & Coding Standards," unrelated; likely refers to
+the original 291-page source PDF's own security chapter, not this file.)
+
+**Permission model: `RolePermission(roleId, module, action)` is
+sparse/existence-based**, not a dense true/false cell for every
+module×action pair. A row's presence means granted; absence means denied.
+Avoids seeding/storing ~1,440 explicit `false` rows (12 roles × 20
+modules × 6 actions) while still satisfying the AC's "independently
+configurable per module × action cell, stored in the database."
+`permission.service.ts::hasPermission`/`requirePermission` always query
+fresh from the DB — never trust anything cached in the JWT — so a
+permission change (STORY-057, later) takes effect immediately without a
+redeploy, per the AC.
+
+**Default permission matrix** (`prisma/seed-admin.ts`): Super
+Administrator gets all 6 actions (View/Edit/Delete/Approve/Export/Audit)
+on all 20 modules — the AC's floor that can never be reduced.
+Administrator gets every action except Audit on all 20 modules — Audit is
+reserved to Super Administrator only, everywhere, a deliberate
+simplification (viewing a module's audit trail is a cross-cutting,
+higher-trust capability) avoiding a per-role judgment call blueprint.md
+doesn't specify. Each of the other 10 functional roles gets
+View/Edit/Delete/Approve/Export on 2-4 "home" modules matching its job
+function and View-only everywhere else:
+
+| Role | Home modules |
+|---|---|
+| Marketing Manager | Marketing, Homepage Builder, SEO |
+| Sales Manager | Orders, Customers, Rewards & Referrals |
+| Finance Manager | Orders, Export Portal, System Settings |
+| Production Manager | Products, Media Library |
+| Warehouse Manager | Orders, Delivery Zones, ERP Integration |
+| Customer Support | Customers, Orders, Reviews, Q&A |
+| Export Manager | Export Portal, Orders, CRM/Analytics |
+| Content Editor | Blog, Recipes, Navigation, CMS Workflow |
+| SEO Specialist | SEO, Navigation |
+
+Viewer gets View-only on all 20 modules, nothing else. Verified by
+direct seed inspection: Super Administrator = 120 rows (20×6),
+Viewer = 20 rows (20×1), total 528 rows across all 12 roles — matches
+the formula exactly.
+
+**Two guards exist with no caller yet** — `assertCanModifyRolePermission`
+(the Super-Administrator-floor: blocks removing any grant from that role)
+and `assertNotLastSuperAdmin` (blocks deleting/de-elevating the last
+active Super Administrator) — both unit-tested directly, since STORY-057
+(the role-editing UI that will call them) doesn't exist yet. Per this
+story's own framing: STORY-038 provides the primitives every later story
+depends on, not just the parts with a UI already attached.
+
+**`(admin)` route-group structure**: `src/app/(admin)/admin/page.tsx`
+(protected, wrapped by `(admin)/layout.tsx`'s session guard) and
+`src/app/admin/login/page.tsx` (public, deliberately a sibling outside
+the group) both resolve under the same `/admin` URL prefix from two
+different route-group parents — the same pattern the customer side
+already uses (`account/(public)/login` + `account/(dashboard)/...`
+converging under `/account`). `src/proxy.ts` (Next.js 16 permits only one
+project-wide) gained a second guard block for `/admin/*`, mirroring the
+existing `/account/*` one exactly — this is a UX-level redirect only, not
+the security boundary; that's `requirePermission()`, enforced server-side
+in the Service layer, called by every protected action.
+
+**`(admin)/layout.tsx` is a minimal top bar** (name, role, sign-out), not
+a full sidebar/dashboard shell — that's STORY-039's scope. Similarly,
+`src/app/(admin)/admin/page.tsx` is a bare landing page proving the
+foundation works end to end, not a dashboard. `GET /api/admin/ping`
+exists purely to prove the session-gating chain for API routes (`proxy.
+ts`'s matcher excludes `api/`, so every admin API route must check its
+own session — this one does, with no module/action check, since "is
+there a session" is all it's proving).
+
+**STORY-Additional.md (received mid-implementation)**: a separate,
+additive specification for Hero Banner/homepage media management, a
+Media Library, and a Promotional Pop-up Manager — explicitly forward-
+looking content/marketing feature work for later stories, not a change
+to this story's scope. It maps cleanly onto the `AdminModule` enum
+already defined here (`HomepageBuilder`, `MediaLibrary`, `Marketing`
+already exist) and its own "recommended permissions" list (e.g.
+`CONTENT_HERO_PUBLISH`, `MEDIA_UPLOAD`) is a finer-grained action
+vocabulary than this story's six generic actions — a future story
+building those modules should map its verbs onto the existing
+View/Edit/Delete/Approve/Export/Audit actions on the relevant module
+(e.g. Publish ≈ Approve, Create/Replace ≈ Edit, Archive ≈ Delete) rather
+than introducing a second, competing action enum, per that document's
+own "do not create duplicate systems" instruction.
+
+**Deferred to follow-up work (see the scope note above):** self-service
+admin invite-by-email (`AdminInvite` model, `/api/admin/auth/invite`,
+`/api/admin/auth/accept-invite`), admin password reset
+(`/api/admin/auth/reset-password`), and TOTP 2FA
+(`/api/admin/auth/2fa/setup`/`verify`, no `otpauth`/`qrcode` dependency
+added yet). All three were designed for in the original story doc and
+remain valid future work — none of them block STORY-039+.
+
+**Testing:** `tests/unit/permission-service.test.ts` — matrix resolution
+against real seeded permission rows, the Super-Administrator-floor guard,
+the last-Super-Administrator lockout guard (including the
+`findOrCreateSuperAdministratorRole` test-isolation note: it must use the
+real `SUPER_ADMINISTRATOR_ROLE_KEY` constant to exercise the guard's
+hardcoded comparison, so the test finds-or-creates rather than always
+creating, to never collide with a real seeded row's unique key).
+`tests/unit/admin-auth-service.test.ts` — login success, wrong password
+(no enumeration), lockout after the threshold (throwing immediately, not
+returning null), a still-locked account rejecting even the correct
+password, password-version force-logout. `tests/e2e/admin-auth.spec.ts`
+— unauthenticated redirect with a return path, successful login reaching
+the protected area, wrong-password rejection, lockout with the distinct
+message, sign-out, and confirmation that an admin session cannot reach
+`/account` (and, by the customer e2e suite's own unaffected passing
+tests, that a customer session cannot reach admin either).
