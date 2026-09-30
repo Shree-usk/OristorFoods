@@ -8,6 +8,7 @@ import { advanceReviewToPublished, submitReview } from "../src/services/review.s
 import { advanceQuestionToPublished, submitQuestion } from "../src/services/qa.service";
 import { advanceRecipeReviewToApproved, changeRecipeReviewStatus, submitReview as submitRecipeReview } from "../src/services/recipe-review.service";
 import { addBookmark } from "../src/services/recipe-bookmark.service";
+import { seedAdmin } from "./seed-admin";
 import { seedBlog } from "./seed-blog";
 import { seedCookingTips } from "./seed-cooking-tips";
 import { seedDelivery } from "./seed-delivery";
@@ -333,6 +334,10 @@ async function main() {
   // Notification templates (STORY-032).
   const notificationsSeed = await seedNotificationTemplates();
 
+  // Admin Auth & RBAC (STORY-038 — core scope): 12 roles, default
+  // permission matrix, one initial Super Administrator.
+  const adminSeed = await seedAdmin();
+
   console.log("Seed complete:", {
     brand: brand.slug,
     categories: [spices.slug, giftSets.slug],
@@ -347,6 +352,7 @@ async function main() {
     rewards: rewardsSeed,
     referrals: referralsSeed,
     notifications: notificationsSeed,
+    admin: adminSeed,
   });
 }
 
