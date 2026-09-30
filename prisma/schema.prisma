@@ -669,6 +669,16 @@ model Recipe {
   foodAcademyRefs      FoodAcademyRecipeRef[]
   recipeReviews        RecipeReview[]
   recipeBookmarks      RecipeBookmark[]
+  // STORY-043. Shown to the author on the Draft a reviewer just rejected;
+  // overwritten each rejection cycle — the full who/when/why history lives
+  // in the audit log's metadata, not a separate comment-log table.
+  reviewerComment      String?
+  createdById          String?
+  createdBy            AdminUser?         @relation("RecipeCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  updatedById          String?
+  updatedBy            AdminUser?         @relation("RecipeUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+  reviewedById         String?
+  reviewedBy           AdminUser?         @relation("RecipeReviewedBy", fields: [reviewedById], references: [id], onDelete: SetNull)
   publishedAt          DateTime?
   createdAt            DateTime           @default(now())
   updatedAt            DateTime           @updatedAt
@@ -1962,6 +1972,10 @@ model AdminUser {
   // STORY-042.
   homepageLayoutsCreated HomepageLayout[] @relation("HomepageLayoutCreatedBy")
   homepageLayoutsUpdated HomepageLayout[] @relation("HomepageLayoutUpdatedBy")
+  // STORY-043.
+  recipesCreated     Recipe[]        @relation("RecipeCreatedBy")
+  recipesUpdated     Recipe[]        @relation("RecipeUpdatedBy")
+  recipesReviewed    Recipe[]        @relation("RecipeReviewedBy")
   createdAt          DateTime        @default(now())
   updatedAt          DateTime        @updatedAt
 }

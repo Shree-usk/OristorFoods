@@ -4330,3 +4330,136 @@ slide via `AssetPickerDialog`, confirm the preview shows it, publish,
 confirm the live storefront reflects it, roll back, confirm the storefront
 reverts — as a full-access fixture; a Viewer-only fixture can browse but a
 mutating route denies server-side.
+
+## 2026-09-30 — STORY-043 Admin Recipes Workflow — core scope
+
+The admin authoring counterpart to STORY-017/018's customer-facing recipe
+experience, and the sole write path for the `Recipe` model those stories
+read from. The data model was already unusually complete going in —
+`Recipe`, `RecipeStep`, `RecipeIngredient`, `RecipeCategory`, `DietaryTag`
+all existed, and `RecipeStatus` already had exactly the five values the AC
+asks for (`Draft`/`Review`/`Approved`/`Published`/`Archived`) — but
+nothing wrote a recipe through anything but the seed script until this
+story. **Scope decisions made with the user this session:**
+
+1. **Built directly on `Recipe`, not on STORY-053.** The story doc's own
+   "Dependencies" section says this should plug into STORY-053's shared
+   CMS Workflow & Versioning engine — but STORY-053 doesn't exist yet
+   (much later in build order), and every other admin module so far
+   (STORY-040 Products, STORY-042 Homepage Builder) built its own
+   lightweight workflow directly on the model instead of waiting for a
+   shared engine nothing else needs yet either. This story does the same:
+   an `ALLOWED_TRANSITIONS` whitelist in `recipe-admin.service.ts`,
+   role-gated via STORY-038 permissions, audit-logged — same shape as
+   `product-admin.service.ts`'s transition guard. A deviation from the
+   stale reference, documented here rather than silently diverging;
+   nothing here blocks a future STORY-053 from absorbing it into a shared
+   engine.
+2. **Full version history (snapshot-every-publish, browsable,
+   rollback-to-any-version) is deferred**, consistent with STORY-042
+   deferring the same thing for homepage layouts. Core still ships the
+   real safety net the AC cares about: nothing reaches `Published`
+   without passing through `Review`/`Approved`, and a reviewer's
+   reject-with-comment sends it straight back to the original author with
+   the comment visible.
+3. **Scheduling (auto-publish at a future date/time) is deferred** — same
+   reason as every prior story this session: no cron/job-runner exists in
+   this codebase yet.
+
+**Workflow:** `Draft --submit--> Review --approve--> Approved
+--publish--> Published --archive--> Archived --restore--> Draft`, plus
+`Review --reject(comment)--> Draft` and `Approved --reject(comment)-->
+Draft` (a reviewer can still catch something before it goes live).
+Gating uses the existing `"Recipes"` module from STORY-038's permission
+matrix — no new `AdminModule` rows needed. `AdminAction` already includes
+`Approve` (confirmed before assuming otherwise), so `approve`/`reject`/
+`publish` are gated on `Approve` specifically, distinct from the `Edit`
+grant that covers create/update/submit/archive/restore — a dedicated unit
+test confirms an Edit-only admin is denied on `approve()`.
+`reviewerComment: String?` on `Recipe` is overwritten each rejection
+cycle and shown to the author on the Draft; the full who-rejected-when-why
+history lives in the audit log's `metadata`, so no separate comment-log
+table was needed.
+
+**Publish-readiness guard:** `publish` (and `submitForReview`, since
+nothing reaches Published without first passing Review) throws
+`RecipePublishReadinessError` unless the recipe has a hero image + alt
+text, at least one ingredient, and at least one step.
+
+**Preview reuses the real storefront transformation, not a duplicate
+mapping.** `recipe.service.ts::toRecipeDetail` was made `export`ed
+specifically so `recipe-admin.service.ts::getRecipeForPreview` could
+reuse the exact same row-to-DTO transformation against
+`findRecipeAdminDetailById` (any status) instead of
+`findPublishedRecipeBySlug` (Published-only) — the same "server-render
+the real components against non-published data, admin-only route"
+pattern STORY-042 established for the Homepage Builder preview. This
+guarantees the admin preview and the real storefront page can never
+structurally drift apart.
+
+**A real bug found via testing, not caught by type-checking:**
+`register(name, { valueAsNumber: true })` reads the native `<input
+type="number">`'s `.valueAsNumber` DOM property, which is `NaN` (not
+`undefined`) for an empty input. Zod's `.optional()` only accepts
+`undefined` — `.number()` explicitly rejects `NaN` — so any *optional*
+numeric field left blank (e.g. an ingredient with no quantity, "salt to
+taste") silently failed validation with no network request ever firing
+and no visible error on whichever tab was currently active (the error
+renders on the tab that owns the field, which may not be the visible
+one in a Tabs-based multi-tab form). Diagnosed by elimination: a network
+listener showed zero requests fired (client-side validation, not a
+server issue) → a per-tab error-text scan isolated it to the Ingredients
+tab → traced to the unfilled Quantity field. Fixed with a shared
+`optionalNumber = { setValueAs: (v) => v === "" ? undefined : Number(v)
+}` transform, applied only to the 7 genuinely-optional numeric fields
+(ingredient quantity + 6 nutrition fields) — `servings`/
+`prepTimeMinutes`/`cookTimeMinutes` correctly keep `valueAsNumber: true`
+since NaN failing their non-optional `z.number()` check is the *correct*
+"this is required" behavior for those.
+
+**A real, pre-existing, codebase-wide bug found but NOT fixed here
+(flagged as a follow-up):** `SelectValue`
+(`src/components/ui/select.tsx`) has no label-resolution logic — it
+displays the raw stored `value`, not the matching `SelectItem`'s child
+label text, whenever `value !== label`. This is invisible on selects
+where the value happens to equal the label (Difficulty, Video Provider),
+which is why nothing caught it before. Confirmed live in this story's own
+Category select (a cuid rendered instead of the category name) both via
+an e2e diagnostic and in this story's live-browser verification, while
+the same field renders correctly in read-only contexts (the storefront
+preview, the admin list view) that resolve the name server-side instead
+of through this client component. The admin Products module's
+Brand/Category selects almost certainly have the identical bug — never
+caught there because `admin-products.spec.ts`'s e2e test never exercises
+those specific fields. Out of scope for this story; needs its own
+`SelectValue` fix as a shared-component investigation.
+
+**Two recurring Base UI/testing gotchas, same class as prior stories:**
+(1) the recipe form's Preview button was missing `nativeButton={false}`
+on its `render={<Link .../>}` — the same omission fixed repeatedly in
+STORY-042; (2) the e2e Reject-dialog test initially used
+`.getByRole("button", { name: "Reject" }).nth(1)`, assuming two
+same-labeled buttons were both queryable — but Base UI's `Dialog` makes
+background content inert while open, so only the dialog's own button was
+actually in the accessibility tree at that moment, and `.nth(1)` never
+resolved. Fixed by scoping the query to `page.getByRole("dialog")`
+first, which is robust regardless of the exact inert-background
+mechanics.
+
+**Testing:** `tests/unit/recipe-admin-service.test.ts` — create/update
+with ingredients and steps (replace-all semantics), duplicate-slug
+rejection, the full Draft→Review→Approved→Published→Archived→Draft
+transition matrix, reject sends Review/Approved back to Draft with a
+visible comment, illegal transitions rejected (Draft→Published direct,
+Approved→Archived direct), the publish-readiness guard's three
+sub-checks (missing hero image / no ingredients / no steps), Draft-only
+delete, permission denial, and approve/reject/publish requiring `Approve`
+specifically rather than just `Edit`. `tests/e2e/admin-recipes.spec.ts`
+— author creates a recipe, submits for review; reviewer previews it
+(confirms the storefront-shared render), rejects with a comment; author
+sees the comment, fixes, resubmits; reviewer approves and publishes;
+confirms the real storefront `/recipes/[slug]` now serves it — as an
+author/reviewer two-role fixture; a Viewer-only fixture can browse but a
+mutating route denies server-side. Verified live in the browser as the
+seeded Super Administrator through the full
+Draft→Review→reject→Draft→resubmit→Approve→Publish→storefront path.
