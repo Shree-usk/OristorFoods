@@ -11,11 +11,11 @@ function formatPrice(price: number, currency: string) {
   return `${currency} ${price.toLocaleString()}`;
 }
 
-export function BestSellingProducts({ products }: { products: ProductCardData[] }) {
+export function BestSellingProducts({ products, titleOverride }: { products: ProductCardData[]; titleOverride?: string | null }) {
   return (
     <Section>
       <div className="flex items-baseline justify-between">
-        <h2 className="text-h2 font-heading text-charcoal">Best Selling Products</h2>
+        <h2 className="text-h2 font-heading text-charcoal">{titleOverride || "Best Selling Products"}</h2>
         <Link href="/products?collection=best-sellers" className="text-small text-chilli hover:underline">
           View all
         </Link>

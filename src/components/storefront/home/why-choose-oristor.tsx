@@ -2,10 +2,10 @@ import { ScrollReveal } from "@/components/motion";
 import { Section } from "@/components/storefront/layout/section";
 import type { WhyChooseFeatureData } from "@/types/home";
 
-export function WhyChooseOristor({ features }: { features: WhyChooseFeatureData[] }) {
+export function WhyChooseOristor({ features, titleOverride }: { features: WhyChooseFeatureData[]; titleOverride?: string | null }) {
   return (
     <Section className="bg-beige">
-      <h2 className="text-h2 font-heading text-charcoal">Why Choose Oristor</h2>
+      <h2 className="text-h2 font-heading text-charcoal">{titleOverride || "Why Choose Oristor"}</h2>
       <div className="mt-8 grid grid-cols-1 gap-8 sm:grid-cols-2 lg:grid-cols-4">
         {features.map((feature, index) => (
           <ScrollReveal key={feature.id} delay={index * 0.05}>

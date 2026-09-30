@@ -4,10 +4,10 @@ import { ScrollReveal } from "@/components/motion";
 import { Section } from "@/components/storefront/layout/section";
 import type { ReviewData } from "@/types/home";
 
-export function CustomerReviews({ reviews }: { reviews: ReviewData[] }) {
+export function CustomerReviews({ reviews, titleOverride }: { reviews: ReviewData[]; titleOverride?: string | null }) {
   return (
     <Section className="bg-charcoal text-ivory">
-      <h2 className="text-h2 font-heading">What Our Customers Say</h2>
+      <h2 className="text-h2 font-heading">{titleOverride || "What Our Customers Say"}</h2>
       <div className="mt-8 grid grid-cols-1 gap-6 sm:grid-cols-3">
         {reviews.map((review, index) => (
           <ScrollReveal key={review.id} delay={index * 0.05}>

@@ -1959,6 +1959,9 @@ model AdminUser {
   productsUpdated    Product[]       @relation("ProductUpdatedBy")
   // STORY-041.
   mediaAssetsUploaded MediaAsset[]
+  // STORY-042.
+  homepageLayoutsCreated HomepageLayout[] @relation("HomepageLayoutCreatedBy")
+  homepageLayoutsUpdated HomepageLayout[] @relation("HomepageLayoutUpdatedBy")
   createdAt          DateTime        @default(now())
   updatedAt          DateTime        @updatedAt
 }
@@ -2048,4 +2051,103 @@ model MediaAsset {
 
   @@index([folderId])
   @@index([type])
+}
+
+// --- Homepage Visual Builder (STORY-042, core scope) ---
+// The admin-side authoring model behind the storefront homepage
+// (src/app/(storefront)/page.tsx, STORY-006). A layout is an ordered set
+// of section instances; publishing swaps which layout is live and
+// archives (never deletes) whichever layout was previously live, giving
+// one-level rollback for free — see docs/architecture-decisions.md.
+// Scheduling (auto-publish/expire) is deferred: no cron/job-runner exists
+// in this codebase yet.
+
+enum HomepageLayoutStatus {
+  Draft
+  Published
+  Archived
+}
+
+enum HomepageSectionType {
+  HeroBanner
+  FeaturedCategories
+  WhyChooseOristor
+  BestSellingProducts
+  FeaturedRecipes
+  ProductCollections
+  FoodAcademy
+  CustomerReviews
+  ExportSolutions
+  RewardsClub
+  InstagramGallery
+}
+
+enum ContentAlignment {
+  Left
+  Center
+  Right
+}
+
+model HomepageLayout {
+  id          String               @id @default(cuid())
+  status      HomepageLayoutStatus @default(Draft)
+  publishedAt DateTime?
+  sections    HomepageSection[]
+  createdById String?
+  createdBy   AdminUser?           @relation("HomepageLayoutCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  updatedById String?
+  updatedBy   AdminUser?           @relation("HomepageLayoutUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+  createdAt   DateTime             @default(now())
+  updatedAt   DateTime             @updatedAt
+
+  @@index([status])
+}
+
+model HomepageSection {
+  id       String              @id @default(cuid())
+  layoutId String
+  layout   HomepageLayout      @relation(fields: [layoutId], references: [id], onDelete: Cascade)
+  type     HomepageSectionType
+  sortOrder Int
+  visible  Boolean             @default(true)
+  // Light-touch override for the 10 non-HeroBanner types — null falls
+  // back to that section's existing hardcoded/fixture heading. Unused
+  // (always null) for HeroBanner, which uses HeroBannerSlide instead. A
+  // layout may have at most one HeroBanner-type section (enforced in
+  // homepage-builder.service.ts, not the schema — Prisma can't express a
+  // conditional unique constraint); the other 10 types may repeat, since
+  // duplicate-section is an explicit AC.
+  titleOverride       String?
+  descriptionOverride String?
+  banners  HeroBannerSlide[]
+  createdAt DateTime           @default(now())
+  updatedAt DateTime           @updatedAt
+
+  @@index([layoutId])
+}
+
+model HeroBannerSlide {
+  id                String           @id @default(cuid())
+  sectionId         String
+  section           HomepageSection  @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  sortOrder         Int
+  visible           Boolean          @default(true)
+  headline          String
+  subheadline       String?
+  supportingText    String?
+  ctaLabel          String?
+  ctaHref           String?
+  secondaryCtaLabel String?
+  secondaryCtaHref  String?
+  desktopImageUrl   String
+  desktopImageAlt   String
+  mobileImageUrl    String?
+  mobileImageAlt    String?
+  videoUrl          String?
+  overlayEnabled    Boolean          @default(false)
+  alignment         ContentAlignment @default(Left)
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+
+  @@index([sectionId])
 }

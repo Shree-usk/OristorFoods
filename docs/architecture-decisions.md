@@ -4192,3 +4192,141 @@ several explicit scoping calls, recorded here so they aren't re-litigated:
   stays a future standalone story, written up once build order reaches it
   after STORY-042 (Homepage Visual Builder, which owns section #1) — no
   change, reaffirmed.
+
+## 2026-09-30 — STORY-042 Homepage Visual Builder — core scope
+
+The admin-side authoring tool for the storefront homepage (STORY-006),
+whose 11 sections were previously hardcoded in `page.tsx`, driven mostly
+by static fixture data. This story makes section order/visibility and
+Hero Banner content fully admin-editable, per `docs/blueprint.md` Section
+7 and `STORY-Additional.md`'s Hero Banner section (#1), authoritative
+here. **Scope decisions made with the user this session** (same "core
+now, defer the rest" split as every prior admin story):
+
+1. **Hero Banner gets the full rich editor** per `STORY-Additional.md`:
+   multi-banner, desktop/mobile media via the Media Library (STORY-041's
+   `AssetPickerDialog`), heading, subheadline, supporting text, CTA 1 +
+   optional CTA 2, overlay, alignment, banner ordering, show/hide. The
+   other 10 section types get only reorder + show/hide + an optional
+   title/description text override this pass — no section-specific
+   editors (no Best Selling Products override list, no curated Customer
+   Reviews list, etc.), explicitly deferred to later stories once their
+   individual requirements are defined.
+2. **Real drag-and-drop via `@dnd-kit/core` + `@dnd-kit/sortable`** — a
+   new dependency; nothing in this codebase did real drag-and-drop
+   before. Both the section canvas and the Hero Banner slide list use
+   dnd-kit's `KeyboardSensor` alongside the pointer sensor — a real
+   accessibility win, not just a testing convenience (confirmed working:
+   focus the drag handle, Space to pick up, Arrow keys to move, Space to
+   drop).
+3. **Scheduling (auto-publish/auto-expire) is deferred.** No
+   cron/job-runner exists in this codebase. Core ships Draft → Published
+   with one-level rollback instead — `publishLayout` archives whichever
+   layout was previously live in the same transaction that publishes the
+   new one (`homepage-layout.repository.ts::publishLayoutSwappingPrevious`),
+   and `rollbackToPrevious` republishes the most-recently-Archived layout
+   by reusing that same primitive. No separate version-history table.
+4. **Preview = view the saved draft**, not a true live/unsaved-edit-
+   reflecting pane. `/admin/homepage-builder/[id]/preview` server-renders
+   the real storefront section components (`HomepageSections`, shared with
+   the actual storefront `page.tsx`) against the draft's saved data, with
+   a client-side desktop/mobile width-container toggle — no iframe, no
+   live-sync engine.
+5. **Storefront shows only the first visible Hero Banner slide** (by
+   `sortOrder`) this pass — no carousel/rotation library exists in this
+   codebase, and building one is new UI scope beyond this story.
+   Multi-banner rotation on the storefront is a flagged follow-up.
+
+**Rollback via status reuse, not a separate history table.** A layout's
+lifecycle is `Draft → Published → Archived`; publishing atomically
+archives whichever layout was previously `Published` in the same
+transaction, so there's never a moment with zero or two `Published`
+layouts. Rollback is just "publish the most-recently-Archived layout" —
+the exact same primitive, no new model needed. This gives one-level
+rollback for free; a full multi-version history list is deferred.
+
+**Storefront retrofit, with a hard "never blank" guarantee.**
+`src/app/(storefront)/page.tsx` now calls
+`homepage.service.ts::getPublishedHomepageLayout()` (storefront-facing,
+separate from the admin-facing `homepage-builder.service.ts` — same split
+as `product.service.ts` vs `product-admin.service.ts`) and renders via a
+new shared `HomepageSections` component. **If no layout has ever been
+published**, it falls back to the exact original STORY-006 fixture-driven
+JSX — this migration must never leave the storefront broken. A new
+`prisma/seed-homepage.ts` creates and publishes one initial layout
+matching STORY-006's original default (11 sections in blueprint order,
+one Hero Banner slide from the former `heroBanner` fixture), so a fresh
+environment isn't relying on the fallback path in practice.
+
+**A real bug found via testing, not the manual walkthrough: the
+homepage route could serve a statically-cached, stale layout.**
+`getPublishedHomepageLayout()` is a plain Prisma call with no Next.js
+dynamic API of its own; the route's dynamic rendering was only being
+forced incidentally, by `FeaturedRecipes`' own `connection()` call deep in
+the tree — but `FeaturedRecipes` is just one of 11 possible sections, and
+whether it renders at all depends on which sections the *currently
+published* layout happens to include. A layout that omits it (e.g. this
+story's own e2e test fixture, which used only `HeroBanner` +
+`FeaturedCategories`) could let the whole route be treated as static,
+silently serving a stale render after later publishes/rollbacks. Fixed by
+calling `await connection()` directly in `page.tsx` itself, so the route
+is unconditionally dynamic regardless of which sections end up rendering
+— the same fix belongs anywhere a route's dynamism depends on a
+conditionally-rendered child rather than the route's own top-level code.
+
+**Ten section components gained an optional `titleOverride`
+(`InstagramGallery` also `descriptionOverride`) prop**, used instead of
+their previously-hardcoded heading text when a `HomepageSection` row sets
+one: `featured-categories.tsx`, `why-choose-oristor.tsx`,
+`best-selling-products.tsx`, `product-collections.tsx`,
+`customer-reviews.tsx`, `instagram-gallery.tsx`, `featured-recipes.tsx`.
+The three `TeaserSectionData`-based sections (`FoodAcademyTeaser`,
+`ExportSolutions`, `RewardsClubTeaser`) needed no component changes at
+all — their existing `headline`/`description` fields are simply
+overridden in `HomepageSections` before the fixture data is passed down.
+
+**A new `hero-banner-slide.tsx` component, not a rewrite of the existing
+`HeroBanner`.** The pre-STORY-042 `HeroBanner` component (single banner,
+one CTA, no overlay/alignment/mobile-image/video) stays completely
+untouched and is used only for the fixture-driven fallback when no layout
+has ever been published — zero risk to STORY-006's own tested behavior.
+The new `HeroBannerSlide` component renders the richer STORY-Additional
+feature set (secondary CTA, overlay scrim, alignment, mobile art direction
+via two `<Image>` elements toggled by breakpoint, optional `<video>`
+background) and is used only for the DB-backed path.
+
+**A real Base UI gotcha, found live in the browser (not caught by
+type-checking or lint):** every `<Button nativeButton={false}
+render={<Link .../>}>` in this story's new admin components was missing
+`nativeButton={false}` initially, producing a real console error ("Base
+UI: A component that acts as a button expected a native `<button>`...")
+— the existing `hero-banner.tsx` component already had this right, but it
+wasn't obvious from that one example alone that every other `render={<Link
+.../>}` usage needed the same prop. Fixed across
+`homepage-builder-list-view.tsx`, `homepage-builder-canvas.tsx`, and the
+preview page's "Back to editor" button.
+
+**A real test-isolation bug, found while writing the e2e test:**
+`HomepageLayout.createdBy` uses `onDelete: SetNull`. The e2e test's
+`beforeEach` originally deleted `adminUser` rows *before* deleting
+`homepageLayout` rows filtered by `createdBy.email` — nulling out
+`createdById` on every layout that admin had created, permanently
+orphaning it from that exact filter on every subsequent run. Fixed by
+reordering the cleanup (layouts before their creator); five already-
+orphaned layouts from this session's own debugging were cleaned up via a
+one-off script. General lesson for any future story with a
+`SetNull`-on-delete creator relation: order cleanup Foreign-key-dependent
+rows before deleting the row they reference, even when "obviously" the
+parent should go first.
+
+**Testing:** `tests/unit/homepage-builder-service.test.ts` — blank vs.
+cloned-from-published draft creation, the HeroBanner-section-cap-at-one
+rejection, section add/update/duplicate/reorder, banner
+add/duplicate/reorder, publish atomically archiving the previous layout,
+rollback republishing the right layout, the Draft-only mutation guard,
+permission denial. `tests/e2e/admin-homepage-builder.spec.ts` — build a
+draft, reorder sections via dnd-kit's keyboard sensor, add a Hero Banner
+slide via `AssetPickerDialog`, confirm the preview shows it, publish,
+confirm the live storefront reflects it, roll back, confirm the storefront
+reverts — as a full-access fixture; a Viewer-only fixture can browse but a
+mutating route denies server-side.
