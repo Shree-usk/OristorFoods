@@ -261,7 +261,15 @@ The source spec left these generic or unspecified — confirm with the client be
   for the full model.
 - ERP system being integrated with (spec assumes ERP sync exists but doesn't name the system)
 - Multi-currency scope for launch vs. future
-- Hosting/cloud provider specifics (Part 15 of the source PDF covers DevOps/CI/CD in more depth if needed)
+- Hosting/cloud provider specifics (Part 15 of the source PDF covers
+  DevOps/CI/CD in more depth if needed). **This also covers file
+  storage/CDN** — STORY-041 (Media Library) ships a swappable
+  `StorageProvider` abstraction with a local-disk placeholder so admin
+  media uploads aren't blocked on this, but two specific features are
+  still blocked until a real provider is confirmed: review photos
+  (`ReviewImage` — STORY-015) and customer profile photo upload
+  (currently a pasted URL only — STORY-034). Resolve this decision before
+  starting either.
 
 ---
 
