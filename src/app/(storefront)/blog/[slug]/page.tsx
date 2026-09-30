@@ -21,10 +21,14 @@ export async function generateMetadata({ params }: BlogDetailPageProps): Promise
   const { slug } = await params;
   const post = await getCachedPost(slug);
   if (!post) return {};
+  const title = post.metaTitle || post.title;
+  const description = post.metaDescription || post.excerpt;
+  const ogImage = post.ogImage || post.heroImageUrl;
   return {
-    title: post.title,
-    description: post.excerpt,
+    title,
+    description,
     alternates: { canonical: `/blog/${slug}` },
+    openGraph: { title, description, ...(ogImage ? { images: [{ url: ogImage }] } : {}) },
   };
 }
 

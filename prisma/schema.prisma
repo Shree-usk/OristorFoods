@@ -944,6 +944,16 @@ model BlogPost {
   readingTimeMinutes Int?
   status             BlogPostStatus @default(Draft)
   publishedAt        DateTime?
+  metaTitle          String?
+  metaDescription    String?
+  ogImage            String?
+  // STORY-044. Internal "who authored this in the console" audit trail —
+  // independent of `authorId`/`author`, which is the curated public byline
+  // (e.g. "The Oristor Kitchen Team") and stays unchanged.
+  createdById        String?
+  createdBy          AdminUser?     @relation("BlogPostCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  updatedById        String?
+  updatedBy          AdminUser?     @relation("BlogPostUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
   createdAt          DateTime       @default(now())
   updatedAt          DateTime       @updatedAt
 
@@ -1976,6 +1986,9 @@ model AdminUser {
   recipesCreated     Recipe[]        @relation("RecipeCreatedBy")
   recipesUpdated     Recipe[]        @relation("RecipeUpdatedBy")
   recipesReviewed    Recipe[]        @relation("RecipeReviewedBy")
+  // STORY-044.
+  blogPostsCreated   BlogPost[]      @relation("BlogPostCreatedBy")
+  blogPostsUpdated   BlogPost[]      @relation("BlogPostUpdatedBy")
   createdAt          DateTime        @default(now())
   updatedAt          DateTime        @updatedAt
 }

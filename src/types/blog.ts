@@ -28,6 +28,10 @@ export interface BlogPostDetailData extends BlogPostCardData {
   comments: BlogCommentData[];
   relatedPosts: BlogPostCardData[];
   recipeCards: Record<string, RecipeCard>;
+  /** STORY-044. Falls back to title/excerpt/heroImageUrl when unset — see generateMetadata in blog/[slug]/page.tsx. */
+  metaTitle: string | null;
+  metaDescription: string | null;
+  ogImage: string | null;
 }
 
 export interface BlogListResult {
