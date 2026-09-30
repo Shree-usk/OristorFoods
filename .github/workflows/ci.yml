@@ -29,6 +29,9 @@ jobs:
       # lint/typecheck/build, which don't need a live DB.
       DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/oristor_ci?sslmode=disable"
       AUTH_SECRET: "ci-placeholder-secret-do-not-use-in-production"
+      # STORY-038. Distinct from AUTH_SECRET, mirroring the real/local env
+      # separation — a shared value here would defeat the point in CI too.
+      ADMIN_AUTH_SECRET: "ci-placeholder-admin-secret-do-not-use-in-production"
     steps:
       - uses: actions/checkout@v4
 
