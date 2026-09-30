@@ -90,3 +90,70 @@ export function getApplicableVolumeDiscountTiersForProducts(productIds: string[]
     orderBy: [{ minQuantity: "desc" }, { createdAt: "desc" }],
   });
 }
+
+// --- Admin CRUD (STORY-040) ---
+// StandardPrice/SalePrice/CampaignPrice are an append-only ledger (a new
+// row per price change, "latest"/"active" wins on read) — see this file's
+// own getLatest*/getActive* functions above. product-admin.service.ts's
+// "set standard price" therefore always calls createStandardPrice (never an
+// update). SalePrice/CampaignPrice windows and VolumeDiscountTier rungs are
+// each a distinct row the admin can edit/delete individually, so those get
+// real update/delete functions. CustomerGroupPrice is upserted in place
+// (its own @@unique([productId, customerGroup]) makes a second row for the
+// same group impossible).
+
+export function listStandardPriceHistory(productId: string) {
+  return prisma.standardPrice.findMany({ where: { productId }, orderBy: { createdAt: "desc" } });
+}
+
+export function listSalePrices(productId: string) {
+  return prisma.salePrice.findMany({ where: { productId }, orderBy: { startDate: "desc" } });
+}
+
+export function updateSalePrice(id: string, data: Prisma.SalePriceUpdateInput) {
+  return prisma.salePrice.update({ where: { id }, data });
+}
+
+export function deleteSalePrice(id: string) {
+  return prisma.salePrice.delete({ where: { id } });
+}
+
+export function listCampaignPrices(productId: string) {
+  return prisma.campaignPrice.findMany({ where: { productId }, orderBy: { startDate: "desc" } });
+}
+
+export function updateCampaignPrice(id: string, data: Prisma.CampaignPriceUpdateInput) {
+  return prisma.campaignPrice.update({ where: { id }, data });
+}
+
+export function deleteCampaignPrice(id: string) {
+  return prisma.campaignPrice.delete({ where: { id } });
+}
+
+export function listCustomerGroupPrices(productId: string) {
+  return prisma.customerGroupPrice.findMany({ where: { productId } });
+}
+
+export function upsertCustomerGroupPrice(productId: string, customerGroup: CustomerGroup, price: number | string, currency: string) {
+  return prisma.customerGroupPrice.upsert({
+    where: { productId_customerGroup: { productId, customerGroup } },
+    create: { productId, customerGroup, price, currency },
+    update: { price, currency },
+  });
+}
+
+export function deleteCustomerGroupPrice(productId: string, customerGroup: CustomerGroup) {
+  return prisma.customerGroupPrice.delete({ where: { productId_customerGroup: { productId, customerGroup } } });
+}
+
+export function listVolumeDiscountTiers(productId: string) {
+  return prisma.volumeDiscountTier.findMany({ where: { productId }, orderBy: { minQuantity: "asc" } });
+}
+
+export function updateVolumeDiscountTier(id: string, data: Prisma.VolumeDiscountTierUpdateInput) {
+  return prisma.volumeDiscountTier.update({ where: { id }, data });
+}
+
+export function deleteVolumeDiscountTier(id: string) {
+  return prisma.volumeDiscountTier.delete({ where: { id } });
+}

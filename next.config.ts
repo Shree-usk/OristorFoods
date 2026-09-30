@@ -2,6 +2,12 @@ import path from "node:path";
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  // The dev-mode indicator badge is fixed bottom-left and can sit directly
+  // on top of page content that scrolls to that corner (found via STORY-040's
+  // admin product form, whose Categories checkbox list landed exactly
+  // there), silently intercepting clicks in both manual testing and
+  // Playwright. Dev-only — no effect on the production build.
+  devIndicators: false,
   turbopack: {
     // This worktree sits inside the main repo, which has its own
     // package-lock.json — Turbopack's root inference picked that sibling

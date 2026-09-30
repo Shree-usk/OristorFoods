@@ -3900,3 +3900,136 @@ module sees every real widget plus all three placeholders; a fixture
 granted only `Orders` sees a visibly reduced set; a fixture with no
 permissions sees the dashboard's own empty-state message rather than an
 error or a blank grid.
+
+## 2026-09-30 — STORY-040 Admin Products Module (CRUD) — core scope
+
+The admin authoring counterpart to STORY-009's storefront product model —
+the first real content-management admin console module (STORY-038 was
+auth-only, STORY-039 was read-only aggregation), so this story establishes
+the first admin list/tabbed-form/bulk-action UI patterns future modules
+will follow. **Scope, per the user's explicit decision** (mirroring
+STORY-038's "core now, defer the rest" split): full CRUD + duplicate +
+every field group editable + list view with filters/search/pagination +
+bulk status actions (publish/archive/delete on a selection) ship now.
+**Deferred to a fast follow-up**, blocking nothing else: CSV bulk
+import/export (transactional per-row validation + downloadable error
+report) and the bulk-edit modal (category reassignment, price adjustment
+by amount/percent) — both meaningfully separate sub-features from the
+core write-path this story otherwise delivers.
+
+**No new pricing model** — the story's own task list says "add
+`ProductPriceTier`", but STORY-009 already built 5 richer, purpose-built
+models (`StandardPrice`, `SalePrice`, `CampaignPrice`,
+`CustomerGroupPrice`, `VolumeDiscountTier`), and `CustomerGroup` already
+has exactly the `Retail/Wholesale/Distributor/Export/PrivateLabel` values
+the AC's "wholesale, distributor, export, private-label" tiers ask for.
+`pricing.repository.ts` had `createXxx` for all 5 (used by the seed
+script) but no update/delete/list-all — this story adds those.
+`StandardPrice`/`SalePrice`/`CampaignPrice` are an **append-only ledger**
+(a new row per price change, "latest"/"active" wins on read — see the
+repository file's own doc comment) — `setStandardPrice` therefore always
+creates a new row, never updates one, while `SalePrice`/`CampaignPrice`
+windows and `VolumeDiscountTier` rungs each get real per-row update/delete
+since they're independently editable entries, not a ledger.
+`CustomerGroupPrice` is upserted in place (`@@unique([productId,
+customerGroup])` makes a second row for the same group impossible).
+**Pricing is edited via its own set of endpoints/service functions, not
+bundled into `createProduct`/`updateProduct`'s payload** — a duplicated
+product's images/videos/nutrition/ingredients all copy in one shot, but
+pricing is deliberately excluded from that copy (see below), and the
+ledger/per-row-editable/upsert shapes don't map cleanly onto one generic
+"save the whole product" call anyway.
+
+**No Media Library picker yet (STORY-041 doesn't exist).** Image/video
+fields use the same plain `url`/`altText`/`sortOrder`/`isPrimary` shape
+`ProductImage`/`ProductVideo` already have — the admin form gets a simple
+repeatable URL-list editor per field, not a picker modal. Upgraded in
+place when STORY-041 ships (same underlying schema, different picker UI)
+— same pattern STORY-030/031 used for building real schema ahead of their
+own admin UI.
+
+**"Related products" is deferred** — the storefront already computes
+related products algorithmically by category overlap
+(`product.service.ts::listRelatedProducts`); a manually-curated override
+would need a new self-relation table, out of scope for this already-large
+core pass.
+
+**`duplicateProduct` never copies pricing rows** — a duplicate starting
+silently priced the same as its source risks an unnoticed wrong price
+going live; the admin must set pricing explicitly on the new Draft
+product. It also forces a caller-supplied slug/SKU (AC), never
+auto-generated, and copies the bundle relation if present (not exposed in
+the create/edit form itself this pass — bundle-type products are a narrow
+enough case that full bundle-item editing is deferred alongside the other
+follow-up items above).
+
+**The Draft/Published/Archived transition set is a whitelist wider than
+the AC's literal "Draft → Published → Archived" wording** — a real admin
+needs to discard a draft without ever publishing it (`Draft → Archived`)
+and reopen an archived product for further edits before republishing
+(`Archived → Draft`), on top of the two the AC names directly. `Archived
+→ Published` (direct republish) is also allowed. Anything not in
+`ALLOWED_TRANSITIONS` (`product-admin.service.ts`) throws
+`ProductAdminIllegalTransitionError`. `bulkChangeStatus`/`bulkDelete`
+apply this per id independently and return `{ succeeded, failed }` rather
+than aborting the whole batch on the first bad row — a heterogeneous
+selection (some already Archived, one id stale) is expected, not
+exceptional; this is a deliberately different contract from bulk CSV
+import's stricter all-or-nothing validation (deferred, see above).
+
+**`createdById`/`updatedById` added to `Product`** (nullable FK to
+`AdminUser`, `onDelete: SetNull`, mirroring `Review.reviewedById`) for
+audit traceability, per the story's own task list — plus the matching
+`AdminUser.productsCreated`/`productsUpdated` back-relations.
+
+**A real bug, found only by driving the actual form, not by
+type-checking:** the SEO tab's `canonicalUrl`/`ogImage` fields are
+optional, but a blank `<input>` submits `""`, not `undefined` — plain
+`z.string().url().optional()` still runs `.url()` against `""` and
+rejects it, so every product save silently failed validation (no
+`serverError` shown, since react-hook-form's `handleSubmit` never calls
+the submit callback on an invalid form — it just sits there with no
+visible feedback because the errored fields live on the currently-inactive
+SEO tab). Fixed with `.optional().or(z.literal(""))` on both fields, in
+`product-admin.schema.ts`.
+
+**The Next.js dev-mode indicator badge (fixed bottom-left) can sit
+directly on top of page content that scrolls to that corner** — found via
+this story's own Categories checkbox list, which happened to land exactly
+there, silently intercepting every click (`<nextjs-portal>` "intercepts
+pointer events") in both a manual walkthrough and Playwright. Disabled
+project-wide via `devIndicators: false` in `next.config.ts` — dev-only,
+no effect on the production build, and prevents the same collision for
+any future admin page whose content happens to land in that corner.
+
+**Reused `CheckboxOption`** (`src/components/storefront/listing/
+checkbox-option.tsx`, originally built for storefront filter sidebars)
+for every checkbox+label pairing on the product form (categories,
+allergens, certifications, ingredient "Allergen", image "Primary", "In
+stock") instead of hand-rolling a `<label><Checkbox/>text</label>`
+pattern. That hand-rolled pattern has a real accessibility bug documented
+in `CheckboxOption`'s own comment: Base UI's Checkbox, wrapped in a
+`<label>` with no explicit `aria-labelledby`, falls back to the enclosing
+label for its accessible name — which contains the checkbox itself, so
+the self-reference resolves to an *empty* name (an axe
+`aria-toggle-field-name` violation, and unreachable by
+`getByRole("checkbox", { name })` in tests). `CheckboxOption` already
+fixed this with `aria-labelledby` pointing at a sibling `<span>`; reusing
+it was both the correct accessibility fix and avoided writing the same
+bug three more times across this form.
+
+**Testing:** `tests/unit/product-admin-service.test.ts` — create/update
+persisting every field group; duplicate forcing a new slug/SKU and never
+copying pricing; slug/SKU conflict → the right error class (a real
+driver-specific gotcha: `@prisma/adapter-pg`'s P2002 reports the violated
+column under `meta.driverAdapterError.cause.constraint.fields`, not the
+classic `meta.target` Prisma's own docs describe for the built-in query
+engine — `conflictField()` checks both); the transition whitelist
+including an illegal-transition rejection; `bulkChangeStatus`'s
+per-id success/failure shape; permission denial; the standard-price
+ledger vs. sale-price upsert-in-place vs. customer-group-price unique
+upsert behaviors. `tests/e2e/admin-products.spec.ts` — full lifecycle
+(create every tab → list → edit → publish → archive → duplicate with a
+forced new slug/SKU → bulk-delete) as a full-access fixture; a
+Viewer-only fixture can browse the list but the create route denies
+server-side (`AccessDenied`, not just a hidden button).

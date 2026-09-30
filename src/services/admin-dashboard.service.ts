@@ -14,10 +14,12 @@ import type { AdminModule } from "@/generated/prisma/client";
 /**
  * STORY-039. No `lowStockThreshold` field exists on Product yet (it would
  * need a System Settings-backed value that has no admin UI home until
- * STORY-040/STORY-054 exist) — a documented constant placeholder until
- * then. See docs/architecture-decisions.md.
+ * STORY-054 exists) — a documented constant placeholder until then.
+ * Exported so product-admin.service.ts's (STORY-040) list-view stock-level
+ * filter uses the exact same threshold, rather than a second magic number.
+ * See docs/architecture-decisions.md.
  */
-const LOW_STOCK_THRESHOLD = 10;
+export const LOW_STOCK_THRESHOLD = 10;
 
 function startOfToday(): Date {
   const now = new Date();
