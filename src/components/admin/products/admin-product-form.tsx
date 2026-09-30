@@ -2,7 +2,7 @@
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Controller, useFieldArray, useForm } from "react-hook-form";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 
@@ -22,6 +22,7 @@ import {
   fetchProductFormReferenceData,
   updateAdminProduct,
 } from "@/lib/api/admin-product-client";
+import { AssetPickerDialog } from "@/components/admin/media/asset-picker-dialog";
 import { DuplicateProductDialog } from "@/components/admin/products/duplicate-product-dialog";
 import { ProductPricingPanel } from "@/components/admin/products/product-pricing-panel";
 import { productAdminSchema, type ProductAdminFormInput } from "@/validation/product-admin.schema";
@@ -79,6 +80,13 @@ export function AdminProductForm({ productId }: { productId?: string }) {
   const queryClient = useQueryClient();
   const [serverError, setServerError] = useState<string | null>(null);
   const [duplicateOpen, setDuplicateOpen] = useState(false);
+  const [pickerTarget, setPickerTarget] = useState<{ kind: "image" | "video"; index: number } | null>(null);
+  // Controlled (not Tabs' own uncontrolled internal state) so it survives
+  // opening AssetPickerDialog without reverting to the first tab —
+  // uncontrolled state in a third-party component isn't reliably
+  // preserved across a dev-mode Fast Refresh, which the picker's first
+  // hit of a not-yet-compiled API route can trigger.
+  const [activeTab, setActiveTab] = useState("general");
 
   const { data: referenceData } = useQuery({
     queryKey: ["admin-products-reference-data"],
@@ -89,6 +97,15 @@ export function AdminProductForm({ productId }: { productId?: string }) {
     queryKey: ["admin-product", productId],
     queryFn: () => fetchAdminProduct(productId!),
     enabled: Boolean(productId),
+    // This query only ever seeds the form (see the reset() effect below,
+    // guarded to run once per product) or refreshes the read-only status
+    // Badge after an explicit action (publish/archive/delete, each calling
+    // invalidateQueries itself). A background refetch — e.g. TanStack
+    // Query's default refetchOnWindowFocus, which opening/closing a
+    // portal-rendered Dialog like AssetPickerDialog can trigger just by
+    // moving window focus — must never race an in-progress form edit.
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
   });
 
   const {
@@ -101,8 +118,19 @@ export function AdminProductForm({ productId }: { productId?: string }) {
     formState: { errors, isSubmitting },
   } = useForm<ProductAdminFormInput>({ resolver: zodResolver(productAdminSchema), defaultValues: EMPTY_VALUES });
 
+  // Seeds the form exactly once per product — a background refetch of
+  // `existingProduct` (TanStack Query's default refetchOnWindowFocus,
+  // which a portal-rendered Dialog like AssetPickerDialog/
+  // DuplicateProductDialog can trigger just by stealing and returning
+  // window focus) must never silently reset in-progress, unsaved edits.
+  // `initializedProductId` tracks which product this form instance has
+  // already seeded; a real navigation to a different product still resets.
+  const initializedProductId = useRef<string | undefined>(undefined);
+
   useEffect(() => {
     if (!existingProduct) return;
+    if (initializedProductId.current === existingProduct.id) return;
+    initializedProductId.current = existingProduct.id;
     reset({
       name: existingProduct.name,
       slug: existingProduct.slug,
@@ -226,7 +254,7 @@ export function AdminProductForm({ productId }: { productId?: string }) {
       {serverError && <p className="mt-2 text-small text-destructive">{serverError}</p>}
       {productId && <DuplicateProductDialog productId={productId} open={duplicateOpen} onOpenChange={setDuplicateOpen} />}
 
-      <Tabs defaultValue="general" className="mt-6">
+      <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as string)} className="mt-6">
         <TabsList>
           <TabsTrigger value="general">General</TabsTrigger>
           <TabsTrigger value="pricing">Pricing</TabsTrigger>
@@ -402,7 +430,7 @@ export function AdminProductForm({ productId }: { productId?: string }) {
 
         <TabsContent value="media" className="mt-4 space-y-6">
           <p className="text-small text-charcoal/70">
-            Plain URL entry for now — this becomes a Media Library picker once that module ships (STORY-041).
+            Type a URL directly, or browse the Media Library for an existing asset.
           </p>
           <div>
             <div className="flex items-center justify-between">
@@ -421,6 +449,9 @@ export function AdminProductForm({ productId }: { productId?: string }) {
                     name={`images.${index}.isPrimary`}
                     render={({ field }) => <CheckboxOption label="Primary" checked={field.value ?? false} onCheckedChange={field.onChange} />}
                   />
+                  <Button type="button" size="sm" variant="outline" onClick={() => setPickerTarget({ kind: "image", index })}>
+                    Browse Library
+                  </Button>
                   <Button type="button" size="sm" variant="ghost" onClick={() => images.remove(index)}>
                     Remove
                   </Button>
@@ -440,6 +471,9 @@ export function AdminProductForm({ productId }: { productId?: string }) {
                 <div key={field.id} className="flex items-center gap-2">
                   <Input {...register(`videos.${index}.url`)} placeholder="Video URL" className="flex-1" />
                   <Input {...register(`videos.${index}.altText`)} placeholder="Alt text" className="flex-1" />
+                  <Button type="button" size="sm" variant="outline" onClick={() => setPickerTarget({ kind: "video", index })}>
+                    Browse Library
+                  </Button>
                   <Button type="button" size="sm" variant="ghost" onClick={() => videos.remove(index)}>
                     Remove
                   </Button>
@@ -447,6 +481,19 @@ export function AdminProductForm({ productId }: { productId?: string }) {
               ))}
             </div>
           </div>
+
+          <AssetPickerDialog
+            open={pickerTarget !== null}
+            onOpenChange={(open) => {
+              if (!open) setPickerTarget(null);
+            }}
+            onSelect={(asset) => {
+              if (!pickerTarget) return;
+              setValue(`${pickerTarget.kind}s.${pickerTarget.index}.url`, asset.url);
+              setValue(`${pickerTarget.kind}s.${pickerTarget.index}.altText`, asset.altText ?? "");
+              setPickerTarget(null);
+            }}
+          />
         </TabsContent>
 
         <TabsContent value="seo" className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
