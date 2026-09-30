@@ -49,3 +49,10 @@ next-env.d.ts
 
 # worktrees (superpowers:using-git-worktrees)
 .claude/worktrees/
+
+# STORY-041 — LocalDiskStorageProvider's local-dev upload target; never committed
+/.local-media-uploads/
+
+# ad-hoc dev/prisma-dev restart logs from local debugging sessions
+next-dev-*.log
+prisma-dev-*.log
