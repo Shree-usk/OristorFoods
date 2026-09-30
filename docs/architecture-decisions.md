@@ -4463,3 +4463,145 @@ author/reviewer two-role fixture; a Viewer-only fixture can browse but a
 mutating route denies server-side. Verified live in the browser as the
 seeded Super Administrator through the full
 Draft→Review→reject→Draft→resubmit→Approve→Publish→storefront path.
+
+## 2026-09-30 — STORY-044 Admin Blog Editor — core scope
+
+The admin authoring and moderation counterpart to STORY-021's already-
+shipped customer-facing blog. STORY-021 built the full storefront read
+path (`BlogPost`/`BlogAuthor`/`BlogTag`/`BlogComment`, markdown rendering
+via `MarkdownContent` + `parseBodyBlocks`, a comment submission flow with
+rate limiting and a honeypot) but had **no write path for posts at all**
+— the only way a post existed before this story was `prisma/seed-blog.ts`.
+Comment moderation logic already existed in `blog.service.ts`
+(`canTransitionComment`/`changeCommentStatus`), explicitly left unwired
+to any admin surface with a comment pointing at "the moderation console
+(Epic 07's STORY-044/045)."
+
+**Scope decisions made with the user this session:**
+
+1. **Markdown-based editor, not WYSIWYG.** The story's AC asks for a rich
+   text editor persisting "structured (not raw HTML string)" content, but
+   `BlogPost.bodyContent` is already plain markdown with `[[recipe:slug]]`
+   / `[[video:url]]` block embeds, and no rich-text editor library is
+   installed (only read-only `react-markdown`). The user confirmed:
+   keep it markdown-based. `blog-body-editor.tsx` is a textarea + a
+   formatting toolbar (bold/italic/heading/link/list/blockquote, an
+   "Image" button that opens the Media Library and inserts standard
+   markdown image syntax, "Recipe embed"/"Video embed" buttons that
+   insert the existing `[[recipe:...]]`/`[[video:...]]` tokens) plus a
+   Preview toggle rendering through the real `MarkdownContent` component
+   — the exact same render path the storefront uses. `bodyContent` stays
+   a plain `String` column; zero schema change to that field, zero risk
+   to STORY-021's shipped rendering.
+2. **`BlogAuthor` stays the public byline; `createdById`/`updatedById`
+   added for an internal audit trail.** Mirrors STORY-040/043 exactly —
+   `BlogPost.authorId → BlogAuthor` (curated brand voice, e.g. "The
+   Oristor Kitchen Team") is unchanged; the console's "who authored this"
+   trail is a separate, optional `AdminUser` relation.
+3. **`BlogPostStatus.Scheduled` is never written — it's a derived
+   display label, not a stored value.** Confirmed before building
+   anything: grepping `src/` showed the literal `"Scheduled"` value is
+   never read or written anywhere in the codebase, and `seed-blog.ts`'s
+   own `scheduledIntoFuture` metric is already computed as `status ===
+   "Published" && publishedAt > now` — its one "scheduled" example post
+   is seeded with `status: "Published"`, `publishedAt: "2099-01-01"`. The
+   storefront's `publishedWhere` already gates visibility on `status ===
+   "Published" AND publishedAt <= now`, so a future `publishedAt` is
+   already correctly invisible with zero cron needed. This story follows
+   the same design already present in the codebase: publishing always
+   writes `status: "Published"` (whatever the date), and `deriveEffective
+   Status()` (`src/lib/blog-post-status.ts`, a pure function with no
+   server imports so both the service and the client list view can use
+   it) computes `Scheduled` vs. `Live` from `publishedAt` vs. now, purely
+   for display. The Publish dialog doubles as the Schedule action — pick
+   a future date/time and the "Publish" button is labelled the same, the
+   only difference is the date. Verified live: the seeded "Our Plans for
+   Next Year's Product Lineup" post (the `scheduledIntoFuture` example)
+   correctly shows "Scheduled" in the admin list with zero code changes
+   needed to make that true.
+4. **Comment moderation wraps the existing STORY-021 service, not a
+   rebuild.** `blog-admin.service.ts`'s `approveComment`/`rejectComment`/
+   `hideComment` are thin wrappers adding `requirePermission` + audit
+   logging around `blog.service.ts`'s existing `canTransitionComment`/
+   `changeCommentStatus` — the exact transition table STORY-021 already
+   built (`Pending → Approved|Rejected`, `Approved → Hidden`) is reused,
+   not reimplemented. A `deleteComment` repository function was added
+   (didn't exist before). **Deviations from the story's own AC, both
+   driven by what `BlogCommentStatus` actually supports** (`Pending/
+   Approved/Rejected/Hidden` — no fifth value): no separate "Spam" status
+   — a spam flag folds into Reject rather than adding an enum value that
+   STORY-045's later unified status vocabulary would also need to absorb;
+   "Reply" (an admin-authored public reply attached to a comment) needs
+   new fields/threading this story has no model for, and STORY-045's own
+   description already frames Reply as part of its own unified console —
+   deferred there, not built twice. The moderation queue built here
+   (`admin-blog-comments-view.tsx`) is blog-scoped, not the unified
+   across-source console STORY-045 will eventually build; STORY-045's own
+   task list already expects to reuse this story's `blog-comment.service`
+   pattern rather than duplicate it.
+5. **SEO fields added to `BlogPost`**: `metaTitle`/`metaDescription`/
+   `ogImage` (`String?`, matching the exact field names already used on
+   `Product`/`Recipe`). `blog/[slug]/page.tsx`'s `generateMetadata` now
+   prefers these when set, falling back to `title`/`excerpt`/
+   `heroImageUrl` exactly as before — also now sets `openGraph` fields,
+   which it didn't before this story.
+6. **No autosave.** The AC asks for periodic autosave, but nothing else
+   in this admin console autosaves — Product/Recipe/Homepage-Builder are
+   all explicit-Save. Deferred; would be the first of its kind with no
+   established pattern and risks silently creating/mutating Draft rows
+   the admin didn't explicitly ask to save.
+7. **Related products / related recipes** (mentioned in the story's
+   Description bullet list, not its AC) were dropped — no relation exists
+   on `BlogPost` to build on and nothing in STORY-021's storefront
+   rendering or the blueprint's one-line Blog bullet calls for them. Same
+   class of stale-spec drift STORY-043 found with its STORY-053
+   reference.
+
+**Reading time is always computed, never manually entered.**
+`computeReadingTimeMinutes()` (`src/lib/blog-reading-time.ts`, 200
+words/minute, minimum 1) is the only place it's derived — no manual
+override field in the form — same "compute it, don't ask" rationale as
+Recipe's `computeTotalTimeMinutes()`.
+
+**Preview reuses the real storefront transformation, not a duplicate
+mapping.** `getPostForPreview()` parses `bodyContent` through the exact
+same `parseBodyBlocks()` and resolves recipe embeds through the exact
+same `getRecipeCardsBySlugs()` that `blog.service.ts`'s `getPostBySlug()`
+uses, then renders through the real `BlogPostBody` storefront component —
+the same "server-render the real components against non-published data,
+admin-only route" pattern as STORY-042/043's own preview routes. Comments
+and related-posts are skipped, matching Recipe's own precedent of
+dropping customer-account-dependent pieces from an admin preview.
+
+**Testing:** `tests/unit/blog-admin-service.test.ts` (15 tests: post
+create/update with tags, duplicate-slug rejection, publish with no date
+vs. a future date (confirms `deriveEffectiveStatus` computes Live/
+Scheduled correctly without ever storing "Scheduled"), archive/restore,
+Draft-only delete, permission denial; comment approve/reject/hide via the
+real transition table, illegal-transition rejection, delete, a bulk
+moderate test with a mixed valid/invalid selection confirming partial
+success (`{updated, skipped}`) rather than an all-or-nothing failure,
+Approve-specifically-required for moderation actions).
+`tests/e2e/admin-blog.spec.ts` (3 tests: author creates a post with a tag
+and a `[[recipe:slug]]` embed, publishes immediately, confirms it's live
+on `/blog/[slug]` with the embed resolved through the real `RecipeCard`
+component, then a reviewer approves a seeded Pending comment and confirms
+it appears on the published post; a second post is scheduled into the
+future, confirms the admin list shows "Scheduled" and the storefront
+`/blog` listing omits it; a Viewer-only fixture can browse both admin
+pages but a mutating route denies server-side). Verified live in the
+browser as the seeded Super Administrator: created a post with a real
+recipe embed, previewed it, published it, confirmed it rendered correctly
+on the real storefront with the byline/reading-time/embed all correct,
+then archived → restored → deleted it to clean up.
+
+**A real environment issue hit during this session, not a code bug:**
+a system-wide low-memory event killed the local `prisma dev` and `next
+dev` processes mid-session. After restarting both, every e2e test failed
+at sign-in with `/api/admin/auth/csrf` returning 404 — not a real auth
+regression, but a corrupted Turbopack `.next` dev cache left over from
+the processes having been force-killed (`taskkill /F`) rather than
+shut down gracefully. Fixed by deleting `.next` and doing a clean `npm
+run dev` restart. General lesson for this project: after a forced kill
+of the dev server (as opposed to a clean stop), if routes start 404ing
+that shouldn't, clear `.next` before assuming it's a real bug.

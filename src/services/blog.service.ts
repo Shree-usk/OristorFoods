@@ -109,6 +109,9 @@ export async function getPostBySlug(slug: string): Promise<BlogPostDetailData | 
     comments: row.comments.map((c) => ({ id: c.id, authorName: c.authorName, body: c.body, createdAt: c.createdAt.toISOString() })),
     relatedPosts: relatedRows.map(toPostCard),
     recipeCards,
+    metaTitle: row.metaTitle,
+    metaDescription: row.metaDescription,
+    ogImage: row.ogImage,
   };
 }
 
