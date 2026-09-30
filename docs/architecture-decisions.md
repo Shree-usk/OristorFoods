@@ -4034,6 +4034,133 @@ forced new slug/SKU → bulk-delete) as a full-access fixture; a
 Viewer-only fixture can browse the list but the create route denies
 server-side (`AccessDenied`, not just a hidden button).
 
+## 2026-09-30 — STORY-041 Media Library — core scope
+
+The centralized upload/manage module every content story with an
+image/video field is meant to depend on, rather than each building its own
+raw uploader — `docs/stories/07-enterprise-admin-platform/
+STORY-Additional.md`'s Media Library section (#2) is authoritative here.
+**Scope, per the user's explicit decision** (same "core now, defer the
+rest" split as STORY-038/040): folders, tags, search/filter, bulk upload
+with per-file error handling, MIME/size validation, server-side-enforced
+required alt text, and a genuinely reusable `AssetPickerDialog` wired into
+STORY-040's product form as its first real consumer, all ship now.
+**Deferred to the same future "follow-up sweep" batch** as STORY-038's
+invite/reset/2FA and STORY-040's CSV import/export (per the user's
+explicit "keep deferring, batch later" decision, not a per-story
+follow-up): automatic compression/WebP conversion, an in-browser
+cropping/resizing tool, version history with rollback, and a
+usage-before-delete guard.
+
+**Storage provider abstraction, reusing STORY-026's exact pattern.**
+`docs/blueprint.md` Section 10 lists hosting/cloud provider specifics as
+unconfirmed, and CLAUDE.md says not to guess at unconfirmed integrations —
+the same situation STORY-026 hit for the payment gateway. `StorageProvider`
+(`src/services/storage/storage-provider.interface.ts`: `upload`, `delete`)
+has one working implementation, `LocalDiskStorageProvider`, selected via
+`MEDIA_STORAGE_PROVIDER=local` (mirroring `PAYMENT_PROVIDER=mock`) through
+`media.service.ts::getActiveStorageProvider()` — the sole place a future
+S3/Cloudinary/etc. adapter plugs in.
+
+**`LocalDiskStorageProvider` writes to `.local-media-uploads/` at the
+project root, deliberately outside `public/`, not `public/uploads/media/`
+as the original plan proposed.** Next.js's dev server specifically watches
+`public/` to notify the browser about new static assets; writing runtime
+uploads there triggers a Fast Refresh cycle on every upload, which can
+remount an in-progress form and silently discard unsaved edits — found via
+this story's own `AssetPickerDialog` integration test (see the Turbopack
+race below; this was one of two real, independently-valuable bugs found
+while chasing that symptom, not the actual root cause). Served back by a
+dedicated `src/app/media-files/[...filename]/route.ts` instead of Next's
+automatic `public/` static handling — unauthenticated by design (same
+trust level as any other public asset URL), validates the filename against
+path traversal, and sets a long-lived immutable cache header.
+
+**Safe filenames, never the raw uploaded filename.** `buildSafeFilename()`
+uses `randomUUID()` (the codebase's established convention for this —
+already used in `checkout-store.ts`, `sms.provider.ts`,
+`whatsapp.provider.ts`) plus the MIME-allowlist-derived extension, blocking
+both path traversal and silent overwrite. The MIME allowlist
+(jpeg/png/webp/svg+xml → Image, mp4 → Video, pdf → Document) and a 20MB
+size cap are enforced server-side in `media.service.ts`, never trusting the
+client; a failed file in a batch is collected as `{ originalName, reason }`
+and does not abort the rest of the upload (AC: "a failed file doesn't
+block the rest of the batch").
+
+**Alt text is enforced at the service layer, not just the form.**
+`selectAssetForPicker()` throws `MediaAssetMissingAltTextError` if
+`altText` is null/empty, called by the dedicated select endpoint
+(`/api/admin/media/[id]/select`) that `AssetPickerDialog` hits — a picker
+consumer cannot receive an asset without alt text even if it bypassed the
+UI's own inline prompt.
+
+**No usage-before-delete guard this pass (documented deferral).** Every
+existing image field (`ProductImage.url`, and eventually `Recipe.
+heroImage`, `BlogPost.heroImageUrl`, etc.) is a plain string today, not a
+`MediaAsset` FK — retrofitting all of them to support usage tracking is a
+large cross-cutting migration disproportionate to bundle into this already
+large core pass. `AssetPickerDialog` returns `{ url, altText }`, the exact
+shape those fields already expect, so consumers adopt it as a
+picker-or-paste-a-URL hybrid with no schema change on their side; the
+FK-based retrofit and usage guard wait for the follow-up sweep once enough
+consumers exist to justify it. Folder deletion still rejects with
+`MediaFolderNotEmptyError` while non-empty (an unconditional block, not a
+usage guard) rather than silently cascading.
+
+**STORY-040 retrofit:** the product form's Media tab image/video rows gain
+a "Browse Library" button next to the existing manual URL `Input`, opening
+`AssetPickerDialog` and filling `url`/`altText` via `setValue` on
+selection. Manual URL entry stays available — this is additive, not a hard
+cutover — and is the first proof `AssetPickerDialog` is genuinely reusable
+rather than product-form-specific.
+
+**Two real bugs found and fixed while debugging the picker integration,
+neither of which was the actual root cause (see below) but both
+independently correct and kept:**
+1. `existingProduct`'s `useEffect` called `reset()` on every refetch, not
+   just the first — a background refetch (e.g. a portal-rendered Dialog
+   stealing and returning window focus) silently wiped in-progress,
+   unsaved form edits. Fixed with an `initializedProductId` ref that seeds
+   the form exactly once per product id; a real navigation to a different
+   product still resets. Paired with `refetchOnWindowFocus: false,
+   refetchOnReconnect: false` on that query as further defense.
+2. The `public/`-directory-write-triggers-Fast-Refresh issue described
+   above under the storage provider.
+
+**Root cause of the picker-integration symptom: Turbopack's dev-mode lazy
+per-route compilation, not a React state bug.** Interacting with a route
+immediately after `page.goto()` — before Turbopack finishes compiling that
+route on its first request in the dev server process — could leave the
+page half-hydrated, silently dropping a freshly-added `useFieldArray` row
+moments later. Confirmed by reproducing manually (works at human speed,
+fails when driven as fast as Playwright can click) and by adding `await
+page.waitForLoadState("networkidle")` immediately after navigating to a
+not-yet-visited route, which alone made the flaky e2e test pass reliably.
+Dev-mode-only — production serves precompiled bundles and never hits this.
+Two other hypotheses were tested and discarded: a `"use no memo"` React
+Compiler opt-out (wrong theory — `useFieldArray`'s `fields`, unlike
+`watch()`, isn't actually flagged as compiler-incompatible) and a
+`setTimeout(fn, 0)` deferral of the `setValue` calls (worked once in a
+slow manual repro, not reliably under Playwright's speed) — both reverted
+once the real cause was found.
+
+**Testing:** `tests/unit/media-service.test.ts` — upload validation with a
+mixed valid/invalid-type batch asserting the `succeeded`/`failed` shape;
+the alt-text selection gate; delete removing both the DB row and the file;
+folder deletion rejected while non-empty; permission denial — against the
+real `LocalDiskStorageProvider` writing to actual files (cleaned up in
+`afterEach`), not a mocked provider, matching this codebase's
+DB-backed-integration-test convention. `tests/e2e/admin-media.spec.ts` —
+create a folder → upload (one valid, one rejected) → tag and set alt text
+→ pick it from the STORY-040 product form's Media tab, confirming the
+URL/alt-text fields populate → delete it back in the library, as a
+full-access fixture; a Viewer-only fixture can browse the library but the
+upload route denies server-side (this assertion checks only the
+server-side 403, not that the Upload button is hidden client-side — per
+`RequirePermission`'s own documented philosophy that hiding a UI control
+is never treated as access control, and identical to STORY-040's own
+Viewer-only precedent in `admin-products.spec.ts`).
+
 ## 2026-09-30 — Deferred-items review: scoping decisions
 
 Following a full audit of every deferred/blocked item across the project

@@ -1957,6 +1957,8 @@ model AdminUser {
   // STORY-040.
   productsCreated    Product[]       @relation("ProductCreatedBy")
   productsUpdated    Product[]       @relation("ProductUpdatedBy")
+  // STORY-041.
+  mediaAssetsUploaded MediaAsset[]
   createdAt          DateTime        @default(now())
   updatedAt          DateTime        @updatedAt
 }
@@ -1981,4 +1983,69 @@ model AuditLog {
 
   @@index([actorId])
   @@index([createdAt])
+}
+
+// --- Media Library (STORY-041, core scope) ---
+// The reusable asset-selection source for every other content module's
+// image/video field (Products STORY-040, and STORY-042/043/044 to come).
+// `width`/`height` stay null until the deferred compression/WebP/variant
+// pipeline lands — nothing in this pass needs them. No `MediaAssetUsage`
+// table yet either: every existing image field (ProductImage.url,
+// Recipe.heroImage, etc.) is still a plain string, and retrofitting them
+// to a real FK-based usage guard is its own scoped follow-up — see
+// docs/architecture-decisions.md.
+
+model MediaFolder {
+  id        String        @id @default(cuid())
+  name      String
+  parentId  String?
+  parent    MediaFolder?  @relation("FolderToParent", fields: [parentId], references: [id], onDelete: SetNull)
+  children  MediaFolder[] @relation("FolderToParent")
+  assets    MediaAsset[]
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+
+  @@index([parentId])
+}
+
+model MediaAssetTag {
+  id     String       @id @default(cuid())
+  name   String       @unique
+  assets MediaAsset[]
+}
+
+enum MediaAssetType {
+  Image
+  Video
+  Document
+}
+
+model MediaAsset {
+  id           String          @id @default(cuid())
+  // Safe, randomized on-disk name (`${cuid()}-${slugified-basename}.${ext}`)
+  // — never the raw uploaded filename, so a crafted name can't traverse
+  // paths or overwrite another asset's file.
+  filename     String
+  // The uploader's own filename, kept only for display/download naming.
+  originalName String
+  url          String
+  mimeType     String
+  type         MediaAssetType
+  sizeBytes    Int
+  width        Int?
+  height       Int?
+  // Required before AssetPickerDialog will let this asset be selected
+  // (media.service.ts::assertAltTextForSelection) — enforced server-side,
+  // not just a form-level nicety (AC).
+  altText      String?
+  folderId     String?
+  folder       MediaFolder?    @relation(fields: [folderId], references: [id], onDelete: SetNull)
+  tags         MediaAssetTag[]
+  uploadedById String?
+  uploadedBy   AdminUser?      @relation(fields: [uploadedById], references: [id], onDelete: SetNull)
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+
+  @@index([folderId])
+  @@index([type])
 }
