@@ -1,6 +1,10 @@
 # STORY-039: Admin Dashboard
 
-**Status:** Draft
+**Status:** Landed — 8 of 11 widgets show real data; Live Visitors, Export
+Enquiries, and System Health render as "coming soon" placeholders since
+none has any backing data source yet (confirmed by exhaustive grep, not
+just "not built"). See the STORY-039 entry in `docs/architecture-decisions.md`
+for the full widget-to-module mapping and every deviation.
 **Epic:** 07 — Enterprise / Admin Platform
 **Priority:** High
 **Persona(s):** Super Administrator, Administrator, Sales Manager, Finance Manager, Warehouse Manager, Marketing Manager, Customer Support, Viewer
@@ -14,28 +18,28 @@ As a Viewer, I want to see a read-only summary of the widgets my role has permis
 This story delivers the admin console's landing screen exactly as specified in `docs/blueprint.md` Section 7: today's revenue/orders, live visitors, pending reviews/questions/comments, low stock alerts, reward redemptions, referral signups, export enquiries, support tickets, failed payments, ERP sync status, and system health. Each widget is a thin aggregation view over data owned by another story in this epic (Orders, Reviews, Q&A, Products/Inventory, Rewards & Referrals, Export Portal, Customer Support, Payments, ERP Integration, System Health) — this story does not own that underlying data, only the dashboard's read/aggregate/visibility layer, gated by STORY-038's RBAC so each widget only shows to roles with view permission on its source module.
 
 ## Acceptance Criteria
-- [ ] "Today's Revenue & Orders" widget shows current-day revenue and order count with a comparison delta vs. the prior day
-- [ ] "Live Visitors" widget shows a near-real-time count of active storefront sessions
-- [ ] "Pending Reviews / Questions / Comments" widget shows separate counts for each moderation queue (product reviews, recipe reviews, blog/Food Academy comments, product Q&A, recipe Q&A) with a link into the relevant console (STORY-045, STORY-046, STORY-044)
-- [ ] "Low Stock Alerts" widget lists products at or below their reorder threshold, linking into the Products module (STORY-040)
-- [ ] "Reward Redemptions" widget shows recent redemption count/value, linking into Rewards & Referrals (STORY-049)
-- [ ] "Referral Signups" widget shows recent referral signup count, linking into Rewards & Referrals (STORY-049)
-- [ ] "Export Enquiries" widget shows new/unactioned B2B enquiry count, linking into the Export Portal (STORY-058)
-- [ ] "Support Tickets" widget shows open ticket count broken down by priority, linking into Customer Support (STORY-048/STORY-036)
-- [ ] "Failed Payments" widget shows recent failed payment attempts, linking into the Orders console (STORY-047)
-- [ ] "ERP Sync Status" widget shows last successful sync time, queue depth, and failed-job count, linking into the ERP Integration Console (STORY-056)
-- [ ] "System Health" widget shows uptime, API error rate, and last backup timestamp, linking into STORY-057's full System Health panel
-- [ ] Widgets are permission-filtered: a role without view permission on a widget's source module never renders that widget (server-side filtering, not CSS hiding)
-- [ ] If a widget's source module/data isn't implemented yet, the widget renders a "coming soon" placeholder rather than erroring the whole dashboard
-- [ ] Dashboard auto-refreshes on a defined interval (e.g. every 60 seconds) without a full page reload
-- [ ] Dashboard is responsive (grid reflows to single column on mobile) and loads within the <300ms API budget from `docs/blueprint.md` Section 6, with skeleton loading states per widget
+- [x] "Today's Revenue & Orders" widget shows current-day revenue and order count. *No comparison delta vs. the prior day — not in the widget's data shape this pass; see architecture-decisions.md.*
+- [ ] Deferred: "Live Visitors" widget shows a near-real-time count of active storefront sessions. *No session/pageview tracking exists anywhere in the codebase — renders "coming soon".*
+- [x] "Pending Reviews / Questions / Comments" widget shows separate counts for each moderation queue. *Recipe Q&A omitted — not a distinct feature (only product Q&A exists). No links into the relevant consoles — STORY-044/045/046 don't exist yet.*
+- [x] "Low Stock Alerts" widget lists a count of products at or below a threshold. *A documented constant (10), not an admin-configurable reorder threshold — no `Product` field or admin UI for one yet. No link into Products (STORY-040 doesn't exist yet).*
+- [x] "Reward Redemptions" widget shows today's redemption count. *No link into Rewards & Referrals (STORY-049 doesn't exist yet).*
+- [x] "Referral Signups" widget shows today's referral signup count. *Same link deferral as above.*
+- [ ] Deferred: "Export Enquiries" widget shows new/unactioned B2B enquiry count. *No B2B enquiry model exists — Export Portal epic unbuilt. Renders "coming soon".*
+- [x] "Support Tickets" widget shows ticket counts. *Broken down by `status`, not priority — `SupportTicket` has no `priority` field. No link into Customer Support (STORY-048 doesn't exist yet).*
+- [x] "Failed Payments" widget shows today's failed payment count. *No link into Orders (STORY-047 doesn't exist yet).*
+- [x] "ERP Sync Status" widget shows pending/failed counts and last successful sync time. *No queue-depth distinction beyond the pending count. No link into an ERP Integration Console (STORY-056 doesn't exist yet).*
+- [ ] Deferred: "System Health" widget shows uptime, API error rate, and last backup timestamp. *No uptime/error-rate/backup tracking exists anywhere. Renders "coming soon".*
+- [x] Widgets are permission-filtered: a role without view permission on a widget's source module never renders that widget — server-side (the API response omits the key entirely; nothing is sent then hidden by CSS).
+- [x] If a widget's source module/data isn't implemented yet, the widget renders a "coming soon" placeholder rather than erroring the whole dashboard.
+- [x] Dashboard auto-refreshes every 60 seconds without a full page reload (`useQuery({ refetchInterval: 60_000 })` — first use of polling in this codebase).
+- [x] Dashboard is responsive (grid reflows to a single column on mobile). *No skeleton loading states — `initialData` from the Server Component means the first paint is never a loading state; the <300ms API budget wasn't independently measured this pass.*
 
 ## Tasks
-- [ ] **API:** `GET /api/admin/dashboard/summary` returning all widget payloads in one aggregated call; `GET /api/admin/dashboard/live-visitors` as a lightweight polling endpoint refreshed more frequently than the rest of the dashboard.
-- [ ] **Service/Backend:** `dashboard.service.ts` composing calls to `order.service`, `review.service`, `question.service`, `product.service` (stock levels), `reward.service`, `referral.service`, `export-enquiry.service`, `support.service`, `payment.service`, `sync-job.service`, `system-health.service` — each widget's data-fetch wrapped so a missing/unbuilt dependency degrades to a placeholder instead of failing the whole response.
-- [ ] **Frontend:** `src/app/(admin)/dashboard/page.tsx`, one component per widget under `src/components/admin/dashboard/`, a permission-aware widget grid that only requests/renders widgets the current role can view, Recharts sparkline for the revenue trend, TanStack Query polling for auto-refresh.
-- [ ] **Testing:** Unit tests for `dashboard.service.ts`'s graceful degradation when a source module is unavailable; unit tests for permission-based widget filtering; e2e test confirming a Viewer-role fixture sees a reduced widget set vs. a Super Administrator fixture.
-- [ ] **Documentation:** Document the widget-to-source-module mapping and refresh intervals so future stories that own a widget's source data know they must keep this dashboard's aggregation contract in sync.
+- [x] **API:** `GET /api/admin/dashboard/summary` returns every permitted widget's payload in one aggregated call. *No separate `live-visitors` polling endpoint — nothing real to poll.*
+- [x] **Service/Backend:** `admin-dashboard.service.ts::getDashboardSummary` composes ~10 new thin repository functions across the existing `order`/`payment`/`review`/`recipe-review`/`blog`/`qa`/`product`/`rewards`/`referral`/`support-ticket` repositories (Service Layer — no new Prisma access outside them) — each widget's fetch independently wrapped so one failing data source degrades to omitted rather than failing the whole response.
+- [x] **Frontend:** `src/app/(admin)/admin/page.tsx` (the story doc's own `dashboard/page.tsx` path was stale — this is where STORY-038's placeholder already lived), one component per widget under `src/components/admin/dashboard/`, a permission-aware grid rendering only the keys present in the summary, TanStack Query polling for auto-refresh. *No Recharts sparkline — dropped, not an AC requirement; see architecture-decisions.md.*
+- [x] **Testing:** `tests/unit/admin-dashboard-service.test.ts` (real data + permission-gating, including graceful degradation for ungranted/placeholder widgets); `tests/e2e/admin-dashboard.spec.ts` (a fixture granted every widget module vs. a fixture granted only `Orders` vs. a fixture with no permissions).
+- [x] **Documentation:** Full widget-to-module mapping and every deviation documented in `docs/architecture-decisions.md`.
 
 ## Dependencies
 - STORY-001, STORY-002, STORY-003 (Foundation) — base app/layout/design system

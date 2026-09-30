@@ -90,6 +90,11 @@ export async function listPublishedReviews(
   return { items, total };
 }
 
+/** STORY-039. Dashboard's Pending Moderation widget. */
+export function countPendingReviews() {
+  return prisma.review.count({ where: { status: "Pending" } });
+}
+
 export function findRatingSummary(productId: string) {
   return prisma.productRatingSummary.findUnique({ where: { productId } });
 }

@@ -305,3 +305,31 @@ export function markIntegrationEventFailed(eventId: string, error: string) {
 export function updateErpSyncStatus(orderId: string, erpSyncStatus: string) {
   return prisma.order.update({ where: { id: orderId }, data: { erpSyncStatus } });
 }
+
+/**
+ * STORY-039. Excludes Cancelled orders — a cancelled order never contributed
+ * real revenue, mirroring countOrdersByUserId's own looser-vs-stricter
+ * counting distinction documented above (this one takes the stricter side).
+ */
+export async function getOrderSummaryForRange(from: Date, to: Date) {
+  const result = await prisma.order.aggregate({
+    where: { createdAt: { gte: from, lte: to }, status: { not: "Cancelled" } },
+    _sum: { grandTotal: true },
+    _count: { _all: true },
+  });
+  return { orderCount: result._count._all, grandTotal: (result._sum.grandTotal ?? 0).toString() };
+}
+
+/** STORY-039. Dashboard's ERP Sync Status widget — Pending/Failed backlog plus the most recent successful sync. */
+export async function getErpSyncStatus() {
+  const [pending, failed, lastProcessed] = await Promise.all([
+    prisma.orderIntegrationEvent.count({ where: { status: "Pending" } }),
+    prisma.orderIntegrationEvent.count({ where: { status: "Failed" } }),
+    prisma.orderIntegrationEvent.findFirst({
+      where: { status: "Processed" },
+      orderBy: { processedAt: "desc" },
+      select: { processedAt: true },
+    }),
+  ]);
+  return { pending, failed, lastProcessedAt: lastProcessed?.processedAt?.toISOString() ?? null };
+}

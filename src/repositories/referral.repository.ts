@@ -62,3 +62,8 @@ export function listAttributionsForReferrer(referrerUserId: string, client: Clie
     include: { referred: { select: { name: true, email: true } } },
   });
 }
+
+/** STORY-039. Dashboard's Rewards & Referrals widget — every referred signup, regardless of status (Qualified/Excluded haven't unhappened as a signup). */
+export function countAttributionsSince(from: Date, client: Client = prisma) {
+  return client.referralAttribution.count({ where: { createdAt: { gte: from } } });
+}

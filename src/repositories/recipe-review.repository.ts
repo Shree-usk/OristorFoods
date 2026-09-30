@@ -28,6 +28,11 @@ export function findReviewById(id: string) {
   return prisma.recipeReview.findUnique({ where: { id } });
 }
 
+/** STORY-039. Dashboard's Pending Moderation widget. */
+export function countPendingRecipeReviews() {
+  return prisma.recipeReview.count({ where: { status: "Pending" } });
+}
+
 export function findReviewByRecipeAndCustomer(recipeId: string, customerId: string) {
   return prisma.recipeReview.findUnique({ where: { recipeId_customerId: { recipeId, customerId } } });
 }

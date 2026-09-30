@@ -24,6 +24,11 @@ export function findQuestionById(id: string) {
   return prisma.question.findUnique({ where: { id } });
 }
 
+/** STORY-039. Dashboard's Pending Product Q&A widget — recipe Q&A doesn't exist as a distinct feature, so this counts product questions only. */
+export function countPendingQuestions() {
+  return prisma.question.count({ where: { status: "Pending" } });
+}
+
 function publishedWhere(productId: string, words: string[]): Prisma.QuestionWhereInput {
   return {
     productId,

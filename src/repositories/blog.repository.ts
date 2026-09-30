@@ -160,6 +160,11 @@ export function findCommentById(commentId: string) {
   return prisma.blogComment.findUnique({ where: { id: commentId } });
 }
 
+/** STORY-039. Dashboard's Pending Moderation widget. */
+export function countPendingComments() {
+  return prisma.blogComment.count({ where: { status: "Pending" } });
+}
+
 /** Looks up a signed-in commenter's canonical name/email from the User
  *  table. The comments route must not trust `session.user.name`/`email`
  *  directly — auth uses the JWT strategy, so those claims are only as
