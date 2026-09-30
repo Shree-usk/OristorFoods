@@ -73,6 +73,7 @@ Stories are grouped into epics that match the build order in
 | STORY-035 | Reward Wallet & Referral Dashboard | Draft |
 | STORY-036 | Order History & Support | Draft |
 | STORY-037 | Saved Recipes & Sync | Draft |
+| STORY-071 | Customer Group & Pricing Context | Draft |
 
 ## Epic 07 — Enterprise / Admin Platform (`07-enterprise-admin-platform/`)
 | ID | Story | Status |
@@ -128,3 +129,9 @@ Stories are grouped into epics that match the build order in
 **Source of truth for scope:** `docs/blueprint.md`. If a story conflicts
 with the blueprint, the blueprint wins — update the story, not the other
 way around.
+
+**On STORY-071's out-of-sequence number:** it was identified after
+STORY-070 had already claimed the last number in the original backlog, so
+it takes the next available ID (071) despite belonging to Epic 06 —
+numbering is allocation order, not build order. Its `Dependencies` field
+and this README's grouping are what determine when it's actually pulled.

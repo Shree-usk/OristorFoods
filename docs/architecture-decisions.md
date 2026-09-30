@@ -4033,3 +4033,35 @@ upsert behaviors. `tests/e2e/admin-products.spec.ts` — full lifecycle
 forced new slug/SKU → bulk-delete) as a full-access fixture; a
 Viewer-only fixture can browse the list but the create route denies
 server-side (`AccessDenied`, not just a hidden button).
+
+## 2026-09-30 — Deferred-items review: scoping decisions
+
+Following a full audit of every deferred/blocked item across the project
+(STORY-024 through STORY-041, plus `STORY-Additional.md`), the user made
+several explicit scoping calls, recorded here so they aren't re-litigated:
+
+- **STORY-040 stays core-only.** CSV bulk import/export and the bulk-edit
+  modal stay in the general follow-up sweep (STORY-038/040/041's deferred
+  items, batched together per the earlier "keep deferring, batch later"
+  decision) — not folded back into STORY-040 retroactively.
+- **The orphaned `User.customerGroup` gap gets its own story, not a bolt-on
+  to STORY-040.** Product management (STORY-040) and customer/pricing
+  context are different concerns; conflating them would have made
+  STORY-040 a worse precedent for future admin-module stories. See the new
+  **STORY-071** (`docs/stories/06-customer-platform/
+  STORY-071-customer-group-pricing-context.md`) — deliberately scoped to
+  "add the field, wire the existing hardcoded call sites, test it," not a
+  new pricing engine.
+- **The storage/hosting provider decision is now explicitly flagged**
+  (`docs/blueprint.md` Section 10) as blocking two specific features —
+  review photos (STORY-015) and customer profile photo upload (STORY-034)
+  — rather than sitting as a generic "unconfirmed" line. STORY-041's
+  `StorageProvider` abstraction means admin media uploads aren't waiting
+  on this, but those two storefront-facing features are.
+- **Payment gateway, ERP system, and shipping carrier integrations stay
+  deferred** exactly as originally scoped (STORY-026/027/028's own
+  entries) — no change, reaffirmed rather than revisited.
+- **The Promotional Pop-up Manager** (`STORY-Additional.md` sections 3–9)
+  stays a future standalone story, written up once build order reaches it
+  after STORY-042 (Homepage Visual Builder, which owns section #1) — no
+  change, reaffirmed.
