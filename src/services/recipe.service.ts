@@ -130,7 +130,8 @@ export async function getRelatedRecipes(recipe: RecipeDetailRow, limit = 6): Pro
   return rows.map(toRecipeCard);
 }
 
-function toRecipeDetail(row: RecipeDetailRow, relatedRecipes: RecipeCard[]): RecipeDetail {
+/** Exported for STORY-043's admin preview, which reuses this exact transformation against a non-published recipe (any status) rather than duplicating the mapping. */
+export function toRecipeDetail(row: RecipeDetailRow, relatedRecipes: RecipeCard[]): RecipeDetail {
   return {
     id: row.id,
     slug: row.slug,
