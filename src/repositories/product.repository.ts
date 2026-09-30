@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/db";
 import type { Prisma, ProductStatus } from "@/generated/prisma/client";
+import { escapeLikePattern } from "@/lib/escape-like-pattern";
 
 export function createProduct(data: Prisma.ProductCreateInput) {
   return prisma.product.create({ data });
@@ -259,4 +260,142 @@ export function listAllergens() {
 
 export function listCertifications() {
   return prisma.certification.findMany({ orderBy: { name: "asc" } });
+}
+
+// --- Admin CRUD (STORY-040) ---
+
+const adminDetailInclude = {
+  brand: true,
+  categories: true,
+  collections: true,
+  images: { orderBy: [{ isPrimary: "desc" }, { sortOrder: "asc" }] },
+  videos: { orderBy: { sortOrder: "asc" } },
+  nutrition: true,
+  ingredients: { orderBy: { sortOrder: "asc" } },
+  allergens: true,
+  certifications: true,
+  bundle: { include: { items: true } },
+  standardPrices: { orderBy: { createdAt: "desc" }, take: 1 },
+  salePrices: { orderBy: { createdAt: "desc" } },
+  campaignPrices: { orderBy: { createdAt: "desc" } },
+  customerGroupPrices: true,
+  volumeDiscountTiers: { orderBy: { minQuantity: "asc" } },
+} satisfies Prisma.ProductInclude;
+
+export type ProductAdminDetail = Prisma.ProductGetPayload<{ include: typeof adminDetailInclude }>;
+
+/** The edit form's GET — every field group in one query. */
+export function findProductAdminDetailById(id: string): Promise<ProductAdminDetail | null> {
+  return prisma.product.findUnique({ where: { id }, include: adminDetailInclude });
+}
+
+/**
+ * `data` is assembled by product-admin.service.ts, including any nested
+ * writes (images/videos/nutrition/ingredients create, allergens/
+ * certifications/categories/collections connect) — this function is a thin
+ * wrapper, matching this file's own createProduct/pricing.repository.ts's
+ * createXxx convention of taking a raw Prisma *CreateInput directly, unlike
+ * order.repository.ts's custom-shaped inputs (which exist because order
+ * creation has real multi-step transactional logic; a product create/update
+ * does not).
+ */
+export function createProductAdmin(data: Prisma.ProductCreateInput): Promise<ProductAdminDetail> {
+  return prisma.product.create({ data, include: adminDetailInclude });
+}
+
+export function updateProductAdmin(id: string, data: Prisma.ProductUpdateInput): Promise<ProductAdminDetail> {
+  return prisma.product.update({ where: { id }, data, include: adminDetailInclude });
+}
+
+export function deleteProductById(id: string) {
+  return prisma.product.delete({ where: { id } });
+}
+
+export function updateProductStatus(id: string, status: ProductStatus, publishedAt: Date | null) {
+  return prisma.product.update({ where: { id }, data: { status, publishedAt } });
+}
+
+export interface AdminProductListFilters {
+  status?: ProductStatus;
+  categoryId?: string;
+  stockLevel?: "in_stock" | "low_stock" | "out_of_stock";
+  /** Matches name, SKU, or barcode (case-insensitive substring). */
+  search?: string;
+}
+
+export interface AdminProductListRow {
+  id: string;
+  sku: string;
+  name: string;
+  status: ProductStatus;
+  inStock: boolean;
+  stockQuantity: number;
+  updatedAt: Date;
+  brand: { name: string } | null;
+  categories: { name: string }[];
+  images: { url: string; altText: string | null }[];
+  standardPrices: { price: Prisma.Decimal; currency: string }[];
+}
+
+function buildAdminListWhere(filters: AdminProductListFilters, lowStockThreshold: number): Prisma.ProductWhereInput {
+  const stockWhere: Prisma.ProductWhereInput | undefined =
+    filters.stockLevel === "out_of_stock"
+      ? { OR: [{ inStock: false }, { stockQuantity: { lte: 0 } }] }
+      : filters.stockLevel === "low_stock"
+        ? { inStock: true, stockQuantity: { gt: 0, lte: lowStockThreshold } }
+        : filters.stockLevel === "in_stock"
+          ? { inStock: true, stockQuantity: { gt: lowStockThreshold } }
+          : undefined;
+
+  return {
+    ...(filters.status ? { status: filters.status } : {}),
+    ...(filters.categoryId ? { categories: { some: { id: filters.categoryId } } } : {}),
+    ...(stockWhere ?? {}),
+    ...(filters.search
+      ? {
+          OR: [
+            { name: { contains: escapeLikePattern(filters.search), mode: "insensitive" as const } },
+            { sku: { contains: escapeLikePattern(filters.search), mode: "insensitive" as const } },
+            { barcode: { contains: escapeLikePattern(filters.search), mode: "insensitive" as const } },
+          ],
+        }
+      : {}),
+  };
+}
+
+export async function listProductsForAdmin(
+  filters: AdminProductListFilters,
+  page: number,
+  pageSize: number,
+  lowStockThreshold: number,
+): Promise<{ items: AdminProductListRow[]; total: number }> {
+  const where = buildAdminListWhere(filters, lowStockThreshold);
+  const [items, total] = await Promise.all([
+    prisma.product.findMany({
+      where,
+      orderBy: [{ updatedAt: "desc" }, { id: "asc" }],
+      skip: (page - 1) * pageSize,
+      take: pageSize,
+      select: {
+        id: true,
+        sku: true,
+        name: true,
+        status: true,
+        inStock: true,
+        stockQuantity: true,
+        updatedAt: true,
+        brand: { select: { name: true } },
+        categories: { select: { name: true } },
+        images: { where: { isPrimary: true }, take: 1, select: { url: true, altText: true } },
+        standardPrices: { orderBy: { createdAt: "desc" }, take: 1, select: { price: true, currency: true } },
+      },
+    }),
+    prisma.product.count({ where }),
+  ]);
+  return { items, total };
+}
+
+/** Reads the full detail row a duplicate copies from — product-admin.service.ts decides what to carry over (never pricing). */
+export function findProductForDuplication(id: string) {
+  return prisma.product.findUnique({ where: { id }, include: adminDetailInclude });
 }
