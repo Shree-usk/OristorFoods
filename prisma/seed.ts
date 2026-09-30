@@ -14,6 +14,7 @@ import { seedCookingTips } from "./seed-cooking-tips";
 import { seedDelivery } from "./seed-delivery";
 import { seedDownloads } from "./seed-downloads";
 import { seedFoodAcademy } from "./seed-food-academy";
+import { seedHomepage } from "./seed-homepage";
 import { seedNotificationTemplates } from "./seed-notifications";
 import { seedRecipes } from "./seed-recipes";
 import { seedReferrals } from "./seed-referrals";
@@ -338,6 +339,10 @@ async function main() {
   // permission matrix, one initial Super Administrator.
   const adminSeed = await seedAdmin();
 
+  // Homepage Builder (STORY-042 — core scope): one initial Published
+  // layout matching STORY-006's original fixture-driven default.
+  const homepageSeed = await seedHomepage();
+
   console.log("Seed complete:", {
     brand: brand.slug,
     categories: [spices.slug, giftSets.slug],
@@ -353,6 +358,7 @@ async function main() {
     referrals: referralsSeed,
     notifications: notificationsSeed,
     admin: adminSeed,
+    homepage: homepageSeed,
   });
 }
 

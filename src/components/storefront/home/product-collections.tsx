@@ -5,10 +5,10 @@ import { ScrollReveal } from "@/components/motion";
 import { Section } from "@/components/storefront/layout/section";
 import type { CollectionCardData } from "@/types/home";
 
-export function ProductCollections({ collections }: { collections: CollectionCardData[] }) {
+export function ProductCollections({ collections, titleOverride }: { collections: CollectionCardData[]; titleOverride?: string | null }) {
   return (
     <Section>
-      <h2 className="text-h2 font-heading text-charcoal">Product Collections</h2>
+      <h2 className="text-h2 font-heading text-charcoal">{titleOverride || "Product Collections"}</h2>
       <div className="mt-8 grid grid-cols-1 gap-6 sm:grid-cols-3">
         {collections.map((collection, index) => (
           <ScrollReveal key={collection.id} delay={index * 0.05}>

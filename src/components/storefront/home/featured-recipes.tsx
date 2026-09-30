@@ -11,7 +11,7 @@ import { getFeaturedRecipes } from "@/services/recipe.service";
  * builder). Render per request so a newly featured recipe shows up
  * without a rebuild, and skip the section entirely when none is featured.
  */
-export async function FeaturedRecipes() {
+export async function FeaturedRecipes({ titleOverride }: { titleOverride?: string | null } = {}) {
   await connection();
   const recipes = await getFeaturedRecipes(4);
   if (recipes.length === 0) return null;
@@ -19,7 +19,7 @@ export async function FeaturedRecipes() {
   return (
     <Section className="bg-beige">
       <div className="flex items-baseline justify-between gap-4">
-        <h2 className="text-h2 font-heading text-charcoal">Featured Recipes</h2>
+        <h2 className="text-h2 font-heading text-charcoal">{titleOverride || "Featured Recipes"}</h2>
         <Link href="/recipes" className="text-small text-chilli hover:underline">
           View all recipes
         </Link>
