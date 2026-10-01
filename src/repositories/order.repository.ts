@@ -333,3 +333,87 @@ export async function getErpSyncStatus() {
   ]);
   return { pending, failed, lastProcessedAt: lastProcessed?.processedAt?.toISOString() ?? null };
 }
+
+// ---------------------------------------------------------------------------
+// STORY-047. Admin orders console — unfiltered-by-owner (unlike every
+// function above), so these are kept separate rather than relaxing the
+// customer-scoped ones' own `where` clauses.
+// ---------------------------------------------------------------------------
+
+export interface OrderAdminListFilters {
+  status?: OrderStatus;
+  paymentStatus?: Prisma.PaymentWhereInput["status"];
+  dateFrom?: Date;
+  dateTo?: Date;
+  /** Matches customer name, email, or the order number itself. */
+  search?: string;
+}
+
+export async function listOrdersForAdmin(filters: OrderAdminListFilters, page: number, pageSize: number) {
+  const where: Prisma.OrderWhereInput = {
+    ...(filters.status ? { status: filters.status } : {}),
+    ...(filters.paymentStatus ? { payment: { status: filters.paymentStatus } } : {}),
+    ...(filters.dateFrom || filters.dateTo
+      ? { createdAt: { ...(filters.dateFrom ? { gte: filters.dateFrom } : {}), ...(filters.dateTo ? { lte: filters.dateTo } : {}) } }
+      : {}),
+    ...(filters.search
+      ? {
+          OR: [
+            { orderNumber: { contains: filters.search, mode: "insensitive" as const } },
+            { shipRecipientName: { contains: filters.search, mode: "insensitive" as const } },
+            { guestEmail: { contains: filters.search, mode: "insensitive" as const } },
+            { user: { OR: [{ name: { contains: filters.search, mode: "insensitive" as const } }, { email: { contains: filters.search, mode: "insensitive" as const } }] } },
+          ],
+        }
+      : {}),
+  };
+  const [orders, total] = await Promise.all([
+    prisma.order.findMany({
+      where,
+      orderBy: { createdAt: "desc" },
+      skip: (page - 1) * pageSize,
+      take: pageSize,
+      include: { items: true, payment: true, user: { select: { name: true, email: true } } },
+    }),
+    prisma.order.count({ where }),
+  ]);
+  return { orders, total };
+}
+
+/**
+ * STORY-047's return/RMA restock step — reuses the exact increment
+ * pattern cancelOrderWithStockRelease already uses above, but scoped to
+ * whichever specific order items the admin selected (a return can be
+ * partial, unlike a cancellation, which always restocks the whole order).
+ */
+export async function restockOrderItems(items: { orderItemId: string; quantity: number }[]): Promise<void> {
+  if (items.length === 0) return;
+  const orderItemIds = items.map((item) => item.orderItemId);
+  const lines = await prisma.orderItem.findMany({ where: { id: { in: orderItemIds } }, select: { id: true, productId: true } });
+  const productIdByOrderItemId = new Map(lines.map((line) => [line.id, line.productId]));
+
+  await prisma.$transaction(
+    items
+      .filter((item) => productIdByOrderItemId.get(item.orderItemId))
+      .map((item) =>
+        prisma.product.update({
+          where: { id: productIdByOrderItemId.get(item.orderItemId)! },
+          data: { stockQuantity: { increment: item.quantity } },
+        }),
+      ),
+  );
+}
+
+export function findOrderAdminDetailById(orderId: string) {
+  return prisma.order.findUnique({
+    where: { id: orderId },
+    include: {
+      items: true,
+      statusHistory: { orderBy: { createdAt: "asc" } },
+      payment: true,
+      user: { select: { name: true, email: true } },
+      returnRequests: { orderBy: { createdAt: "desc" } },
+      refundRecords: { orderBy: { createdAt: "desc" } },
+    },
+  });
+}

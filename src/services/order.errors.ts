@@ -7,7 +7,9 @@ export type OrderErrorCode =
   | "concurrent_transition"
   | "cancellation_not_allowed"
   | "return_not_allowed"
-  | "invalid_return_quantity";
+  | "invalid_return_quantity"
+  | "refund_amount_exceeds_remaining"
+  | "no_payment_on_order";
 
 export class OrderServiceError extends Error {
   constructor(
@@ -81,5 +83,24 @@ export class OrderReturnNotAllowedError extends OrderServiceError {
 export class InvalidReturnQuantityError extends OrderServiceError {
   constructor() {
     super("invalid_return_quantity", "A requested return quantity exceeds the quantity originally ordered.");
+  }
+}
+
+/**
+ * STORY-047. An order-level guard across every RefundRecord already
+ * issued for this order — distinct from payment.service.ts's own
+ * PaymentRefundAmountInvalidError, which only checks a single refund
+ * call against the payment's original amount.
+ */
+export class OrderRefundAmountExceedsRemainingError extends OrderServiceError {
+  constructor(public readonly remaining: number) {
+    super("refund_amount_exceeds_remaining", `The refund amount cannot exceed the remaining refundable balance (${remaining.toFixed(2)}).`);
+  }
+}
+
+/** STORY-047. An order with no linked Payment (e.g. a zero-total order) can't be refunded. */
+export class OrderHasNoPaymentError extends OrderServiceError {
+  constructor() {
+    super("no_payment_on_order", "This order has no payment to refund.");
   }
 }
