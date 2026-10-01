@@ -36,6 +36,13 @@ export async function changeCommentStatus(commentId: string, nextStatus: BlogCom
   return blogRepository.updateCommentStatus(commentId, nextStatus);
 }
 
+/** STORY-045. A CS reply — no status change. */
+export async function setCommentAdminReply(commentId: string, body: string) {
+  const comment = await blogRepository.findCommentById(commentId);
+  if (!comment) throw new Error(`Comment not found: ${commentId}`);
+  return blogRepository.setCommentAdminReply(commentId, body);
+}
+
 /**
  * Walks a Pending comment to Approved through the real transition function,
  * for the seed and e2e tests only. In production, comments are approved

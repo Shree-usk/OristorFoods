@@ -88,6 +88,31 @@ export async function creditPointsForConfirmedOrder(orderId: string, userId: str
   await evaluateTierAndBadges(userId, orderId);
 }
 
+/**
+ * STORY-045. A one-off admin-granted credit (e.g. rewarding a customer for
+ * a standout review), not tied to any order. Writes an `Earned`-type
+ * transaction with `orderId: null` — Postgres allows multiple NULLs under
+ * `@@unique([orderId, type])`, so this can never collide with an
+ * order-based credit. Reuses the exact same primitives
+ * creditPointsForConfirmedOrder does (account bootstrap, transaction
+ * write, notification), just without an order to attach to. Not gated
+ * behind STORY-049 (Rewards & Referrals Campaign Management, not yet
+ * built) — this is a manual grant primitive, not a campaign system.
+ */
+export async function grantManualPoints(userId: string, points: number, note: string): Promise<void> {
+  const transaction = await prisma.$transaction(async (tx) => {
+    await rewardsRepository.getOrCreateAccount(tx, userId);
+    return rewardsRepository.createTransaction(tx, { userId, type: "Earned", points, orderId: null, note });
+  });
+  await sendNotification({
+    userId,
+    templateKey: "rewards.points_earned",
+    variables: { points },
+    triggeringEventId: transaction.id,
+  });
+  await evaluateTierAndBadges(userId, null);
+}
+
 export async function reversePointsForCancelledOrder(orderId: string, userId: string): Promise<void> {
   const earned = await rewardsRepository.findTransactionByOrderAndType(orderId, "Earned");
   if (earned && earned.points > 0) {

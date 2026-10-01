@@ -118,7 +118,7 @@ export interface SendNotificationInput {
   recipientOverrideEmail?: string | null;
   templateKey: string;
   variables: Record<string, string | number>;
-  /** OrderIntegrationEvent.id | RewardTransaction.id | ReferralAttribution.id — see schema.prisma's NotificationLog doc comment. */
+  /** OrderIntegrationEvent.id | RewardTransaction.id | ReferralAttribution.id | Review.id | RecipeReview.id — see schema.prisma's NotificationLog doc comment. */
   triggeringEventId: string;
 }
 

@@ -64,6 +64,25 @@ export async function seedNotificationTemplates() {
       sms: "Oristor: Your referral qualified! You earned {{points}} reward points.",
       whatsapp: "Your referral just qualified — you earned *{{points}}* Oristor reward points! Thanks for sharing.",
     },
+    // STORY-045.
+    {
+      templateKey: "review.approved",
+      email: {
+        subject: "Your Oristor product review is now live",
+        body: "Thanks for your review of {{productName}} — it's now published and visible to other customers.",
+      },
+      sms: "Oristor: Your review of {{productName}} is now live. Thanks for sharing!",
+      whatsapp: "Your Oristor review of *{{productName}}* is now live. Thanks for sharing your feedback!",
+    },
+    {
+      templateKey: "recipe_review.approved",
+      email: {
+        subject: "Your Oristor recipe review is now live",
+        body: "Thanks for your review of {{recipeTitle}} — it's now approved and visible to other customers.",
+      },
+      sms: "Oristor: Your review of {{recipeTitle}} is now live. Thanks for sharing!",
+      whatsapp: "Your Oristor review of *{{recipeTitle}}* is now live. Thanks for sharing your feedback!",
+    },
   ];
 
   for (const template of templates) {

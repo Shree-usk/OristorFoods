@@ -341,13 +341,19 @@ const blogCommentAdminListSelect = {
   id: true,
   authorName: true,
   authorEmail: true,
+  customerId: true,
   body: true,
   status: true,
+  adminReplyBody: true,
   createdAt: true,
   post: { select: { id: true, slug: true, title: true } },
 } satisfies Prisma.BlogCommentSelect;
 
 export type BlogCommentAdminListRow = Prisma.BlogCommentGetPayload<{ select: typeof blogCommentAdminListSelect }>;
+
+export function findCommentAdminRowById(commentId: string): Promise<BlogCommentAdminListRow | null> {
+  return prisma.blogComment.findUnique({ where: { id: commentId }, select: blogCommentAdminListSelect });
+}
 
 export async function listCommentsForAdmin(filters: BlogCommentAdminListFilters, page: number, pageSize: number): Promise<{ items: BlogCommentAdminListRow[]; total: number }> {
   const where: Prisma.BlogCommentWhereInput = {
@@ -364,6 +370,11 @@ export async function listCommentsForAdmin(filters: BlogCommentAdminListFilters,
 
 export function deleteComment(commentId: string) {
   return prisma.blogComment.delete({ where: { id: commentId } });
+}
+
+/** STORY-045. A CS reply — no status change, so no moderation-transition table involved. */
+export function setCommentAdminReply(commentId: string, adminReplyBody: string) {
+  return prisma.blogComment.update({ where: { id: commentId }, data: { adminReplyBody } });
 }
 
 export function bulkUpdateCommentStatus(commentIds: string[], status: BlogCommentStatus) {

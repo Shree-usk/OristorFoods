@@ -36,7 +36,7 @@ export interface ReviewPage {
   pageSize: number;
 }
 
-export type ReviewStatusValue = "Pending" | "Approved" | "Published" | "Rejected" | "Archived";
+export type ReviewStatusValue = "Pending" | "Approved" | "Published" | "Rejected" | "Archived" | "Hidden";
 
 /** The signed-in customer's own review, in any status. */
 export interface OwnReview {

@@ -157,3 +157,54 @@ export function updateStatusAndRecalculate(
     return tx.review.findUnique({ where: { id: reviewId } });
   });
 }
+
+// --- STORY-045 moderation console: reply/feature (no status change, no recalculation needed) ---
+
+export function setAdminReply(id: string, adminReplyBody: string) {
+  return prisma.review.update({ where: { id }, data: { adminReplyBody } });
+}
+
+export function setFeatured(id: string, featured: boolean) {
+  return prisma.review.update({ where: { id }, data: { featured } });
+}
+
+const reviewAdminSelect = {
+  id: true,
+  userId: true,
+  rating: true,
+  title: true,
+  body: true,
+  status: true,
+  featured: true,
+  adminReplyBody: true,
+  moderatorNote: true,
+  publishedAt: true,
+  createdAt: true,
+  user: { select: { name: true, email: true } },
+  product: { select: { id: true, slug: true, name: true } },
+} satisfies Prisma.ReviewSelect;
+
+export type ReviewAdminRow = Prisma.ReviewGetPayload<{ select: typeof reviewAdminSelect }>;
+
+export interface ReviewAdminListFilters {
+  status?: ReviewStatus;
+  rating?: number;
+  search?: string;
+}
+
+export async function listReviewsForAdmin(filters: ReviewAdminListFilters, page: number, pageSize: number): Promise<{ items: ReviewAdminRow[]; total: number }> {
+  const where: Prisma.ReviewWhereInput = {
+    ...(filters.status ? { status: filters.status } : {}),
+    ...(filters.rating ? { rating: filters.rating } : {}),
+    ...(filters.search ? { body: { contains: filters.search, mode: "insensitive" as const } } : {}),
+  };
+  const [items, total] = await Promise.all([
+    prisma.review.findMany({ where, orderBy: [{ createdAt: "desc" }, { id: "asc" }], skip: (page - 1) * pageSize, take: pageSize, select: reviewAdminSelect }),
+    prisma.review.count({ where }),
+  ]);
+  return { items, total };
+}
+
+export function findReviewAdminRowById(id: string): Promise<ReviewAdminRow | null> {
+  return prisma.review.findUnique({ where: { id }, select: reviewAdminSelect });
+}
