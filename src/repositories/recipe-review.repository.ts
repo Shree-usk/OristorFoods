@@ -105,7 +105,7 @@ export function updateReviewStatusAndRecalculate(
   reviewId: string,
   recipeId: string,
   fromStatus: RecipeReviewStatus,
-  data: Prisma.RecipeReviewUpdateInput,
+  data: Prisma.RecipeReviewUncheckedUpdateInput,
   recalculate: boolean,
 ) {
   return prisma.$transaction(async (tx) => {
@@ -127,4 +127,52 @@ export function updateReviewStatusAndRecalculate(
     }
     return tx.recipeReview.findUnique({ where: { id: reviewId } });
   });
+}
+
+// --- STORY-045 moderation console: reply/feature (no status change, no recalculation needed) ---
+
+export function setAdminReply(id: string, adminReplyBody: string) {
+  return prisma.recipeReview.update({ where: { id }, data: { adminReplyBody } });
+}
+
+export function setFeatured(id: string, featured: boolean) {
+  return prisma.recipeReview.update({ where: { id }, data: { featured } });
+}
+
+const recipeReviewAdminSelect = {
+  id: true,
+  customerId: true,
+  rating: true,
+  reviewText: true,
+  status: true,
+  featured: true,
+  adminReplyBody: true,
+  createdAt: true,
+  customer: { select: { name: true, email: true } },
+  recipe: { select: { id: true, slug: true, title: true } },
+} satisfies Prisma.RecipeReviewSelect;
+
+export type RecipeReviewAdminRow = Prisma.RecipeReviewGetPayload<{ select: typeof recipeReviewAdminSelect }>;
+
+export interface RecipeReviewAdminListFilters {
+  status?: RecipeReviewStatus;
+  rating?: number;
+  search?: string;
+}
+
+export async function listRecipeReviewsForAdmin(filters: RecipeReviewAdminListFilters, page: number, pageSize: number): Promise<{ items: RecipeReviewAdminRow[]; total: number }> {
+  const where: Prisma.RecipeReviewWhereInput = {
+    ...(filters.status ? { status: filters.status } : {}),
+    ...(filters.rating ? { rating: filters.rating } : {}),
+    ...(filters.search ? { reviewText: { contains: filters.search, mode: "insensitive" as const } } : {}),
+  };
+  const [items, total] = await Promise.all([
+    prisma.recipeReview.findMany({ where, orderBy: [{ createdAt: "desc" }, { id: "asc" }], skip: (page - 1) * pageSize, take: pageSize, select: recipeReviewAdminSelect }),
+    prisma.recipeReview.count({ where }),
+  ]);
+  return { items, total };
+}
+
+export function findRecipeReviewAdminRowById(id: string): Promise<RecipeReviewAdminRow | null> {
+  return prisma.recipeReview.findUnique({ where: { id }, select: recipeReviewAdminSelect });
 }

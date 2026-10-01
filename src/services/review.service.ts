@@ -25,8 +25,10 @@ import { reviewInputSchema, type ReviewInput, type ReviewListQuery } from "@/val
 const allowedTransitions: Record<ReviewStatus, readonly ReviewStatus[]> = {
   Pending: ["Approved", "Rejected"],
   Approved: ["Published", "Rejected"],
-  Published: ["Archived"],
+  // STORY-045. Hidden is reversible (unlike Archived, a terminal action).
+  Published: ["Archived", "Hidden"],
   Archived: ["Published"],
+  Hidden: ["Published"],
   Rejected: [],
 };
 
@@ -68,6 +70,19 @@ export async function changeReviewStatus(
   );
   if (!updated) throw new InvalidReviewTransitionError(review.status, nextStatus);
   return updated;
+}
+
+/** STORY-045. Neither reply nor feature affects the published rating summary — no status change, no recalculation. */
+export async function setAdminReply(reviewId: string, body: string) {
+  const review = await reviewRepository.findReviewById(reviewId);
+  if (!review) throw new ReviewNotFoundError();
+  return reviewRepository.setAdminReply(reviewId, body);
+}
+
+export async function setFeatured(reviewId: string, featured: boolean) {
+  const review = await reviewRepository.findReviewById(reviewId);
+  if (!review) throw new ReviewNotFoundError();
+  return reviewRepository.setFeatured(reviewId, featured);
 }
 
 export async function getRatingSummary(productId: string): Promise<RatingSummaryData | null> {

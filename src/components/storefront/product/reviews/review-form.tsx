@@ -21,6 +21,7 @@ const statusNotes: Record<Exclude<ReviewStatusValue, "Pending">, string> = {
   Published: "Thanks! Your review has been published.",
   Rejected: "Your review wasn't approved for publication.",
   Archived: "Your review is no longer shown on this product.",
+  Hidden: "Your review is no longer shown on this product.",
 };
 
 const reviewFields = ["rating", "title", "body"] as const;

@@ -4605,3 +4605,160 @@ shut down gracefully. Fixed by deleting `.next` and doing a clean `npm
 run dev` restart. General lesson for this project: after a forced kill
 of the dev server (as opposed to a clean stop), if routes start 404ing
 that shouldn't, clear `.next` before assuming it's a real bug.
+
+## 2026-10-01 — STORY-045 Reviews Moderation Console — core scope
+
+The moderation console for content already submitted through three
+already-shipped storefront features: STORY-015 (Product Reviews),
+STORY-022 (Recipe Reviews), and STORY-021/044 (Blog Comments). All three
+already had a complete status-transition service
+(`review.service.ts::changeReviewStatus`, `recipe-review.service.ts
+::changeRecipeReviewStatus`, `blog.service.ts::changeCommentStatus`) —
+each one's own doc comment explicitly said "approved from the moderation
+console (Epic 07, STORY-045)." Nothing admin-facing existed yet. This
+story builds that console, unifying all three into one queue.
+
+**A real pre-existing bug found and fixed before building anything:**
+`Review.reviewedById` — fields explicitly commented "Reserved for the
+STORY-045 moderation console" in STORY-015 — pointed at `User` (a
+customer account), not `AdminUser`. A moderator is an admin, never a
+customer; since nothing had ever written to this field before this
+story, retargeting the relation to `AdminUser` was a safe, purely
+additive-risk fix (confirmed via the pre-existing
+`tests/unit/review-lifecycle.test.ts` test, which had to be updated to
+pass a real `AdminUser` id instead of a `User` id — a second confirmation
+the old relation was simply wrong, not an intentional design choice).
+
+**Scope decisions made this session:**
+
+1. **Reply, Feature, and a manual reward grant all needed new fields/
+   primitives — built directly here, not deferred.** Unlike STORY-044
+   (which could legitimately defer Reply to "STORY-045's own console"),
+   this story IS that console.
+   - **Reply**: `adminReplyBody String?` added to `Review`, `RecipeReview`,
+     and `BlogComment` — one overwritable reply slot per item, no
+     threading, matching `moderatorNote`'s existing shape.
+   - **Feature**: `featured Boolean @default(false)` added to `Review`
+     and `RecipeReview` only, not `BlogComment` (a comment has no
+     rating/quote to curate). **Important limitation, confirmed and
+     deliberately not fixed**: the AC says Feature should be "consumable
+     by the Homepage Visual Builder's Customer Reviews section" — but
+     STORY-042 never actually built curated-review consumption;
+     `customer-reviews.tsx` still renders STORY-006-era fixture data
+     (`ReviewData`/`quote`/`authorLocation`, a different shape entirely)
+     with no curated-ID mechanism at all. This story adds the `featured`
+     flag and its toggle — real and useful on its own — but does NOT
+     wire it into the Homepage Builder, since that consumption mechanism
+     doesn't exist yet and building it is STORY-042/homepage-builder
+     scope, not this story's. Flagged as a follow-up.
+   - **Hide**: `ReviewStatus` gained a `Hidden` value (`Published ->
+     Hidden`, `Hidden -> Published`) so all three content types now
+     uniformly support a Hide side-state, matching
+     `RecipeReviewStatus`/`BlogCommentStatus`'s existing shape. The
+     exhaustive transition-matrix test in `review-lifecycle.test.ts` was
+     extended to cover every `Hidden`-involving pair, not just the two
+     new ones, so the whole matrix stays provably exhaustive.
+   - **Reward Customer**: a new `grantManualPoints(userId, points, note)`
+     in the existing `rewards.service.ts` (STORY-030) — writes an
+     `Earned`-type `RewardTransaction` with `orderId: null` (Postgres
+     allows multiple NULLs under `@@unique([orderId, type])`, so this
+     can never collide with an order-based credit), reusing the exact
+     same account-bootstrap/transaction-write/notify/tier-evaluation
+     primitives `creditPointsForConfirmedOrder` already uses. The user
+     explicitly confirmed building this now rather than gating it behind
+     STORY-049 (Rewards & Referrals Campaign Management), which doesn't
+     exist yet — a manual grant primitive, not a campaign system.
+2. **Notification + rating recalculation on approve applies to product/
+   recipe reviews only**, not blog comments — the AC's own wording is
+   specific: "Approving a **review** triggers a customer notification and
+   recalculates the target **product's or recipe's** aggregate rating."
+   A comment has no rating to recalculate. Two new notification
+   templates (`review.approved`, `recipe_review.approved`) were seeded
+   alongside the existing 6 in `seed-notifications.ts`; recalculation
+   reuses the exact existing `updateStatusAndRecalculate`/
+   `updateReviewStatusAndRecalculate` repository functions — zero new
+   recalculation logic written.
+3. **Blog-comment moderation taken through this console gates on the
+   "Reviews" module, not "Blog"** — deliberately distinct from
+   STORY-044's own `admin-blog-comments-view.tsx`, which gates on
+   "Blog". Customer Support (the AC's named persona for this console)
+   has "Reviews" as a home module by STORY-038's seed matrix but only
+   `View` on "Blog"; gating this console's blog-comment actions on
+   "Blog" would make the unified queue useless to that persona for
+   exactly the thing it was built for. Both consoles remain valid,
+   independent entry points to the same underlying
+   `blog.service.ts::changeCommentStatus` — "two doors, one lock," not a
+   conflict.
+4. **The three lifecycles are genuinely asymmetric, and the UI doesn't
+   pretend otherwise.** Product reviews are Pending -> Approved ->
+   Published -> Archived (Approved is NOT yet publicly visible —
+   Published is, a real two-step gate already shipped in STORY-015).
+   Recipe reviews and blog comments are Pending -> Approved -> Hidden
+   (Approved IS the visible state already, no separate publish step, and
+   Hidden is terminal — no restore — in their own already-shipped
+   STORY-021/022 design, not reopened here). Approve/Reject/Hide are
+   offered uniformly across all three (each domain's own `canTransition*`
+   check is still the real authority); Publish/Archive/Restore are
+   product-only, both in the service (`review-moderation.service.ts`)
+   and in the admin UI's per-row action computation.
+5. **The unified queue's pagination is per-source when one source type is
+   filtered, and a bounded merge when "All sources" is selected** — three
+   differently-shaped tables can't share one SQL query. A specific
+   `sourceType` filter paginates that table directly (efficient,
+   unlimited depth). "All" fetches up to `page * pageSize` rows (capped
+   at 500) from each of the three sources, merges and sorts them by
+   `createdAt` in the service layer, then slices to the requested page —
+   correct and simple at this console's expected volumes, with a known,
+   documented limitation that true cross-source pagination at scale is a
+   deferred concern (same "build what's needed now" principle as every
+   prior story). A status filter invalid for a given domain (e.g.
+   `Published` when merging in a recipe review, which has no such status)
+   excludes that domain's rows entirely rather than silently ignoring
+   the filter for it.
+6. **No photo-review moderation UI.** `ReviewImage` exists in the schema
+   but is explicitly unused until a storage provider is chosen
+   (STORY-015's own note) — nothing to moderate yet, consistent with
+   that existing deferral.
+
+**A real bug found and fixed while writing the first unit tests, not by
+inspection:** `recipe-review.service.ts::changeRecipeReviewStatus` wrote
+the new `reviewedById` via a relation-`connect` object
+(`data.reviewedBy = { connect: { id } }`), but the underlying repository
+write (`updateReviewStatusAndRecalculate`) uses Prisma's `updateMany`,
+which only accepts scalar field updates — relation operations like
+`connect` are a `update`-only shape and throw `Unknown argument
+reviewedBy` under `updateMany`. Fixed by writing the scalar FK directly
+(`data.reviewedById = id`) and changing the data parameter's type from
+`Prisma.RecipeReviewUpdateInput` to
+`Prisma.RecipeReviewUncheckedUpdateInput` to match. General lesson: any
+write that goes through `updateMany` (used throughout this codebase's
+conditional-write pattern, e.g. "only update if status still matches")
+must use the Unchecked/scalar-FK input type, never the relation-based
+one — a mistake that compiles fine (both are valid Prisma input types)
+but fails at runtime only on the `updateMany` path specifically.
+
+**Testing:** `tests/unit/review-moderation-service.test.ts` (14 tests —
+approve/reject/hide/restore across all three source types, confirming
+product-review approval does NOT yet make it visible (Approved !=
+Published) while recipe-review approval both makes it visible and
+recalculates `Recipe.avgRating`/`ratingCount`, and blog-comment approval
+triggers neither notification nor recalculation; reply persisted for all
+three; feature toggle works for product/recipe and is rejected for blog
+comments; reward-customer credits the wallet with a real
+`RewardTransaction` row and is rejected for a guest (no-account) blog
+commenter; bulk-approve across source types with a correctly-skipped
+non-Pending item; permission denial). `tests/e2e/admin-reviews.spec.ts`
+(2 tests — a moderator sees all three source types in one queue, approves
+and publishes a product review and confirms it's live on the real PDP,
+rejects a recipe review, replies to and features the product review; a
+Viewer-only fixture can browse but a mutating route denies server-side).
+Also re-ran and fixed the pre-existing `review-lifecycle.test.ts` (the
+`AdminUser`-not-`User` fix above) and confirmed zero regressions across
+`review-service`, `review-repository`, `recipe-review-service`,
+`recipe-review-repository`, `rewards-service`, and all STORY-044 blog
+tests (183 tests total, 10 files). Verified live in the browser as the
+seeded Super Administrator: filtered the queue by source type, replied
+to and featured a published product review, hid then restored another,
+and issued a manual reward grant — confirmed via a direct database query
+that it wrote a real `orderId: null` `Earned` transaction to the
+customer's wallet.

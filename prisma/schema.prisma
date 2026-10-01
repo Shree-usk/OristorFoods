@@ -37,7 +37,6 @@ model User {
   wishlist          Wishlist?
   cart              Cart?
   reviews           Review[]   @relation("ReviewAuthor")
-  moderatedReviews  Review[]   @relation("ReviewModerator")
   questions         Question[] @relation("QuestionAsker")
   answeredQuestions Question[] @relation("QuestionAnswerer")
   blogComments      BlogComment[]
@@ -469,6 +468,9 @@ enum ReviewStatus {
   Published
   Rejected
   Archived
+  // STORY-045. "Remove from public view without deleting" — distinct from
+  // Archived (a terminal admin action); Published <-> Hidden is reversible.
+  Hidden
 }
 
 model Review {
@@ -483,11 +485,17 @@ model Review {
   status             ReviewStatus @default(Pending)
   isVerifiedPurchase Boolean      @default(false)
 
-  // Reserved for the STORY-045 moderation console; STORY-015 never writes them.
-  reviewedById  String?
-  reviewedBy    User?     @relation("ReviewModerator", fields: [reviewedById], references: [id], onDelete: SetNull)
-  reviewedAt    DateTime?
-  moderatorNote String?
+  // STORY-045 moderation console fields. reviewedById/reviewedAt/
+  // moderatorNote were reserved ahead of time by STORY-015 (see that
+  // story's own comment, now removed) but pointed reviewedBy at `User` —
+  // a pre-STORY-038 mistake, since nothing wrote them yet, corrected here
+  // to `AdminUser` (a moderator is an admin, never a customer `User` row).
+  reviewedById    String?
+  reviewedBy      AdminUser? @relation("ReviewModerator", fields: [reviewedById], references: [id], onDelete: SetNull)
+  reviewedAt      DateTime?
+  moderatorNote   String?
+  adminReplyBody  String?
+  featured        Boolean    @default(false)
 
   publishedAt DateTime?
   createdAt   DateTime  @default(now())
@@ -742,6 +750,14 @@ model RecipeReview {
   createdAt  DateTime           @default(now())
   updatedAt  DateTime           @updatedAt
 
+  // STORY-045 moderation console fields, mirroring Review's own
+  // (STORY-015) reserved-fields pattern — RecipeReview never had them.
+  reviewedById   String?
+  reviewedBy     AdminUser? @relation("RecipeReviewModerator", fields: [reviewedById], references: [id], onDelete: SetNull)
+  reviewedAt     DateTime?
+  adminReplyBody String?
+  featured       Boolean    @default(false)
+
   @@unique([recipeId, customerId])
   @@index([recipeId, status])
 }
@@ -976,16 +992,18 @@ model BlogPostTag {
 }
 
 model BlogComment {
-  id          String            @id @default(cuid())
-  postId      String
-  post        BlogPost          @relation(fields: [postId], references: [id], onDelete: Cascade)
-  authorName  String
-  authorEmail String
-  customerId  String?
-  customer    User?             @relation(fields: [customerId], references: [id])
-  body        String
-  status      BlogCommentStatus @default(Pending)
-  createdAt   DateTime          @default(now())
+  id             String            @id @default(cuid())
+  postId         String
+  post           BlogPost          @relation(fields: [postId], references: [id], onDelete: Cascade)
+  authorName     String
+  authorEmail    String
+  customerId     String?
+  customer       User?             @relation(fields: [customerId], references: [id])
+  body           String
+  status         BlogCommentStatus @default(Pending)
+  // STORY-045. A CS reply, same shape as Review/RecipeReview's adminReplyBody.
+  adminReplyBody String?
+  createdAt      DateTime          @default(now())
 
   @@index([postId, status])
   @@index([postId, authorEmail, createdAt])
@@ -1846,11 +1864,12 @@ model NotificationPreference {
 // One row per attempted send. `triggeringEventId` deliberately spans
 // multiple source tables (OrderIntegrationEvent.id for order-lifecycle
 // notifications, RewardTransaction.id for points-earned,
-// ReferralAttribution.id for referral-qualified) rather than being a
-// strict FK to any one of them — same "plain string for extensibility"
-// treatment as OrderIntegrationEvent.eventType. @@unique below is the
-// duplicate-send guard: the same fact can never notify the same
-// recipient on the same channel twice.
+// ReferralAttribution.id for referral-qualified, Review.id /
+// RecipeReview.id for STORY-045's review.approved/recipe_review.approved)
+// rather than being a strict FK to any one of them — same "plain string
+// for extensibility" treatment as OrderIntegrationEvent.eventType.
+// @@unique below is the duplicate-send guard: the same fact can never
+// notify the same recipient on the same channel twice.
 model NotificationLog {
   id                String              @id @default(cuid())
   // Null for a guest order-confirmation email — there is no User row to link.
@@ -1989,6 +2008,9 @@ model AdminUser {
   // STORY-044.
   blogPostsCreated   BlogPost[]      @relation("BlogPostCreatedBy")
   blogPostsUpdated   BlogPost[]      @relation("BlogPostUpdatedBy")
+  // STORY-045.
+  reviewsModerated       Review[]       @relation("ReviewModerator")
+  recipeReviewsModerated RecipeReview[] @relation("RecipeReviewModerator")
   createdAt          DateTime        @default(now())
   updatedAt          DateTime        @updatedAt
 }

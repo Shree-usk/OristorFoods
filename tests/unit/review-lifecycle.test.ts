@@ -22,16 +22,20 @@ afterEach(async () => {
   await prisma.review.deleteMany();
   await prisma.product.deleteMany();
   await prisma.user.deleteMany();
+  await prisma.adminUser.deleteMany({ where: { email: { endsWith: "@review-lifecycle-test.test" } } });
+  await prisma.role.deleteMany({ where: { key: { startsWith: "review-lifecycle-test-role-" } } });
 });
 
-const statuses: ReviewStatus[] = ["Pending", "Approved", "Published", "Rejected", "Archived"];
+const statuses: ReviewStatus[] = ["Pending", "Approved", "Published", "Rejected", "Archived", "Hidden"];
 const allowed = new Set([
   "Pending>Approved",
   "Pending>Rejected",
   "Approved>Published",
   "Approved>Rejected",
   "Published>Archived",
+  "Published>Hidden",
   "Archived>Published",
+  "Hidden>Published",
 ]);
 
 describe("canTransitionReview", () => {
@@ -91,7 +95,9 @@ describe("changeReviewStatus", () => {
 
   it("writes moderator fields only when they are provided", async () => {
     const review = await makePendingReview();
-    const moderator = await prisma.user.create({ data: { email: "moderator@test.com", name: "Moderator" } });
+    // STORY-045. reviewedBy targets AdminUser (a moderator is an admin, never a customer User row).
+    const role = await prisma.role.create({ data: { key: "review-lifecycle-test-role-1", name: "Review Lifecycle Test Role" } });
+    const moderator = await prisma.adminUser.create({ data: { email: "moderator@review-lifecycle-test.test", name: "Moderator", passwordHash: "unused", roleId: role.id } });
 
     const approved = await changeReviewStatus(review.id, "Approved");
     expect(approved).toMatchObject({ reviewedById: null, reviewedAt: null, moderatorNote: null });

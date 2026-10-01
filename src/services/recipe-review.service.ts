@@ -32,7 +32,15 @@ export function canTransitionRecipeReview(from: RecipeReviewStatus, to: RecipeRe
   return allowedTransitions[from].includes(to);
 }
 
-export async function changeRecipeReviewStatus(reviewId: string, nextStatus: RecipeReviewStatus) {
+export interface ChangeRecipeReviewStatusOptions {
+  moderatorId?: string;
+}
+
+export async function changeRecipeReviewStatus(
+  reviewId: string,
+  nextStatus: RecipeReviewStatus,
+  options: ChangeRecipeReviewStatusOptions = {},
+) {
   const review = await recipeReviewRepository.findReviewById(reviewId);
   if (!review) throw new RecipeReviewNotFoundError();
   if (!canTransitionRecipeReview(review.status, nextStatus)) {
@@ -43,15 +51,38 @@ export async function changeRecipeReviewStatus(reviewId: string, nextStatus: Rec
   // boundary in either direction (Pending->Approved, Approved->Hidden).
   // Approved->Rejected is impossible per allowedTransitions above.
   const recalculate = review.status === "Approved" || nextStatus === "Approved";
+  // Prisma.RecipeReviewUncheckedUpdateInput (scalar FK), not
+  // RecipeReviewUpdateInput (relation `connect`) — updateReviewStatusAndRecalculate
+  // writes via updateMany(), which only accepts scalar field updates.
+  const data: Prisma.RecipeReviewUncheckedUpdateInput = { status: nextStatus };
+  // STORY-045. Reserved ahead of time, mirroring Review's own reviewedById/
+  // reviewedAt fields — written for the first time by the moderation console.
+  if (options.moderatorId) {
+    data.reviewedById = options.moderatorId;
+    data.reviewedAt = new Date();
+  }
   const updated = await recipeReviewRepository.updateReviewStatusAndRecalculate(
     review.id,
     review.recipeId,
     review.status,
-    { status: nextStatus },
+    data,
     recalculate,
   );
   if (!updated) throw new InvalidRecipeReviewTransitionError(review.status, nextStatus);
   return updated;
+}
+
+/** STORY-045. Neither reply nor feature affects avgRating/ratingCount — no status change, no recalculation. */
+export async function setAdminReply(reviewId: string, body: string) {
+  const review = await recipeReviewRepository.findReviewById(reviewId);
+  if (!review) throw new RecipeReviewNotFoundError();
+  return recipeReviewRepository.setAdminReply(reviewId, body);
+}
+
+export async function setFeatured(reviewId: string, featured: boolean) {
+  const review = await recipeReviewRepository.findReviewById(reviewId);
+  if (!review) throw new RecipeReviewNotFoundError();
+  return recipeReviewRepository.setFeatured(reviewId, featured);
 }
 
 // ---------------------------------------------------------------------------
