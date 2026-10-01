@@ -3,11 +3,12 @@ import { createHash, randomBytes } from "node:crypto";
 import bcrypt from "bcryptjs";
 
 import { checkRateLimit, resetRateLimit } from "@/lib/rate-limit";
+import * as loginEventRepository from "@/repositories/login-event.repository";
 import * as passwordResetRepository from "@/repositories/password-reset.repository";
 import * as userRepository from "@/repositories/user.repository";
 import { attributeReferralAtRegistration, getOrCreateReferralCode } from "@/services/referral.service";
 import { sendTransactionalEmail } from "@/services/notification.service";
-import { EmailInUseError, InvalidResetTokenError, ResetTokenExpiredError } from "@/services/auth.errors";
+import { AccountSuspendedError, EmailInUseError, InvalidResetTokenError, ResetTokenExpiredError } from "@/services/auth.errors";
 import type { RegisterInput } from "@/validation/auth.schema";
 
 const LOGIN_RATE_LIMIT = { max: 5, windowMs: 15 * 60 * 1000 };
@@ -42,9 +43,16 @@ export interface AuthenticatedUser {
  * authorize). Returns null uniformly for "no such user", "no password
  * set" (an OAuth-only account, once those exist), "wrong password", and
  * "rate limited" — the caller must never be able to distinguish these,
- * per the story's no-enumeration AC.
+ * per the story's no-enumeration AC. STORY-048: once the password has
+ * verified correctly, a Suspended account throws AccountSuspendedError
+ * instead (see that error's own doc comment for why this one case is a
+ * deliberate exception to the no-enumeration rule), and every outcome
+ * from that point on writes a LoginEvent (best-effort IP/user-agent
+ * from `request`, present only when NextAuth's authorize passes one
+ * through) — but never for a nonexistent email, so LoginEvent can't be
+ * used to enumerate registered addresses either.
  */
-export async function verifyCredentials(email: string, password: string): Promise<AuthenticatedUser | null> {
+export async function verifyCredentials(email: string, password: string, request?: Request): Promise<AuthenticatedUser | null> {
   const rateLimitKey = `login:${email.toLowerCase()}`;
   if (!checkRateLimit(rateLimitKey, LOGIN_RATE_LIMIT)) return null;
 
@@ -52,9 +60,18 @@ export async function verifyCredentials(email: string, password: string): Promis
   if (!user?.passwordHash) return null;
 
   const isValid = await bcrypt.compare(password, user.passwordHash);
-  if (!isValid) return null;
+  if (!isValid) {
+    await recordLoginEvent(user.id, false, request);
+    return null;
+  }
+
+  if (user.status === "Suspended") {
+    await recordLoginEvent(user.id, false, request);
+    throw new AccountSuspendedError();
+  }
 
   resetRateLimit(rateLimitKey);
+  await recordLoginEvent(user.id, true, request);
   return {
     id: user.id,
     name: user.name,
@@ -62,6 +79,12 @@ export async function verifyCredentials(email: string, password: string): Promis
     image: user.image,
     passwordVersion: passwordVersion(user.passwordChangedAt),
   };
+}
+
+function recordLoginEvent(userId: string, success: boolean, request?: Request): Promise<unknown> {
+  const ipAddress = request?.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? null;
+  const userAgent = request?.headers.get("user-agent") ?? null;
+  return loginEventRepository.createLoginEvent({ userId, success, ipAddress, userAgent });
 }
 
 export async function registerCustomer(input: RegisterInput, request: Request): Promise<{ userId: string }> {

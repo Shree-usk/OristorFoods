@@ -62,3 +62,20 @@ export interface CreateRedemptionInput {
 export function createRedemption(tx: Prisma.TransactionClient, input: CreateRedemptionInput) {
   return tx.couponRedemption.create({ data: input });
 }
+
+export interface CreateCouponInput {
+  code: string;
+  discountType: Prisma.CouponCreateInput["discountType"];
+  percentOff: string | null;
+  amountOff: string | null;
+  startDate: Date;
+  endDate: Date;
+  usageLimitGlobal: number | null;
+  usageLimitPerCustomer: number | null;
+  restrictedToUserId: string | null;
+}
+
+/** STORY-048. Customer-admin coupon issuance (coupon.service.ts::issueCouponToCustomer) is the only caller today — general-purpose coupon CRUD belongs to a future Marketing console story. */
+export function createCoupon(input: CreateCouponInput) {
+  return prisma.coupon.create({ data: input });
+}

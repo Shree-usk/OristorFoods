@@ -99,10 +99,10 @@ export async function creditPointsForConfirmedOrder(orderId: string, userId: str
  * behind STORY-049 (Rewards & Referrals Campaign Management, not yet
  * built) — this is a manual grant primitive, not a campaign system.
  */
-export async function grantManualPoints(userId: string, points: number, note: string): Promise<void> {
+export async function grantManualPoints(userId: string, points: number, note: string, expiresAt: Date | null = null): Promise<void> {
   const transaction = await prisma.$transaction(async (tx) => {
     await rewardsRepository.getOrCreateAccount(tx, userId);
-    return rewardsRepository.createTransaction(tx, { userId, type: "Earned", points, orderId: null, note });
+    return rewardsRepository.createTransaction(tx, { userId, type: "Earned", points, orderId: null, note, expiresAt });
   });
   await sendNotification({
     userId,

@@ -72,6 +72,16 @@ model User {
   status                  AccountStatus @default(Active)
   deactivationReason      String?
   deactivationRequestedAt DateTime?
+  // STORY-048. Set only when status is Suspended — an admin-initiated
+  // block, distinct from the customer-initiated deactivation* fields
+  // above.
+  suspendedReason         String?
+  suspendedAt             DateTime?
+  suspendedById           String?
+  suspendedBy             AdminUser? @relation(fields: [suspendedById], references: [id], onDelete: SetNull)
+  loginEvents             LoginEvent[]
+  adminNotes              AdminNote[]
+  restrictedCoupons       Coupon[]
   createdAt         DateTime   @default(now())
   updatedAt         DateTime   @updatedAt
 }
@@ -80,6 +90,13 @@ enum AccountStatus {
   Active
   DeactivationRequested
   Deactivated
+  // STORY-048. Admin-initiated (fraud/abuse/policy), distinct from the
+  // customer's own DeactivationRequested/Deactivated above — conflating
+  // the two would make it impossible to tell "customer left" from
+  // "admin blocked this account" apart in reporting. Only this value
+  // blocks storefront login (auth.service.ts::verifyCredentials);
+  // Deactivated remains the inert, unenforced value STORY-034 left it.
+  Suspended
 }
 
 model Account {
@@ -1188,6 +1205,15 @@ model Coupon {
   createdAt    DateTime           @default(now())
   updatedAt    DateTime           @updatedAt
 
+  // STORY-048. Set only for a customer-admin-issued coupon
+  // (coupon.service.ts::issueCouponToCustomer) — null for every
+  // general-purpose coupon. validateCoupon() rejects redemption by
+  // anyone else as CouponNotFoundError (not a distinct "forbidden"),
+  // so a restricted coupon's existence can't be enumerated by a
+  // different customer.
+  restrictedToUserId String?
+  restrictedToUser   User?   @relation(fields: [restrictedToUserId], references: [id], onDelete: Cascade)
+
   scopeProducts   CouponScopeProduct[]
   scopeCategories CouponScopeCategory[]
   redemptions     CouponRedemption[]
@@ -2117,6 +2143,9 @@ model AdminUser {
   // STORY-047.
   refundsProcessed  RefundRecord[]
   returnsProcessed  ReturnRequest[]
+  // STORY-048.
+  customersSuspended User[]
+  adminNotesAuthored AdminNote[]
   createdAt          DateTime        @default(now())
   updatedAt          DateTime        @updatedAt
 }
@@ -2141,6 +2170,39 @@ model AuditLog {
 
   @@index([actorId])
   @@index([createdAt])
+}
+
+// STORY-048. Customer-side login history — AuditLog above is
+// AdminUser-only (STORY-038's admin audit trail) and never covered
+// storefront logins. Written from auth.service.ts::verifyCredentials,
+// the Credentials provider's sole verification path. A failed row is
+// only written once a real user is matched (never for a nonexistent
+// email), so this can't be used to enumerate registered addresses.
+model LoginEvent {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  success   Boolean
+  ipAddress String?
+  userAgent String?
+  createdAt DateTime @default(now())
+
+  @@index([userId, createdAt])
+}
+
+// STORY-048. Internal-only support context, never surfaced on any
+// customer-facing read path (profile.service.ts, etc.) — append-only,
+// no edit/delete.
+model AdminNote {
+  id         String    @id @default(cuid())
+  customerId String
+  customer   User      @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  authorId   String
+  author     AdminUser @relation(fields: [authorId], references: [id])
+  body       String    @db.VarChar(2000)
+  createdAt  DateTime  @default(now())
+
+  @@index([customerId, createdAt])
 }
 
 // --- Media Library (STORY-041, core scope) ---

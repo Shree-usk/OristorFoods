@@ -6,6 +6,7 @@ const statusByCode: Record<AuthErrorCode, number> = {
   email_in_use: 409,
   invalid_reset_token: 400,
   reset_token_expired: 400,
+  account_suspended: 403,
 };
 
 export function authErrorResponse(error: unknown) {

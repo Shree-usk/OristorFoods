@@ -1,10 +1,16 @@
 import { PrismaAdapter } from "@auth/prisma-adapter";
-import NextAuth from "next-auth";
+import NextAuth, { CredentialsSignin } from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 
 import { prisma } from "@/lib/db";
+import { AccountSuspendedError } from "@/services/auth.errors";
 import { getPasswordVersion, verifyCredentials } from "@/services/auth.service";
 import { credentialsSchema } from "@/validation/auth.schema";
+
+/** STORY-048. The signin-page-visible counterpart of AccountSuspendedError — @auth/core requires a CredentialsSignin subclass to show a distinct message instead of the generic "CredentialsSignin" error. */
+class AccountSuspendedSignInError extends CredentialsSignin {
+  code = "account_suspended";
+}
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   adapter: PrismaAdapter(prisma),
@@ -23,11 +29,16 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         email: { label: "Email", type: "email" },
         password: { label: "Password", type: "password" },
       },
-      authorize: async (rawCredentials) => {
+      authorize: async (rawCredentials, request) => {
         const parsed = credentialsSchema.safeParse(rawCredentials);
         if (!parsed.success) return null;
 
-        return verifyCredentials(parsed.data.email, parsed.data.password);
+        try {
+          return await verifyCredentials(parsed.data.email, parsed.data.password, request);
+        } catch (error) {
+          if (error instanceof AccountSuspendedError) throw new AccountSuspendedSignInError();
+          throw error;
+        }
       },
     }),
   ],

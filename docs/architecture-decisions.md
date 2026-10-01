@@ -5276,3 +5276,142 @@ Verified live in the browser against real seeded data: the orders list
 renders with live status/payment/total columns, the detail page's
 status-action buttons update correctly after each transition, and a
 packing-slip download returns a real PDF buffer.
+
+## 2026-10-01 — STORY-048 Admin Customers Console — core scope
+
+Delivers `/admin/customers`: profile, purchase/support/login history,
+suspend/activate, manual reward/coupon issuance, internal notes. Next
+in the confirmed build sequence (blueprint Section 9a) after STORY-047.
+`src/services/customer-admin.service.ts`/`customer-admin.errors.ts`
+already existed (STORY-071, deliberately minimal — "the full console
+(STORY-048) will likely grow a richer error set") with one function,
+`setCustomerGroup`, extended here rather than replaced. This console
+mostly composes already-shipped data: `customer-rewards-dashboard.
+service.ts::getRewardsSummary`, `customer-referrals-dashboard.
+service.ts::getReferralSummary`, `address.repository.ts::
+listAddressesByUserId`, `support-ticket.service.ts::listTicketsForUser`,
+and `customer-order-history.service.ts::getOrderListPage` all existed
+already for the Profile/Rewards/Support/Purchase tabs.
+`rewards.service.ts::grantManualPoints` (STORY-045, built for the
+review-moderation reward action) was the exact primitive AC #4 needed,
+extended with an optional `expiresAt` param rather than duplicated.
+
+**Three genuine gaps found and closed, each a small real addition:**
+
+1. **Suspend/reactivate.** `User.status` already had an `AccountStatus`
+   enum (`Active`/`DeactivationRequested`/`Deactivated`) from STORY-034,
+   whose own entry above says verbatim: "the `Deactivated` status value
+   exists in the `AccountStatus` enum for that future use, unused by
+   any code today" — referring to a customer's own deactivation once
+   some future admin process enforces it. Conflating that with an
+   admin-initiated suspension (fraud/abuse/policy — a different cause)
+   would make the two impossible to tell apart in reporting, so a new
+   `Suspended` value was added instead, leaving `Deactivated` exactly
+   as inert as STORY-034 left it — wiring up self-deactivation
+   enforcement is still not this story's job and isn't asked for.
+   `User` gained `suspendedReason`/`suspendedAt`/`suspendedById`,
+   mirroring the existing `deactivationReason`/`deactivationRequestedAt`
+   pair. Login is blocked specifically when `status === "Suspended"` —
+   in `auth.service.ts::verifyCredentials`, AFTER the password already
+   verified correctly (a deliberate, documented exception to that
+   function's own no-enumeration rule: telling a successfully-
+   authenticated person their account is suspended reveals nothing an
+   attacker could use to enumerate accounts, unlike every other
+   failure path there, which stays a uniform `null`). Throws a new
+   `AccountSuspendedError`; `src/lib/auth.ts`'s `authorize` catches it
+   and re-throws a `CredentialsSignin` subclass
+   (`AccountSuspendedSignInError`, `code: "account_suspended"`) so
+   `signIn()`'s `result.code` lets `login-form.tsx` show a specific
+   message instead of the generic "Incorrect email or password."
+   (confirmed via `node_modules/next-auth/react.js` that `result.code`
+   is populated from the redirect URL's `code` query param — not
+   documented in training data for this Auth.js v5 beta, verified by
+   reading the actual runtime source rather than assumed).
+2. **Login history.** `AuditLog.actorId` is a FK to `AdminUser` only
+   (STORY-038's admin audit trail) and never covered storefront
+   customer logins — confirmed by reading the model before assuming
+   otherwise. New `LoginEvent` model (`userId`, `success`, `ipAddress`,
+   `userAgent`, `createdAt`), written from `verifyCredentials` on every
+   outcome once a real user is matched (wrong password AND success) —
+   but never for a nonexistent email, so it can't be used to enumerate
+   registered addresses either. `@auth/core`'s `Credentials.authorize`
+   receives `(credentials, request)` (confirmed by reading
+   `node_modules/@auth/core/providers/credentials.d.ts`), threaded
+   through to `verifyCredentials` for best-effort IP
+   (`x-forwarded-for`) and device (`user-agent`) capture — both null in
+   local dev with no reverse proxy, matching the AC's own "where
+   available" wording.
+3. **Coupon "account-scoped" issuance.** `Coupon` (confirmed by reading
+   the full model) had no owner field — `usageLimitPerCustomer` caps
+   use per customer but doesn't restrict a code to one customer; a
+   random code alone would be security-through-obscurity, not an
+   enforced restriction. `referral.service.ts`'s own comment had
+   already flagged this exact gap before this story existed to close
+   it: "coupon.repository.ts has no function to programmatically create
+   a new Coupon row... building one is separate scope." Added
+   `Coupon.restrictedToUserId String?` and one check in
+   `coupon.service.ts::validateCoupon` — a restricted coupon redeemed
+   by anyone else throws `CouponNotFoundError` (not a distinct
+   "forbidden"), matching this app's no-enumeration precedent.
+   `coupon.service.ts::issueCouponToCustomer` generates an 8-character
+   Crockford-base32 code (same alphabet/retry-on-collision pattern as
+   `order.service.ts::generateOrderNumber`/`referral.service.ts::
+   generateCode` — same "unambiguous read aloud" rationale applies to a
+   support agent reading a code to a customer), sets
+   `usageLimitGlobal`/`usageLimitPerCustomer` both from the single
+   `usageLimit` param (the AC's "single-use or account-scoped" maps to
+   `usageLimit: 1` vs. a higher number — both are already
+   account-restricted via `restrictedToUserId`, so no separate "scope"
+   toggle was needed). General-purpose coupon CRUD (a Marketing
+   console) is still a future story; this is only ever a single
+   customer-restricted grant.
+
+**A real security issue found and fixed while composing the detail
+read, not introduced by this story alone (STORY-071's `setCustomerGroup`
+had the same gap already):** `userRepository.findById`/
+`listCustomersForAdmin`/etc. return the full `User` row, including
+`passwordHash`. Every admin-customer read now goes through a new
+`toCustomerAdminSummary` mapper in `customer-admin.service.ts` before
+reaching a route response — applied to `listCustomersForAdmin`,
+`getCustomerAdminDetail`, `suspendCustomer`, `reactivateCustomer`, and
+retrofitted onto `setCustomerGroup`'s own return value.
+
+**Dropped, not built: the AC's "tags" filter.** No backing concept for
+customer tags exists anywhere in this codebase (confirmed by
+searching) — same "don't invent a feature the data model has no room
+for" judgment call as STORY-047's already-satisfied delivery-zone
+finding. List filtering ships with status/search/registration-date
+only.
+
+**Internal notes never reach a customer-facing read.** `AdminNote` has
+no relation from, and is never selected by, any customer-facing
+service (`profile.service.ts`, `customer-dashboard.service.ts`, etc.)
+— structural non-visibility, not merely a missing UI affordance.
+Confirmed via `profile-service.test.ts`'s existing `getProfile` call
+never returning an `adminNotes` field.
+
+**Testing:** `tests/unit/customer-admin-service.test.ts` (extended from
+STORY-071's 3 tests to 14) — list/detail with the passwordHash-leak
+guard, suspend blocking a real `verifyCredentials` call (not just the
+DB flag), reactivate restoring it, double-suspend and
+reactivate-when-not-suspended rejected, View/Edit/Approve permission
+gating, a LoginEvent-writing test (success, wrong password, and
+nothing for a nonexistent email), grant-reward reflected in
+`getRewardsSummary`, issue-coupon redeemable by that customer and
+`CouponNotFoundError` for a different one, and a note's absence from
+`getProfile`. Confirmed zero regressions: `auth-service`,
+`admin-auth-service`, `profile-service`, `rewards-service`,
+`review-moderation-service`, `coupon-service`, `coupon-routes`, and
+`customer-order-history-service` suites pass unchanged (103 tests,
+run individually per this session's established PGlite-under-load
+recovery discipline). `tests/e2e/admin-customers.spec.ts` (new, 2
+tests) — a suspend/reactivate walk confirming the real storefront
+login form shows the specific suspended message and blocks/un-blocks
+sign-in (in a separate browser context from the admin session, to
+avoid cookie cross-contamination between the two auth boundaries on
+one page), and a reward-grant + coupon-issuance walk confirming the
+balance updates in the UI and the issued coupon's `usageLimitGlobal`/
+`usageLimitPerCustomer` are both set to the requested limit. Verified
+live in the browser: suspended a real seeded customer, confirmed their
+storefront login was blocked with the specific message, reactivated,
+confirmed login worked again.
