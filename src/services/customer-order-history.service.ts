@@ -7,7 +7,7 @@ import * as returnRequestRepository from "@/repositories/return-request.reposito
 import { resolveCartIdentity } from "@/services/cart.service";
 import { InvalidReturnQuantityError, OrderNotFoundError, OrderReturnNotAllowedError } from "@/services/order.errors";
 import { getOrderForConfirmation } from "@/services/order.service";
-import { resolvePrice } from "@/services/pricing.service";
+import { resolveCustomerGroupForUser, resolvePrice } from "@/services/pricing.service";
 import type { CheckoutAddress, OrderStatusHistoryEntry } from "@/types/checkout";
 
 /**
@@ -268,6 +268,7 @@ export async function reorderPastOrder(userId: string, orderNumber: string): Pro
   const { cart } = await resolveCartIdentity(userId, undefined);
   const existingItems = await cartRepository.listCartItemsWithProduct(cart.id);
   const existingByProductId = new Map(existingItems.map((item) => [item.productId, item]));
+  const customerGroup = await resolveCustomerGroupForUser(userId);
 
   for (const line of reorderable) {
     const existing = existingByProductId.get(line.productId);
@@ -276,7 +277,7 @@ export async function reorderPastOrder(userId: string, orderNumber: string): Pro
     const cappedQuantity = Math.min(combinedQuantity, stock);
     if (cappedQuantity <= 0) continue;
 
-    const resolved = await resolvePrice({ productId: line.productId, customerGroup: "Retail", quantity: cappedQuantity });
+    const resolved = await resolvePrice({ productId: line.productId, customerGroup, quantity: cappedQuantity });
     const unitPrice = resolved?.price.toFixed(2) ?? "0.00";
 
     if (existing) {

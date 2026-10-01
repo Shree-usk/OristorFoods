@@ -1887,6 +1887,12 @@ every product, and wiring a real customer group through will only ever
 require changing the value passed at each of these call sites, never the
 engine itself.
 
+**Resolved 2026-10-01 by STORY-071** (Customer Group & Pricing Context) —
+`User.customerGroup` now exists and every call site named above
+(including `search.service.ts`, which STORY-071's own AC list omitted
+but is the same gap) resolves it from the authenticated customer. See
+that story's own architecture-decisions entry.
+
 **`resolvePrice()` is called per cart line, never the bulk
 `resolvePricesForProducts()`.** The bulk function shares one `quantity`
 across every requested product (correct for a listing page, where every
@@ -5008,3 +5014,128 @@ each time despite the data being gone. Recovered each time via a full
 reseed (`npx tsx --env-file=.env prisma/seed.ts`). Documented as a
 general project lesson (see memory), since it is not specific to this
 story's code.
+
+## 2026-10-01 — STORY-071 Customer Group & Pricing Context
+
+Closes the hardcoded-`customerGroup: "Retail"` gap flagged since
+STORY-024 and re-confirmed outstanding in the 2026-09-30 deferred-items
+review — `User` had no `customerGroup` field, so every `resolvePrice()`
+call site passed the literal `"Retail"` regardless of who was actually
+asking, even though the pricing engine's customer-group tier has worked
+correctly since STORY-009. Pulled ahead of its file position (Epic 06)
+in the confirmed build sequence (`docs/blueprint.md` Section 9a) because
+STORY-048 (Admin Customers Console) is written to build its UI on top of
+the field this story adds.
+
+**A real gap found during research, outside the story's own AC list:**
+the AC named exactly 10 call sites (`cart.service.ts` ×4,
+`customer-order-history.service.ts` ×1, `product.service.ts` ×4,
+`wishlist.service.ts` ×1), but `search.service.ts`'s own `searchProducts`
+was calling `resolvePricesForProducts` with **no** `customerGroup` at
+all — not even the literal `"Retail"` the AC's list described everywhere
+else. STORY-024's own entry had already named `search.service.ts`
+alongside the other three as part of the same limitation; the AC simply
+dropped it when STORY-071 was written. Fixed in the same pass
+(`searchCatalogue`/`searchProducts`, plus their 4 callers) rather than
+leaving a known, already-documented gap half-closed — a Wholesale
+customer searching for a product would otherwise have seen the correct
+price on the PDP and in their cart but the wrong (Retail) price in
+search results, undermining the story's own stated goal ("I want my
+account's commercial relationship... reflected automatically wherever I
+shop").
+
+**Scope decisions:**
+
+1. **One shared resolver** — `pricing.service.ts::resolveCustomerGroupForUser
+   (userId: string | null): Promise<CustomerGroup>` — backed by a new,
+   deliberately light `user.repository.ts::findCustomerGroupById`
+   (selects just the scalar, not `findById`'s full row). Returns
+   `"Retail"` for a guest or a row that's unexpectedly missing its
+   group — the same default the field itself carries, made explicit so
+   every call site shares one source of truth instead of each hardcoding
+   the literal independently.
+2. **Two different wiring shapes, deliberately kept distinct.**
+   `cart.service.ts`/`customer-order-history.service.ts`/
+   `wishlist.service.ts` already receive `userId` as a function
+   parameter (every one of their 6 combined call sites is reachable only
+   from an authenticated or at-least-identified session) — fixed
+   entirely internally, resolving the group once per function from the
+   `userId` already in scope, no signature or caller changes.
+   `product.service.ts`/`search.service.ts`'s functions serve guest
+   traffic too and already had (for 3 of 6) an optional
+   `customerGroup?: CustomerGroup` parameter nothing populated — kept
+   that "caller resolves and passes" shape, added the same optional
+   param to the 3 that didn't have it yet (`getProductsByIds`,
+   `getProductsForCompare`, and both `search.service.ts` functions
+   needed it added fresh), and updated all 13 callers (9 product + 4
+   search: pages and API routes) to resolve `auth()` +
+   `resolveCustomerGroupForUser` and pass it through.
+3. **`getProductDetail`'s new parameter is a plain primitive, not an
+   options object, to protect its `cache()` wrapper.** `products/[slug]/
+   page.tsx` calls `getProductDetail` through `cache()` from both
+   `generateMetadata` and the page body specifically to dedupe the work
+   to one call per request (a load-bearing performance optimization,
+   per that file's own existing comment). React's `cache()` keys on
+   argument equality; a fresh `{ customerGroup }` object literal written
+   at each call site would be treated as a different key even when its
+   value is identical, silently defeating the dedup and running the
+   full PDP aggregation (price resolution, related products, 3 summary
+   calls, a category-ancestor walk) twice per page view. Changed the
+   signature from `(slug, opts: { customerGroup? })` to `(slug,
+   customerGroup?)` — a primitive compares correctly.
+4. **Minimal admin path**: `customer-admin.service.ts::setCustomerGroup`
+   (new), mirroring `product-admin.service.ts::setCustomerGroupPrice`'s
+   `requirePermission`+`writeAuditLog` shape exactly, gated on the
+   already-existing `Customers`/`Edit` permission (no seed/schema
+   changes — `Customers` already has home-module grants for
+   `sales_manager`/`customer_support`). New `PATCH
+   /api/admin/customers/[id]/group` — the first route under
+   `/api/admin/customers/*`; STORY-048 will extend this directory with
+   the full console. Deliberately the only admin-customer capability
+   this story ships, per its own "Out of Scope" section.
+5. **No new UI to display a customer's own group on their account
+   page.** `profile.service.ts::getProfile(userId)` already calls
+   `userRepository.findById` with no `select` (the full row, confirmed
+   by that file's own "the only place... reads or writes the User row"
+   comment) — adding the schema field makes it appear in that response
+   automatically, satisfying the AC's "expose the field on whatever
+   customer-profile read... already uses" at the data layer. No new
+   account-page UI element was added to display it (not explicitly
+   asked for — the AC's wording is about the read, not a new
+   affordance), avoiding scope creep beyond what the story asks.
+
+**A real test-infrastructure issue found and fixed, not this story's own
+bug:** 6 pre-existing route-handler unit tests (`products-route`,
+`product-detail-route`, `products-by-ids-route`, `product-compare-route`,
+`search-route`, `product-search-route`) directly import their route
+module, which now transitively imports `next-auth` via the new `auth()`
+call. Under Vitest, loading the real `next-auth` package throws
+(`next-auth/lib/env.js` imports `next/server`, which fails to resolve in
+Vitest's module graph) — a pre-existing fragility in how this project's
+test environment resolves Next.js's package exports, not something
+STORY-071 introduced, just the first time code reachable from these
+specific 6 test files called `auth()`. Fixed using the established
+mitigation already used by `wishlist-route.test.ts`: `vi.mock("@/lib/auth",
+() => ({ auth: vi.fn() }))` before importing the route, with the mock
+resolving `null` (guest) in a `beforeEach` so each file's existing
+guest-only test scenarios keep behaving exactly as before.
+
+**Testing:** `tests/unit/customer-group-pricing.test.ts` (new, 14
+tests) — a seeded Wholesale customer with a real `CustomerGroupPrice`
+row resolves that tier (not standard) across all 11 call sites: cart
+(add item, then read the summary), wishlist, order-history
+(`reorderPastOrder`), all 4 `product.service.ts` functions, and both
+`search.service.ts` functions — plus confirms every one of them still
+defaults to the standard/Retail tier with no group passed.
+`tests/unit/customer-admin-service.test.ts` (new, 3 tests) —
+`setCustomerGroup` permission-gating, audit log, persistence, and an
+unknown-customer rejection. Confirmed zero regressions: the full
+pre-existing `cart-service`/`wishlist-service`/
+`customer-order-history-service`/`pricing-service`/`product-service`/
+`search-service` suites, plus all 6 fixed route tests, pass unchanged
+(75+ tests). Verified live in the browser: created a customer, set
+their group to Wholesale via the new admin endpoint, signed in as that
+customer, and confirmed the real seeded wholesale price (LKR 450, vs.
+the Retail LKR 550 struck through) rendered correctly on the PDP, in
+the cart, and on the product listing page — then cleaned up the demo
+data.

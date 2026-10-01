@@ -1,15 +1,31 @@
 // @vitest-environment node
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { Mock } from "vitest";
+import type { Session } from "next-auth";
 
 import { prisma } from "@/lib/db";
 import { createCategory } from "@/repositories/category.repository";
 import { createProduct } from "@/repositories/product.repository";
 import { createStandardPrice } from "@/repositories/pricing.repository";
-import { GET } from "@/app/api/products/route";
+
+// STORY-071: the route now resolves the caller's customer group via
+// auth() — mocked as signed-out (guest/Retail) here, matching this
+// file's existing guest-only test scenarios. See wishlist-route.test.ts
+// for the pattern this mirrors.
+vi.mock("@/lib/auth", () => ({ auth: vi.fn() }));
+
+const { auth } = await import("@/lib/auth");
+const { GET } = await import("@/app/api/products/route");
+const mockAuth = auth as unknown as Mock<() => Promise<Session | null>>;
+
+beforeEach(() => {
+  mockAuth.mockResolvedValue(null);
+});
 
 afterEach(async () => {
   await prisma.product.deleteMany();
   await prisma.category.deleteMany();
+  vi.clearAllMocks();
 });
 
 describe("GET /api/products", () => {

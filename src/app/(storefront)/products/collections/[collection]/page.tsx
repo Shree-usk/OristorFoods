@@ -4,10 +4,12 @@ import { notFound } from "next/navigation";
 import { Section } from "@/components/storefront/layout/section";
 import { ItemListJsonLd } from "@/components/storefront/product/item-list-json-ld";
 import { ProductGrid } from "@/components/storefront/product/product-grid";
+import { auth } from "@/lib/auth";
 import { loadProductListingParams } from "@/lib/product-listing-loader";
 import { listBrands } from "@/repositories/brand.repository";
 import { listAllergens, listCertifications } from "@/repositories/product.repository";
 import { getPublishedCollectionBySlug } from "@/services/collection.service";
+import { resolveCustomerGroupForUser } from "@/services/pricing.service";
 import { listProducts } from "@/services/product.service";
 import { productListingQuerySchema } from "@/validation/product-listing.schema";
 
@@ -35,6 +37,8 @@ export default async function CollectionPage({ params, searchParams }: Collectio
 
   const listingParams = await loadProductListingParams(searchParams);
   const { pageSize } = productListingQuerySchema.pick({ pageSize: true }).parse(await searchParams);
+  const session = await auth();
+  const customerGroup = await resolveCustomerGroupForUser(session?.user?.id ?? null);
 
   const [result, allergens, certifications, brands] = await Promise.all([
     listProducts({
@@ -50,6 +54,7 @@ export default async function CollectionPage({ params, searchParams }: Collectio
         brands: listingParams.brands ?? undefined,
         inStock: listingParams.inStock ?? undefined,
       },
+      customerGroup,
     }),
     listAllergens(),
     listCertifications(),

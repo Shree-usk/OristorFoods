@@ -1,4 +1,5 @@
 // src/services/search.service.ts
+import type { CustomerGroup } from "@/generated/prisma/client";
 import * as pricingService from "@/services/pricing.service";
 import * as productRepository from "@/repositories/product.repository";
 import * as searchRepository from "@/repositories/search.repository";
@@ -31,7 +32,7 @@ function emptyResult(page: number, pageSize: number): SearchResultsPage {
 
 export async function searchCatalogue(
   query: string,
-  opts: { page?: number; pageSize?: number } = {},
+  opts: { page?: number; pageSize?: number; customerGroup?: CustomerGroup } = {},
 ): Promise<SearchResultsPage> {
   const page = opts.page ?? 1;
   const pageSize = opts.pageSize ?? DEFAULT_PAGE_SIZE;
@@ -42,7 +43,7 @@ export async function searchCatalogue(
   // product matching that used to be a plain substring search here —
   // same external SearchResultsPage shape, better internals.
   const [productResults, recipes] = await Promise.all([
-    searchProducts(trimmed, { page, pageSize }),
+    searchProducts(trimmed, { page, pageSize, customerGroup: opts.customerGroup }),
     searchRecipes(trimmed, pageSize),
   ]);
 
@@ -69,6 +70,7 @@ export async function searchProducts(
     sort?: ProductSort;
     page?: number;
     pageSize?: number;
+    customerGroup?: CustomerGroup;
   } = {},
 ): Promise<ProductListingResult> {
   const page = opts.page ?? 1;
@@ -92,7 +94,10 @@ export async function searchProducts(
     },
   );
 
-  const resolvedPrices = await pricingService.resolvePricesForProducts(products.map((product) => product.id));
+  const resolvedPrices = await pricingService.resolvePricesForProducts(
+    products.map((product) => product.id),
+    { customerGroup: opts.customerGroup ?? "Retail" },
+  );
 
   interface Candidate {
     product: (typeof products)[number];

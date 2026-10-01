@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 
+import { auth } from "@/lib/auth";
+import { resolveCustomerGroupForUser } from "@/services/pricing.service";
 import { getProductsByIds } from "@/services/product.service";
 
 export async function GET(request: Request) {
@@ -11,6 +13,8 @@ export async function GET(request: Request) {
     .filter(Boolean)
     .slice(0, 200);
 
-  const items = await getProductsByIds(ids);
+  const session = await auth();
+  const customerGroup = await resolveCustomerGroupForUser(session?.user?.id ?? null);
+  const items = await getProductsByIds(ids, customerGroup);
   return NextResponse.json({ items }, { status: 200 });
 }

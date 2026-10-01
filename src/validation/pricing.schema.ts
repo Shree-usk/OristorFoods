@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-const customerGroupEnum = z.enum(["Retail", "Wholesale", "Distributor", "Export", "PrivateLabel"]);
+export const customerGroupEnum = z.enum(["Retail", "Wholesale", "Distributor", "Export", "PrivateLabel"]);
 
 export const standardPriceSchema = z.object({
   productId: z.string().min(1),

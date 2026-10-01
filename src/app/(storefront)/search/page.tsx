@@ -5,6 +5,8 @@ import Link from "next/link";
 import { Section } from "@/components/storefront/layout/section";
 import { ProductCard } from "@/components/storefront/product/product-card";
 import { SearchInput } from "@/components/storefront/search/search-input";
+import { auth } from "@/lib/auth";
+import { resolveCustomerGroupForUser } from "@/services/pricing.service";
 import { searchCatalogue } from "@/services/search.service";
 import { searchQuerySchema } from "@/validation/search.schema";
 
@@ -26,7 +28,9 @@ export async function generateMetadata({ searchParams }: SearchPageProps): Promi
 
 export default async function SearchPage({ searchParams }: SearchPageProps) {
   const { q, page } = searchQuerySchema.parse(await searchParams);
-  const results = await searchCatalogue(q, { page });
+  const session = await auth();
+  const customerGroup = await resolveCustomerGroupForUser(session?.user?.id ?? null);
+  const results = await searchCatalogue(q, { page, customerGroup });
 
   return (
     <Section>

@@ -32,6 +32,10 @@ model User {
   // sessions issued before the reset stop verifying.
   passwordChangedAt DateTime?
   marketingOptIn    Boolean    @default(false)
+  // STORY-071. Drives resolvePrice()'s customer-group pricing tier —
+  // every call site used to hardcode "Retail" since this field never
+  // existed. See docs/architecture-decisions.md's STORY-024/STORY-071 entries.
+  customerGroup     CustomerGroup @default(Retail)
   accounts          Account[]
   sessions          Session[]
   wishlist          Wishlist?
