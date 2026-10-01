@@ -59,8 +59,19 @@ export async function answerQuestion(questionId: string, answerText: string, mod
   return answered;
 }
 
+export interface ChangeQuestionStatusOptions {
+  /** Set on entering Approved. */
+  approverId?: string;
+  /** Internal-only; set on entering Rejected, never shown to the customer. */
+  rejectionReason?: string;
+}
+
 /** Approve, publish or reject. Answering goes through answerQuestion() only. */
-export async function changeQuestionStatus(questionId: string, nextStatus: QuestionStatus) {
+export async function changeQuestionStatus(
+  questionId: string,
+  nextStatus: QuestionStatus,
+  options: ChangeQuestionStatusOptions = {},
+) {
   const question = await qaRepository.findQuestionById(questionId);
   if (!question) throw new QuestionNotFoundError();
   if (nextStatus === "Answered" || !canTransitionQuestion(question.status, nextStatus)) {
@@ -69,6 +80,13 @@ export async function changeQuestionStatus(questionId: string, nextStatus: Quest
 
   const data: QuestionStatusUpdate = { status: nextStatus };
   if (nextStatus === "Published") data.publishedAt = new Date();
+  if (nextStatus === "Approved" && options.approverId) {
+    data.approvedById = options.approverId;
+    data.approvedAt = new Date();
+  }
+  if (nextStatus === "Rejected" && options.rejectionReason !== undefined) {
+    data.rejectionReason = options.rejectionReason;
+  }
 
   const updated = await qaRepository.updateQuestionStatus(question.id, question.status, data);
   if (!updated) throw new InvalidQuestionTransitionError(question.status, nextStatus);

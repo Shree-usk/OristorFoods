@@ -12,6 +12,9 @@ export interface PublishedQuestionQuery {
 export interface QuestionStatusUpdate {
   status: QuestionStatus;
   publishedAt?: Date;
+  approvedById?: string;
+  approvedAt?: Date;
+  rejectionReason?: string;
 }
 
 const openStatuses: QuestionStatus[] = ["Pending", "Answered", "Approved"];
@@ -86,4 +89,77 @@ export async function answerPendingQuestion(
 export async function updateQuestionStatus(id: string, fromStatus: QuestionStatus, data: QuestionStatusUpdate) {
   const { count } = await prisma.question.updateMany({ where: { id, status: fromStatus }, data });
   return count === 0 ? null : prisma.question.findUnique({ where: { id } });
+}
+
+// ---------------------------------------------------------------------------
+// STORY-046. Admin moderation queue.
+// ---------------------------------------------------------------------------
+
+const questionAdminSelect = {
+  id: true,
+  productId: true,
+  userId: true,
+  text: true,
+  status: true,
+  answerText: true,
+  answeredById: true,
+  answeredAt: true,
+  approvedById: true,
+  approvedAt: true,
+  rejectionReason: true,
+  publishedAt: true,
+  createdAt: true,
+  user: { select: { name: true, email: true } },
+  product: { select: { id: true, slug: true, name: true } },
+} satisfies Prisma.QuestionSelect;
+
+export type QuestionAdminRow = Prisma.QuestionGetPayload<{ select: typeof questionAdminSelect }>;
+
+export interface QuestionAdminListFilters {
+  status?: QuestionStatus;
+  productId?: string;
+  dateFrom?: Date;
+  dateTo?: Date;
+  search?: string;
+}
+
+export async function listQuestionsForAdmin(
+  filters: QuestionAdminListFilters,
+  page: number,
+  pageSize: number,
+): Promise<{ items: QuestionAdminRow[]; total: number }> {
+  const where: Prisma.QuestionWhereInput = {
+    ...(filters.status ? { status: filters.status } : {}),
+    ...(filters.productId ? { productId: filters.productId } : {}),
+    ...(filters.dateFrom || filters.dateTo
+      ? { createdAt: { ...(filters.dateFrom ? { gte: filters.dateFrom } : {}), ...(filters.dateTo ? { lte: filters.dateTo } : {}) } }
+      : {}),
+    ...(filters.search
+      ? {
+          OR: [
+            { text: { contains: filters.search, mode: "insensitive" as const } },
+            { answerText: { contains: filters.search, mode: "insensitive" as const } },
+            // Doubles as the "target product" filter from the AC — no
+            // separate product picker; searching a product's name finds
+            // its questions too.
+            { product: { name: { contains: filters.search, mode: "insensitive" as const } } },
+          ],
+        }
+      : {}),
+  };
+  const [items, total] = await Promise.all([
+    prisma.question.findMany({
+      where,
+      orderBy: [{ createdAt: "desc" }, { id: "asc" }],
+      skip: (page - 1) * pageSize,
+      take: pageSize,
+      select: questionAdminSelect,
+    }),
+    prisma.question.count({ where }),
+  ]);
+  return { items, total };
+}
+
+export function findQuestionAdminRowById(id: string): Promise<QuestionAdminRow | null> {
+  return prisma.question.findUnique({ where: { id }, select: questionAdminSelect });
 }

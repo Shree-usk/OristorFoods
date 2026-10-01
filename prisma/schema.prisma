@@ -38,7 +38,6 @@ model User {
   cart              Cart?
   reviews           Review[]   @relation("ReviewAuthor")
   questions         Question[] @relation("QuestionAsker")
-  answeredQuestions Question[] @relation("QuestionAnswerer")
   blogComments      BlogComment[]
   recipeReviews     RecipeReview[]
   recipeBookmarks   RecipeBookmark[]
@@ -556,12 +555,24 @@ model Question {
   text      String
   status    QuestionStatus @default(Pending)
 
-  // The official answer. Reserved for STORY-046, which sets all three
-  // together through answerQuestion() on Pending → Answered.
+  // The official answer. Set by answerQuestion() on Pending → Answered.
+  // answeredBy/approvedBy target AdminUser, not User -- a moderator is
+  // staff, never a customer (STORY-046; same fix as Review.reviewedById
+  // in STORY-045, caught here before anything had ever written to it).
   answerText   String?
   answeredById String?
-  answeredBy   User?     @relation("QuestionAnswerer", fields: [answeredById], references: [id], onDelete: SetNull)
+  answeredBy   AdminUser? @relation("QuestionAnswerer", fields: [answeredById], references: [id], onDelete: SetNull)
   answeredAt   DateTime?
+
+  // STORY-046. Separate approval step before Answered -> Published.
+  approvedById String?
+  approvedBy   AdminUser? @relation("QuestionApprover", fields: [approvedById], references: [id], onDelete: SetNull)
+  approvedAt   DateTime?
+
+  // STORY-046. Internal-only -- never shown to the customer. A question
+  // rejected with a public decline is instead answered normally (the
+  // decline text becomes the public answerText) rather than using this.
+  rejectionReason String?
 
   publishedAt DateTime?
   createdAt   DateTime  @default(now())
@@ -2011,6 +2022,9 @@ model AdminUser {
   // STORY-045.
   reviewsModerated       Review[]       @relation("ReviewModerator")
   recipeReviewsModerated RecipeReview[] @relation("RecipeReviewModerator")
+  // STORY-046.
+  questionsAnswered  Question[]      @relation("QuestionAnswerer")
+  questionsApproved  Question[]      @relation("QuestionApprover")
   createdAt          DateTime        @default(now())
   updatedAt          DateTime        @updatedAt
 }

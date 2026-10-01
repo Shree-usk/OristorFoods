@@ -30,6 +30,9 @@ afterEach(async () => {
   await prisma.question.deleteMany();
   await prisma.product.deleteMany();
   await prisma.user.deleteMany();
+  // STORY-046. answeredBy/approvedBy target AdminUser, not User.
+  await prisma.adminUser.deleteMany({ where: { email: { endsWith: "@qa-lifecycle-test.test" } } });
+  await prisma.role.deleteMany({ where: { key: { startsWith: "qa-lifecycle-test-role-" } } });
 });
 
 const statuses: QuestionStatus[] = ["Pending", "Answered", "Approved", "Published", "Rejected"];
@@ -54,7 +57,9 @@ describe("canTransitionQuestion", () => {
 describe("answerQuestion", () => {
   it("moves Pending to Answered and records the answer", async () => {
     const question = await makePendingQuestion();
-    const staff = await prisma.user.create({ data: { email: "qa-staff@test.com", name: "Staff" } });
+    // STORY-046. answeredBy targets AdminUser (a moderator is staff, never a customer User row).
+    const role = await prisma.role.create({ data: { key: "qa-lifecycle-test-role-1", name: "QA Lifecycle Test Role" } });
+    const staff = await prisma.adminUser.create({ data: { email: "staff@qa-lifecycle-test.test", name: "Staff", passwordHash: "unused", roleId: role.id } });
 
     const answered = await answerQuestion(question.id, "  Medium heat.  ", staff.id);
 

@@ -1,6 +1,7 @@
 // @vitest-environment node
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { sendNotification } from "@/services/notification.service";
 import {
   notifyQuestionPublished,
   notifyQuestionSubmitted,
@@ -9,6 +10,8 @@ import {
   type QuestionPublishedEvent,
   type QuestionSubmittedEvent,
 } from "@/services/qa-notifications";
+
+vi.mock("@/services/notification.service", () => ({ sendNotification: vi.fn(async () => {}) }));
 
 const submitted: QuestionSubmittedEvent = {
   questionId: "q1",
@@ -34,16 +37,25 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe("default notifier", () => {
-  it("logs a [qa-notify] line for each event (temporary fallback until STORY-032)", async () => {
+describe("default (sending) notifier", () => {
+  it("logs a [qa-notify] line for a submitted event (no admin channel built)", async () => {
     const info = vi.spyOn(console, "info").mockImplementation(() => {});
 
     await notifyQuestionSubmitted(submitted);
+
+    expect(info).toHaveBeenCalledOnce();
+    expect(String(info.mock.calls[0]?.[0])).toMatch(/^\[qa-notify\] question submitted/);
+  });
+
+  it("sends a real customer notification for a published event (STORY-046)", async () => {
     await notifyQuestionPublished(published);
 
-    expect(info).toHaveBeenCalledTimes(2);
-    expect(String(info.mock.calls[0]?.[0])).toMatch(/^\[qa-notify\] question submitted/);
-    expect(String(info.mock.calls[1]?.[0])).toMatch(/^\[qa-notify\] question published/);
+    expect(sendNotification).toHaveBeenCalledWith({
+      userId: published.askedByUserId,
+      templateKey: "qa.question_answered",
+      variables: { productName: published.productName },
+      triggeringEventId: published.questionId,
+    });
   });
 });
 

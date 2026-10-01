@@ -4762,3 +4762,135 @@ to and featured a published product review, hid then restored another,
 and issued a manual reward grant — confirmed via a direct database query
 that it wrote a real `orderId: null` `Earned` transaction to the
 customer's wallet.
+
+## 2026-10-01 — STORY-046 Q&A Moderation Console — core scope
+
+The admin-side workflow for questions already submitted through
+STORY-016 (Product Q&A). `qa.service.ts` already had a complete
+status-transition service (`canTransitionQuestion`/`answerQuestion`/
+`changeQuestionStatus`, matching the blueprint's submit -> answer ->
+approve -> publish flow exactly) with a comment saying "the STORY-046
+moderation console calls them." Nothing admin-facing existed until now.
+
+**Scope narrowed to Product Q&A only — no `RecipeQuestion` model, no
+unified cross-source queue, unlike STORY-045.** The blueprint's admin
+console bullet mentions "recipe Q&A," but this was confirmed stale by
+three independent, already-documented decisions from earlier stories,
+not guessed at fresh this session: STORY-022's own deviation note
+("Recipe Q&A — not specified for recipes in the blueprint; Q&A is
+specified for products, STORY-016"); STORY-039's dashboard widget
+comment and its own architecture-decisions entry ("AC #3's fifth
+sub-count ('recipe Q&A') doesn't exist as a distinct feature"); and
+`qa.repository.ts::countPendingQuestions`'s own comment making the same
+point. A separate, user-specified follow-on story (STORY-047, "Recipe
+Q&A — Lightweight") adds an isolated Recipe Q&A module later, explicitly
+without touching this story's data model or console.
+
+**A real pre-existing bug found and fixed before writing any code, the
+same pattern as STORY-045's `Review.reviewedById`:**
+`Question.answeredById`/`answeredBy` — fields explicitly commented
+"Reserved for STORY-046" in STORY-016 — pointed at `User` (a customer
+account), not `AdminUser`. A moderator is staff, never a customer.
+Nothing had ever written to this field before this story, so retargeting
+the relation to `AdminUser` was a safe, purely additive-risk fix,
+confirmed by the pre-existing `qa-lifecycle.test.ts` and
+`qa-repository.test.ts`, both of which had been passing a `User.id` as
+the moderator and needed updating to pass a real `AdminUser.id` instead
+— a second confirmation the old relation was simply wrong.
+
+**Scope decisions made this session:**
+
+1. **Added `approvedById`/`approvedBy` (`AdminUser?`) + `approvedAt`, and
+   an internal-only `rejectionReason String?`** — the two fields the
+   story's own task list asked for that didn't exist yet. `rejectionReason`
+   is never shown to the customer; a Rejected question is structurally
+   invisible on the storefront regardless, since
+   `listPublishedQuestions` only ever selects `status: "Published"`.
+2. **Separation of duties (the AC's "answer-authoring staff cannot
+   self-approve their own answers") is satisfied by RBAC alone, not a
+   new same-user runtime check.** The AC's own wording — "RBAC can be
+   **configured** so..." — describes role configuration, not new
+   enforcement code. `answer()` gates on `QA`/`Edit`; `approve()`/
+   `reject()`/`publish()` gate on `QA`/`Approve` — the same Edit-vs-
+   Approve split already used for Recipes (STORY-043) and Reviews
+   (STORY-045). A role granted only `Edit` can draft answers but cannot
+   call the approve/publish endpoints at all; verified in both the unit
+   suite (a permission-denial test) and the e2e spec (a dedicated
+   author/reviewer pair across two sign-ins, plus a direct 403 check
+   that the author's own session cannot call the approve route).
+3. **"Public unable-to-answer" is a specially-worded Answer, not a
+   separate code path.** Re-reading the AC: a question "can be rejected
+   with either an internal-only reason... or a public 'unable to answer'
+   response." The internal-only path is the real `reject(reason)`
+   (status -> `Rejected`, `rejectionReason` stored). The "public" path
+   needs no new state at all — staff write the polite decline as the
+   ordinary `answerText` and it goes through the **normal**
+   answer -> approve -> publish pipeline, exactly like any other answer.
+   This avoids a third, redundant pathway the schema doesn't need; noted
+   directly in the Answer dialog's own helper text.
+4. **Real customer notification on publish; admin notification on
+   submit deliberately stays the existing console-log placeholder, not a
+   new channel.** `qa-notifications.ts` already had exactly the
+   provider-registration seam this needed
+   (`registerQaNotifier()`/the module-level `holder`, explicitly
+   commented "STORY-032 registers real delivery... until then the
+   default notifier just logs"). This story makes the default notifier's
+   `onQuestionPublished` call the established `sendNotification()`
+   (STORY-032/044/045 precedent) against a new `qa.question_answered`
+   template (seeded alongside the existing 9). `onQuestionSubmitted`
+   (the admin-facing "notify admin" half) stays log-only — nothing in
+   this codebase has ever built an admin-targeted notification channel
+   (email/Slack to staff) to extend, and the admin Dashboard's
+   already-shipped live "Pending Product Q&A" count widget (STORY-039)
+   already gives staff real-time visibility for that half of the AC. A
+   deliberate, documented deferral, not a silent gap — building a
+   genuinely new internal-alert subsystem would be disproportionate
+   scope for this story.
+5. **No dedicated "target product" filter control; the existing search
+   box also matches the joined product's name.** Simpler than adding a
+   product picker, and covers the AC's filter requirement without new
+   UI — `qa.repository.ts::listQuestionsForAdmin`'s `search` clause now
+   OR-matches `text`, `answerText`, and `product.name`.
+6. **The "unanswered only" SLA-style saved view from the AC is just the
+   queue's default status filter (`Pending`) on load** — not a separate
+   saved-views mechanism, consistent with "build what's needed now."
+7. **Bulk approve and bulk publish**, mirroring STORY-044/045's
+   `{updated, skipped}` partial-success shape exactly.
+
+No `AdminModule`/seed changes needed — `QA` already existed in
+`ALL_MODULES` and Customer Support's home-module grant already included
+it from STORY-038's seed matrix. No admin nav/sidebar entry was added —
+confirmed by reading `src/app/(admin)/layout.tsx` and STORY-039's
+dashboard cards that this project has no persistent admin sidebar or
+module-linking convention at all yet (every prior console, including
+Reviews in STORY-045, is reached by a direct URL); not a gap introduced
+by this story.
+
+**Testing:** `tests/unit/qa-moderation-service.test.ts` (10 tests —
+answer records `answeredById` as a real `AdminUser`; approve records
+`approvedById`/`approvedAt`; publish requires going through Answered and
+Approved first and sends the real customer notification (verified via a
+real `NotificationLog` row, not a mock); reject at any stage stores
+`rejectionReason` and confirms the question is structurally invisible to
+`listPublishedQuestionsForProduct`; illegal transitions and an unknown
+question are rejected; an Edit-only admin can answer but not
+approve/publish (separation of duties); a View-only admin cannot
+answer; queue listing by status and by product-name search; bulk-approve
+with a correctly-skipped non-Answered item). `tests/e2e/admin-qa.spec.ts`
+(2 tests — a dedicated author/reviewer pair: the author answers, is
+denied approving their own answer (403, verified directly against the
+API), then a separate reviewer approves and publishes, confirmed live on
+the real PDP; a Viewer-only fixture can browse but a mutating route
+denies server-side). Fixed two pre-existing test regressions from the
+`answeredById` retarget (`qa-lifecycle.test.ts`'s and
+`qa-repository.test.ts`'s moderator fixtures, both switched from a
+`User` to a real `AdminUser`) and one from the notifier default-behavior
+change (`qa-notifications.test.ts`'s "default notifier" test, split so
+the published-event half asserts against a mocked `sendNotification`
+rather than the old log-only expectation). Full QA-related regression
+(`qa-lifecycle`, `qa-notifications`, `qa-repository`, `qa-service`,
+`qa-routes`) confirmed green at 68 tests. Verified live in the browser
+as the seeded Super Administrator: answered a pending question, approved
+it, published it, and confirmed it appeared on the real PDP with the
+answer text; rejected a different question with an internal reason and
+confirmed it never appeared on the storefront.
