@@ -41,6 +41,7 @@ model User {
   blogComments      BlogComment[]
   recipeReviews     RecipeReview[]
   recipeBookmarks   RecipeBookmark[]
+  recipeQuestions   RecipeQuestion[] @relation("RecipeQuestionAsker")
   addresses         Address[]
   orders            Order[]
   couponRedemptions CouponRedemption[]
@@ -688,6 +689,8 @@ model Recipe {
   foodAcademyRefs      FoodAcademyRecipeRef[]
   recipeReviews        RecipeReview[]
   recipeBookmarks      RecipeBookmark[]
+  // STORY-046.1.
+  questions            RecipeQuestion[]
   // STORY-043. Shown to the author on the Draft a reviewer just rejected;
   // overwritten each rejection cycle — the full who/when/why history lives
   // in the audit log's metadata, not a separate comment-log table.
@@ -786,6 +789,45 @@ model RecipeBookmark {
   // STORY-037. listBookmarkedRecipeIdsForCustomer filters on customerId and
   // sorts by createdAt desc — this covers that query.
   @@index([customerId, createdAt])
+}
+
+// --- Recipe Q&A (STORY-046.1) ---
+// A lightweight, isolated sibling of product Q&A (Question, STORY-016/046)
+// — same 5-state pipeline, so QuestionStatus is reused directly rather than
+// cloned (unlike ReviewStatus/RecipeReviewStatus, which differ in which
+// states they have). Relation naming (customerId) follows RecipeReview/
+// RecipeBookmark above, not Question's userId.
+
+model RecipeQuestion {
+  id         String         @id @default(cuid())
+  recipeId   String
+  recipe     Recipe         @relation(fields: [recipeId], references: [id], onDelete: Cascade)
+  customerId String
+  customer   User           @relation("RecipeQuestionAsker", fields: [customerId], references: [id], onDelete: Cascade)
+  text       String
+  status     QuestionStatus @default(Pending)
+
+  // Mirrors Question's answer fields exactly (STORY-046), including
+  // targeting AdminUser from the start — a moderator is staff, never a
+  // customer.
+  answerText   String?
+  answeredById String?
+  answeredBy   AdminUser? @relation("RecipeQuestionAnswerer", fields: [answeredById], references: [id], onDelete: SetNull)
+  answeredAt   DateTime?
+
+  approvedById String?
+  approvedBy   AdminUser? @relation("RecipeQuestionApprover", fields: [approvedById], references: [id], onDelete: SetNull)
+  approvedAt   DateTime?
+
+  // Internal-only — never shown to the customer.
+  rejectionReason String?
+
+  publishedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([recipeId, status, publishedAt])
+  @@index([recipeId, customerId, status])
 }
 
 // --- Cooking Tips (STORY-019) ---
@@ -2025,6 +2067,9 @@ model AdminUser {
   // STORY-046.
   questionsAnswered  Question[]      @relation("QuestionAnswerer")
   questionsApproved  Question[]      @relation("QuestionApprover")
+  // STORY-046.1.
+  recipeQuestionsAnswered RecipeQuestion[] @relation("RecipeQuestionAnswerer")
+  recipeQuestionsApproved RecipeQuestion[] @relation("RecipeQuestionApprover")
   createdAt          DateTime        @default(now())
   updatedAt          DateTime        @updatedAt
 }
