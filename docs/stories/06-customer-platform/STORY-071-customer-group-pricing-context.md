@@ -1,6 +1,6 @@
 # STORY-071: Customer Group & Pricing Context
 
-**Status:** Draft
+**Status:** Core landed (2026-10-01) — see `docs/architecture-decisions.md`'s 2026-10-01 STORY-071 entry for the full write-up, including the `search.service.ts` call site found outside this story's own AC list (confirmed as the same gap STORY-024 had already flagged), the `getProductDetail` `cache()`-safety decision, and a pre-existing test-infrastructure issue (6 route tests) found and fixed along the way.
 **Epic:** 06 — Customer Platform
 **Priority:** Medium
 **Persona(s):** Distributor, Executive (admin), Home Cook (as the default Retail case)
@@ -16,20 +16,20 @@ The pricing engine's `CustomerGroupPrice` tier (one of five pricing models — s
 This story closes that specific gap: add the field, wire the existing hardcoded call sites to read it from the authenticated customer, and test that a non-Retail customer actually receives non-Retail pricing end-to-end. It explicitly does **not** build a new pricing engine, per-customer negotiated pricing, or a group-management UI — `CustomerGroupPrice` and its five-value `CustomerGroup` enum already exist and are reused as-is.
 
 ## Acceptance Criteria
-- [ ] `User` has a `customerGroup CustomerGroup @default(Retail)` field, reusing the existing `CustomerGroup` enum (`Retail`/`Wholesale`/`Distributor`/`Export`/`PrivateLabel`) already defined for `CustomerGroupPrice` — no new enum.
-- [ ] Every call site currently hardcoding `customerGroup: "Retail"` resolves it from the authenticated customer's actual `customerGroup` instead, where a customer is known:
-  `cart.service.ts` (4 call sites), `customer-order-history.service.ts` (1), `product.service.ts` (4, one of which already accepts an optional `customerGroup` param that nothing currently populates), `wishlist.service.ts` (1).
-- [ ] A guest / unauthenticated session continues to resolve as `Retail` (there's no customer record to read a group from) — this is not a regression, just the existing default made explicit.
-- [ ] At least one minimal way for an admin to set a customer's group exists (a script, or a small authenticated endpoint gated the same way STORY-038's permission system gates other admin actions) — full group-assignment UI is explicitly out of scope (see below).
-- [ ] New test coverage: a seeded non-Retail customer resolves a different price than Retail for a product that has a `CustomerGroupPrice` row for that group, across each of the four wired call sites (not just a unit test on `resolvePrice()` in isolation, which already passes today).
-- [ ] Existing cart/wishlist/product/search pricing tests continue to pass unmodified for the Retail/guest path.
+- [x] `User` has a `customerGroup CustomerGroup @default(Retail)` field, reusing the existing `CustomerGroup` enum (`Retail`/`Wholesale`/`Distributor`/`Export`/`PrivateLabel`) already defined for `CustomerGroupPrice` — no new enum.
+- [x] Every call site currently hardcoding `customerGroup: "Retail"` resolves it from the authenticated customer's actual `customerGroup` instead, where a customer is known:
+  `cart.service.ts` (4 call sites), `customer-order-history.service.ts` (1), `product.service.ts` (4, one of which already accepts an optional `customerGroup` param that nothing currently populates), `wishlist.service.ts` (1). **Deviation:** `search.service.ts` (2 functions, 4 callers) was fixed too — not in this AC's own list, but STORY-024's entry had already flagged it as part of the same gap; leaving it would have meant a Wholesale customer saw correct pricing everywhere except search results.
+- [x] A guest / unauthenticated session continues to resolve as `Retail` (there's no customer record to read a group from) — this is not a regression, just the existing default made explicit.
+- [x] At least one minimal way for an admin to set a customer's group exists (a script, or a small authenticated endpoint gated the same way STORY-038's permission system gates other admin actions) — full group-assignment UI is explicitly out of scope (see below). Shipped as `PATCH /api/admin/customers/[id]/group`.
+- [x] New test coverage: a seeded non-Retail customer resolves a different price than Retail for a product that has a `CustomerGroupPrice` row for that group, across each of the four wired call sites (not just a unit test on `resolvePrice()` in isolation, which already passes today). Covers all 11 actual call sites (including `search.service.ts`).
+- [x] Existing cart/wishlist/product/search pricing tests continue to pass unmodified for the Retail/guest path. **Deviation:** 6 pre-existing route tests needed a `vi.mock("@/lib/auth")` addition (a pre-existing test-infrastructure fragility, not a behavior change) since they now transitively load `next-auth`, which Vitest can't resolve without the mock — their actual test assertions are unchanged.
 
 ## Tasks
-- [ ] **Database:** add `User.customerGroup CustomerGroup @default(Retail)` (reuses the existing enum — no migration risk to `CustomerGroupPrice` itself).
-- [ ] **Service/Backend:** update the 10 hardcoded call sites listed above to read `customerGroup` from the resolved session/customer where available, falling back to `Retail` for guests. Minimal admin path to set the field (script or single endpoint) — see Out of Scope.
-- [ ] **API:** if a minimal admin endpoint is added rather than a script, follow STORY-038's `requirePermission` pattern; expose the field on whatever customer-profile read the storefront/account area already uses so a signed-in customer can at least see their own group.
-- [ ] **Testing:** integration tests per call site (cart line pricing, order-history repricing, product/PDP pricing, wishlist pricing) proving a non-Retail group actually changes the resolved price; guest-path regression coverage.
-- [ ] **Documentation:** update `docs/architecture-decisions.md`'s STORY-024 entry (which documents the hardcoded-Retail limitation this story resolves) with a forward reference once shipped; add this story's own dated entry.
+- [x] **Database:** add `User.customerGroup CustomerGroup @default(Retail)` (reuses the existing enum — no migration risk to `CustomerGroupPrice` itself).
+- [x] **Service/Backend:** update the 10 hardcoded call sites listed above (plus `search.service.ts`, see AC deviation) to read `customerGroup` from the resolved session/customer where available, falling back to `Retail` for guests. Minimal admin path to set the field — see Out of Scope.
+- [x] **API:** `PATCH /api/admin/customers/[id]/group` follows STORY-038's `requirePermission` pattern; `profile.service.ts::getProfile`'s existing full-row read automatically exposes the field to a signed-in customer's own profile data with no code change needed.
+- [x] **Testing:** integration tests per call site (cart line pricing, order-history repricing, product/PDP pricing, wishlist pricing, search pricing) proving a non-Retail group actually changes the resolved price; guest-path regression coverage; admin-service permission/audit tests.
+- [x] **Documentation:** `docs/architecture-decisions.md`'s STORY-024 entry updated with a forward reference; this story's own dated entry added.
 
 ## Dependencies
 - STORY-009 (Product Catalogue Data Model) — `CustomerGroup` enum and `CustomerGroupPrice` model already exist; this story only wires them up. Done.

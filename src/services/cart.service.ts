@@ -12,7 +12,7 @@ import {
 } from "@/services/cart.errors";
 import { resolveDiscountForCart } from "@/services/discount.service";
 import type { DiscountableLine } from "@/services/discount.service";
-import { resolvePrice } from "@/services/pricing.service";
+import { resolveCustomerGroupForUser, resolvePrice } from "@/services/pricing.service";
 import { calculatePointsRedemption } from "@/services/rewards-calc";
 import type { CartLineItem, CartSummary } from "@/types/cart";
 
@@ -109,10 +109,11 @@ function toLineItem(item: CartItemWithProduct, resolvedUnitPrice: number, curren
  * gets pointsBalance: 0, pointsRedemption: null — no ledger to read.
  */
 async function buildSummary(cart: Prisma.CartGetPayload<object>, items: CartItemWithProduct[], userId: string | null): Promise<CartSummary> {
+  const customerGroup = await resolveCustomerGroupForUser(userId);
   const lineItems: CartLineItem[] = [];
   const discountableLines: DiscountableLine[] = [];
   for (const item of items) {
-    const resolved = await resolvePrice({ productId: item.productId, customerGroup: "Retail", quantity: item.quantity });
+    const resolved = await resolvePrice({ productId: item.productId, customerGroup, quantity: item.quantity });
     const liveUnitPrice = resolved?.price.toNumber() ?? item.unitPriceSnapshot.toNumber();
     const currency = resolved?.currency ?? "LKR";
     const priceChanged = liveUnitPrice !== item.unitPriceSnapshot.toNumber();
@@ -205,7 +206,8 @@ export async function addItem(
   const totalRequested = (existingItem?.quantity ?? 0) + quantity;
 
   const product = await requireAvailableProduct(productId, totalRequested);
-  const resolved = await resolvePrice({ productId, customerGroup: "Retail", quantity: totalRequested });
+  const customerGroup = await resolveCustomerGroupForUser(userId);
+  const resolved = await resolvePrice({ productId, customerGroup, quantity: totalRequested });
   const unitPrice = resolved?.price.toFixed(2) ?? "0.00";
 
   await cartRepository.upsertCartItem(identity.cart.id, product.id, quantity, unitPrice);
@@ -228,7 +230,8 @@ export async function updateItemQuantity(
 ): Promise<void> {
   const item = await requireOwnCartItem(userId, guestCookieValue, itemId);
   await requireAvailableProduct(item.productId, quantity);
-  const resolved = await resolvePrice({ productId: item.productId, customerGroup: "Retail", quantity });
+  const customerGroup = await resolveCustomerGroupForUser(userId);
+  const resolved = await resolvePrice({ productId: item.productId, customerGroup, quantity });
   await cartRepository.updateCartItemQuantity(itemId, quantity);
   if (resolved) await cartRepository.updateCartItemSnapshot(itemId, resolved.price.toFixed(2));
 }
@@ -281,6 +284,7 @@ export async function mergeGuestCartIntoUser(userId: string, guestCookieValue: s
   const { cart: userCart } = await resolveCartIdentity(userId, undefined);
   const userItems = await cartRepository.listCartItemsWithProduct(userCart.id);
   const userItemByProductId = new Map(userItems.map((item) => [item.productId, item]));
+  const customerGroup = await resolveCustomerGroupForUser(userId);
 
   for (const guestItem of guestItems) {
     const existing = userItemByProductId.get(guestItem.productId);
@@ -290,7 +294,7 @@ export async function mergeGuestCartIntoUser(userId: string, guestCookieValue: s
     const cappedQuantity = Math.min(combinedQuantity, product.stockQuantity);
     if (cappedQuantity <= 0) continue;
 
-    const resolved = await resolvePrice({ productId: guestItem.productId, customerGroup: "Retail", quantity: cappedQuantity });
+    const resolved = await resolvePrice({ productId: guestItem.productId, customerGroup, quantity: cappedQuantity });
     const unitPrice = resolved?.price.toFixed(2) ?? guestItem.unitPriceSnapshot.toFixed(2);
 
     if (existing) {

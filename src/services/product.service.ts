@@ -222,13 +222,13 @@ export async function listRelatedProducts(params: {
   return items;
 }
 
-export async function getProductsByIds(ids: string[]): Promise<ProductListItem[]> {
+export async function getProductsByIds(ids: string[], customerGroup?: CustomerGroup): Promise<ProductListItem[]> {
   if (ids.length === 0) return [];
 
   const candidates = await productRepository.findProductsByIdsWithFilters(ids, {});
   const resolvedPrices = await pricingService.resolvePricesForProducts(
     candidates.map((candidate) => candidate.id),
-    { customerGroup: "Retail" },
+    { customerGroup: customerGroup ?? "Retail" },
   );
 
   const items: ProductListItem[] = [];
@@ -322,9 +322,16 @@ export interface CompareItem {
   reviewCount: number | null;
 }
 
+/**
+ * STORY-071: `customerGroup` is a plain primitive, not wrapped in an
+ * options object — generateMetadata and the page body both call this
+ * through the same `cache()` wrapper (see products/[slug]/page.tsx),
+ * which dedupes by argument equality; a fresh object literal per call
+ * would defeat that even when its value is identical.
+ */
 export async function getProductDetail(
   slug: string,
-  opts: { customerGroup?: CustomerGroup } = {},
+  customerGroup?: CustomerGroup,
 ): Promise<ProductDetail | null> {
   const product = await productRepository.findProductDetailBySlug(slug);
   if (!product || product.status !== "Published") return null;
@@ -332,8 +339,8 @@ export async function getProductDetail(
   const categoryIds = product.categories.map((category) => category.id);
 
   const [resolvedPrice, relatedProducts, reviewSummary, qaSummary, recipeSummary] = await Promise.all([
-    pricingService.resolvePrice({ productId: product.id, customerGroup: opts.customerGroup ?? "Retail" }),
-    listRelatedProducts({ productId: product.id, categoryIds, customerGroup: opts.customerGroup }),
+    pricingService.resolvePrice({ productId: product.id, customerGroup: customerGroup ?? "Retail" }),
+    listRelatedProducts({ productId: product.id, categoryIds, customerGroup }),
     getReviewSummary(product.id),
     getQaSummary(product.id),
     getRecipeSummary(product.id),
@@ -420,13 +427,13 @@ export async function getProductDetail(
   };
 }
 
-export async function getProductsForCompare(productIds: string[]): Promise<CompareItem[]> {
+export async function getProductsForCompare(productIds: string[], customerGroup?: CustomerGroup): Promise<CompareItem[]> {
   if (productIds.length === 0) return [];
 
   const candidates = await productRepository.findProductsForCompareByIds(productIds);
   const resolvedPrices = await pricingService.resolvePricesForProducts(
     candidates.map((candidate) => candidate.id),
-    { customerGroup: "Retail" },
+    { customerGroup: customerGroup ?? "Retail" },
   );
 
   const byId = new Map<string, CompareItem>();

@@ -2,16 +2,17 @@ import { Prisma } from "@/generated/prisma/client";
 import { findProductById } from "@/repositories/product.repository";
 import * as wishlistRepository from "@/repositories/wishlist.repository";
 import { toProductListItem } from "@/services/product.service";
-import { resolvePricesForProducts } from "@/services/pricing.service";
+import { resolveCustomerGroupForUser, resolvePricesForProducts } from "@/services/pricing.service";
 import type { ProductListItem } from "@/types/product";
 
 export async function getWishlist(userId: string): Promise<ProductListItem[]> {
   const wishlist = await wishlistRepository.findOrCreateWishlist(userId);
   const items = await wishlistRepository.listItemsWithProduct(wishlist.id);
 
+  const customerGroup = await resolveCustomerGroupForUser(userId);
   const resolvedPrices = await resolvePricesForProducts(
     items.map((item) => item.product.id),
-    { customerGroup: "Retail" },
+    { customerGroup },
   );
 
   const result: ProductListItem[] = [];

@@ -4,8 +4,10 @@ import Link from "next/link";
 
 import { Section } from "@/components/storefront/layout/section";
 import { ProductGrid } from "@/components/storefront/product/product-grid";
+import { auth } from "@/lib/auth";
 import { listBrands } from "@/repositories/brand.repository";
 import { listAllergens, listCertifications } from "@/repositories/product.repository";
+import { resolveCustomerGroupForUser } from "@/services/pricing.service";
 import { findDidYouMeanSuggestion, searchProducts } from "@/services/search.service";
 import { productSearchQuerySchema } from "@/validation/product-search.schema";
 
@@ -24,6 +26,8 @@ export async function generateMetadata({ searchParams }: ProductSearchPageProps)
 export default async function ProductSearchPage({ searchParams }: ProductSearchPageProps) {
   const query = productSearchQuerySchema.parse(await searchParams);
   const { q, sort, page, pageSize } = query;
+  const session = await auth();
+  const customerGroup = await resolveCustomerGroupForUser(session?.user?.id ?? null);
 
   const [result, allergens, certifications, brands] = await Promise.all([
     searchProducts(q, {
@@ -38,6 +42,7 @@ export default async function ProductSearchPage({ searchParams }: ProductSearchP
         brands: query.brands,
         inStock: query.inStock,
       },
+      customerGroup,
     }),
     listAllergens(),
     listCertifications(),

@@ -1,5 +1,19 @@
 import { Prisma, type CustomerGroup } from "@/generated/prisma/client";
 import * as pricingRepository from "@/repositories/pricing.repository";
+import { findCustomerGroupById } from "@/repositories/user.repository";
+
+/**
+ * STORY-071. The single place callers resolve which CustomerGroup a
+ * resolvePrice()/resolvePricesForProducts() call should use. A guest
+ * (`userId: null`) or a user row that's unexpectedly missing its group
+ * both resolve to "Retail" — the same default the field itself carries,
+ * made explicit here so every call site shares one source of truth
+ * instead of each hardcoding the literal.
+ */
+export async function resolveCustomerGroupForUser(userId: string | null): Promise<CustomerGroup> {
+  if (!userId) return "Retail";
+  return (await findCustomerGroupById(userId)) ?? "Retail";
+}
 
 export interface ResolvePriceParams {
   productId: string;

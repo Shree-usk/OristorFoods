@@ -1,7 +1,12 @@
-import type { Prisma } from "@/generated/prisma/client";
+import type { CustomerGroup, Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/db";
 
-/** STORY-033/034. The only place auth.service.ts/profile.service.ts/security.service.ts read or write the User row. */
+/**
+ * STORY-033/034. The only place auth.service.ts/profile.service.ts/
+ * security.service.ts read or write the User row. STORY-071 also reads/
+ * writes the single customerGroup field from here (pricing.service.ts,
+ * customer-admin.service.ts) rather than duplicating a User lookup.
+ */
 
 type Client = Prisma.TransactionClient | typeof prisma;
 
@@ -73,4 +78,14 @@ export function requestDeactivation(userId: string, reason: string | null, clien
     where: { id: userId },
     data: { status: "DeactivationRequested", deactivationReason: reason, deactivationRequestedAt: new Date() },
   });
+}
+
+/** STORY-071. Just the scalar — lighter than findById's full row for pricing.service.ts's resolver. */
+export async function findCustomerGroupById(userId: string, client: Client = prisma): Promise<CustomerGroup | null> {
+  const user = await client.user.findUnique({ where: { id: userId }, select: { customerGroup: true } });
+  return user?.customerGroup ?? null;
+}
+
+export function updateCustomerGroup(userId: string, customerGroup: CustomerGroup, client: Client = prisma) {
+  return client.user.update({ where: { id: userId }, data: { customerGroup } });
 }

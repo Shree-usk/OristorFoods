@@ -16,6 +16,8 @@ import { RelatedProducts } from "@/components/storefront/product/related-product
 import { QuestionsSection } from "@/components/storefront/product/questions/questions-section";
 import { ReviewsSection } from "@/components/storefront/product/reviews/reviews-section";
 import { ShareButtons } from "@/components/storefront/product/share-buttons";
+import { auth } from "@/lib/auth";
+import { resolveCustomerGroupForUser } from "@/services/pricing.service";
 import { getProductDetail } from "@/services/product.service";
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://oristor.com";
@@ -32,7 +34,9 @@ interface ProductDetailPageProps {
 
 export async function generateMetadata({ params }: ProductDetailPageProps): Promise<Metadata> {
   const { slug } = await params;
-  const product = await getCachedProductDetail(slug);
+  const session = await auth();
+  const customerGroup = await resolveCustomerGroupForUser(session?.user?.id ?? null);
+  const product = await getCachedProductDetail(slug, customerGroup);
   if (!product) return {};
 
   return {
@@ -44,7 +48,9 @@ export async function generateMetadata({ params }: ProductDetailPageProps): Prom
 
 export default async function ProductDetailPage({ params }: ProductDetailPageProps) {
   const { slug } = await params;
-  const product = await getCachedProductDetail(slug);
+  const session = await auth();
+  const customerGroup = await resolveCustomerGroupForUser(session?.user?.id ?? null);
+  const product = await getCachedProductDetail(slug, customerGroup);
   if (!product) notFound();
 
   const pageUrl = `${SITE_URL}/products/${product.slug}`;
