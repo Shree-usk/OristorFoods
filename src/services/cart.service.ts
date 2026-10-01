@@ -13,6 +13,7 @@ import {
 import { resolveDiscountForCart } from "@/services/discount.service";
 import type { DiscountableLine } from "@/services/discount.service";
 import { resolveCustomerGroupForUser, resolvePrice } from "@/services/pricing.service";
+import { resolveActiveMultiplier } from "@/services/reward-campaign.service";
 import { calculatePointsRedemption } from "@/services/rewards-calc";
 import type { CartLineItem, CartSummary } from "@/types/cart";
 
@@ -63,7 +64,7 @@ async function requireAvailableProduct(productId: string, requestedQuantity: num
   return product;
 }
 
-function toLineItem(item: CartItemWithProduct, resolvedUnitPrice: number, currency: string, priceChanged: boolean): CartLineItem {
+function toLineItem(item: CartItemWithProduct, resolvedUnitPrice: number, currency: string, priceChanged: boolean, campaignMultiplier: number): CartLineItem {
   const primaryImage = item.product.images[0];
   const quantityCapped = item.quantity > item.product.stockQuantity;
   return {
@@ -77,7 +78,8 @@ function toLineItem(item: CartItemWithProduct, resolvedUnitPrice: number, curren
     unitPrice: resolvedUnitPrice,
     currency,
     lineTotal: Math.round(resolvedUnitPrice * item.quantity * 100) / 100,
-    rewardPointsEarned: item.product.rewardPoints * item.quantity,
+    // STORY-049: campaignMultiplier is 1 with no active RewardCampaign — a no-op, same shape as every other resolved-once-per-cart-read factor here (price, discount).
+    rewardPointsEarned: Math.round(item.product.rewardPoints * item.quantity * campaignMultiplier),
     priceChanged,
     unavailable: item.product.status !== "Published" || !item.product.inStock,
     quantityCapped,
@@ -110,6 +112,7 @@ function toLineItem(item: CartItemWithProduct, resolvedUnitPrice: number, curren
  */
 async function buildSummary(cart: Prisma.CartGetPayload<object>, items: CartItemWithProduct[], userId: string | null): Promise<CartSummary> {
   const customerGroup = await resolveCustomerGroupForUser(userId);
+  const [campaignMultiplier, setting] = await Promise.all([resolveActiveMultiplier(customerGroup), rewardsRepository.getSetting()]);
   const lineItems: CartLineItem[] = [];
   const discountableLines: DiscountableLine[] = [];
   for (const item of items) {
@@ -120,7 +123,7 @@ async function buildSummary(cart: Prisma.CartGetPayload<object>, items: CartItem
     if (priceChanged) {
       await cartRepository.updateCartItemSnapshot(item.id, liveUnitPrice.toFixed(2));
     }
-    const line = toLineItem(item, liveUnitPrice, currency, priceChanged);
+    const line = toLineItem(item, liveUnitPrice, currency, priceChanged, campaignMultiplier);
     lineItems.push(line);
     discountableLines.push({ productId: item.productId, categoryIds: item.product.categories.map((category) => category.id), lineTotal: line.lineTotal });
   }
@@ -128,10 +131,13 @@ async function buildSummary(cart: Prisma.CartGetPayload<object>, items: CartItem
   const subtotal = Math.round(lineItems.reduce((sum, item) => sum + item.lineTotal, 0) * 100) / 100;
   const discount = await resolveDiscountForCart({ couponId: cart.couponId }, discountableLines, subtotal, 0, userId);
 
+  // STORY-049: an additive order-value-based bonus on top of the per-product sum above — not a replacement mode. Off (0) when orderValuePointsRate is unset, the existing fail-safe convention every RewardSetting field uses.
+  const orderValueBonus = setting?.orderValuePointsRate ? Math.floor(subtotal * setting.orderValuePointsRate.toNumber()) : 0;
+
   let pointsBalance = 0;
   let pointsRedemption: { points: number; value: number } | null = null;
   if (userId) {
-    const [setting, balances] = await Promise.all([rewardsRepository.getSetting(), rewardsRepository.getBalances(userId)]);
+    const balances = await rewardsRepository.getBalances(userId);
     pointsBalance = balances.spendable;
     if (cart.pointsToRedeem && cart.pointsToRedeem > 0) {
       const calc = calculatePointsRedemption({
@@ -150,7 +156,7 @@ async function buildSummary(cart: Prisma.CartGetPayload<object>, items: CartItem
     itemCount: lineItems.reduce((sum, item) => sum + item.quantity, 0),
     subtotal,
     currency: lineItems[0]?.currency ?? "LKR",
-    rewardPointsEarned: lineItems.reduce((sum, item) => sum + item.rewardPointsEarned, 0),
+    rewardPointsEarned: lineItems.reduce((sum, item) => sum + item.rewardPointsEarned, 0) + orderValueBonus,
     discount:
       discount.applied.length > 0
         ? { amount: discount.totalAmount, applied: discount.applied, freeShippingApplied: discount.freeShippingApplied }

@@ -156,3 +156,70 @@ export function getAccountWithTier(userId: string) {
 export function countRedemptionsSince(from: Date, client: Client = prisma) {
   return client.rewardTransaction.count({ where: { type: "Redeemed", createdAt: { gte: from } } });
 }
+
+// ---------------------------------------------------------------------------
+// STORY-049. Admin Rewards & Referrals console.
+// ---------------------------------------------------------------------------
+
+export interface UpdateRewardSettingInput {
+  pointsToCurrencyRate?: string | null;
+  maxRedeemablePointsPerOrder?: number | null;
+  pointsExpiryDays?: number | null;
+  orderValuePointsRate?: string | null;
+}
+
+/** Singleton upsert by id: "global" — mirrors getSetting's own row. */
+export function updateSetting(input: UpdateRewardSettingInput, client: Client = prisma) {
+  return client.rewardSetting.upsert({ where: { id: "global" }, create: { id: "global", ...input }, update: input });
+}
+
+/** Admin list — includes inactive tiers/badges, unlike listTiersAscending/listActiveBadges above (storefront-only, active-only reads). */
+export function listTiersForAdmin(client: Client = prisma) {
+  return client.rewardTier.findMany({ orderBy: { minLifetimePoints: "asc" } });
+}
+
+export interface CreateTierInput {
+  name: string;
+  minLifetimePoints: number;
+  sortOrder: number;
+  isActive: boolean;
+}
+
+export function createTier(input: CreateTierInput, client: Client = prisma) {
+  return client.rewardTier.create({ data: input });
+}
+
+export function updateTier(id: string, input: Partial<CreateTierInput>, client: Client = prisma) {
+  return client.rewardTier.update({ where: { id }, data: input });
+}
+
+export function listBadgesForAdmin(client: Client = prisma) {
+  return client.badge.findMany({ orderBy: { createdAt: "asc" } });
+}
+
+export interface CreateBadgeInput {
+  code: string;
+  name: string;
+  description: string | null;
+  criteriaType: string;
+  threshold: number | null;
+  isActive: boolean;
+}
+
+export function createBadge(input: CreateBadgeInput, client: Client = prisma) {
+  return client.badge.create({ data: input });
+}
+
+export function updateBadge(id: string, input: Partial<CreateBadgeInput>, client: Client = prisma) {
+  return client.badge.update({ where: { id }, data: input });
+}
+
+/** STORY-049. Redemption velocity check's own sum — per-customer, unlike countRedemptionsSince's global dashboard count above. Redeemed points are stored negative, so this returns a negative (or zero) number; callers take Math.abs. */
+export async function sumRedeemedPointsSince(userId: string, since: Date, client: Client = prisma): Promise<number> {
+  const result = await client.rewardTransaction.aggregate({ where: { userId, type: "Redeemed", createdAt: { gte: since } }, _sum: { points: true } });
+  return result._sum.points ?? 0;
+}
+
+export function findTransactionById(id: string, client: Client = prisma) {
+  return client.rewardTransaction.findUnique({ where: { id } });
+}

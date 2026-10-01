@@ -59,6 +59,8 @@ const rewardsStatusByCode: Record<RewardsErrorCode, number> = {
   exceeds_per_order_cap: 409,
   redemption_unavailable: 409,
   invalid_amount: 400,
+  transaction_not_found: 404,
+  transaction_not_reversible: 409,
 };
 
 /**

@@ -7,8 +7,11 @@ import { verifyReferralToken } from "@/lib/referral-token";
 import * as orderRepository from "@/repositories/order.repository";
 import * as referralRepository from "@/repositories/referral.repository";
 import * as rewardsRepository from "@/repositories/rewards.repository";
+import { checkReferralVelocity, checkSharedAddress } from "@/services/fraud-detection.service";
 import { sendNotification } from "@/services/notification.service";
 import type { OrderEventConsumer } from "@/services/order-integration.service";
+import { writeAuditLog } from "@/services/audit-log.service";
+import { requirePermission } from "@/services/permission.service";
 
 /**
  * Referral Programme (STORY-031): code generation, attribution-cookie
@@ -86,8 +89,8 @@ export async function attributeReferralAtRegistration(newUser: { id: string; ema
     const isSelfReferral = Boolean(codeRow.user.email && newUser.email && codeRow.user.email.toLowerCase() === newUser.email.toLowerCase());
     const welcomeBonus = setting?.referredWelcomeBonusPoints ?? 0;
 
-    await prisma.$transaction(async (tx) => {
-      await referralRepository.createAttribution(
+    const attribution = await prisma.$transaction(async (tx) => {
+      const created = await referralRepository.createAttribution(
         {
           referrerUserId: codeRow.userId,
           referredUserId: newUser.id,
@@ -101,7 +104,17 @@ export async function attributeReferralAtRegistration(newUser: { id: string; ema
         await rewardsRepository.getOrCreateAccount(tx, newUser.id);
         await rewardsRepository.createTransaction(tx, { userId: newUser.id, type: "ReferralWelcomeBonus", points: welcomeBonus, orderId: null });
       }
+      return created;
     });
+
+    // STORY-049: best-effort fraud check, never a reason to fail registration — same framing as this whole function's own catch below.
+    if (!isSelfReferral) {
+      try {
+        await checkReferralVelocity(codeRow.userId, attribution.id);
+      } catch (fraudCheckError) {
+        console.error("[referral] referral-velocity fraud check failed", fraudCheckError);
+      }
+    }
   } catch (error) {
     console.error("[referral] failed to record attribution at registration", error);
   }
@@ -135,6 +148,17 @@ async function handleQualifyingCheck(orderId: string, referredUserId: string): P
       variables: { points: bonusPoints },
       triggeringEventId: attribution.id,
     });
+
+    // STORY-049: best-effort fraud check — a real shipping address now
+    // exists to compare (unlike at registration, where a brand-new
+    // customer typically has none saved yet). Never a reason to fail
+    // the qualification above, which has already committed.
+    try {
+      const bonusTransaction = bonusPoints > 0 ? await rewardsRepository.findTransactionByOrderAndType(orderId, "ReferralBonus") : null;
+      await checkSharedAddress(attribution.referrerUserId, { shipLine1: order.shipLine1, shipCity: order.shipCity }, attribution.id, bonusTransaction?.id ?? null);
+    } catch (fraudCheckError) {
+      console.error("[referral] shared-address fraud check failed", fraudCheckError);
+    }
   } catch (error) {
     // Already qualified for this order (a replayed event) — idempotent
     // no-op. The status guard above already prevents this in practice;
@@ -203,4 +227,29 @@ export async function getReferralStatusForUser(userId: string): Promise<Referral
     qualifiedAt: row.qualifiedAt?.toISOString() ?? null,
     createdAt: row.createdAt.toISOString(),
   }));
+}
+
+// --- STORY-049. Admin Rewards & Referrals console: referral rule config ---
+
+export interface UpdateReferralSettingInput {
+  referrerBonusPoints?: number | null;
+  minQualifyingOrderValue?: number | null;
+  attributionWindowDays?: number | null;
+  referredWelcomeBonusPoints?: number | null;
+  maxReferralsPerPeriod?: number | null;
+  referralPeriodDays?: number | null;
+}
+
+export async function updateReferralSetting(adminUserId: string, input: UpdateReferralSettingInput) {
+  await requirePermission(adminUserId, "RewardsReferrals", "Edit");
+  const updated = await referralRepository.updateSetting({
+    ...(input.referrerBonusPoints !== undefined ? { referrerBonusPoints: input.referrerBonusPoints } : {}),
+    ...(input.minQualifyingOrderValue !== undefined ? { minQualifyingOrderValue: input.minQualifyingOrderValue?.toFixed(2) ?? null } : {}),
+    ...(input.attributionWindowDays !== undefined ? { attributionWindowDays: input.attributionWindowDays } : {}),
+    ...(input.referredWelcomeBonusPoints !== undefined ? { referredWelcomeBonusPoints: input.referredWelcomeBonusPoints } : {}),
+    ...(input.maxReferralsPerPeriod !== undefined ? { maxReferralsPerPeriod: input.maxReferralsPerPeriod } : {}),
+    ...(input.referralPeriodDays !== undefined ? { referralPeriodDays: input.referralPeriodDays } : {}),
+  });
+  await writeAuditLog({ actorId: adminUserId, action: "referral_setting_updated", module: "RewardsReferrals", targetType: "ReferralSetting", targetId: "global" });
+  return updated;
 }

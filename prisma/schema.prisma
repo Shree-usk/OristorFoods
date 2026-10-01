@@ -82,6 +82,8 @@ model User {
   loginEvents             LoginEvent[]
   adminNotes              AdminNote[]
   restrictedCoupons       Coupon[]
+  // STORY-049.
+  fraudFlags              FraudFlag[]
   createdAt         DateTime   @default(now())
   updatedAt         DateTime   @updatedAt
 }
@@ -1473,15 +1475,36 @@ model RewardSetting {
   // Absolute per-order redemption cap, independent of balance. Null = no
   // separate cap (balance remains the only bound).
   maxRedeemablePointsPerOrder Int?
-  // Days after which an Earned batch expires. Null = points never expire
-  // (current default — no admin UI exists yet to set this).
+  // Days after which an Earned batch expires. Null = points never expire.
+  // STORY-049 is the first admin UI to write this field.
   pointsExpiryDays            Int?
-  // Reserved for a future order-value-based earning mode (the AC's
-  // "and/or" wording) — NOT read by any code in this story. See
-  // docs/architecture-decisions.md for why a second earning formula
-  // isn't built now.
+  // STORY-049. An additive order-value-based bonus on top of the
+  // existing per-product earning (cart.service.ts::buildSummary) — not
+  // a replacement mode. Null = no bonus (off by default, same
+  // fail-safe convention every field on this row uses).
   orderValuePointsRate        Decimal? @db.Decimal(10, 4)
   updatedAt                   DateTime @updatedAt
+}
+
+// STORY-049. A time-boxed points multiplier, optionally scoped to one
+// CustomerGroup (null = all groups) — reuses STORY-071's existing
+// segmentation concept rather than inventing a parallel one. Resolved
+// once per cart read (reward-campaign.service.ts::resolveActiveMultiplier)
+// the same way resolveDiscountForCart already resolves coupons/promotions
+// once per cart read; checkout re-reads the cart at placement time, so
+// there is no separate snapshot/drift risk to manage here.
+model RewardCampaign {
+  id                  String         @id @default(cuid())
+  name                String
+  startDate           DateTime
+  endDate             DateTime
+  targetCustomerGroup CustomerGroup?
+  pointsMultiplier    Decimal        @db.Decimal(4, 2)
+  isActive            Boolean        @default(true)
+  createdAt           DateTime       @default(now())
+  updatedAt           DateTime       @updatedAt
+
+  @@index([startDate, endDate, isActive])
 }
 
 // --- Checkout (STORY-025) ---
@@ -1916,6 +1939,11 @@ model ReferralSetting {
   // Optional signup bonus for the REFERRED customer, credited once at
   // registration. Null = no welcome bonus (genuinely optional per the AC).
   referredWelcomeBonusPoints Int?
+  // STORY-049. Fraud threshold — a referrer attributing more than this
+  // many referrals within referralPeriodDays is flagged (FraudFlag),
+  // never auto-blocked. Null on either field = this check is off.
+  maxReferralsPerPeriod     Int?
+  referralPeriodDays        Int?
   updatedAt                  DateTime @updatedAt
 }
 
@@ -2146,6 +2174,8 @@ model AdminUser {
   // STORY-048.
   customersSuspended User[]
   adminNotesAuthored AdminNote[]
+  // STORY-049.
+  fraudFlagsResolved FraudFlag[]
   createdAt          DateTime        @default(now())
   updatedAt          DateTime        @updatedAt
 }
@@ -2203,6 +2233,37 @@ model AdminNote {
   createdAt  DateTime  @default(now())
 
   @@index([customerId, createdAt])
+}
+
+enum FraudFlagStatus {
+  Pending
+  Approved
+  Reversed
+}
+
+// STORY-049. A best-effort side-effect flag written by fraud-detection
+// heuristics (shared referrer/referred address, referral velocity,
+// redemption velocity) — never blocks the customer action that triggers
+// it. `type` is a free, extensible string (mirrors Badge.criteriaType/
+// ReferralAttribution.excludedReason's precedent). An admin either
+// Approves (dismiss, no reward change) or Reverses (claws back the
+// related reward via rewards.service.ts::reverseTransaction).
+model FraudFlag {
+  id                           String           @id @default(cuid())
+  customerId                   String
+  customer                     User             @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  type                         String
+  details                      Json?
+  relatedRewardTransactionId   String?
+  relatedReferralAttributionId String?
+  status                       FraudFlagStatus  @default(Pending)
+  resolvedById                 String?
+  resolvedBy                   AdminUser?       @relation(fields: [resolvedById], references: [id], onDelete: SetNull)
+  resolvedAt                   DateTime?
+  createdAt                    DateTime         @default(now())
+
+  @@index([customerId])
+  @@index([status])
 }
 
 // --- Media Library (STORY-041, core scope) ---
