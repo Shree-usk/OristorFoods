@@ -12,12 +12,15 @@ import { RecipeDetailView } from "@/components/storefront/recipes/recipe-detail-
 import { RecipeHero } from "@/components/storefront/recipes/recipe-hero";
 import { RecipeJsonLd } from "@/components/storefront/recipes/recipe-json-ld";
 import { RecipeRatingStars } from "@/components/storefront/recipes/recipe-rating-stars";
+import { RecipeQuestionsSection } from "@/components/storefront/recipes/questions/recipe-questions-section";
 import { RecipeReviewsSection } from "@/components/storefront/recipes/reviews/recipe-reviews-section";
 import { RelatedRecipes } from "@/components/storefront/recipes/related-recipes";
 import { formatIngredientLine, formatScaledQuantity } from "@/lib/recipe-scaling";
 import { formatRecipeTime } from "@/lib/recipe-time";
+import { listPublishedQuestionsForRecipe } from "@/services/recipe-qa.service";
 import { listApprovedReviewsForRecipe } from "@/services/recipe-review.service";
 import { getRecipeBySlug } from "@/services/recipe.service";
+import { RECIPE_QUESTION_PAGE_SIZE } from "@/types/recipe-question";
 import { RECIPE_REVIEW_PAGE_SIZE } from "@/types/recipe-review";
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://oristor.com";
@@ -51,6 +54,7 @@ export default async function RecipeDetailPage({ params }: RecipeDetailPageProps
     pageSize: RECIPE_REVIEW_PAGE_SIZE,
     sort: "recent",
   });
+  const initialQuestionPage = await listPublishedQuestionsForRecipe(recipe.id, { page: 1, pageSize: RECIPE_QUESTION_PAGE_SIZE });
 
   const pageUrl = `${SITE_URL}/recipes/${recipe.slug}`;
 
@@ -148,6 +152,9 @@ export default async function RecipeDetailPage({ params }: RecipeDetailPageProps
       </div>
       <div className="mt-10">
         <RecipeReviewsSection recipeSlug={recipe.slug} initialReviewPage={initialReviewPage} />
+      </div>
+      <div className="mt-10">
+        <RecipeQuestionsSection recipeSlug={recipe.slug} initialQuestionPage={initialQuestionPage} />
       </div>
       <div className="mt-10">
         <RelatedRecipes recipes={recipe.relatedRecipes} />

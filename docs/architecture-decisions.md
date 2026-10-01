@@ -4894,3 +4894,117 @@ as the seeded Super Administrator: answered a pending question, approved
 it, published it, and confirmed it appeared on the real PDP with the
 answer text; rejected a different question with an internal reason and
 confirmed it never appeared on the storefront.
+
+## 2026-10-01 — STORY-046.1 Recipe Q&A (Lightweight) — core scope
+
+A user-supplied spec, filed as `docs/stories/07-enterprise-admin-platform/
+STORY-046.1-Recipe Q&A-Lightweight.txt` and referred to as **STORY-046.1**
+everywhere (not "STORY-047" — the real backlog's own STORY-047 is "Admin
+Orders Console," confirmed in the prior session's full backlog survey
+and recorded in `docs/blueprint.md` Section 9a). Adds customer Q&A to
+Recipes as a deliberately isolated, lightweight sibling of Product Q&A
+(STORY-016/046): reuses its patterns closely, but shares no code path
+and no data model with it, and is reachable through a separate admin
+console, never merged into `/admin/questions`.
+
+**A deliberate deviation from this session's own Review/RecipeReview
+precedent, decided before writing any code:** `Review`/`RecipeReview`
+keep separate status enums because their pipelines genuinely differ
+(`ReviewStatus` has extra Published/Archived/Hidden states
+`RecipeReviewStatus` doesn't). `Question`'s 5-state pipeline
+(`Pending → Answered → Approved → Published`, `Rejected` from any state)
+is something `RecipeQuestion` needs **identically**, not just similarly
+— so `RecipeQuestion.status` reuses the existing `QuestionStatus` enum
+directly rather than cloning it into a `RecipeQuestionStatus`. This is
+the one place this story intentionally does NOT mirror the "each domain
+owns its own enum" pattern, because here the two domains' state machines
+are the same machine, not two similar ones.
+
+**Scope decisions:**
+
+1. **Relation naming follows Recipe's own siblings (`customerId`/
+   `customer`), not Product Q&A's (`userId`/`user`)** — confirmed by
+   reading `RecipeReview` and `RecipeBookmark`, both of which already
+   use `customerId`. `RecipeQuestion.customerId` matches its epic's own
+   convention rather than copying Product Q&A's field name verbatim.
+2. **No provider-registry indirection for the PDP summary.** Product
+   Q&A's publish-count-to-PDP path goes through
+   `product-detail-extensions.ts`'s `registerQaSummaryProvider` seam;
+   Recipe Reviews (STORY-022) never used anything like that —
+   `recipes/[slug]/page.tsx` just calls `listApprovedReviewsForRecipe
+   (recipe.id, ...)` directly, server-side. `RecipeQuestion` mirrors
+   that simpler pattern: `listPublishedQuestionsForRecipe(recipe.id,
+   ...)` called directly in the page component, no registry, no
+   `instrumentation.ts` wiring needed.
+3. **Each domain owns its own error hierarchy, confirmed as the
+   project's real pattern** (both `recipe-bookmark.errors.ts` and
+   `recipe-review.errors.ts` independently define their own
+   `RecipeNotFoundError` — never shared). `recipe-qa.errors.ts` does the
+   same, mirroring `qa.errors.ts`'s shape rather than importing from it.
+4. **Admin actions gate on the existing `QA` module** — per the spec's
+   own "do not introduce a new permission system," identical to Product
+   Q&A. No `AdminModule`/seed changes. Separation of duties is the same
+   story as STORY-046: `answer()` gates on `Edit`, `approve()`/
+   `reject()`/`publish()` gate on `Approve` — satisfied by existing RBAC,
+   not new enforcement code.
+5. **Two things deliberately omitted vs. Product Q&A, to keep this
+   genuinely lightweight per the spec's own instruction:** no "my open
+   questions" tracking widget (the spec only asks for "submit" and "view
+   published," not a personal pending-questions view), and no search box
+   on the customer-facing list (the admin side still gets a search-matches-
+   joined-recipe-title trick, same as STORY-046's product-name search, to
+   satisfy the spec's "Recipe filter" requirement without a picker).
+6. **Real customer notification on publish, built right the first time**
+   — `recipe-qa-notifications.ts`'s default notifier calls
+   `sendNotification()` from the start (no log-only placeholder
+   transition this time, unlike STORY-046's `qa-notifications.ts`, which
+   had to evolve from a pre-existing placeholder). A new
+   `recipe_qa.question_answered` template was seeded alongside the
+   existing 9 (confirmed via a reseed reporting `templateTypes: 10`).
+   No admin-notify-on-submit channel — the spec's own functional list
+   only names the customer-notify step ("Customer receives the existing
+   notification when their answer is published"), consistent with
+   STORY-046's documented deferral (no admin-alert infrastructure exists
+   anywhere in this codebase to extend).
+7. **`RecipeQuestion.answeredById`/`approvedById` targeted `AdminUser`
+   from the start** — no retroactive bug fix needed this time, applying
+   the STORY-045/046 lesson proactively rather than repeating the
+   mistake a third time.
+
+**Testing:** `tests/unit/recipe-qa-lifecycle.test.ts` (44 tests combined
+with the moderation-service file below — transition matrix identical in
+shape to `qa-lifecycle.test.ts`'s, answer/approve/reject/publish,
+`answeredById`/`approvedById` correctly targeting `AdminUser`, real
+notification fired on publish). `tests/unit/
+recipe-qa-moderation-service.test.ts` — permission gating, separation of
+duties (an Edit-only admin can answer but not approve/publish), bulk
+moderate with a correctly-skipped non-Answered item, reject reason never
+customer-visible (confirmed structurally invisible to
+`listPublishedQuestionsForRecipe`), queue listing by status and recipe-
+title search. `tests/e2e/admin-recipe-qa.spec.ts` (2 tests — a dedicated
+author/reviewer pair, mirroring `admin-qa.spec.ts`'s exact structure:
+the author answers and is denied approving their own answer (403,
+verified directly against the API), a separate reviewer approves and
+publishes, confirmed live on the real recipe detail page; a Viewer-only
+fixture can browse but a mutating route denies server-side). Confirmed
+zero regressions: all pre-existing Product Q&A tests (`qa-lifecycle`,
+`qa-notifications`, `qa-repository`, `qa-service`, `qa-routes`,
+`qa-moderation-service`, 78 tests) and Recipe Review tests pass
+unchanged, satisfying the spec's explicit "Existing Product Q&A tests
+must continue passing." Verified live in the browser as the seeded
+Super Administrator: answered a pending recipe question, approved it,
+published it, confirmed it live on the real recipe detail page with the
+answer text and a real `NotificationLog` row (`status: "Sent"`);
+rejected a different question with an internal-only reason and
+confirmed it was never shown — then cleaned up all demo data.
+
+**A recurring environmental issue, not a code bug, hit repeatedly this
+session:** the local `prisma dev` PGlite server lost all seed data
+across several of its wedge-recovery restarts during this story's
+verification (confirmed via direct row counts before/after each
+restart) — a more severe variant of the already-documented PGlite
+wedging issue, since `npx prisma db push` reported "already in sync"
+each time despite the data being gone. Recovered each time via a full
+reseed (`npx tsx --env-file=.env prisma/seed.ts`). Documented as a
+general project lesson (see memory), since it is not specific to this
+story's code.

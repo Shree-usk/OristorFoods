@@ -93,6 +93,16 @@ export async function seedNotificationTemplates() {
       sms: "Oristor: Your question about {{productName}} has been answered. Check the product page for details.",
       whatsapp: "Your question about *{{productName}}* has been answered — check the product page for details.",
     },
+    // STORY-046.1.
+    {
+      templateKey: "recipe_qa.question_answered",
+      email: {
+        subject: "Your question about {{recipeTitle}} has been answered",
+        body: "Your question about {{recipeTitle}} has been answered by our team and is now published on the recipe page.",
+      },
+      sms: "Oristor: Your question about {{recipeTitle}} has been answered. Check the recipe page for details.",
+      whatsapp: "Your question about *{{recipeTitle}}* has been answered — check the recipe page for details.",
+    },
   ];
 
   for (const template of templates) {
