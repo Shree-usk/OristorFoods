@@ -1661,6 +1661,8 @@ model Order {
   // STORY-036.
   returnRequests     ReturnRequest[]
   supportTickets     SupportTicket[]
+  // STORY-047.
+  refundRecords      RefundRecord[]
   createdAt          DateTime    @default(now())
   updatedAt          DateTime    @updatedAt
 
@@ -1691,6 +1693,25 @@ model OrderStatusHistory {
   createdAt DateTime    @default(now())
 }
 
+// STORY-047. Payment.status alone can only say "refunded or not" — this
+// is the ledger of individual refund actions (amount, reason, who),
+// since an order can in principle see more than one partial refund over
+// its life even though payment.service.ts's refundPayment() only
+// supports a single refund call per payment today (see
+// docs/architecture-decisions.md).
+model RefundRecord {
+  id            String    @id @default(cuid())
+  orderId       String
+  order         Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  amount        Decimal   @db.Decimal(10, 2)
+  reason        String    @db.VarChar(500)
+  processedById String
+  processedBy   AdminUser @relation(fields: [processedById], references: [id])
+  createdAt     DateTime  @default(now())
+
+  @@index([orderId])
+}
+
 // --- Order History & Support (STORY-036) ---
 // Customer-facing presentation layer on top of STORY-028's Order model.
 // ReturnRequest/SupportTicket are request records only — admin-side
@@ -1704,6 +1725,17 @@ enum ReturnRequestStatus {
   Completed
 }
 
+// STORY-047. The admin's own categorization when processing a return —
+// distinct from the free-text `reason` above, which is the customer's
+// own words from when they (optionally) submitted the request.
+enum ReturnReasonCode {
+  Damaged
+  WrongItem
+  NotAsDescribed
+  ChangedMind
+  Other
+}
+
 model ReturnRequest {
   id        String              @id @default(cuid())
   orderId   String
@@ -1715,6 +1747,14 @@ model ReturnRequest {
   status    ReturnRequestStatus @default(Requested)
   createdAt DateTime            @default(now())
   updatedAt DateTime            @updatedAt
+
+  // STORY-047. Set when an admin processes this request (or creates one
+  // directly, admin-initiated, with no prior customer submission).
+  reasonCode    ReturnReasonCode?
+  processedById String?
+  processedBy   AdminUser?        @relation(fields: [processedById], references: [id], onDelete: SetNull)
+  processedAt   DateTime?
+  restocked     Boolean           @default(false)
 
   @@index([orderId])
 }
@@ -2074,6 +2114,9 @@ model AdminUser {
   // STORY-046.1.
   recipeQuestionsAnswered RecipeQuestion[] @relation("RecipeQuestionAnswerer")
   recipeQuestionsApproved RecipeQuestion[] @relation("RecipeQuestionApprover")
+  // STORY-047.
+  refundsProcessed  RefundRecord[]
+  returnsProcessed  ReturnRequest[]
   createdAt          DateTime        @default(now())
   updatedAt          DateTime        @updatedAt
 }

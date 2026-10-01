@@ -5139,3 +5139,140 @@ customer, and confirmed the real seeded wholesale price (LKR 450, vs.
 the Retail LKR 550 struck through) rendered correctly on the PDP, in
 the cart, and on the product listing page — then cleaned up the demo
 data.
+
+## 2026-10-01 — STORY-047 Admin Orders Console — core scope
+
+Delivers `/admin/orders`: status pipeline, invoices, packing slips,
+shipping labels, refunds, and returns. Next in the confirmed build
+sequence (blueprint Section 9a) after STORY-071.
+
+**Almost all of the hard infrastructure already existed, reserved by
+STORY-028/STORY-036 specifically for this story to consume** —
+`order.service.ts::isTransitionAllowed`/`transitionOrderStatus` (already
+accepting an `admin:${string}` actor), `OrderStatusHistory` (the full
+audit trail already written on every transition),
+`payment.service.ts::refundPayment` (full/partial refund already
+implemented behind the gateway-agnostic `PaymentProvider` interface,
+its own comment anticipating this story), `invoice-pdf.service.tsx`
+(a complete `@react-pdf/renderer` template plus the PDF-streaming route
+pattern to mirror), `Order.carrier`/`trackingNumber`/`trackingUrl`/
+`deliveryZoneName`/`estimatedDaysMin`/`estimatedDaysMax` (already on the
+schema since STORY-036, with that model's own comment "admin console
+(STORY-047) will" write them), and `ReturnRequest` (STORY-036,
+customer-submitted return records, with its own comment deferring
+admin-side processing to this story). This story's real scope ended up
+being a thin admin orchestration layer, two new PDF templates, one
+genuinely new data model, and a modest `ReturnRequest` extension — not
+a from-scratch build.
+
+**Scope decisions:**
+
+1. **Reused the real `OrderStatus` pipeline exactly as shipped, not the
+   AC's simplified prose.** The AC describes "Pending → Processing →
+   Dispatched → Delivered → Returned plus Cancelled." The actual,
+   already-tested `ALLOWED_TRANSITIONS` table in `order.service.ts`
+   additionally has a distinct `Confirmed` state and allows `Returned`
+   from both `Dispatched` and `Delivered`. `order-admin.service.ts`
+   calls `isTransitionAllowed`/`transitionOrderStatus` directly — no
+   new enum, no new transition table.
+2. **`order-admin.service.ts` reuses `order.errors.ts`'s existing error
+   classes** (`OrderNotFoundError`, `IllegalOrderTransitionError`,
+   `ConcurrentTransitionError`) rather than cloning a parallel
+   hierarchy — unlike STORY-045/046's genuinely different sibling
+   domains (Review vs. RecipeReview), this operates on the exact same
+   `Order` entity as `order.service.ts`. Two new order-level errors were
+   added to the same file (`OrderRefundAmountExceedsRemainingError`,
+   `OrderHasNoPaymentError`) since they're specific to this story's own
+   guards, not reused from elsewhere.
+3. **New `RefundRecord` model, not reused `Payment.status`.**
+   `Payment.status` (`Pending/Succeeded/Failed/Refunded`) can represent
+   only "refunded or not," never an amount, reason, actor, or a log of
+   multiple partial refunds. `RefundRecord` (`orderId`, `amount`,
+   `reason`, `processedById`, `createdAt`) captures what the AC asks
+   for.
+   **A real constraint found and documented, not silently worked
+   around:** `payment.service.ts::refundPayment` sets `Payment.status =
+   "Refunded"` unconditionally after any refund call — even a partial
+   one — then refuses a second call (`status !== "Succeeded"` guard).
+   So today, only **one** refund action (full or partial) can succeed
+   per order, not a running series of partial refunds.
+   `order-admin.service.ts::refundOrder`'s own validation (refund
+   amount ≤ order total − prior refunds, via
+   `refund-record.repository.ts::sumRefundedAmountForOrder`) is still
+   written correctly for a future where `refundPayment` supports
+   incremental refunds, but a second attempt today fails at the payment
+   layer with `PaymentRefundNotAllowedError` — not a bug this story
+   introduces, and not patched in STORY-026's gateway-agnostic contract
+   without being asked.
+4. **Extended `ReturnRequest`, didn't add a parallel `ReturnRecord`.**
+   Added `reasonCode ReturnReasonCode?` (new enum:
+   `Damaged`/`WrongItem`/`NotAsDescribed`/`ChangedMind`/`Other` — the
+   admin's own categorization, distinct from the existing free-text
+   `reason`, which is the customer's own words), `processedById`/
+   `processedBy` (`AdminUser?`), `processedAt`, `restocked Boolean
+   @default(false)`. `order-admin.service.ts::processReturn` completes
+   an existing `Requested` `ReturnRequest` when one exists
+   (`return-request.repository.ts::findRequestedReturnByOrderId` +
+   `completeReturnRequest`), or creates one directly as `Completed` when
+   the admin is initiating it themselves with no prior customer request
+   (`createCompletedReturnRequest`) — the AC's "lets an admin mark an
+   order... as returned," not only "approve a customer's request." On
+   completion: optionally restocks (`order.repository.ts::
+   restockOrderItems`, reusing the exact increment pattern
+   `cancelOrderWithStockRelease` already uses, but scoped to the
+   specific selected line items since a return can be partial) and
+   transitions the Order to `Returned` via the existing
+   `transitionOrderStatus` if it isn't already and the transition is
+   legal from the order's current status (if not, the return record and
+   restock still succeed — surfaced via `console.warn`, not rolled
+   back, since a status-sequencing mismatch shouldn't undo a real
+   restock).
+5. **Permission gating**, mirroring STORY-045's Edit-vs-Approve split
+   for its own money-moving reward grant: `Orders`/`View` for list and
+   detail reads; `Orders`/`Edit` for single and bulk status changes;
+   `Orders`/`Approve` for refund and return/RMA (both money- or
+   stock-moving).
+6. **Shipping label is a genuine carrier-agnostic placeholder** — a
+   clean A6 PDF (ship-to block, order number, a plain placeholder
+   barcode-style text block, "Carrier: not yet integrated" note),
+   nothing claiming real carrier tracking, per the AC's own wording and
+   blueprint Section 10's unconfirmed-carrier flag.
+7. **Packing slip is a genuinely new PDF** mirroring
+   `invoice-pdf.service.tsx`'s exact structure/fonts/palette, but shows
+   SKU+quantity with checkboxes for warehouse picking, no pricing.
+8. **`getOrderAdminDetail`'s return shape (`OrderAdminDetail`) structurally
+   extends `OrderDetail`** (`customer-order-history.service.ts`'s
+   existing shape) with `customerName`/`customerEmail`/`refundRecords`/
+   `returnRequests`/`nextLegalStatuses` — so the exact same
+   `renderOrderInvoicePdf(order)` STORY-036 already built is called
+   directly from the new admin invoice route, no adapter needed.
+   `nextLegalStatuses` (the set of statuses `isTransitionAllowed`
+   permits from the order's current status) is computed server-side and
+   sent as data — the admin UI's "Mark as X" buttons never need their
+   own copy of the transition table, avoiding the drift risk a
+   client-side mirror would introduce.
+
+**Testing:** `tests/unit/order-admin-service.test.ts` (new, 14 tests) —
+list/detail (including `nextLegalStatuses`), legal and illegal status
+transitions against the real state machine, Edit-vs-View permission
+gating, bulk status update with a correctly-skipped illegal-transition
+item, refund (writes `RefundRecord`, rejects an amount exceeding the
+remaining refundable balance, requires Approve not just Edit, rejects a
+payment-less order), and return/RMA (admin-initiated with restock and
+an `Order.status` transition to `Returned`, completing an existing
+customer-submitted `Requested` request instead of creating a duplicate,
+Approve-gated). `tests/unit/order-admin-pdf-services.test.ts` (new, 2
+tests) — packing-slip and shipping-label PDF smoke tests against a
+hand-built fixture, confirming a non-empty `%PDF`-prefixed buffer.
+Confirmed zero regressions: `order-service`, `customer-order-history-
+service`, `order-routes`, `order-integration-fanout`, and all three
+`payment-service` suites pass unchanged (66+ tests).
+`tests/e2e/admin-orders.spec.ts` (new, 2 tests) — a full `Confirmed →
+Processing → Dispatched → Delivered` walk through the real UI, all
+three documents downloading as `application/pdf`, and a partial refund
+recorded correctly; a return with restock confirming the order reaches
+`Returned` and the product's `stockQuantity` actually increases.
+Verified live in the browser against real seeded data: the orders list
+renders with live status/payment/total columns, the detail page's
+status-action buttons update correctly after each transition, and a
+packing-slip download returns a real PDF buffer.

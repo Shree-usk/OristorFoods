@@ -27,6 +27,8 @@ const orderStatusByCode: Record<OrderErrorCode, number> = {
   cancellation_not_allowed: 409,
   return_not_allowed: 409,
   invalid_return_quantity: 400,
+  refund_amount_exceeds_remaining: 400,
+  no_payment_on_order: 409,
 };
 
 const paymentStatusByCode: Record<PaymentErrorCode, number> = {
