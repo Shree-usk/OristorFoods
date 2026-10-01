@@ -1,0 +1,63 @@
+STORY-047 — Recipe Q&A — Lightweight
+
+OBJECTIVE
+Add lightweight customer Q&A capability for Recipes without changing or disturbing the existing Product Q&A module or STORY-046.
+
+SCOPE
+- Recipe Q&A only.
+- Reuse the existing Product Q&A architecture, services, status workflow, permissions, notifications and UI patterns wherever practical.
+- Do not modify or merge the Product Q&A data model unnecessarily.
+- Do not create a unified Product + Recipe Q&A console.
+- Keep Recipe Q&A as a lightweight, isolated module.
+
+FUNCTIONALITY
+- Customer can submit a question from a Recipe page.
+- Customer can view published questions and answers for that Recipe.
+- Admin can view pending Recipe questions.
+- Admin can answer a Recipe question.
+- Admin can approve, reject and publish an answer.
+- Use the existing moderation/status pattern where appropriate.
+- Rejected questions remain invisible to customers.
+- Customer receives the existing notification when their answer is published, reusing the existing notification infrastructure.
+
+ADMIN
+- Add a lightweight Recipe Q&A section following the existing admin UI pattern.
+- Basic list, status filter and Recipe filter.
+- Answer / Approve / Reject / Publish actions.
+- Use existing QA permissions/RBAC patterns.
+- Do not introduce a new permission system.
+
+DATABASE
+- Add only the minimum Recipe Q&A model/relations required.
+- Keep Product Q&A relationships unchanged.
+- Do not retarget or restructure the existing Product Question model.
+- Follow the existing AdminUser relationship pattern for answer/approval attribution.
+
+API / SERVICE
+- Implement only the endpoints and service methods required for Recipe Q&A.
+- Reuse existing QA validation, moderation and notification patterns where possible.
+- Avoid duplicating large amounts of Product Q&A logic.
+- Keep the implementation isolated so future expansion remains possible.
+
+TESTING
+- Customer submits Recipe question.
+- Admin can view pending Recipe question.
+- Admin answers, approves and publishes.
+- Published Recipe Q&A appears on the Recipe page.
+- Rejected question does not appear publicly.
+- Customer notification fires when answer is published.
+- Permission checks work server-side.
+- Existing Product Q&A tests must continue passing.
+
+IMPORTANT
+- Do NOT modify STORY-046 scope.
+- Do NOT add Recipe Q&A into the Product Q&A console.
+- Do NOT refactor the existing Product Q&A architecture unless strictly required for safe code reuse.
+- Do NOT add unnecessary bulk operations, advanced filters, analytics or extra moderation features.
+- Do NOT disturb existing Product Q&A functionality.
+- Keep this story lightweight and independently testable.
+
+VERIFICATION
+Run the relevant Prisma sync/generate commands, TypeScript check, lint, targeted Recipe Q&A unit tests, existing Product Q&A regression tests, Recipe Q&A E2E test, and production build.
+
+Before coding, confirm the minimal implementation plan and identify any schema change required. Then proceed.

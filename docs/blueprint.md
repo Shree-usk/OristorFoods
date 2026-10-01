@@ -247,6 +247,45 @@ Settings / Shipping, with the same level of admin control as Products or Recipes
 9. **Quality & Security** — security/performance/accessibility/load/penetration testing, bug fixes, optimization, SEO validation. *Done when the platform meets production quality standards.*
 10. **Production Launch** — deployment, domain, SSL, monitoring, backups, analytics, ERP integration, training, documentation, go-live.
 
+### 9a. Current story-by-story sequence (confirmed 2026-10-01)
+
+Epics 01–06 and STORY-038 through STORY-046 (Epic 07) are shipped
+("Core landed"/"Done" in their own story docs). Two isolated gaps sit
+inside otherwise-finished epics and are not blocking anything —
+pick them up opportunistically: **STORY-023** (Downloads & Resources,
+Epic 04) and **STORY-071** (Customer Group & Pricing Context, Epic 06's
+numbering but pulled forward, see below).
+
+**Naming note:** a user-supplied spec titled itself "STORY-047 — Recipe
+Q&A — Lightweight," but the real backlog already has a numbered
+**STORY-047 — Admin Orders Console**. That spec is filed as
+`docs/stories/07-enterprise-admin-platform/STORY-046.1-Recipe Q&A-Lightweight.txt`
+and is referred to as **STORY-046.1** everywhere to avoid collision —
+the real STORY-047 (Admin Orders Console) keeps its number.
+
+Confirmed build order from here:
+
+1. **STORY-046.1** — Recipe Q&A (Lightweight) — isolated module, reuses Product Q&A patterns, does not touch its data model.
+2. **STORY-071** — Customer Group & Pricing Context — pulled *ahead* of its file position. Closes a real bug (every pricing call site hardcodes `Retail`, flagged since STORY-024); STORY-048 is written to build its UI on top of this story's field, so it must land first.
+3. **STORY-047** — Admin Orders Console — refund logic built payment-gateway-agnostic (provider still unconfirmed, Section 10).
+4. **STORY-048** — Admin Customers Console.
+5. **STORY-049** — Rewards & Referrals Campaign Management — what STORY-045's manual reward grant (built ahead of this story, by user decision) will eventually integrate with.
+6. **STORY-050** — Marketing Console — also the natural home for the Promotional Pop-up Manager (`docs/stories/STORY-Additional.md` §3–9), not yet its own numbered story; fold in or spin out when this story starts.
+7. **051 SEO Console → 052 Navigation & Menus → 053 CMS Workflow & Versioning → 054 System Settings → 055 Delivery Zone Management → 056 ERP Integration Console → 057 Users/Roles/Audit Logs → 058 Export Portal → 059 CRM/Analytics Executive Dashboard** — closes Epic 07.
+8. **STORY-023** (Downloads & Resources) — slot in opportunistically, does not block or depend on the admin sequence.
+9. **Epic 08 (AI Platform, 060–064) → Epic 09 (Quality & Security, 065–068) → Epic 10 (Production Launch, 069–070)**, in file order.
+
+**Known deferred/leftover items to eventually close** (see
+`docs/architecture-decisions.md` for the full reasoning behind each):
+Customer Reviews homepage section never wired to curated/featured
+reviews (needs a section-specific editor STORY-042 didn't build for any
+non-Hero section); STORY-046's admin-notify-on-submit stays a log-only
+placeholder (no admin-alert infra exists); Product CSV bulk import/
+export + bulk-edit modal (batched for a later sweep); Low Stock
+threshold hardcoded pending STORY-054; review photos and profile photo
+upload blocked on the storage/hosting provider decision below; a
+cosmetic `SelectValue` display bug from STORY-043 (known, not fixed).
+
 ---
 
 ## 10. Open Items to Confirm Before/During Build
