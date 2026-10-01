@@ -89,3 +89,45 @@ export async function findCustomerGroupById(userId: string, client: Client = pri
 export function updateCustomerGroup(userId: string, customerGroup: CustomerGroup, client: Client = prisma) {
   return client.user.update({ where: { id: userId }, data: { customerGroup } });
 }
+
+// ---------------------------------------------------------------------------
+// STORY-048. Admin customers console.
+// ---------------------------------------------------------------------------
+
+export interface CustomerAdminListFilters {
+  status?: Prisma.UserWhereInput["status"];
+  search?: string;
+  registeredFrom?: Date;
+  registeredTo?: Date;
+}
+
+export async function listCustomersForAdmin(filters: CustomerAdminListFilters, page: number, pageSize: number) {
+  const where: Prisma.UserWhereInput = {
+    ...(filters.status ? { status: filters.status } : {}),
+    ...(filters.registeredFrom || filters.registeredTo
+      ? { createdAt: { ...(filters.registeredFrom ? { gte: filters.registeredFrom } : {}), ...(filters.registeredTo ? { lte: filters.registeredTo } : {}) } }
+      : {}),
+    ...(filters.search
+      ? { OR: [{ name: { contains: filters.search, mode: "insensitive" as const } }, { email: { contains: filters.search, mode: "insensitive" as const } }] }
+      : {}),
+  };
+  const [customers, total] = await Promise.all([
+    prisma.user.findMany({ where, orderBy: { createdAt: "desc" }, skip: (page - 1) * pageSize, take: pageSize }),
+    prisma.user.count({ where }),
+  ]);
+  return { customers, total };
+}
+
+export function suspendCustomer(userId: string, reason: string, adminId: string, client: Client = prisma) {
+  return client.user.update({
+    where: { id: userId },
+    data: { status: "Suspended", suspendedReason: reason, suspendedAt: new Date(), suspendedById: adminId },
+  });
+}
+
+export function reactivateCustomer(userId: string, client: Client = prisma) {
+  return client.user.update({
+    where: { id: userId },
+    data: { status: "Active", suspendedReason: null, suspendedAt: null, suspendedById: null },
+  });
+}

@@ -30,7 +30,8 @@ export function LoginForm() {
   const onSubmit = handleSubmit(async (data) => {
     const result = await signIn("credentials", { ...data, redirect: false });
     if (result?.error) {
-      setError("root", { message: "Incorrect email or password." });
+      const message = result.code === "account_suspended" ? "This account has been suspended. Please contact support." : "Incorrect email or password.";
+      setError("root", { message });
       return;
     }
     router.push(callbackUrl);

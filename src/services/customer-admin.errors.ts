@@ -1,9 +1,5 @@
-/**
- * STORY-071. The minimal admin-customer capability this story ships
- * (setting a customer's pricing group) — the full console (STORY-048)
- * will likely grow a richer error set; this stays deliberately small.
- */
-export type CustomerAdminErrorCode = "customer_not_found";
+/** STORY-071/048. The admin-customer console's error set. */
+export type CustomerAdminErrorCode = "customer_not_found" | "already_suspended" | "not_suspended";
 
 export class CustomerAdminServiceError extends Error {
   readonly code: CustomerAdminErrorCode;
@@ -18,5 +14,17 @@ export class CustomerAdminServiceError extends Error {
 export class CustomerNotFoundError extends CustomerAdminServiceError {
   constructor() {
     super("customer_not_found", "Customer not found");
+  }
+}
+
+export class AccountAlreadySuspendedError extends CustomerAdminServiceError {
+  constructor() {
+    super("already_suspended", "This customer is already suspended.");
+  }
+}
+
+export class AccountNotSuspendedError extends CustomerAdminServiceError {
+  constructor() {
+    super("not_suspended", "This customer isn't currently suspended.");
   }
 }
