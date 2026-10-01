@@ -1,9 +1,16 @@
 /**
  * Notification hooks for product Q&A (STORY-016): "notify admin" when a
  * question is submitted, "notify customer" when it is published.
- * STORY-032 (Notifications) registers real email/SMS/WhatsApp delivery with
- * registerQaNotifier() from src/instrumentation.ts. Until then the default
- * notifier just logs a [qa-notify] line — a documented temporary fallback.
+ *
+ * STORY-046 wires the customer-facing half for real: registerQaProviders()
+ * (qa.service.ts, called from src/instrumentation.ts) registers
+ * sendingQaNotifier below, whose onQuestionPublished calls the established
+ * sendNotification() (STORY-032). onQuestionSubmitted (the admin-facing
+ * "notify admin" half) deliberately stays log-only -- this codebase has no
+ * admin-targeted notification channel (email/Slack to staff) anywhere to
+ * extend, and the admin Dashboard's live "Pending Product Q&A" count widget
+ * (STORY-039) already gives staff real-time visibility. A documented,
+ * deliberate deferral, not a silent gap -- see docs/architecture-decisions.md.
  *
  * Contract: qa.service.ts calls notify*() only AFTER the database write has
  * succeeded, and notify*() never throws — a failing notifier is logged, so it
@@ -12,6 +19,8 @@
  * Kept on globalThis for the same reason as product-detail-extensions.ts:
  * instrumentation.ts is bundled separately from route code.
  */
+import { sendNotification } from "@/services/notification.service";
+
 export interface QuestionSubmittedEvent {
   questionId: string;
   productId: string;
@@ -36,21 +45,29 @@ export interface QaNotifier {
   onQuestionPublished(event: QuestionPublishedEvent): Promise<void>;
 }
 
-const loggingNotifier: QaNotifier = {
+/**
+ * STORY-046. The real notifier: onQuestionPublished sends an actual customer
+ * notification; onQuestionSubmitted (admin-facing) stays log-only (see the
+ * file header). Registered as the default by registerQaProviders().
+ */
+const sendingQaNotifier: QaNotifier = {
   async onQuestionSubmitted(event) {
     console.info(
-      `[qa-notify] question submitted ${event.questionId} on ${event.productSlug} — notify admin (STORY-032 not wired yet)`,
+      `[qa-notify] question submitted ${event.questionId} on ${event.productSlug} — notify admin (no admin channel built; see Dashboard's Pending Product Q&A widget)`,
     );
   },
   async onQuestionPublished(event) {
-    console.info(
-      `[qa-notify] question published ${event.questionId} on ${event.productSlug} — notify customer ${event.askedByUserId} (STORY-032 not wired yet)`,
-    );
+    await sendNotification({
+      userId: event.askedByUserId,
+      templateKey: "qa.question_answered",
+      variables: { productName: event.productName },
+      triggeringEventId: event.questionId,
+    });
   },
 };
 
 const globalForQa = globalThis as unknown as { __oristorQaNotifier?: { notifier: QaNotifier } };
-const holder = (globalForQa.__oristorQaNotifier ??= { notifier: loggingNotifier });
+const holder = (globalForQa.__oristorQaNotifier ??= { notifier: sendingQaNotifier });
 
 export function registerQaNotifier(notifier: QaNotifier): void {
   holder.notifier = notifier;
@@ -72,7 +89,7 @@ export async function notifyQuestionPublished(event: QuestionPublishedEvent): Pr
   }
 }
 
-/** Test-only: restores the default logging notifier. */
+/** Test-only: restores the default (sending) notifier. */
 export function resetQaNotifierForTesting(): void {
-  holder.notifier = loggingNotifier;
+  holder.notifier = sendingQaNotifier;
 }

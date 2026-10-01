@@ -47,6 +47,9 @@ afterEach(async () => {
   await prisma.question.deleteMany();
   await prisma.product.deleteMany();
   await prisma.user.deleteMany();
+  // STORY-046. answeredBy/approvedBy target AdminUser, not User.
+  await prisma.adminUser.deleteMany({ where: { email: { endsWith: "@qa-repo-test.test" } } });
+  await prisma.role.deleteMany({ where: { key: { startsWith: "qa-repo-test-role-" } } });
 });
 
 describe("createQuestion / findQuestionById", () => {
@@ -182,7 +185,9 @@ describe("answerPendingQuestion", () => {
   it("sets the answer fields and Answered status on a Pending question", async () => {
     const product = await makeProduct();
     const user = await makeUser();
-    const staff = await makeUser();
+    sequence += 1;
+    const role = await prisma.role.create({ data: { key: `qa-repo-test-role-${sequence}`, name: `QA Repo Test Role ${sequence}` } });
+    const staff = await prisma.adminUser.create({ data: { email: `staff-${sequence}@qa-repo-test.test`, name: "Staff", passwordHash: "unused", roleId: role.id } });
     const question = await makeQuestion(product.id, user.id);
     const answeredAt = new Date();
 
