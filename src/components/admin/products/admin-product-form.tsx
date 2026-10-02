@@ -25,6 +25,7 @@ import {
 import { AssetPickerDialog } from "@/components/admin/media/asset-picker-dialog";
 import { DuplicateProductDialog } from "@/components/admin/products/duplicate-product-dialog";
 import { ProductPricingPanel } from "@/components/admin/products/product-pricing-panel";
+import { SeoFieldsPanel } from "@/components/admin/seo/seo-fields-panel";
 import { productAdminSchema, type ProductAdminFormInput } from "@/validation/product-admin.schema";
 
 const NEXT_STATUSES: Record<string, string[]> = {
@@ -52,10 +53,6 @@ const EMPTY_VALUES: ProductAdminFormInput = {
   inStock: true,
   stockQuantity: 0,
   weightGrams: undefined,
-  metaTitle: "",
-  metaDescription: "",
-  canonicalUrl: "",
-  ogImage: "",
   images: [],
   videos: [],
   nutrition: {
@@ -148,10 +145,6 @@ export function AdminProductForm({ productId }: { productId?: string }) {
       inStock: existingProduct.inStock,
       stockQuantity: existingProduct.stockQuantity,
       weightGrams: existingProduct.weightGrams ?? undefined,
-      metaTitle: existingProduct.metaTitle ?? "",
-      metaDescription: existingProduct.metaDescription ?? "",
-      canonicalUrl: existingProduct.canonicalUrl ?? "",
-      ogImage: existingProduct.ogImage ?? "",
       images: existingProduct.images.map((image: { url: string; altText: string | null; isPrimary: boolean; sortOrder: number; mediaRole: string }) => ({
         url: image.url,
         altText: image.altText ?? "",
@@ -496,23 +489,8 @@ export function AdminProductForm({ productId }: { productId?: string }) {
           />
         </TabsContent>
 
-        <TabsContent value="seo" className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <div>
-            <Label htmlFor="product-meta-title">Meta title</Label>
-            <Input id="product-meta-title" {...register("metaTitle")} />
-          </div>
-          <div>
-            <Label htmlFor="product-canonical-url">Canonical URL</Label>
-            <Input id="product-canonical-url" {...register("canonicalUrl")} />
-          </div>
-          <div className="sm:col-span-2">
-            <Label htmlFor="product-meta-description">Meta description</Label>
-            <Textarea id="product-meta-description" {...register("metaDescription")} />
-          </div>
-          <div className="sm:col-span-2">
-            <Label htmlFor="product-og-image">OG image URL</Label>
-            <Input id="product-og-image" {...register("ogImage")} />
-          </div>
+        <TabsContent value="seo" className="mt-4">
+          <SeoFieldsPanel entityType="Product" entityId={productId ?? null} />
         </TabsContent>
 
         <TabsContent value="rewards" className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">

@@ -43,6 +43,7 @@ export async function generateMetadata({ params }: ProductDetailPageProps): Prom
     title: product.metaTitle ?? product.name,
     description: product.metaDescription ?? product.shortDescription ?? undefined,
     alternates: product.canonicalUrl ? { canonical: product.canonicalUrl } : undefined,
+    robots: { index: product.robotsIndex, follow: product.robotsFollow },
   };
 }
 

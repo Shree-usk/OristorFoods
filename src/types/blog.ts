@@ -32,6 +32,8 @@ export interface BlogPostDetailData extends BlogPostCardData {
   metaTitle: string | null;
   metaDescription: string | null;
   ogImage: string | null;
+  robotsIndex: boolean;
+  robotsFollow: boolean;
 }
 
 export interface BlogListResult {

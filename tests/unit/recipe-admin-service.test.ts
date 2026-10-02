@@ -78,8 +78,6 @@ function baseInput(categoryId: string, overrides: Partial<RecipeAdminValidatedIn
     nutritionFat: null,
     nutritionFiber: null,
     nutritionSodium: null,
-    metaTitle: null,
-    metaDescription: null,
     videoUrl: null,
     videoProvider: null,
     videoDurationSeconds: null,

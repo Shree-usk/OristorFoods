@@ -2,6 +2,7 @@ import type { RecipeDifficulty, RecipeStatus } from "@/generated/prisma/client";
 import { computeTotalTimeMinutes } from "@/lib/recipe-time";
 import * as recipeRepository from "@/repositories/recipe.repository";
 import type { RecipeCardRow, RecipeDetailRow } from "@/repositories/recipe.repository";
+import * as seoRepository from "@/repositories/seo.repository";
 import { registerRecipeSummaryProvider, type RecipePreview } from "@/services/product-detail-extensions";
 import { registerRecipeSearchProvider, type SearchSuggestionItem } from "@/services/search-extensions";
 import type { RecipeCard, RecipeDetail, RecipeFacets, RecipeIngredientItem, RecipeListResult, RecipeStepItem } from "@/types/recipe";
@@ -73,8 +74,6 @@ export interface NewRecipeInput {
   avgRating?: number | null;
   ratingCount?: number;
   publishedAt?: Date | null;
-  metaTitle?: string | null;
-  metaDescription?: string | null;
   dietaryTagIds?: string[];
 }
 
@@ -130,8 +129,19 @@ export async function getRelatedRecipes(recipe: RecipeDetailRow, limit = 6): Pro
   return rows.map(toRecipeCard);
 }
 
-/** Exported for STORY-043's admin preview, which reuses this exact transformation against a non-published recipe (any status) rather than duplicating the mapping. */
-export function toRecipeDetail(row: RecipeDetailRow, relatedRecipes: RecipeCard[]): RecipeDetail {
+/**
+ * Exported for STORY-043's admin preview, which reuses this exact
+ * transformation against a non-published recipe (any status) rather than
+ * duplicating the mapping. `seoMeta` defaults to null for that caller (a
+ * content preview has no need for real SEO meta — STORY-051a's
+ * SeoFieldsPanel is the actual place an admin manages it); the public
+ * callers below pass the real SeoMeta row.
+ */
+export function toRecipeDetail(
+  row: RecipeDetailRow,
+  relatedRecipes: RecipeCard[],
+  seoMeta: { metaTitle: string | null; metaDescription: string | null; robotsIndex: boolean; robotsFollow: boolean } | null = null,
+): RecipeDetail {
   return {
     id: row.id,
     slug: row.slug,
@@ -163,8 +173,10 @@ export function toRecipeDetail(row: RecipeDetailRow, relatedRecipes: RecipeCard[
     },
     ingredients: row.ingredients.map(toIngredientItem),
     steps: row.steps.map(toStepItem),
-    metaTitle: row.metaTitle,
-    metaDescription: row.metaDescription,
+    metaTitle: seoMeta?.metaTitle ?? null,
+    metaDescription: seoMeta?.metaDescription ?? null,
+    robotsIndex: seoMeta?.robotsIndex ?? true,
+    robotsFollow: seoMeta?.robotsFollow ?? true,
     publishedAt: row.publishedAt?.toISOString() ?? null,
     relatedRecipes,
     video:
@@ -180,14 +192,15 @@ export async function getRecipeBySlug(slug: string): Promise<RecipeDetail | null
 
   // Fire-and-forget: a view-count UPDATE failing must never fail the page
   // render (it's a nice-to-have popularity signal, not core content).
-  const [relatedRecipes] = await Promise.all([
+  const [relatedRecipes, seoMeta] = await Promise.all([
     getRelatedRecipes(row, 6),
+    seoRepository.findSeoMeta("Recipe", row.id),
     recipeRepository.incrementRecipeViewCount(row.id).catch((error: unknown) => {
       console.error(`Failed to increment view count for recipe ${row.id}`, error);
     }),
   ]);
 
-  return toRecipeDetail(row, relatedRecipes);
+  return toRecipeDetail(row, relatedRecipes, seoMeta);
 }
 
 /**

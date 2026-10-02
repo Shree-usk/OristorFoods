@@ -166,6 +166,8 @@ export function buildRecipeDetail(overrides: Partial<RecipeDetail> = {}): Recipe
     steps: [{ stepNumber: 1, instruction: "Do the thing.", imageUrl: null }],
     metaTitle: null,
     metaDescription: null,
+    robotsIndex: true,
+    robotsFollow: true,
     publishedAt: "2026-09-01T00:00:00.000Z",
     relatedRecipes: [],
     video: null,

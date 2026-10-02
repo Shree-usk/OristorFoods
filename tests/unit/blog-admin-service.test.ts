@@ -62,9 +62,6 @@ function baseInput(authorId: string, overrides: Partial<BlogPostAdminValidatedIn
     heroImageUrl: "/images/test-hero.webp",
     bodyContent: "Some test body content, long enough to read.",
     authorId,
-    metaTitle: null,
-    metaDescription: null,
-    ogImage: null,
     tagIds: [],
     ...overrides,
   };

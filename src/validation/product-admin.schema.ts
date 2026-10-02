@@ -58,25 +58,6 @@ export const productAdminSchema = z.object({
   inStock: z.boolean().optional(),
   stockQuantity: z.number().int().min(0).optional(),
   weightGrams: z.number().int().positive().optional().nullable(),
-  metaTitle: z.string().trim().max(70).optional().nullable(),
-  metaDescription: z.string().trim().max(160).optional().nullable(),
-  // An empty text input submits "" (not undefined), so plain `.url().optional()`
-  // would reject an admin who leaves the field blank — `.or(z.literal(""))`
-  // treats blank the same as not-provided.
-  canonicalUrl: z
-    .string()
-    .trim()
-    .url("Enter a valid URL.")
-    .optional()
-    .or(z.literal(""))
-    .nullable(),
-  ogImage: z
-    .string()
-    .trim()
-    .url("Enter a valid URL.")
-    .optional()
-    .or(z.literal(""))
-    .nullable(),
   images: z.array(imageSchema),
   videos: z.array(videoSchema).optional(),
   nutrition: nutritionSchema,

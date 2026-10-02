@@ -41,6 +41,7 @@ export async function generateMetadata({ params }: RecipeDetailPageProps): Promi
   return {
     title: recipe.metaTitle ?? recipe.title,
     description: recipe.metaDescription ?? recipe.shortDescription,
+    robots: { index: recipe.robotsIndex, follow: recipe.robotsFollow },
   };
 }
 

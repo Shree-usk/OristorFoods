@@ -18,6 +18,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { AssetPickerDialog } from "@/components/admin/media/asset-picker-dialog";
 import { RecipeIngredientProductPicker } from "@/components/admin/recipes/recipe-ingredient-product-picker";
+import { SeoFieldsPanel } from "@/components/admin/seo/seo-fields-panel";
 import {
   approveRecipe,
   archiveRecipe,
@@ -81,8 +82,6 @@ const EMPTY_VALUES: RecipeAdminFormInput = {
   nutritionFat: undefined,
   nutritionFiber: undefined,
   nutritionSodium: undefined,
-  metaTitle: "",
-  metaDescription: "",
   videoUrl: "",
   videoProvider: undefined,
   videoDurationSeconds: undefined,
@@ -157,8 +156,6 @@ export function AdminRecipeForm({ recipeId }: { recipeId?: string }) {
       nutritionFat: existingRecipe.nutritionFat ?? undefined,
       nutritionFiber: existingRecipe.nutritionFiber ?? undefined,
       nutritionSodium: existingRecipe.nutritionSodium ?? undefined,
-      metaTitle: existingRecipe.metaTitle ?? "",
-      metaDescription: existingRecipe.metaDescription ?? "",
       videoUrl: existingRecipe.videoUrl ?? "",
       videoProvider: existingRecipe.videoProvider ?? undefined,
       videoDurationSeconds: existingRecipe.videoDurationSeconds ?? undefined,
@@ -546,15 +543,8 @@ export function AdminRecipeForm({ recipeId }: { recipeId?: string }) {
           />
         </TabsContent>
 
-        <TabsContent value="seo" className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <div>
-            <Label htmlFor="recipe-meta-title">Meta title</Label>
-            <Input id="recipe-meta-title" {...register("metaTitle")} />
-          </div>
-          <div className="sm:col-span-2">
-            <Label htmlFor="recipe-meta-description">Meta description</Label>
-            <Textarea id="recipe-meta-description" {...register("metaDescription")} />
-          </div>
+        <TabsContent value="seo" className="mt-4">
+          <SeoFieldsPanel entityType="Recipe" entityId={recipeId ?? null} />
         </TabsContent>
       </Tabs>
     </form>

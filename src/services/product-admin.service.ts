@@ -73,10 +73,6 @@ export interface ProductAdminInput {
   inStock?: boolean;
   stockQuantity?: number;
   weightGrams?: number | null;
-  metaTitle?: string | null;
-  metaDescription?: string | null;
-  canonicalUrl?: string | null;
-  ogImage?: string | null;
   images: ProductImageInput[];
   videos?: ProductVideoInput[];
   nutrition: ProductNutritionInput;
@@ -159,10 +155,6 @@ function scalarFields(input: ProductAdminInput) {
     inStock: input.inStock ?? true,
     stockQuantity: input.stockQuantity ?? 0,
     weightGrams: input.weightGrams ?? null,
-    metaTitle: input.metaTitle ?? null,
-    metaDescription: input.metaDescription ?? null,
-    canonicalUrl: input.canonicalUrl ?? null,
-    ogImage: input.ogImage ?? null,
   };
 }
 
@@ -280,10 +272,6 @@ export async function duplicateProduct(adminUserId: string, id: string, newSlug:
     inStock: source.inStock,
     stockQuantity: source.stockQuantity,
     weightGrams: source.weightGrams,
-    metaTitle: source.metaTitle,
-    metaDescription: source.metaDescription,
-    canonicalUrl: source.canonicalUrl,
-    ogImage: source.ogImage,
     brand: source.brand ? { connect: { id: source.brand.id } } : undefined,
     categories: source.categories.length ? { connect: source.categories.map((category) => ({ id: category.id })) } : undefined,
     collections: source.collections.length ? { connect: source.collections.map((collection) => ({ id: collection.id })) } : undefined,

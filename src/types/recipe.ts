@@ -87,6 +87,8 @@ export interface RecipeDetail {
   steps: RecipeStepItem[];
   metaTitle: string | null;
   metaDescription: string | null;
+  robotsIndex: boolean;
+  robotsFollow: boolean;
   publishedAt: string | null;
   relatedRecipes: RecipeCard[];
   video: { url: string; provider: "Youtube" | "Vimeo" | "SelfHosted"; durationSeconds: number | null; captionsUrl: string | null } | null;

@@ -53,9 +53,6 @@ export const blogPostDetailSelect = {
   bodyContent: true,
   publishedAt: true,
   readingTimeMinutes: true,
-  metaTitle: true,
-  metaDescription: true,
-  ogImage: true,
   authorId: true,
   author: { select: { name: true, slug: true, bio: true, avatarUrl: true } },
   tags: { select: { tag: { select: { id: true, name: true, slug: true } } } },
@@ -192,9 +189,6 @@ export const blogPostAdminDetailSelect = {
   readingTimeMinutes: true,
   status: true,
   publishedAt: true,
-  metaTitle: true,
-  metaDescription: true,
-  ogImage: true,
   createdAt: true,
   updatedAt: true,
   author: { select: { id: true, name: true, slug: true, bio: true, avatarUrl: true } },
@@ -272,9 +266,6 @@ export interface BlogPostAdminWriteInput {
   bodyContent: string;
   authorId: string;
   readingTimeMinutes?: number | null;
-  metaTitle?: string | null;
-  metaDescription?: string | null;
-  ogImage?: string | null;
   tagIds: string[];
 }
 
@@ -288,9 +279,6 @@ export function createBlogPostAdmin(input: BlogPostAdminWriteInput, adminUserId:
       bodyContent: input.bodyContent,
       authorId: input.authorId,
       readingTimeMinutes: input.readingTimeMinutes ?? null,
-      metaTitle: input.metaTitle ?? null,
-      metaDescription: input.metaDescription ?? null,
-      ogImage: input.ogImage ?? null,
       createdById: adminUserId,
       updatedById: adminUserId,
       tags: input.tagIds.length ? { create: input.tagIds.map((tagId) => ({ tagId })) } : undefined,
@@ -311,9 +299,6 @@ export function updateBlogPostAdmin(id: string, input: BlogPostAdminWriteInput, 
       bodyContent: input.bodyContent,
       authorId: input.authorId,
       readingTimeMinutes: input.readingTimeMinutes ?? null,
-      metaTitle: input.metaTitle ?? null,
-      metaDescription: input.metaDescription ?? null,
-      ogImage: input.ogImage ?? null,
       updatedById: adminUserId,
       tags: { deleteMany: {}, create: input.tagIds.map((tagId) => ({ tagId })) },
     },

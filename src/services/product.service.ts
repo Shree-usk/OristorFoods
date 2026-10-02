@@ -3,6 +3,7 @@ import * as categoryRepository from "@/repositories/category.repository";
 import * as collectionService from "@/services/collection.service";
 import * as pricingService from "@/services/pricing.service";
 import * as productRepository from "@/repositories/product.repository";
+import * as seoRepository from "@/repositories/seo.repository";
 import {
   getQaSummary,
   getRecipeSummary,
@@ -303,6 +304,8 @@ export interface ProductDetail {
   metaTitle: string | null;
   metaDescription: string | null;
   canonicalUrl: string | null;
+  robotsIndex: boolean;
+  robotsFollow: boolean;
 }
 
 export interface CompareItem {
@@ -338,12 +341,13 @@ export async function getProductDetail(
 
   const categoryIds = product.categories.map((category) => category.id);
 
-  const [resolvedPrice, relatedProducts, reviewSummary, qaSummary, recipeSummary] = await Promise.all([
+  const [resolvedPrice, relatedProducts, reviewSummary, qaSummary, recipeSummary, seoMeta] = await Promise.all([
     pricingService.resolvePrice({ productId: product.id, customerGroup: customerGroup ?? "Retail" }),
     listRelatedProducts({ productId: product.id, categoryIds, customerGroup }),
     getReviewSummary(product.id),
     getQaSummary(product.id),
     getRecipeSummary(product.id),
+    seoRepository.findSeoMeta("Product", product.id),
   ]);
 
   if (!resolvedPrice) {
@@ -421,9 +425,11 @@ export async function getProductDetail(
     reviewSummary,
     qaSummary,
     recipeSummary,
-    metaTitle: product.metaTitle,
-    metaDescription: product.metaDescription,
-    canonicalUrl: product.canonicalUrl,
+    metaTitle: seoMeta?.metaTitle ?? null,
+    metaDescription: seoMeta?.metaDescription ?? null,
+    canonicalUrl: seoMeta?.canonicalUrl ?? null,
+    robotsIndex: seoMeta?.robotsIndex ?? true,
+    robotsFollow: seoMeta?.robotsFollow ?? true,
   };
 }
 
