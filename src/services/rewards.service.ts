@@ -4,8 +4,10 @@ import * as cartRepository from "@/repositories/cart.repository";
 import * as orderRepository from "@/repositories/order.repository";
 import * as rewardsRepository from "@/repositories/rewards.repository";
 import { getCartSummaryById } from "@/services/cart.service";
+import { writeAuditLog } from "@/services/audit-log.service";
 import { sendNotification } from "@/services/notification.service";
 import type { OrderEventConsumer } from "@/services/order-integration.service";
+import { requirePermission } from "@/services/permission.service";
 import { calculatePointsRedemption } from "@/services/rewards-calc";
 import type { PointsRedemptionCalcResult } from "@/services/rewards-calc";
 import {
@@ -14,6 +16,8 @@ import {
   RewardsInvalidAmountError,
   RewardsNotAuthenticatedError,
   RewardsRedemptionUnavailableError,
+  RewardsTransactionNotFoundError,
+  RewardsTransactionNotReversibleError,
 } from "@/services/rewards.errors";
 import type { CartSummary } from "@/types/cart";
 
@@ -319,4 +323,102 @@ export async function removePointsFromCart(userId: string | null): Promise<CartS
   if (!cart) throw new RewardsRedemptionUnavailableError();
   await cartRepository.setCartPointsToRedeem(cart.id, 0);
   return getCartSummaryById(cart.id, userId);
+}
+
+// ---------------------------------------------------------------------------
+// STORY-049. Admin Rewards & Referrals console — point rule, tier, and
+// badge configuration, plus the fraud-flag reversal primitive.
+// ---------------------------------------------------------------------------
+
+export interface UpdateRewardSettingInput {
+  pointsToCurrencyRate?: number | null;
+  maxRedeemablePointsPerOrder?: number | null;
+  pointsExpiryDays?: number | null;
+  orderValuePointsRate?: number | null;
+}
+
+export async function updateRewardSetting(adminUserId: string, input: UpdateRewardSettingInput) {
+  await requirePermission(adminUserId, "RewardsReferrals", "Edit");
+  const updated = await rewardsRepository.updateSetting({
+    ...(input.pointsToCurrencyRate !== undefined ? { pointsToCurrencyRate: input.pointsToCurrencyRate?.toFixed(4) ?? null } : {}),
+    ...(input.maxRedeemablePointsPerOrder !== undefined ? { maxRedeemablePointsPerOrder: input.maxRedeemablePointsPerOrder } : {}),
+    ...(input.pointsExpiryDays !== undefined ? { pointsExpiryDays: input.pointsExpiryDays } : {}),
+    ...(input.orderValuePointsRate !== undefined ? { orderValuePointsRate: input.orderValuePointsRate?.toFixed(4) ?? null } : {}),
+  });
+  await writeAuditLog({ actorId: adminUserId, action: "reward_setting_updated", module: "RewardsReferrals", targetType: "RewardSetting", targetId: "global" });
+  return updated;
+}
+
+export async function listTiersForAdmin(adminUserId: string) {
+  await requirePermission(adminUserId, "RewardsReferrals", "View");
+  return rewardsRepository.listTiersForAdmin();
+}
+
+export interface TierInput {
+  name: string;
+  minLifetimePoints: number;
+  sortOrder: number;
+  isActive: boolean;
+}
+
+export async function createTier(adminUserId: string, input: TierInput) {
+  await requirePermission(adminUserId, "RewardsReferrals", "Edit");
+  const tier = await rewardsRepository.createTier(input);
+  await writeAuditLog({ actorId: adminUserId, action: "reward_tier_created", module: "RewardsReferrals", targetType: "RewardTier", targetId: tier.id });
+  return tier;
+}
+
+export async function updateTier(adminUserId: string, id: string, input: Partial<TierInput>) {
+  await requirePermission(adminUserId, "RewardsReferrals", "Edit");
+  const tier = await rewardsRepository.updateTier(id, input);
+  await writeAuditLog({ actorId: adminUserId, action: "reward_tier_updated", module: "RewardsReferrals", targetType: "RewardTier", targetId: id });
+  return tier;
+}
+
+export async function listBadgesForAdmin(adminUserId: string) {
+  await requirePermission(adminUserId, "RewardsReferrals", "View");
+  return rewardsRepository.listBadgesForAdmin();
+}
+
+export interface BadgeInput {
+  code: string;
+  name: string;
+  description: string | null;
+  criteriaType: string;
+  threshold: number | null;
+  isActive: boolean;
+}
+
+export async function createBadge(adminUserId: string, input: BadgeInput) {
+  await requirePermission(adminUserId, "RewardsReferrals", "Edit");
+  const badge = await rewardsRepository.createBadge(input);
+  await writeAuditLog({ actorId: adminUserId, action: "badge_created", module: "RewardsReferrals", targetType: "Badge", targetId: badge.id });
+  return badge;
+}
+
+export async function updateBadge(adminUserId: string, id: string, input: Partial<BadgeInput>) {
+  await requirePermission(adminUserId, "RewardsReferrals", "Edit");
+  const badge = await rewardsRepository.updateBadge(id, input);
+  await writeAuditLog({ actorId: adminUserId, action: "badge_updated", module: "RewardsReferrals", targetType: "Badge", targetId: id });
+  return badge;
+}
+
+/**
+ * STORY-049. The fraud-flag reversal primitive — claws back points from
+ * an Earned or ReferralBonus transaction by writing the matching
+ * Reversed/ReferralBonusReversed row, mirroring exactly how
+ * reversePointsForCancelledOrder above claws back an order-cancellation's
+ * Earned row. Not exposed as its own admin route — only
+ * fraud-detection.service.ts::reverseFlag calls this, which is itself
+ * RewardsReferrals/Approve-gated.
+ */
+export async function reverseTransaction(transactionId: string, note: string): Promise<void> {
+  const original = await rewardsRepository.findTransactionById(transactionId);
+  if (!original) throw new RewardsTransactionNotFoundError();
+  if (original.type !== "Earned" && original.type !== "ReferralBonus") throw new RewardsTransactionNotReversibleError();
+
+  const reversalType = original.type === "Earned" ? "Reversed" : "ReferralBonusReversed";
+  await prisma.$transaction((tx) =>
+    rewardsRepository.createTransaction(tx, { userId: original.userId, type: reversalType, points: -original.points, orderId: original.orderId, note }),
+  );
 }

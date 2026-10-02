@@ -5415,3 +5415,138 @@ balance updates in the UI and the issued coupon's `usageLimitGlobal`/
 live in the browser: suspended a real seeded customer, confirmed their
 storefront login was blocked with the specific message, reactivated,
 confirmed login worked again.
+
+## 2026-10-02 — STORY-049 Rewards & Referrals Campaign Management — core scope
+
+Delivers the admin configuration surface for the Rewards/Loyalty Club
+(STORY-030) and Referral Programme (STORY-031): campaign builder, point
+rule configuration, tier/badge management, referral rule configuration,
+and a fraud-monitoring review queue. Blueprint Section 9a's own note on
+this story: "what STORY-045's manual reward grant (built ahead of this
+story) will eventually integrate with" — confirmed manual grants
+(`rewards.service.ts::grantManualPoints`, used by STORY-045's review
+reward and STORY-048's manual customer grant) stay independent of
+campaigns; nothing here retrofits them.
+
+**Several pieces already existed as reserved-but-unwired config,
+explicitly flagged in earlier stories' own comments for this story to
+pick up:** `RewardSetting` (`pointsToCurrencyRate`,
+`maxRedeemablePointsPerOrder`, `pointsExpiryDays`,
+`orderValuePointsRate`) and `ReferralSetting`
+(`referrerBonusPoints`/`minQualifyingOrderValue`/
+`attributionWindowDays`/`referredWelcomeBonusPoints`) were both already
+read by their respective services — only `orderValuePointsRate` was
+unread, its own schema comment calling out "reserved for a future
+order-value-based earning mode," and STORY-030's own architecture-
+decisions entry said building that logic "without a concrete admin UI
+to configure it would be speculative." `RewardTier`/`Badge` (STORY-030)
+were already read by `evaluateTierAndBadges`. None of these four had a
+write/CRUD path — this story adds exactly that, no new models for any
+of them. Self-referral exclusion already existed
+(`referral.service.ts::attributeReferralAtRegistration`, exact email
+match → `ReferralAttribution.status = "Excluded"`); the new fraud
+heuristics below reuse that same model and its already-extensible
+`excludedReason` string convention, not a parallel concept.
+
+**1. Campaign multiplier — new `RewardCampaign` model, one integration
+point.** Points are earned from `Product.rewardPoints * quantity`,
+computed inside `cart.service.ts::buildSummary` — the same function
+that already resolves `customerGroup` (STORY-071) and calls
+`resolveDiscountForCart` once per cart read for coupons/promotions
+(STORY-029). `reward-campaign.service.ts::resolveActiveMultiplier(
+customerGroup, now)` is called the same way: once per cart read,
+applied to every line's `rewardPointsEarned` via `toLineItem`'s new
+`campaignMultiplier` parameter. `RewardCampaign.targetCustomerGroup`
+is nullable — null means all groups, reusing STORY-071's existing
+segmentation concept rather than inventing a parallel one. More than
+one active, matching campaign: the highest multiplier wins (a simple,
+explainable tie-break). Confirmed `checkout.service.ts::placeOrder`
+re-reads the cart via `getCartForCheckout`→`buildSummary` immediately
+before order creation — the exact same re-validation path coupons
+already go through — so this one change covers both the live cart
+preview and the order snapshot with no separate wiring and no
+stale-multiplier risk between viewing a cart and placing the order.
+
+**2. `orderValuePointsRate` is wired in as an additive bonus, not a
+replacement mode.** `Math.floor(subtotal * rate)` points are added to
+the cart-level `rewardPointsEarned` total, on top of the per-product
+sum — the existing, shipped, tested per-product mechanism is
+untouched. STORY-030 explicitly deferred building dual-mode
+earning-formula *selection* logic as speculative without a concrete
+admin UI; additive avoids that decision entirely while finally letting
+the reserved field do something once this story's UI exists to set it.
+
+**3. Fraud monitoring is genuinely new infrastructure — a new
+`FraudFlag` model and `fraud-detection.service.ts`, built around real,
+scoped heuristics against data that already exists, never blocking the
+customer action that triggers them** (mirrors this codebase's
+established "never block the primary action on a side-effect check"
+precedent — STORY-034's address-save-during-checkout,
+STORY-031's referral attribution itself):
+- **Shared address** is checked at the referral's *qualifying* step
+  (`handleQualifyingCheck`, when the referred customer's order
+  confirms), not at registration — a brand-new customer almost never
+  has a saved address yet, so checking there would rarely find
+  anything. By qualification time there's a real order with a real
+  shipping address (`Order.shipLine1`/`shipCity`) to compare against
+  the referrer's own saved `Address` book. This is a deliberate
+  refinement of the original plan (which proposed checking at
+  registration) made during implementation once the data-availability
+  gap was clear.
+- **Referral velocity** (`ReferralSetting.maxReferralsPerPeriod` +
+  `referralPeriodDays`, two new nullable fields, same "both unset =
+  off" convention every other setting field here uses) is checked at
+  attribution creation (registration) — independent of any order.
+- **Redemption velocity** is checked after a successful order redeems
+  points, against a fixed window/threshold (7 days / 2000 points), not
+  an admin-configurable setting — the AC asks for a referral
+  fraud-threshold specifically, not a separate redemption one.
+- **"Shared payment method" from the AC is explicitly not
+  implemented** — the payment gateway is still "mock," with no real
+  card data to fingerprint (blueprint Section 10's unconfirmed-
+  provider flag, the same one STORY-026/047 already established).
+  Documented as deferred, not silently dropped or guessed at. All
+  three implemented heuristics, plus this deferred one, are the
+  concrete candidates for future AI-assisted scoring (STORY-064) per
+  the AC's own wording.
+- **Reversal** claws back the flagged reward via a new, generic
+  `rewards.service.ts::reverseTransaction(transactionId, note)` —
+  writes the matching `Reversed`/`ReferralBonusReversed` row, mirroring
+  exactly how `reversePointsForCancelledOrder` already claws back an
+  order-cancellation's `Earned` row. Only `Earned`/`ReferralBonus`
+  transactions are reversible (`RewardsTransactionNotReversibleError`)
+  — reversing a `Redeemed` row would mean refunding points a customer
+  already spent on a real order, a different operation this story
+  doesn't attempt.
+
+**Permission gating** mirrors STORY-045/047/048's Edit-vs-Approve
+split: `RewardsReferrals`/`View` for every read; `/Edit` for
+campaign/setting/tier/badge CRUD; `/Approve` for fraud-flag
+resolution (reversing is money-moving, same bar as STORY-047's refund
+and STORY-048's reward grant).
+
+**Testing:** `tests/unit/reward-campaign-service.test.ts` (9 tests) —
+multiplier resolution by group/date range/highest-wins, and a real
+`cart.service.ts::buildSummary`-level test (via `addItem`/`getCart`)
+confirming a cart's `rewardPointsEarned` actually doubles with an
+active campaign — not just that the resolver function returns the
+right number in isolation. `tests/unit/rewards-admin-service.test.ts`
+(4 tests) — setting update reflected in a cart's additive bonus, tier/
+badge CRUD, permission gating. `tests/unit/referral-admin-service.test.ts`
+(2 tests) — setting update including the new fraud-threshold fields.
+`tests/unit/fraud-detection-service.test.ts` (11 tests) — each
+heuristic's trigger/non-trigger condition, approve (no reward change)
+vs. reverse (real points clawback via `reverseTransaction`, confirmed
+against the customer's actual balance), not-found/not-pending
+rejections, permission gating. Confirmed zero regressions:
+`cart-service`, `cart-routes`, `checkout-service`, `checkout-routes`,
+`rewards-service`, `rewards-routes`, `referral-service`,
+`referral-routes` suites pass unchanged (102 tests) — significant
+given this story edits `buildSummary`/`attributeReferralAtRegistration`/
+`placeOrder` directly. `tests/e2e/admin-rewards-referrals.spec.ts` (2
+tests) — creating a 2x campaign via the real admin UI doubles a real
+guest cart's `rewardPointsEarned`, verified by reading the actual
+`/api/cart` route before and after (not a mocked check); reversing a
+fraud flag from the real Fraud Queue UI claws back the related
+`RewardTransaction`'s points, confirmed against the database. Verified
+live in the browser via the same e2e flows.

@@ -9,7 +9,9 @@ export type RewardsErrorCode =
   | "insufficient_balance"
   | "exceeds_per_order_cap"
   | "redemption_unavailable"
-  | "invalid_amount";
+  | "invalid_amount"
+  | "transaction_not_found"
+  | "transaction_not_reversible";
 
 export class RewardsServiceError extends Error {
   constructor(
@@ -54,5 +56,19 @@ export class RewardsRedemptionUnavailableError extends RewardsServiceError {
 export class RewardsInvalidAmountError extends RewardsServiceError {
   constructor() {
     super("invalid_amount", "Enter a positive whole number of points.");
+  }
+}
+
+/** STORY-049. Fraud-flag reversal target. */
+export class RewardsTransactionNotFoundError extends RewardsServiceError {
+  constructor() {
+    super("transaction_not_found", "That reward transaction could not be found.");
+  }
+}
+
+/** STORY-049. reverseTransaction only accepts Earned/ReferralBonus — reversing a Redeemed row would mean refunding points a customer already spent on a real order, a different (and not fraud-related) operation. */
+export class RewardsTransactionNotReversibleError extends RewardsServiceError {
+  constructor() {
+    super("transaction_not_reversible", "Only an Earned or ReferralBonus transaction can be reversed.");
   }
 }

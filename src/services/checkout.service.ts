@@ -15,6 +15,7 @@ import {
 import { CouponNotFoundError } from "@/services/coupon.errors";
 import { validateCoupon } from "@/services/coupon.service";
 import { resolveDiscountForCart } from "@/services/discount.service";
+import { checkRedemptionVelocity } from "@/services/fraud-detection.service";
 import type { DiscountableLine } from "@/services/discount.service";
 import { createOrder, getOrderForConfirmation } from "@/services/order.service";
 import { createPaymentIntent, getPaymentByReference } from "@/services/payment.service";
@@ -268,6 +269,16 @@ export async function placeOrder(
       await saveAddressFromCheckout(userId, input.address);
     } catch (error) {
       if (!(error instanceof AddressLimitExceededError)) throw error;
+    }
+  }
+
+  // STORY-049: best-effort fraud check, never a reason to fail an
+  // already-placed order — same framing as the address save above.
+  if (userId && pointsRedemption && !wasReplay) {
+    try {
+      await checkRedemptionVelocity(userId);
+    } catch (error) {
+      console.error("[checkout] redemption-velocity fraud check failed", error);
     }
   }
 

@@ -67,3 +67,26 @@ export function listAttributionsForReferrer(referrerUserId: string, client: Clie
 export function countAttributionsSince(from: Date, client: Client = prisma) {
   return client.referralAttribution.count({ where: { createdAt: { gte: from } } });
 }
+
+// ---------------------------------------------------------------------------
+// STORY-049. Admin Rewards & Referrals console.
+// ---------------------------------------------------------------------------
+
+export interface UpdateReferralSettingInput {
+  referrerBonusPoints?: number | null;
+  minQualifyingOrderValue?: string | null;
+  attributionWindowDays?: number | null;
+  referredWelcomeBonusPoints?: number | null;
+  maxReferralsPerPeriod?: number | null;
+  referralPeriodDays?: number | null;
+}
+
+/** Singleton upsert by id: "global" — mirrors rewards.repository.ts::updateSetting's own row. */
+export function updateSetting(input: UpdateReferralSettingInput, client: Client = prisma) {
+  return client.referralSetting.upsert({ where: { id: "global" }, create: { id: "global", ...input }, update: input });
+}
+
+/** The referral-velocity fraud check's own count — per referrer, unlike countAttributionsSince's global dashboard count above. */
+export function countAttributionsByReferrerSince(referrerUserId: string, since: Date, client: Client = prisma) {
+  return client.referralAttribution.count({ where: { referrerUserId, createdAt: { gte: since } } });
+}
