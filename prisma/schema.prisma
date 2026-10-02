@@ -84,6 +84,8 @@ model User {
   restrictedCoupons       Coupon[]
   // STORY-049.
   fraudFlags              FraudFlag[]
+  // STORY-050a.
+  popupInteractions       PopupInteraction[]
   createdAt         DateTime   @default(now())
   updatedAt         DateTime   @updatedAt
 }
@@ -2176,6 +2178,8 @@ model AdminUser {
   adminNotesAuthored AdminNote[]
   // STORY-049.
   fraudFlagsResolved FraudFlag[]
+  // STORY-050a.
+  popupsCreated      PromotionalPopup[]
   createdAt          DateTime        @default(now())
   updatedAt          DateTime        @updatedAt
 }
@@ -2264,6 +2268,141 @@ model FraudFlag {
 
   @@index([customerId])
   @@index([status])
+}
+
+// STORY-050a. Promotional Pop-up Manager (docs/stories/STORY-Additional.md
+// §3-9) — the first of five sub-stories split out of STORY-050 (Marketing
+// Console), confirmed with the user 2026-10-02 (docs/blueprint.md Section
+// 9a). Permission gating reuses the plain View/Edit/Approve AdminAction
+// shape every other admin console this session built already uses, not
+// the granular PROMOTION_* scheme that source doc's own section 12
+// suggests — introducing a second permission model would itself be the
+// "competing system" that doc's own section 15 forbids.
+enum PopupStatus {
+  Draft
+  Scheduled
+  Published
+  Paused
+  Unpublished
+  Archived
+}
+
+// Grounded in this app's actual storefront route groups — no existing
+// page-targeting system exists anywhere to reuse (Promotion/STORY-029
+// only scopes to products/categories, never pages).
+enum PopupPageTarget {
+  AllPages
+  Homepage
+  Products
+  Recipes
+  Blog
+}
+
+// NewVisitors/ReturningVisitors can only ever be a best-effort first-party
+// cookie heuristic — no visitor/session-tracking infrastructure exists
+// (confirmed by the admin dashboard's own "Live Visitors: Coming soon"
+// widget, STORY-039). CustomerGroupTarget reuses the same CustomerGroup
+// concept RewardCampaign (STORY-049) already targets by.
+enum PopupAudienceTarget {
+  AllVisitors
+  NewVisitors
+  ReturningVisitors
+  Authenticated
+  CustomerGroupTarget
+  LoyaltyMembers
+  ReferralMembers
+}
+
+enum PopupTriggerType {
+  Immediate
+  TimeDelay
+  ScrollDepth
+  ExitIntent
+  PageViews
+  AddToCart
+  BeforeCheckout
+}
+
+// Real, server-side enforcement only for authenticated customers
+// (PopupInteraction below). A guest has no durable identity to enforce
+// this against server-side yet, so guest-side capping is necessarily
+// client-side (localStorage) — this app's existing "browser storage for
+// a per-viewer convenience, never a hard guarantee" convention.
+enum PopupFrequencyCap {
+  OncePerSession
+  OncePerDay
+  OncePerWeek
+  OncePerCustomer
+  UntilDismissed
+}
+
+model PromotionalPopup {
+  id                  String              @id @default(cuid())
+  name                String
+  status              PopupStatus         @default(Draft)
+  title               String
+  description         String?
+  imageUrl            String?
+  imageAlt            String?
+  mobileImageUrl      String?
+  mobileImageAlt      String?
+  videoUrl            String?
+  ctaLabel            String?
+  ctaHref             String?
+  secondaryCtaLabel   String?
+  secondaryCtaHref    String?
+  // Display-only — not validated against the real Coupon model yet.
+  // STORY-050b (coupon management UI) wires that live integration once
+  // it exists; this field's purpose until then is purely to show a code
+  // in the popup's own content, same as the source spec's AC asks for.
+  couponCode          String?
+  pageTarget          PopupPageTarget     @default(AllPages)
+  audienceTarget      PopupAudienceTarget @default(AllVisitors)
+  // Only read when audienceTarget is CustomerGroupTarget.
+  targetCustomerGroup CustomerGroup?
+  triggerType         PopupTriggerType    @default(Immediate)
+  // Seconds (TimeDelay), percent (ScrollDepth), or a page-view count
+  // (PageViews) depending on triggerType — unread for every other type.
+  triggerValue        Int?
+  frequencyCap        PopupFrequencyCap   @default(OncePerSession)
+  startAt             DateTime?
+  endAt               DateTime?
+  // Popups sharing a variantGroupId are A/B alternates of one another;
+  // resolveEligiblePopup weighted-picks one per visit by variantWeight.
+  // Not a full experimentation platform — no confidence/significance
+  // tracking, just a traffic split.
+  variantGroupId      String?
+  variantWeight       Int                 @default(100)
+  createdById         String?
+  createdBy           AdminUser?          @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt           DateTime            @default(now())
+  updatedAt           DateTime            @updatedAt
+  interactions        PopupInteraction[]
+
+  @@index([status, startAt, endAt])
+  @@index([pageTarget])
+}
+
+enum PopupInteractionType {
+  Impression
+  Click
+  Dismissal
+}
+
+// Serves two purposes at once, deliberately — the authenticated
+// frequency-cap check above, and the performance summary (impressions/
+// clicks/dismissals) — one model, not a second analytics system.
+model PopupInteraction {
+  id        String               @id @default(cuid())
+  popupId   String
+  popup     PromotionalPopup     @relation(fields: [popupId], references: [id], onDelete: Cascade)
+  userId    String?
+  user      User?                @relation(fields: [userId], references: [id], onDelete: SetNull)
+  type      PopupInteractionType
+  createdAt DateTime             @default(now())
+
+  @@index([popupId, type])
+  @@index([userId, popupId])
 }
 
 // --- Media Library (STORY-041, core scope) ---
