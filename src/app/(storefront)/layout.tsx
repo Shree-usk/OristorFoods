@@ -2,6 +2,7 @@ import { PageTransition } from "@/components/motion";
 import { Footer } from "@/components/storefront/layout/footer";
 import { Header } from "@/components/storefront/layout/header";
 import { MobileNav } from "@/components/storefront/layout/mobile-nav";
+import { PopupTriggerController } from "@/components/storefront/popup/popup-trigger-controller";
 
 /**
  * Customer-facing shell: header, main content landmark, mobile bottom
@@ -32,6 +33,9 @@ export default function StorefrontLayout({ children }: { children: React.ReactNo
       </div>
       <div className="print:hidden">
         <Footer />
+      </div>
+      <div className="print:hidden">
+        <PopupTriggerController />
       </div>
     </div>
   );

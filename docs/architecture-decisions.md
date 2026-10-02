@@ -5550,3 +5550,130 @@ guest cart's `rewardPointsEarned`, verified by reading the actual
 fraud flag from the real Fraud Queue UI claws back the related
 `RewardTransaction`'s points, confirmed against the database. Verified
 live in the browser via the same e2e flows.
+
+## 2026-10-02 — STORY-050a Promotional Pop-up Manager — core scope
+
+The first of five sub-stories STORY-050 (Marketing Console) was split
+into, confirmed with the user — Popups first, since it's the most
+self-contained spec, detailed separately in `docs/stories/07-enterprise-
+admin-platform/STORY-Additional.md` §3–9 ("PROJECT CINNAMON — ADMIN CMS
+ENHANCEMENT"). The split itself and the remaining four sub-stories'
+order are recorded in `docs/blueprint.md` Section 9a.
+
+That source document's own section 14 instruction — "inspect the
+existing CMS models... RBAC... audit logging... analytics... customer
+segmentation... identify reusable patterns... do NOT create duplicate
+systems" — was followed literally before writing any code:
+
+**Reused, not rebuilt:** `AdminModule.Marketing` and the plain `View`/
+`Edit`/`Approve` `AdminAction` shape every other admin console this
+session built already uses — **not** the granular `PROMOTION_VIEW`/
+`CREATE`/`EDIT`/`PUBLISH`/`PAUSE`/`ARCHIVE` scheme that source doc's own
+section 12 suggests. Introducing a second, finer-grained permission
+model alongside the one every other console already uses would itself
+be the "competing system" that doc's own section 15 explicitly forbids.
+`Edit` gates content/scheduling and low-risk status moves (pause,
+archive); `Approve` gates whatever makes a popup live or takes it down
+(publish, and resuming into Published from Paused; unpublish) — the
+same money/visibility-moving bar STORY-047's refund and STORY-048's
+reward grant already established. `AssetPickerDialog`/`MediaAsset`
+(STORY-041) is reused directly for the image/mobile-image fields —
+confirmed via that component's own doc comment that it's "the only
+sanctioned way other admin modules select an image/video/document."
+`CustomerGroup` (STORY-071) is reused for audience segmentation exactly
+as `RewardCampaign` (STORY-049) already reused it. `Dialog` (`@/
+components/ui/dialog`) is already used on the storefront side too
+(confirmed: `address-form-dialog.tsx`, `redeem-points-dialog.tsx`), so
+the popup's live render reuses it rather than a new overlay primitive.
+
+**Two real gaps, each scoped honestly rather than over-built:**
+1. **No page-targeting system exists to reuse.** `Promotion`
+   (STORY-029) only scopes to products/categories, never pages — a new
+   `PopupPageTarget` enum (`AllPages`/`Homepage`/`Products`/`Recipes`/
+   `Blog`) is grounded in this app's actual storefront route groups,
+   confirmed by listing `src/app/(storefront)`, not invented.
+2. **No visitor/session-tracking infrastructure exists at all** —
+   confirmed by the admin dashboard's own "Live Visitors: Coming soon —
+   storefront session tracking isn't built yet" widget (STORY-039).
+   This honestly bounds two AC bullets, both stated plainly in the
+   admin UI's own copy rather than silently overstated as equally
+   solid: **new-vs-returning-visitor targeting** resolves as "don't
+   exclude either way" server-side (there's no visitor identity to
+   check against) — a real cookie-based heuristic was deliberately not
+   built for v1, since it would only ever be a guess masquerading as a
+   targeting rule; **frequency capping** gets real, server-side
+   enforcement only for *authenticated* customers (the new
+   `PopupInteraction` ledger, keyed by `userId`) — guests get
+   `OncePerSession` capping via `sessionStorage` only, since there is
+   no guest-identity architecture to enforce the other caps
+   (`OncePerDay`/`Week`/`Customer`/`UntilDismissed`) against server-side.
+
+**A deliberate refinement made during implementation, not in the
+original plan:** page-view counting (the `PageViews` trigger) uses a
+`sessionStorage` counter bumped on every client-side page mount —
+confirmed working correctly with the trigger-controller's `key=
+{pathname}` remount pattern (see below), not a separate tracking system.
+
+**`PopupInteraction` serves two AC bullets at once, deliberately** —
+per the source doc's own section 11 instruction ("do not introduce a
+second analytics architecture"): the authenticated frequency-cap check
+above, *and* the admin editor's performance summary (impressions/
+clicks/dismissals). One model, not two.
+
+**The eligibility/trigger split**, mirroring `reward-campaign.service.ts
+::resolveActiveMultiplier`'s (STORY-049) "resolve once, pure function
+over pre-fetched state" shape: `popup.service.ts::resolveEligiblePopup`
+(server) decides *which* popup, if any, is eligible at all (page,
+audience, schedule, status, authenticated-frequency-cap); the client
+(`popup-trigger-controller.tsx`) owns the trigger's own *timing*
+(delay/scroll/exit-intent/page-views/add-to-cart/before-checkout are
+inherently client-observed events). `AddToCart` is wired to a real
+event (`window.dispatchEvent(new Event("oristor:add-to-cart"))`) added
+to `use-cart.ts`'s `addItemMutation.onSuccess` — the one shared choke
+point every "add to cart" action in the app already goes through
+(confirmed by finding both of its consumers, `use-add-to-cart.ts` and
+`wishlist-item-row.tsx`), so no product/cart UI component needed its
+own popup awareness. `BeforeCheckout` is resolved by checking
+`pathname.startsWith("/checkout")` directly in the controller, rather
+than a new `PopupPageTarget` enum value, since it's semantically a
+*trigger moment*, not a *page category*.
+
+**`couponCode` is a display-only string field, not validated against
+the real `Coupon` model** — that live integration is explicitly
+STORY-050b's job (coupon management UI) once it exists, a deliberate
+scope boundary stated in the field's own schema comment, not an
+oversight.
+
+**A `key={pathname}` remount pattern replaced an initial draft that
+reset state imperatively inside a `useEffect`** (caught by this
+project's `react-hooks/set-state-in-effect` lint rule) — `
+PopupTriggerController` is now a thin wrapper rendering `
+<PopupTriggerForPage key={pathname} .../>`, giving every navigation a
+fresh component instance instead of manually clearing state on every
+pathname change.
+
+**Testing:** `tests/unit/popup-service.test.ts` (16 tests) — admin
+CRUD + audit logging, the full status-transition table (Edit-gated
+moves succeed for an Edit-only admin, Approve-gated moves correctly
+rejected for the same admin, an illegal transition like Archived→
+Published rejected), a real performance-summary count,
+`resolveEligiblePopup`'s page-target matching, schedule-window
+boundaries, every audience-target heuristic (`CustomerGroupTarget`,
+`Authenticated`, `LoyaltyMembers` via a real `RewardTransaction`,
+`ReferralMembers` via a real `ReferralAttribution`), an authenticated
+customer's frequency cap actually blocking re-eligibility via real
+`PopupInteraction` rows (not mocked), and the variant-group weighted
+pick confirmed to only ever return one of its siblings across repeated
+calls. `tests/unit/use-cart.test.tsx` (existing, 4 tests) confirmed
+unchanged after adding the `AddToCart` event dispatch.
+`tests/e2e/admin-popups.spec.ts` (1 test, covering the full workflow)
+— a View/Edit-only admin's publish attempt is rejected server-side
+(403, confirmed via that admin's own separate browser context, not
+just a hidden button); the full-access admin creates and publishes a
+real popup through the real editor UI; a separate, real storefront
+visitor (a third browser context) sees it render on the real homepage
+with a real `Immediate` trigger, a real `Impression` row is written;
+dismissing it and reloading confirms the `OncePerSession` cap actually
+prevents a second showing within the same session, and a real
+`Dismissal` row is written. Verified live in the browser via the same
+flow.

@@ -44,7 +44,14 @@ export function useCart() {
       });
       if (!response.ok) await throwWithServerMessage(response, "Failed to add to cart");
     },
-    onSuccess: invalidate,
+    onSuccess: () => {
+      invalidate();
+      // STORY-050a: the one shared choke point every "add to cart" action
+      // already goes through — lets the popup trigger controller react to
+      // a real add-to-cart without any product/cart UI needing its own
+      // awareness of popups.
+      window.dispatchEvent(new Event("oristor:add-to-cart"));
+    },
   });
 
   const updateQuantityMutation = useMutation({
