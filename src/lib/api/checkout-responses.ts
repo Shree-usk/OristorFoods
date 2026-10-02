@@ -51,6 +51,7 @@ const couponStatusByCode: Record<CouponErrorCode, number> = {
   min_order_value_not_met: 409,
   scope_not_met: 409,
   already_applied: 409,
+  code_taken: 409,
 };
 
 const rewardsStatusByCode: Record<RewardsErrorCode, number> = {

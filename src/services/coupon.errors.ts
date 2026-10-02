@@ -13,7 +13,8 @@ export type CouponErrorCode =
   | "customer_limit_exceeded"
   | "min_order_value_not_met"
   | "scope_not_met"
-  | "already_applied";
+  | "already_applied"
+  | "code_taken";
 
 export class CouponServiceError extends Error {
   constructor(
@@ -79,5 +80,25 @@ export class CouponScopeNotMetError extends CouponServiceError {
 export class CouponAlreadyAppliedError extends CouponServiceError {
   constructor() {
     super("already_applied", "This coupon is already applied to your cart.");
+  }
+}
+
+/** STORY-050b. Admin-entered coupon code collides with an existing one. */
+export class CouponCodeTakenError extends CouponServiceError {
+  constructor() {
+    super("code_taken", "That coupon code is already in use.");
+  }
+}
+
+/** STORY-050b. Admin console lookup by id (as opposed to CouponNotFoundError's code-based, no-enumeration message used at checkout). */
+export class CouponAdminNotFoundError extends CouponServiceError {
+  constructor() {
+    super("not_found", "That coupon could not be found.");
+  }
+}
+
+export class PromotionNotFoundError extends CouponServiceError {
+  constructor() {
+    super("not_found", "That promotion could not be found.");
   }
 }
