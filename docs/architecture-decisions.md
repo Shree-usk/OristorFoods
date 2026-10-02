@@ -5955,3 +5955,80 @@ block with a real Media Library image) through the real console,
 publishes it, and a separate, real storefront visitor sees it render
 at `/landing/<slug>` with the real headline and CTA; a second,
 unpublished page's slug confirmed 404ing for that same visitor.
+
+## 2026-10-02 — STORY-050c Seasonal Campaign Hub
+
+The last of the five STORY-050 sub-stories, built only once 050a
+(Popups), 050b (Coupons/Promotions), 050d (Email/SMS/WhatsApp), and
+050e (Landing Pages) all existed — the AC's own framing ("tie together
+a coupon, a popup, a homepage section override, and an email/SMS/
+WhatsApp send") makes it a pure linking + reporting record over
+already-built pieces, not a new orchestration layer.
+
+**The one real scope decision**: `SeasonalCampaign`'s own status
+(`Draft`/`Scheduled`/`Active`/`Ended`/`Archived`) does **not** cascade
+into any linked entity's own status — marking a hub "Active" never
+force-publishes a `Draft` popup, and "Ended" never unpublishes one.
+The admin still manages each linked item's own lifecycle in its own
+console (Popups, Coupons, Email/SMS); this hub only groups up to four
+already-created items under one name and date range and reports their
+combined performance. Building cross-entity cascade automation would
+have meant inventing surprising side effects (what should "Active"
+actually *do* to a Draft popup — publish it? refuse to activate the
+hub?) that neither the AC nor the user asked for. `SeasonalCampaign`
+only links to pre-existing rows via four nullable foreign keys
+(`popupId`/`couponId`/`emailSmsCampaignId`/`homepageSectionId`, every
+one `onDelete: SetNull`) — it never creates a popup/coupon/campaign
+itself.
+
+**New `SeasonalCampaignStatus` enum, not a reuse of any sibling
+status enum** — `Active`/`Ended` are new terms (none of `PopupStatus`,
+`LandingPageStatus`, or `CampaignStatus` has them), matching the AC's
+own literal wording for this entity. Status transitions reuse STORY-
+050a's exact Edit/Approve split: `Draft → Scheduled` and anything
+`→ Archived` are `Edit`-gated (low-risk); `Scheduled → Active` and
+`Active → Ended` are `Approve`-gated (the same "whatever makes it
+live or takes it down" bar every other admin console this epic built
+uses).
+
+**Performance summary is a per-channel breakdown, not one blended
+number** — a popup's impressions/clicks/dismissals, a coupon's
+redemption count, and an email/SMS campaign's sent/failed/skipped
+counts aren't comparable quantities, so forcing them into a single
+"performance score" would be misleading. `getSeasonalCampaignPerformanceSummary`
+simply fans out to each linked item's own existing performance read
+(`popup.service.ts::getPerformanceSummary`,
+`email-sms-campaign.service.ts::getCampaignDeliverySummary`) plus one
+new, trivial `CouponRedemption` count query — no second analytics
+system, same principle `PopupInteraction`'s own doc comment states.
+
+**Homepage section picker is a deliberate two-round-trip client-side
+read, not a new admin endpoint** — confirmed by reading
+`homepage-builder.service.ts` in full: `findPublishedLayout` (the only
+function that reads the live layout's sections without needing a
+layout id first) is wired exclusively to the unauthenticated storefront
+read (`homepage.service.ts`), not exposed to the admin API at all.
+Rather than adding a permission-gated wrapper to that already-shipped
+STORY-042 module for the sake of one dropdown, the picker component
+calls the existing admin endpoints directly: `GET
+/api/admin/homepage-builder/layouts?status=Published` to find the
+live layout's id, then `GET /api/admin/homepage-builder/layouts/[id]`
+to read its `sections` (already includes `type`/`titleOverride`, no
+new fields needed). If a second caller ever needs this same read, that
+would be the point to promote it to a real `homepage-builder.service.ts`
+export — not before.
+
+**Testing:** `tests/unit/seasonal-campaign-service.test.ts` (9 tests)
+— CRUD + audit logging, the full status-transition table (Edit vs.
+Approve, an illegal `Draft → Active` skip rejected), the date-range
+Zod refine, and the performance summary proven against real linked
+`PromotionalPopup`/`Coupon`/`EmailSmsCampaign` fixtures (including a
+real `Order` + `CouponRedemption` row, since `CouponRedemption.orderId`
+is a required, unique FK — there is no lighter-weight way to create a
+redemption). `tests/e2e/admin-seasonal-campaigns.spec.ts` — a View/
+Edit-only admin's `Scheduled → Active` attempt is rejected server-side
+(403, via a separate browser context); the full-access admin links a
+real, already-Published popup (with real recorded impressions) from
+the editor's picker, walks the real UI through
+Draft → Scheduled → Active → Ended, and the performance panel shows
+that popup's real impression count throughout.

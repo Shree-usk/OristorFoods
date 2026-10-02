@@ -1222,6 +1222,7 @@ model Coupon {
   scopeCategories CouponScopeCategory[]
   redemptions     CouponRedemption[]
   carts           Cart[]
+  seasonalCampaigns SeasonalCampaign[]
 
   @@index([code, isActive])
   @@index([startDate, endDate])
@@ -2087,6 +2088,7 @@ model EmailSmsCampaign {
   createdBy      AdminUser              @relation(fields: [createdById], references: [id])
   createdAt      DateTime               @default(now())
   updatedAt      DateTime               @updatedAt
+  seasonalCampaigns SeasonalCampaign[]
 
   @@index([status, scheduledAt])
 }
@@ -2227,6 +2229,8 @@ model AdminUser {
   emailSmsCampaignsCreated EmailSmsCampaign[]
   // STORY-050e.
   landingPagesCreated LandingPage[]
+  // STORY-050c.
+  seasonalCampaignsCreated SeasonalCampaign[]
   createdAt          DateTime        @default(now())
   updatedAt          DateTime        @updatedAt
 }
@@ -2425,6 +2429,7 @@ model PromotionalPopup {
   createdAt           DateTime            @default(now())
   updatedAt           DateTime            @updatedAt
   interactions        PopupInteraction[]
+  seasonalCampaigns   SeasonalCampaign[]
 
   @@index([status, startAt, endAt])
   @@index([pageTarget])
@@ -2450,6 +2455,45 @@ model PopupInteraction {
 
   @@index([popupId, type])
   @@index([userId, popupId])
+}
+
+// STORY-050c. A pure linking + reporting record, deliberately NOT a new
+// orchestration layer — it does not create popups/coupons/campaigns
+// itself (those are built in their own consoles first, then linked
+// here), and its own status does not cascade into the linked entities'
+// own status (marking this "Active" never force-publishes a Draft
+// popup, for example). The admin still manages each linked item's own
+// lifecycle in its own console; this just groups them under one
+// name/date-range and surfaces their combined performance. See
+// docs/architecture-decisions.md for the full reasoning.
+enum SeasonalCampaignStatus {
+  Draft
+  Scheduled
+  Active
+  Ended
+  Archived
+}
+
+model SeasonalCampaign {
+  id          String                 @id @default(cuid())
+  name        String
+  status      SeasonalCampaignStatus @default(Draft)
+  startDate   DateTime
+  endDate     DateTime
+  popupId     String?
+  popup       PromotionalPopup?      @relation(fields: [popupId], references: [id], onDelete: SetNull)
+  couponId    String?
+  coupon      Coupon?                @relation(fields: [couponId], references: [id], onDelete: SetNull)
+  emailSmsCampaignId String?
+  emailSmsCampaign   EmailSmsCampaign? @relation(fields: [emailSmsCampaignId], references: [id], onDelete: SetNull)
+  homepageSectionId  String?
+  homepageSection    HomepageSection?  @relation(fields: [homepageSectionId], references: [id], onDelete: SetNull)
+  createdById String
+  createdBy   AdminUser              @relation(fields: [createdById], references: [id])
+  createdAt   DateTime               @default(now())
+  updatedAt   DateTime               @updatedAt
+
+  @@index([status, startDate, endDate])
 }
 
 // --- Media Library (STORY-041, core scope) ---
@@ -2586,6 +2630,7 @@ model HomepageSection {
   banners  HeroBannerSlide[]
   createdAt DateTime           @default(now())
   updatedAt DateTime           @updatedAt
+  seasonalCampaigns SeasonalCampaign[]
 
   @@index([layoutId])
 }
