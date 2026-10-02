@@ -6032,3 +6032,101 @@ real, already-Published popup (with real recorded impressions) from
 the editor's picker, walks the real UI through
 Draft → Scheduled → Active → Ended, and the performance panel shows
 that popup's real impression count throughout.
+
+## 2026-10-02 — STORY-051 split, and STORY-051a Per-Page SEO Fields + SeoFieldsPanel
+
+Researching STORY-051 (SEO Console) before building it found it was
+already bigger than its own doc suggested: `Product`, `Recipe`, and
+`BlogPost` each already had their own inline, duplicated `metaTitle`/
+`metaDescription` columns (Product and BlogPost also had `ogImage`;
+Product alone had `canonicalUrl`), each with its own admin form fields
+and its own `generateMetadata()` reading them directly — and nothing
+for redirects, sitemap.xml, robots.txt, or a shared cross-entity admin
+component existed anywhere. Comparable in size to all five STORY-050
+sub-stories combined. **Confirmed with the user: split the same way
+STORY-050 was split** — 051a (this entry) → 051b (Redirect Manager) →
+051c (Sitemap/Robots/Structured Data) → 051d (Bulk Edit + Health
+Scoring), recorded in `docs/blueprint.md` Section 9a item 7 the same
+way item 6 records the STORY-050 split.
+
+**Full migration, not an additive bolt-on.** `SeoMeta` (new, polymorphic
+via `(entityType, entityId)` — Prisma can't express a single FK
+pointing at one of several different models) is now the single source
+of truth for these fields; Product/Recipe/BlogPost's own columns were
+removed, not left duplicated alongside the new table. This is what the
+AC actually asks for ("per-page SEO fields... from one console") and
+what `docs/stories/09-quality-security/STORY-068-seo-validation-qa.md`
+(read in full before starting) depends on: it expects one
+CMS-sourced metadata path across every page template, not two. Leaving
+the old columns in place "for now" would mean two places an admin
+could set the same title/description with no indication which one
+wins — worse than not building this at all.
+
+**`ogImageUrl`/`ogImageAlt` (plain strings), not `ogImageId` (an FK) —
+a deliberate correction to the story doc's own wording.** Every other
+Media-Library-picked image field in this schema (`PromotionalPopup.
+imageUrl`, `HeroBannerSlide.desktopImageUrl`, etc.) is a plain URL +
+alt-text string pair, never a `MediaAsset` foreign key —
+`AssetPickerDialog`'s `onSelect` already hands back `{ url, altText }`,
+never an id to store. Following the story doc's FK design would have
+made `SeoMeta` the one inconsistent field in the whole schema *and*
+created a real migration problem: Product/BlogPost's existing `ogImage`
+was already a plain URL, with no reliable way to resolve it back to a
+`MediaAsset` row. `ogImageUrl`/`ogImageAlt` instead made the migration
+a direct 1:1 column copy.
+
+**Discovered mid-implementation: `db push`, not `migrate dev`, for the
+actual schema change.** `prisma/migrations/` is frozen at
+`add_checkout_orders` (2026-09-28) — every schema change since
+(Coupons, Popups, Seasonal Campaigns, Landing Pages, ~15 stories) went
+through `db push` only, never a tracked migration (confirmed by
+listing the migrations folder before acting). Running `migrate dev` for
+just this story would have improperly bundled all of that unrelated
+historical drift into one "051a" migration file, and this repo has no
+real deployment pipeline yet that consumes migration files (hosting is
+still an unconfirmed open item per blueprint.md Section 10) — so there
+was no actual production data-loss risk to guard against. Followed this
+project's own established, consistent precedent instead: `db push`,
+same as every story since STORY-029. Local dev data for the migrated
+columns was disposable seed data (confirmed empty row counts before and
+after), so no backfill was needed locally. **Honest gap, not fixed
+here:** adopting tracked migrations for a real deployment later will
+need either a fresh baseline migration or a proper backfill written at
+that time.
+
+**`SeoFieldsPanel` is a self-contained mini-editor, not threaded through
+each parent form's own `react-hook-form` instance** — it fetches and
+saves its own `SeoMeta` row via its own API/client, with its own "Save
+SEO fields" action, completely decoupled from Product/Recipe/BlogPost's
+own save flow. This is the only way shared infrastructure could sit
+inside three differently-shaped existing forms without rewriting any of
+their own submit logic. **A real bug this caught, not a test-only
+curiosity:** the panel's first draft used a real `<form onSubmit>`,
+which — nested inside the parent content form's own `<form>` — is
+invalid HTML; React logged a hydration error and the nested submit
+button's click didn't reliably reach the handler. Fixed by making the
+panel's own "Save" a plain button `onClick` calling `handleSubmit`
+directly, never a second `<form>` element. When `entityId` is `null`
+(the entity hasn't been created yet), it renders a "Save this page
+first..." placeholder — the same conditional-render-until-an-id-exists
+pattern the Popup editor's status actions and performance panel already
+use.
+
+**Health checklist is a pure, framework-agnostic helper
+(`src/lib/seo-health.ts`), deliberately not inside `seo.service.ts`** —
+that file transitively imports the Node-only Prisma client and would
+break if imported from the client-side `SeoFieldsPanel`. The AC's
+*central, filterable* list of all pages by health status is 051d's job,
+not this one — this is just the per-page checklist.
+
+**Testing:** `tests/unit/seo-service.test.ts` (7 tests) — upsert-on-
+missing-row behavior, permission gating (View vs. Edit), and every
+`computeSeoHealth` case. Regression: the full Product/Recipe/Blog
+service/repository/route suites (191 tests across 14 files) confirmed
+clean after removing the inline columns — nothing else read `metaTitle`
+etc. directly off those models. `tests/e2e/admin-seo-fields.spec.ts` —
+creates a real product through the real admin console, sets a price (a
+Published product with no resolvable price 404s on the storefront —
+`product.service.ts`'s own guard), edits its SEO fields through the
+embedded panel, and confirms a separate, real storefront visitor sees
+the custom title on `/products/[slug]`.

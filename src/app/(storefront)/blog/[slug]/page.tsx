@@ -29,6 +29,7 @@ export async function generateMetadata({ params }: BlogDetailPageProps): Promise
     description,
     alternates: { canonical: `/blog/${slug}` },
     openGraph: { title, description, ...(ogImage ? { images: [{ url: ogImage }] } : {}) },
+    robots: { index: post.robotsIndex, follow: post.robotsFollow },
   };
 }
 

@@ -165,8 +165,6 @@ export const recipeDetailSelect = {
   nutritionFat: true,
   nutritionFiber: true,
   nutritionSodium: true,
-  metaTitle: true,
-  metaDescription: true,
   publishedAt: true,
   videoUrl: true,
   videoProvider: true,
@@ -297,8 +295,6 @@ export const recipeAdminDetailSelect = {
   nutritionFat: true,
   nutritionFiber: true,
   nutritionSodium: true,
-  metaTitle: true,
-  metaDescription: true,
   publishedAt: true,
   videoUrl: true,
   videoProvider: true,
@@ -400,8 +396,6 @@ export interface RecipeAdminWriteInput {
   nutritionFat?: number | null;
   nutritionFiber?: number | null;
   nutritionSodium?: number | null;
-  metaTitle?: string | null;
-  metaDescription?: string | null;
   videoUrl?: string | null;
   videoProvider?: VideoProvider | null;
   videoDurationSeconds?: number | null;
@@ -453,8 +447,6 @@ export function createRecipeAdmin(input: RecipeAdminWriteInput, adminUserId: str
       nutritionFat: input.nutritionFat ?? null,
       nutritionFiber: input.nutritionFiber ?? null,
       nutritionSodium: input.nutritionSodium ?? null,
-      metaTitle: input.metaTitle ?? null,
-      metaDescription: input.metaDescription ?? null,
       videoUrl: input.videoUrl ?? null,
       videoProvider: input.videoProvider ?? null,
       videoDurationSeconds: input.videoDurationSeconds ?? null,
@@ -495,8 +487,6 @@ export function updateRecipeAdmin(id: string, input: RecipeAdminWriteInput, admi
       nutritionFat: input.nutritionFat ?? null,
       nutritionFiber: input.nutritionFiber ?? null,
       nutritionSodium: input.nutritionSodium ?? null,
-      metaTitle: input.metaTitle ?? null,
-      metaDescription: input.metaDescription ?? null,
       videoUrl: input.videoUrl ?? null,
       videoProvider: input.videoProvider ?? null,
       videoDurationSeconds: input.videoDurationSeconds ?? null,

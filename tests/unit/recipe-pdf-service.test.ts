@@ -32,6 +32,8 @@ function makeMinimalRecipe(overrides: Partial<RecipeDetail> = {}): RecipeDetail 
     steps: [{ stepNumber: 1, instruction: "Combine everything.", imageUrl: null }],
     metaTitle: null,
     metaDescription: null,
+    robotsIndex: true,
+    robotsFollow: true,
     publishedAt: null,
     relatedRecipes: [],
     video: null,

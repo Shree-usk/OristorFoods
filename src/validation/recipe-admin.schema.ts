@@ -38,8 +38,6 @@ export const recipeAdminSchema = z.object({
   nutritionFat: z.number().int().nonnegative().optional().nullable(),
   nutritionFiber: z.number().int().nonnegative().optional().nullable(),
   nutritionSodium: z.number().int().nonnegative().optional().nullable(),
-  metaTitle: z.string().trim().max(70).optional().nullable(),
-  metaDescription: z.string().trim().max(160).optional().nullable(),
   videoUrl: z.string().trim().max(2000).optional().or(z.literal("")).nullable(),
   videoProvider: videoProviderEnum.optional().nullable(),
   videoDurationSeconds: z.number().int().nonnegative().optional().nullable(),

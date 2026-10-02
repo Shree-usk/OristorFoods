@@ -10,9 +10,6 @@ export const blogPostAdminSchema = z.object({
   heroImageUrl: z.string().trim().max(2000).optional().or(z.literal("")).nullable(),
   bodyContent: z.string().trim().min(1, "Body content is required."),
   authorId: z.string().trim().min(1, "Author is required."),
-  metaTitle: z.string().trim().max(70).optional().nullable(),
-  metaDescription: z.string().trim().max(160).optional().nullable(),
-  ogImage: z.string().trim().max(2000).optional().or(z.literal("")).nullable(),
   tagIds: z.array(z.string().min(1)).optional().default([]),
 });
 

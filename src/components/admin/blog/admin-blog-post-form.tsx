@@ -18,6 +18,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { AssetPickerDialog } from "@/components/admin/media/asset-picker-dialog";
 import { BlogBodyEditor } from "@/components/admin/blog/blog-body-editor";
+import { SeoFieldsPanel } from "@/components/admin/seo/seo-fields-panel";
 import {
   archiveBlogPost,
   createAdminBlogPost,
@@ -38,9 +39,6 @@ const EMPTY_VALUES: BlogPostAdminFormInput = {
   heroImageUrl: "",
   bodyContent: "",
   authorId: "",
-  metaTitle: "",
-  metaDescription: "",
-  ogImage: "",
   tagIds: [],
 };
 
@@ -55,7 +53,6 @@ export function AdminBlogPostForm({ postId }: { postId?: string }) {
   const queryClient = useQueryClient();
   const [serverError, setServerError] = useState<string | null>(null);
   const [heroPickerOpen, setHeroPickerOpen] = useState(false);
-  const [ogPickerOpen, setOgPickerOpen] = useState(false);
   const [publishOpen, setPublishOpen] = useState(false);
   const [publishAt, setPublishAt] = useState("");
   const [actionError, setActionError] = useState<string | null>(null);
@@ -99,9 +96,6 @@ export function AdminBlogPostForm({ postId }: { postId?: string }) {
       heroImageUrl: existingPost.heroImageUrl ?? "",
       bodyContent: existingPost.bodyContent,
       authorId: existingPost.authorId,
-      metaTitle: existingPost.metaTitle ?? "",
-      metaDescription: existingPost.metaDescription ?? "",
-      ogImage: existingPost.ogImage ?? "",
       tagIds: existingPost.tags.map((t: { tag: { id: string } }) => t.tag.id),
     });
   }, [existingPost, reset]);
@@ -295,16 +289,6 @@ export function AdminBlogPostForm({ postId }: { postId?: string }) {
               </Button>
             </div>
           </div>
-          <div>
-            <Label htmlFor="blog-og-image">Social share image (OG image)</Label>
-            <div className="flex gap-2">
-              <Input id="blog-og-image" {...register("ogImage")} className="flex-1" />
-              <Button type="button" size="sm" variant="outline" onClick={() => setOgPickerOpen(true)}>
-                Browse Library
-              </Button>
-            </div>
-          </div>
-
           <AssetPickerDialog
             open={heroPickerOpen}
             onOpenChange={setHeroPickerOpen}
@@ -313,25 +297,10 @@ export function AdminBlogPostForm({ postId }: { postId?: string }) {
               setHeroPickerOpen(false);
             }}
           />
-          <AssetPickerDialog
-            open={ogPickerOpen}
-            onOpenChange={setOgPickerOpen}
-            onSelect={(asset) => {
-              setValue("ogImage", asset.url);
-              setOgPickerOpen(false);
-            }}
-          />
         </TabsContent>
 
-        <TabsContent value="seo" className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <div>
-            <Label htmlFor="blog-meta-title">Meta title</Label>
-            <Input id="blog-meta-title" {...register("metaTitle")} />
-          </div>
-          <div className="sm:col-span-2">
-            <Label htmlFor="blog-meta-description">Meta description</Label>
-            <Textarea id="blog-meta-description" {...register("metaDescription")} />
-          </div>
+        <TabsContent value="seo" className="mt-4">
+          <SeoFieldsPanel entityType="BlogPost" entityId={postId ?? null} />
         </TabsContent>
       </Tabs>
     </form>

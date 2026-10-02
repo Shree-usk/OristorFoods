@@ -247,11 +247,6 @@ model Product {
   categories  Category[]
   collections Collection[]
 
-  metaTitle       String?
-  metaDescription String?
-  canonicalUrl    String?
-  ogImage         String?
-
   // STORY-040. Nullable — products seeded before this story, or seeded by
   // scripts rather than an admin, have neither. SetNull (not Cascade/Restrict)
   // mirrors Review.reviewedById: deleting the admin account must never
@@ -692,8 +687,6 @@ model Recipe {
   viewCount            Int                @default(0)
   avgRating            Decimal?           @db.Decimal(2, 1)
   ratingCount          Int                @default(0)
-  metaTitle            String?
-  metaDescription      String?
   chefNotes            String?
   nutritionCalories    Int?
   nutritionProtein     Int?
@@ -1038,9 +1031,6 @@ model BlogPost {
   readingTimeMinutes Int?
   status             BlogPostStatus @default(Draft)
   publishedAt        DateTime?
-  metaTitle          String?
-  metaDescription    String?
-  ogImage            String?
   // STORY-044. Internal "who authored this in the console" audit trail —
   // independent of `authorId`/`author`, which is the curated public byline
   // (e.g. "The Oristor Kitchen Team") and stays unchanged.
@@ -1085,6 +1075,44 @@ model BlogComment {
 
   @@index([postId, status])
   @@index([postId, authorEmail, createdAt])
+}
+
+// --- SEO Console (STORY-051a, core scope) ---
+// Polymorphic via (entityType, entityId) rather than a typed Prisma
+// relation per entity — Prisma can't express a single FK pointing at one
+// of several different models, and entityId's referential integrity
+// isn't enforced at the DB level (same trade-off the story's own AC
+// accepted by calling this "polymorphic"). Replaces the metaTitle/
+// metaDescription/canonicalUrl/ogImage columns that used to live
+// directly on Product/Recipe/BlogPost (each had its own copy, with no
+// single source of truth) — see docs/architecture-decisions.md for the
+// full migration reasoning. ogImageUrl/ogImageAlt are plain strings, not
+// an ogImageId FK to MediaAsset, matching every other Media-Library-
+// picked image field in this schema (PromotionalPopup.imageUrl,
+// HeroBannerSlide.desktopImageUrl, etc.) — AssetPickerDialog's onSelect
+// already hands back { url, altText }, never an id to store.
+enum SeoEntityType {
+  Product
+  Recipe
+  BlogPost
+}
+
+model SeoMeta {
+  id              String        @id @default(cuid())
+  entityType      SeoEntityType
+  entityId        String
+  metaTitle       String?
+  metaDescription String?
+  canonicalUrl    String?
+  ogImageUrl      String?
+  ogImageAlt      String?
+  robotsIndex     Boolean       @default(true)
+  robotsFollow    Boolean       @default(true)
+  focusKeyword    String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  @@unique([entityType, entityId])
 }
 
 // --- Downloads & Resources (STORY-023) ---

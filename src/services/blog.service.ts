@@ -3,6 +3,7 @@ import * as blogRepository from "@/repositories/blog.repository";
 import type { BlogPostCardRow, BlogPostDetailRow } from "@/repositories/blog.repository";
 import { parseBodyBlocks } from "@/lib/blog-body-blocks";
 import { getRecipeCardsBySlugs } from "@/services/recipe.service";
+import * as seoRepository from "@/repositories/seo.repository";
 import type { BlogListResult, BlogPostCardData, BlogPostDetailData } from "@/types/blog";
 import type { BlogCommentInput, BlogListQuery } from "@/validation/blog.schema";
 
@@ -101,9 +102,10 @@ export async function getPostBySlug(slug: string): Promise<BlogPostDetailData | 
   const blocks = parseBodyBlocks(row.bodyContent);
   const recipeSlugs = blocks.filter((block) => block.kind === "recipeEmbed").map((block) => block.slug);
 
-  const [relatedRows, recipeCardList] = await Promise.all([
+  const [relatedRows, recipeCardList, seoMeta] = await Promise.all([
     blogRepository.findRelatedBlogPosts({ id: row.id, authorId: row.authorId, tagIds: row.tags.map((t) => t.tag.id) }, 3),
     getRecipeCardsBySlugs(recipeSlugs),
+    seoRepository.findSeoMeta("BlogPost", row.id),
   ]);
 
   const recipeCards = Object.fromEntries(recipeCardList.map((card) => [card.slug, card]));
@@ -116,9 +118,11 @@ export async function getPostBySlug(slug: string): Promise<BlogPostDetailData | 
     comments: row.comments.map((c) => ({ id: c.id, authorName: c.authorName, body: c.body, createdAt: c.createdAt.toISOString() })),
     relatedPosts: relatedRows.map(toPostCard),
     recipeCards,
-    metaTitle: row.metaTitle,
-    metaDescription: row.metaDescription,
-    ogImage: row.ogImage,
+    metaTitle: seoMeta?.metaTitle ?? null,
+    metaDescription: seoMeta?.metaDescription ?? null,
+    ogImage: seoMeta?.ogImageUrl ?? null,
+    robotsIndex: seoMeta?.robotsIndex ?? true,
+    robotsFollow: seoMeta?.robotsFollow ?? true,
   };
 }
 
