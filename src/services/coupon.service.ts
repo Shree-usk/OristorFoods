@@ -122,10 +122,23 @@ const ISSUED_CODE_ALPHABET = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
 const ISSUED_CODE_LENGTH = 8;
 const ISSUED_CODE_MAX_ATTEMPTS = 5;
 
-function isUniqueCodeViolation(error: unknown): boolean {
+/**
+ * With the @prisma/adapter-pg driver adapter (Prisma 7), a P2002's
+ * `meta.target` is NOT populated the classic way — the violated
+ * column list instead lives at
+ * `meta.driverAdapterError.cause.constraint.fields` (confirmed by
+ * triggering a real duplicate-key insert and inspecting the thrown
+ * error). Both shapes are checked so this keeps working if Prisma
+ * ever reverts/standardizes the shape.
+ */
+export function isUniqueCodeViolation(error: unknown): boolean {
   if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== "P2002") return false;
   const target = error.meta?.target;
-  return Array.isArray(target) ? target.includes("code") : typeof target === "string" && target.includes("code");
+  if (Array.isArray(target) && target.includes("code")) return true;
+  if (typeof target === "string" && target.includes("code")) return true;
+  const driverAdapterError = error.meta?.driverAdapterError as { cause?: { constraint?: { fields?: string[] } } } | undefined;
+  const fields = driverAdapterError?.cause?.constraint?.fields;
+  return Array.isArray(fields) && fields.includes("code");
 }
 
 function generateIssuedCode(): string {

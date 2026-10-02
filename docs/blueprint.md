@@ -271,8 +271,8 @@ Confirmed build order from here:
 4. **STORY-048** — Admin Customers Console.
 5. **STORY-049** — Rewards & Referrals Campaign Management — what STORY-045's manual reward grant (built ahead of this story, by user decision) will eventually integrate with.
 6. **STORY-050 is split into five right-sized stories** (confirmed with the user on 2026-10-02, replacing the earlier "fold in or spin out" open question) — the doc stays at `docs/stories/07-enterprise-admin-platform/STORY-050-marketing-console.md` as the umbrella reference; each sub-story's own doc notes which AC bullets it covers:
-   - **050a — Promotional Pop-up Manager** (`docs/stories/STORY-Additional.md` §3–9: targeting, audience, triggers, frequency, scheduling, workflow, preview, analytics-readiness) — built first, most self-contained.
-   - **050b — Coupon management UI** — admin CRUD over the existing `Coupon`/`Promotion` models (STORY-029), no admin UI exists yet.
+   - **050a — Promotional Pop-up Manager** (`docs/stories/STORY-Additional.md` §3–9: targeting, audience, triggers, frequency, scheduling, workflow, preview, analytics-readiness) — built first, most self-contained. Done.
+   - **050b — Coupon management UI** — admin CRUD over the existing `Coupon`/`Promotion` models (STORY-029), no admin UI exists yet. Done — a pure admin-surface story, no model/discount-resolution changes needed.
    - **050c — Seasonal campaign hub** — the umbrella record tying a coupon + popup + homepage section override + email/SMS/WhatsApp send together; built after 050a/050b/050d/050e exist, since it only links already-built pieces.
    - **050d — Email/SMS/WhatsApp campaign builder** — new bulk-send infrastructure; `notification.service.ts` (STORY-032) is transactional/one-to-one only today, confirmed by its own header comment ("bulk marketing campaigns are STORY-050").
    - **050e — Landing page builder** — reuses STORY-042's Homepage Builder section component library rather than a second page-building system.

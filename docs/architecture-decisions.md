@@ -5677,3 +5677,74 @@ dismissing it and reloading confirms the `OncePerSession` cap actually
 prevents a second showing within the same session, and a real
 `Dismissal` row is written. Verified live in the browser via the same
 flow.
+
+## 2026-10-02 — STORY-050b Coupon & Promotion Management UI
+
+The second of five STORY-050 (Marketing Console) sub-stories, after
+STORY-050a (Promotional Pop-up Manager). Unlike that story, this one
+has **no genuine capability gap** — `Coupon`/`Promotion` (STORY-029)
+and `discount.service.ts`'s `couponToRule`/`promotionToRule` (read
+live at checkout) already fully support every AC bullet. This story
+is purely the missing admin surface: `/admin/marketing/coupons`
+(Coupons / Promotions tabs), confirmed working end-to-end by applying
+an admin-created coupon to a real cart in both the unit test and the
+e2e test, not just saving it.
+
+**`coupon.repository.ts::createCoupon`'s input shape was extended, not
+duplicated**, so STORY-048's customer-admin single-coupon issuance
+(`coupon.service.ts::issueCouponToCustomer`) and this story's
+general-purpose admin create both go through the one function — the
+new fields (`scope`, `minOrderValue`, `stackable`, `scopeProductIds`,
+`scopeCategoryIds`) default to STORY-048's exact prior behavior
+(`AllProducts`, no minimum, non-stackable, no scope rows) when omitted.
+
+**A STORY-048-issued, customer-restricted coupon (`restrictedToUserId`
+set) is deliberately excluded from this console's list and from
+`getCouponAdminDetail`** (`CouponAdminNotFoundError`, not a silent
+empty result) — it's managed from the Customers console, and showing
+or letting it be edited here would blur who owns that one-off grant.
+
+**A real latent bug was found and fixed while testing this story, not
+introduced by it**: `coupon.service.ts::isUniqueCodeViolation` (written
+for STORY-048's generated-code retry loop) checked `error.meta.target`
+for a P2002 unique-constraint violation — the classic Prisma shape.
+Under this project's actual `@prisma/adapter-pg` driver adapter
+(Prisma 7), `meta.target` is **not populated**; the violated column
+list instead lives at `meta.driverAdapterError.cause.constraint.fields`
+(confirmed by triggering a real duplicate-key insert and inspecting the
+thrown error — see the function's updated comment). STORY-048's retry
+loop never surfaced this, since its randomly-generated 8-character
+codes essentially never collide in practice; this story's
+duplicate-admin-code test is what actually exercises the catch path
+for the first time. Fixed by checking both shapes, so this keeps
+working if Prisma ever reverts/standardizes it.
+
+**Permission gating is `View`/`Edit` only, no `Approve` tier** — unlike
+a popup's publish step (STORY-050a), a coupon/promotion has had no
+distinct "make it live" action beyond `isActive` + its own date range
+since STORY-029, so introducing an approval gate here would be new
+process, not a reflection of how the model already works.
+
+**The scope-product picker (`coupon-scope-product-picker.tsx`) reuses
+the admin products search endpoint** (STORY-040,
+`/api/admin/products`), the same dependency
+`recipe-ingredient-product-picker.tsx` (STORY-043) already has for its
+own single-select variant — which means an admin needs **both**
+`Marketing:Edit` and `Products:View` to use it. This cross-module
+permission dependency already existed via the recipe picker; this
+story's e2e test is the first to actually exercise it (and so the
+first to need the explicit `Products:View` grant on its test admin).
+
+**Testing:** `tests/unit/coupon-admin-service.test.ts` — permission
+gating, CRUD + audit logging for both models, the duplicate-code
+rejection (and the `isUniqueCodeViolation` fix above), the restricted-
+coupon list/detail exclusion, and — the key proof this story is wired
+in, not just persisted — a real admin-created, product-scoped coupon
+applied to a real cart via `applyCouponToCart`: accepted for a matching
+product, rejected with the real `CouponScopeNotMetError` for a
+non-matching one. `tests/e2e/admin-coupons.spec.ts` repeats that same
+proof end-to-end through the real admin UI and the real storefront
+cart page. Regression: `coupon-service`, `coupon-routes`,
+`checkout-service`, `checkout-routes`, `cart-service` (83 tests) —
+confirmed unaffected, since `discount.service.ts`'s read side was never
+touched by this story.
