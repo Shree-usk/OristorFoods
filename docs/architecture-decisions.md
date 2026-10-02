@@ -6130,3 +6130,94 @@ Published product with no resolvable price 404s on the storefront —
 `product.service.ts`'s own guard), edits its SEO fields through the
 embedded panel, and confirms a separate, real storefront visitor sees
 the custom title on `/products/[slug]`.
+
+## 2026-10-02 — STORY-051b Redirect Manager
+
+Second of the four STORY-051 sub-stories. Independent of 051a (no
+shared model). Confirmed before starting: no `Redirect` model, no
+`next.config.ts` `redirects()` block, `src/proxy.ts` had zero redirect-
+resolution logic, no CSV library or bulk-import precedent anywhere in
+this codebase, and no in-memory Map/TTL cache pattern anywhere either —
+all four genuinely new for this story.
+
+**Conflict detection needs no graph traversal.** A new redirect is
+rejected when (1) `sourcePath === destinationPath` (self-loop), (2)
+`destinationPath` equals any existing active redirect's `sourcePath`
+(the new redirect would point at something that itself redirects
+elsewhere), or (3) `sourcePath` equals any existing active redirect's
+`destinationPath` (something already redirects here). Banning any
+single 2-hop chain this way transitively bans every loop too — a cycle
+of any length requires at least one such link to exist at some point
+during its construction, so there's nothing to walk. `detectRedirectConflict`
+is a pure, exported function (`redirect.service.ts`) reused identically
+by single-row create/update and by the CSV bulk importer (which
+additionally accumulates each newly-accepted row into the checked set,
+so a batch can't create a chain/loop/duplicate against itself either).
+Plain duplicate `sourcePath` detection is separate: a DB `@unique`
+constraint plus an `isUniqueSourcePathViolation` error-shape-sniffing
+helper, the same pattern `coupon-admin.service.ts`/`coupon.service.ts`
+already use for `Coupon.code`.
+
+**A real, non-obvious bug this project's own helper pattern has: the
+`@prisma/adapter-pg` driver echoes a camelCase unique-constraint
+column's name *with its quote characters still attached*** (e.g. the
+array element is the literal string `"sourcePath"`, not `sourcePath`)
+— confirmed by logging the raw error. `Coupon.code`'s own
+`isUniqueCodeViolation` helper never surfaced this because `code` is
+already lowercase and needs no Postgres quoting. `isUniqueSourcePathViolation`
+strips quote characters before comparing
+(`field.replaceAll('"', "") === "sourcePath"`). Worth a quick check if
+any *future* `isUniqueXViolation`-style helper is written for a
+camelCase column — the existing `code`-based ones happen to work by
+accident of being lowercase, not because the pattern is quote-safe.
+
+**The cache TTL is the only freshness mechanism — eager invalidation
+across the proxy/route-handler boundary doesn't work, discovered via a
+failing e2e test, not assumed.** The first implementation added
+`invalidateRedirectCache()` calls after every write (create/update/
+delete/bulk-import) on the theory that `src/proxy.ts` and the API route
+handlers share one Node.js process and therefore one module-scope cache
+instance, with a 30s TTL as a pure fallback. An e2e test creating a
+redirect and immediately visiting it failed — 404, not a redirect, even
+though the admin console round-trip had clearly succeeded. Lowering the
+TTL to 2s and adding a matching wait made it pass, proving the real
+mechanism was the TTL elapsing, not the invalidation call. Root cause:
+Next.js compiles `proxy.ts` (middleware) into a separate module bundle
+from route handlers, even within the same process — the invalidation
+call nulls the route-handler bundle's own copy of the cache state, which
+nothing reads; `proxy.ts` has its own, separate copy that only the TTL
+ever clears. The invalidation calls are kept (harmless, correct for any
+future same-bundle reader) but every comment near them now says
+explicitly that they don't fix `proxy.ts`'s freshness. Shipped TTL: 10
+seconds — short enough that an admin testing a just-created redirect
+doesn't perceive it as broken, long enough to still meaningfully cut DB
+load under real traffic. The e2e test waits 11s before its redirect
+assertion, by design, to exercise real eventual-consistency behavior
+rather than a lucky cold-cache race.
+
+**CSV import: a hand-rolled line/comma parser (`src/lib/csv.ts`), not a
+new dependency.** No CSV library exists in this project and the data
+shape is fixed and simple (`sourcePath,destinationPath,statusCode`);
+URL paths don't contain commas in practice. Full RFC4180 quoted-field
+handling is unneeded complexity for this shape — a deliberate, bounded
+scope cut, not an oversight.
+
+**`statusCode` is a plain `Int`, not an enum** — unlike this schema's
+other status fields (which model a semantic workflow state), this one
+*is* literally an HTTP status code; Zod constrains it to `301 | 302` at
+the validation layer instead.
+
+**Testing:** `tests/unit/redirect-service.test.ts` (9 tests) — CRUD +
+audit logging, permission gating, the real DB duplicate-path error,
+every `detectRedirectConflict` case (self-loop, both chain directions,
+a clean accept), and a full CSV bulk-import scenario (valid rows, an
+in-batch duplicate, a row chaining against a real existing DB redirect,
+a malformed line) with exact per-line failure attribution.
+`tests/unit/csv.test.ts` (6 tests) and `tests/unit/redirect-cache.test.ts`
+(2 tests, mocking the repository to prove single-fetch-serves-many and
+concurrent-miss de-duplication without real timers). `tests/e2e/admin-redirects.spec.ts`
+— a View-only admin's create attempt is rejected server-side (403); the
+full-access admin creates a redirect through the real console; a
+separate, real storefront visitor hitting the old path is actually
+redirected once the cache TTL elapses, proving the `proxy.ts`
+integration end-to-end, not just the admin CRUD.

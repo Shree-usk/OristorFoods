@@ -3,6 +3,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { auth } from "@/lib/auth";
 import { adminAuth } from "@/lib/admin-auth";
 import { setReferralCookie } from "@/lib/api/referral-cookie";
+import { getActiveRedirectsCached } from "@/lib/redirect-cache";
 import { signReferralToken } from "@/lib/referral-token";
 
 /**
@@ -37,6 +38,16 @@ import { signReferralToken } from "@/lib/referral-token";
  * boundary for any specific action is permission.service.ts's
  * requirePermission(), called server-side in the Service layer; a signed-in
  * admin reaching a page here is not the same as being authorized to use it.
+ *
+ * STORY-051b adds admin-managed URL redirects, checked first (before the
+ * account/admin guards above) via getActiveRedirectsCached() — a 10s-TTL
+ * in-memory cache (src/lib/redirect-cache.ts), not a DB query on every
+ * request. A cheap Map lookup against every incoming pathname. That TTL
+ * is the *only* freshness mechanism here — redirect.service.ts's own
+ * cache-invalidation calls run in a separate module bundle from this
+ * middleware and never reach this file's copy of the cache (confirmed
+ * empirically, see redirect-cache.ts's own comment); a newly created or
+ * edited redirect can take up to 10s to actually resolve.
  */
 
 const PUBLIC_ACCOUNT_PREFIXES = [
@@ -63,6 +74,10 @@ function isPublicAdminPath(pathname: string): boolean {
 
 export async function proxy(request: NextRequest) {
   const { pathname, search } = request.nextUrl;
+
+  const redirects = await getActiveRedirectsCached();
+  const redirect = redirects.get(pathname);
+  if (redirect) return NextResponse.redirect(new URL(redirect.destinationPath, request.url), redirect.statusCode);
 
   if (pathname.startsWith("/account") && !isPublicAccountPath(pathname)) {
     const session = await auth();

@@ -1115,6 +1115,29 @@ model SeoMeta {
   @@unique([entityType, entityId])
 }
 
+// STORY-051b. Resolved in src/proxy.ts via a short-TTL in-memory cache
+// (src/lib/redirect-cache.ts), not a DB query per request. Conflict
+// detection (redirect.service.ts::detectRedirectConflict) bans any
+// single 2-hop chain at create/update time — a cycle of any length
+// requires at least one such link to exist at some point, so banning
+// the link transitively bans every chain and loop too, with no graph
+// traversal needed. statusCode is a plain Int (a real HTTP status
+// code, not a semantic workflow state like this schema's other status
+// enums) — Zod constrains it to 301|302 at the validation layer.
+model Redirect {
+  id              String     @id @default(cuid())
+  sourcePath      String     @unique
+  destinationPath String
+  statusCode      Int        @default(301)
+  active          Boolean    @default(true)
+  createdById     String?
+  createdBy       AdminUser? @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+
+  @@index([active])
+}
+
 // --- Downloads & Resources (STORY-023) ---
 
 enum DownloadResourceStatus {
@@ -2259,6 +2282,8 @@ model AdminUser {
   landingPagesCreated LandingPage[]
   // STORY-050c.
   seasonalCampaignsCreated SeasonalCampaign[]
+  // STORY-051b.
+  redirectsCreated   Redirect[]
   createdAt          DateTime        @default(now())
   updatedAt          DateTime        @updatedAt
 }
