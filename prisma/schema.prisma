@@ -2225,6 +2225,8 @@ model AdminUser {
   popupsCreated      PromotionalPopup[]
   // STORY-050d.
   emailSmsCampaignsCreated EmailSmsCampaign[]
+  // STORY-050e.
+  landingPagesCreated LandingPage[]
   createdAt          DateTime        @default(now())
   updatedAt          DateTime        @updatedAt
 }
@@ -2612,4 +2614,64 @@ model HeroBannerSlide {
   updatedAt         DateTime         @updatedAt
 
   @@index([sectionId])
+}
+
+// STORY-050e. A standalone, slug-addressable campaign page — NOT built
+// on HomepageLayout/HomepageSection, which are hard-wired to a single
+// site-wide active homepage (homepage-builder.service.ts enforces
+// exactly one Published layout). Many landing pages are independently
+// live at once, a materially different invariant. LandingPageBlock's
+// fields deliberately mirror HeroBannerSlide's exactly — the only
+// genuinely reusable, author-from-scratch content block STORY-042
+// shipped (every other section type there just toggles visibility over
+// hardcoded fixture data) — and its storefront render component
+// (hero-banner-slide.tsx) is imported and reused directly for both this
+// model's public page and the admin preview, never duplicated.
+enum LandingPageStatus {
+  Draft
+  Published
+  Archived
+}
+
+model LandingPage {
+  id              String            @id @default(cuid())
+  name            String
+  slug            String            @unique
+  status          LandingPageStatus @default(Draft)
+  metaTitle       String?
+  metaDescription String?
+  publishedAt     DateTime?
+  blocks          LandingPageBlock[]
+  createdById     String
+  createdBy       AdminUser         @relation(fields: [createdById], references: [id])
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  @@index([status])
+}
+
+model LandingPageBlock {
+  id                String           @id @default(cuid())
+  landingPageId     String
+  landingPage       LandingPage      @relation(fields: [landingPageId], references: [id], onDelete: Cascade)
+  sortOrder         Int
+  visible           Boolean          @default(true)
+  headline          String
+  subheadline       String?
+  supportingText    String?
+  ctaLabel          String?
+  ctaHref           String?
+  secondaryCtaLabel String?
+  secondaryCtaHref  String?
+  desktopImageUrl   String
+  desktopImageAlt   String
+  mobileImageUrl    String?
+  mobileImageAlt    String?
+  videoUrl          String?
+  overlayEnabled    Boolean          @default(false)
+  alignment         ContentAlignment @default(Left)
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+
+  @@index([landingPageId])
 }

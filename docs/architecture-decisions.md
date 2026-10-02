@@ -5861,3 +5861,97 @@ creates and sends a real SMS campaign scoped to a customer group
 through the real console; a real seeded customer in that group with
 `smsOptIn` + a phone receives a `Sent` `NotificationLog` row, a
 customer outside the group does not.
+
+## 2026-10-02 — STORY-050e Landing Page Builder
+
+The last of the three STORY-050 (Marketing Console) sub-stories that
+STORY-050c (Seasonal campaign hub) depends on — 050a (Popups) and 050b
+(Coupons/Promotions) were already merged; 050d (Email/SMS/WhatsApp)
+merged immediately before this. Once this lands, 050c becomes
+buildable.
+
+**The one real scoping question, surfaced to and resolved with the
+user before implementation**: the AC asks this builder to reuse
+STORY-042's "section component library," but reading every one of
+Homepage's 11 section types (`homepage-sections.tsx`) in full showed
+only **Hero Banner** is genuinely admin-authored, reusable content —
+the other 10 (Best Selling Products, Why Choose Oristor, etc.) just
+toggle visibility/title over hardcoded sitewide fixture data
+(`lib/fixtures/home-fixtures.ts`), not real content a one-off campaign
+page could embed. **Resolved with the user**: a landing page is an
+ordered stack of Hero-Banner-shaped blocks — the first acts as the
+hero, additional ones are the AC's "content blocks" — reusing
+`hero-banner-slide.tsx`'s render component directly (confirmed by
+reading it in full: a pure, presentation-only component taking a
+plain data interface, zero DB coupling). The other 10 section types
+stay homepage-only; forcing them into a landing-page context would
+have meant either showing identical sitewide content on every
+campaign page or re-engineering their content model — both outside
+this story's actual scope.
+
+**New `LandingPage`/`LandingPageBlock` models, not a reuse of
+`HomepageLayout`/`HomepageSection`/`HeroBannerSlide`** — those are
+hard-wired to a single, site-wide active homepage
+(`homepage-builder.service.ts` enforces exactly one `Published` layout
+at a time). Many landing pages are independently live at once, a
+materially different invariant despite similarly-named statuses.
+`LandingPageBlock`'s fields mirror `HeroBannerSlide`'s exactly; only
+the render *component* is reused, never duplicated. For the same
+reason, `LandingPageStatus` is a new enum (even though its three
+values echo `HomepageLayoutStatus`) — forcing a shared Prisma enum
+across two features with different "how many can be live" rules would
+wrongly couple them. `LandingPageBlock.alignment` **does** reuse the
+existing `ContentAlignment` enum directly, since that one is genuinely
+generic (already shared by `HeroBannerSlide` itself).
+
+**Status workflow reuses STORY-050a's exact Edit/Approve split**:
+`Edit` gates the low-risk direction (`Draft`/`Published` → `Archived`,
+`Archived` → `Draft`); `Approve` gates whatever makes a page publicly
+reachable (`Draft`/`Archived` → `Published`) — the same money/
+visibility-moving bar this session has used consistently. Unlike
+Homepage's single-active-layout model, there's no "swap + rollback" —
+editing a `Published` page just edits it in place, and retiring one is
+a plain `Archived` transition.
+
+**The public route (`/landing/[slug]`) follows `/recipes/[slug]`'s
+exact shape** (`generateMetadata` + `notFound()` + a direct
+`landing-page.service.ts` call, no internal API round-trip, confirmed
+by reading that file) — a `Draft`/`Archived` page's slug simply 404s
+for a public visitor (the repository's own `findPublishedLandingPageBySlug`
+filters to `status: "Published"`, so there's nothing to leak via direct
+slug guessing). SEO fields (`metaTitle`/`metaDescription`) are
+first-class per CLAUDE.md's "Accessibility & SEO are not optional,"
+falling back to the first block's `supportingText`/`subheadline` when
+left blank — the page is left indexable by default (no blanket
+`noindex`), since a campaign landing page is meant to drive traffic,
+not hide from it.
+
+**A real admin-UX bug caught before it shipped, not discovered via a
+failing test**: the first draft of "Add block" created a block via the
+API with an empty `desktopImageUrl`/`desktopImageAlt` (matching
+`HeroBannerSlide`'s own non-nullable fields), which the validation
+schema correctly rejects — every "Add block" click would have failed
+immediately. Fixed by restructuring the flow so a block is never
+created until the admin has actually picked a real image (the Media
+Library's own `AssetPickerDialog`, opened directly by "Add block");
+confirmed the picker's server-side `selectAssetForPicker` gate
+(`media.service.ts`) already guarantees a selected asset always has
+non-empty alt text, so no placeholder/fallback alt text was ever
+needed.
+
+**Testing:** `tests/unit/landing-page-service.test.ts` (10 tests) —
+CRUD + audit logging, slug-uniqueness rejection, block CRUD +
+reordering, the full status-transition table (Edit vs. Approve,
+illegal transitions rejected), and `getPublishedLandingPageBySlug`
+proven to return nothing for a `Draft`/`Archived` page and the real
+visible blocks in the right order for a `Published` one. Regression:
+`homepage-builder-service` (12 tests) confirms `hero-banner-slide.tsx`
+and `homepage-builder.service.ts` are unaffected, since this story only
+reads/imports the former and never touches the latter.
+`tests/e2e/admin-landing-pages.spec.ts` — a View/Edit-only admin's
+publish attempt is rejected server-side (403, via a separate browser
+context); the full-access admin builds a real page (name, slug, one
+block with a real Media Library image) through the real console,
+publishes it, and a separate, real storefront visitor sees it render
+at `/landing/<slug>` with the real headline and CTA; a second,
+unpublished page's slug confirmed 404ing for that same visitor.
