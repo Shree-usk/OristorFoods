@@ -55,7 +55,7 @@ function isUniqueConstraintViolation(error: unknown): boolean {
 }
 
 /** Plain `{{key}}` substitution — no templating engine needed for this story's scope. */
-function renderTemplate(body: string, variables: Record<string, string | number>): string {
+export function renderTemplate(body: string, variables: Record<string, string | number>): string {
   return body.replace(/\{\{(\w+)\}\}/g, (match, key: string) => (key in variables ? String(variables[key]) : match));
 }
 
@@ -133,6 +133,39 @@ async function writeLog(input: CreateLogInput): Promise<void> {
 
 const NO_CONTACT_PLACEHOLDER = "(none)";
 
+/**
+ * The shared "actually call a provider and log the outcome" step —
+ * used by both the transactional path (sendToChannel, below) and
+ * STORY-050d's bulk campaign sends (sendCampaignMessage). Does NOT
+ * include the dedup check or any template/consent lookup, since the
+ * two callers resolve those differently (a fixed NotificationTemplate
+ * vs. a campaign's own ad-hoc, already-rendered content).
+ */
+async function dispatchAndLog(input: {
+  userId: string | null;
+  recipient: string;
+  channel: NotificationChannel;
+  templateKey: string;
+  triggeringEventId: string;
+  subject: string | null;
+  body: string;
+}): Promise<void> {
+  const provider = getProviderForChannel(input.channel);
+  const result = await provider.send(input.recipient, input.subject, input.body);
+
+  await writeLog({
+    userId: input.userId,
+    recipient: input.recipient,
+    channel: input.channel,
+    templateKey: input.templateKey,
+    status: result.status === "sent" ? "Sent" : "Failed",
+    provider: provider.name,
+    providerReference: result.providerReference ?? null,
+    error: result.error ?? null,
+    triggeringEventId: input.triggeringEventId,
+  });
+}
+
 async function sendToChannel(channel: NotificationChannel, recipient: string | null, input: SendNotificationInput): Promise<void> {
   const dedupRecipient = recipient ?? NO_CONTACT_PLACEHOLDER;
 
@@ -167,21 +200,44 @@ async function sendToChannel(channel: NotificationChannel, recipient: string | n
     return;
   }
 
-  const provider = getProviderForChannel(channel);
   const subject = template.subject ? renderTemplate(template.subject, input.variables) : null;
   const body = renderTemplate(template.body, input.variables);
-  const result = await provider.send(recipient, subject, body);
+  await dispatchAndLog({ userId: input.userId, recipient, channel, templateKey: input.templateKey, triggeringEventId: input.triggeringEventId, subject, body });
+}
 
-  await writeLog({
+export interface SendCampaignMessageInput {
+  campaignId: string;
+  userId: string | null;
+  recipient: string;
+  channel: NotificationChannel;
+  subject: string | null;
+  body: string;
+}
+
+/**
+ * STORY-050d. A bulk campaign's per-recipient send — reuses the same
+ * provider cache and NotificationLog ledger as the transactional path
+ * above, but skips resolveChannelTargets/NotificationTemplate (a
+ * campaign's content is ad-hoc per-send, already rendered by the
+ * caller, not a fixed system templateKey). The dedup check reuses the
+ * same NotificationLog unique constraint via a synthetic
+ * templateKey — "campaign:{id}" — so re-running a send (or an
+ * overlapping audience segment) can never double-send to the same
+ * recipient.
+ */
+export async function sendCampaignMessage(input: SendCampaignMessageInput): Promise<void> {
+  const templateKey = `campaign:${input.campaignId}`;
+  const existing = await notificationRepository.findLogEntry(input.campaignId, templateKey, input.channel, input.recipient);
+  if (existing) return;
+
+  await dispatchAndLog({
     userId: input.userId,
-    recipient,
-    channel,
-    templateKey: input.templateKey,
-    status: result.status === "sent" ? "Sent" : "Failed",
-    provider: provider.name,
-    providerReference: result.providerReference ?? null,
-    error: result.error ?? null,
-    triggeringEventId: input.triggeringEventId,
+    recipient: input.recipient,
+    channel: input.channel,
+    templateKey,
+    triggeringEventId: input.campaignId,
+    subject: input.subject,
+    body: input.body,
   });
 }
 

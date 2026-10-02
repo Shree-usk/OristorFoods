@@ -5748,3 +5748,116 @@ cart page. Regression: `coupon-service`, `coupon-routes`,
 `checkout-service`, `checkout-routes`, `cart-service` (83 tests) —
 confirmed unaffected, since `discount.service.ts`'s read side was never
 touched by this story.
+
+## 2026-10-02 — STORY-050d Email/SMS/WhatsApp Campaign Builder
+
+The fourth of five STORY-050 (Marketing Console) sub-stories — 050c
+(Seasonal campaign hub) explicitly depends on this and 050e existing
+first, so this landed before it.
+
+**The one real architectural fork, surfaced to the user before
+planning, not guessed at**: "schedule for later" needs something to
+actually fire the send — unlike every other "Scheduled" feature in
+this codebase (blog posts — `blog-post-status.ts::deriveEffectiveStatus`,
+popups — `findEligiblePopups`'s date-range check, promotions), which
+are all lazily evaluated at read time, nobody's page load triggers an
+outbound SMS/email blast. This codebase has no cron/background-job
+infrastructure anywhere, and hosting/cloud provider is still an open
+item (`docs/blueprint.md` Section 10) — the thing a real cron would
+run on. **Resolved with the user: no new infrastructure.** A campaign
+is sent immediately ("Send now") or left `Scheduled` with a
+`scheduledAt`; a separate, `Approve`-gated action — "Send due
+campaigns" — actually dispatches every past-due `Scheduled` campaign
+when an admin triggers it. True unattended automation is deferred to
+once hosting is confirmed, not faked here.
+
+**Everything else is reuse, not new architecture:**
+- `notification.service.ts`'s provider cache (`getProviderForChannel`)
+  and `renderTemplate`'s `{{key}}` substitution (now exported) are used
+  directly — no second provider or templating mechanism for bulk sends.
+- **`NotificationLog` is the one delivery ledger for both transactional
+  and campaign sends** — a synthetic `templateKey: "campaign:{id}"` +
+  `triggeringEventId: campaignId` gets per-campaign, per-recipient,
+  per-channel idempotency for free via that model's own existing
+  `@@unique([triggeringEventId, templateKey, channel, recipient])`:
+  re-running "Send due campaigns", or a recipient matching two
+  overlapping segments, can never double-send. Confirmed by a real
+  test (`sending the same campaign twice never double-sends`), not
+  just asserted. The same ledger backs the AC's delivery-status
+  tracking via a `groupBy` summary
+  (`notification.repository.ts::getDeliverySummaryByTriggeringEventId`)
+  — the same "one ledger, two jobs" principle STORY-050a's
+  `PopupInteraction` already established.
+- `notification.service.ts::sendToChannel`'s provider-call + log-write
+  step was extracted into a shared `dispatchAndLog` helper, used by
+  both the existing transactional path and the new exported
+  `sendCampaignMessage` — campaign sends skip
+  `resolveChannelTargets`/`NotificationTemplate` entirely (a fixed
+  system `templateKey` doesn't fit an admin's ad-hoc per-campaign
+  content), but still go through the same provider cache and log
+  table. The transactional path's own behavior is unchanged — confirmed
+  by re-running the full existing `notification-service`/
+  `notification-routes`/`qa-notifications` suites (22 tests) after the
+  refactor.
+- **Consent is channel-specific and already modeled, not invented**:
+  Email marketing gates on `User.marketingOptIn` — confirmed via that
+  field's own schema comment ("STORY-034's 'promotional emails'
+  toggle... same concept already captured at registration") — **not**
+  `NotificationPreference.emailOptIn`, which is order-lifecycle only
+  and would have silently opted every transactional-email customer
+  into marketing blasts too. SMS/WhatsApp reuse the existing
+  channel-level `smsOptIn`/`whatsappOptIn` + a phone on file, since no
+  separate marketing-specific toggle for those channels has ever
+  existed or been needed.
+- `CustomerGroup` backs one audience segment (`CustomerGroupTarget`);
+  `RewardTransaction`/`ReferralAttribution` back two more
+  (`LoyaltyMembers`/`ReferralMembers`), resolved in bulk with the exact
+  same semantics `popup.service.ts::matchesAudience` already
+  established per-user — `listLoyaltyMemberUserIds` is the bulk form
+  of `rewards.repository.ts::getBalances`'s `lifetimeAchievement`
+  calculation (sum of `Earned`/`Reversed` points, kept only where
+  positive), not a new definition.
+- A new `CampaignAudienceTarget` enum (not a reuse of
+  `PopupAudienceTarget`) — a bulk send has no guest/anonymous
+  recipient, so popup-only values (`NewVisitors`, `Authenticated`,
+  etc.) don't apply; forcing a shared enum would carry meaningless
+  values on every row.
+
+**Permission split** mirrors every other admin console this session
+built: `Marketing`/`Edit` for draft content/schedule;
+`Marketing`/`Approve` specifically for `sendCampaignNow` and
+`processDueCampaigns` — the same money/visibility-moving bar as
+STORY-047's refund and STORY-050a's publish, since dispatching a bulk
+blast to real customers is a clearly separate, irreversible action
+(unlike STORY-050b's coupons, which have no distinct "go live" step).
+
+**A real test-fixture bug found and fixed while writing the unit
+tests** (not a product bug): the first draft of
+`email-sms-campaign-service.test.ts` gave every seeded test customer
+the identical placeholder phone number. Since `NotificationLog`'s
+dedup key is keyed on `recipient` (the phone/email string), not
+`userId`, two different customers sharing one phone number correctly
+collapsed into a single log entry — the dedup logic did exactly its
+job, but it caught an unrealistic test fixture rather than a real
+bug. Fixed by giving each seeded test customer a unique phone number.
+Documented here because the same sharp edge would bite a real deploy
+if two distinct customer accounts legitimately shared a phone number
+(e.g. a household) — a second campaign send to that number would be
+silently treated as already-delivered. Out of scope to address further
+this pass; noted for whoever next touches multi-account shared-contact
+handling.
+
+**Testing:** `tests/unit/email-sms-campaign-service.test.ts` (14
+tests) — permission gating, all four audience segments resolved
+against real seeded users/`RewardTransaction`/`ReferralAttribution`
+rows, consent/contact filtering, real `NotificationLog` rows with
+correct dedup, `processDueCampaigns` only picking up past-due
+`Scheduled` rows (not `Draft`, not future-dated), merge-field
+rendering, and edit-blocked-once-`Sent`. Regression:
+`notification-service`/`notification-routes`/`qa-notifications` (22
+tests) confirm the `sendToChannel` refactor changed no transactional
+behavior. `tests/e2e/admin-email-sms-campaigns.spec.ts` — an admin
+creates and sends a real SMS campaign scoped to a customer group
+through the real console; a real seeded customer in that group with
+`smsOptIn` + a phone receives a `Sent` `NotificationLog` row, a
+customer outside the group does not.

@@ -2048,6 +2048,49 @@ model NotificationLog {
   @@index([userId])
 }
 
+// STORY-050d. A bulk, ad-hoc-content send — distinct from
+// NotificationTemplate's fixed system templateKeys (order.confirmed etc.),
+// which a one-off marketing blast doesn't fit. Delivery is still tracked
+// in the SAME NotificationLog table above (triggeringEventId: this
+// campaign's id, templateKey: "campaign:{id}") rather than a second
+// ledger — see email-sms-campaign.service.ts.
+enum CampaignAudienceTarget {
+  AllCustomers
+  CustomerGroupTarget
+  LoyaltyMembers
+  ReferralMembers
+}
+
+enum CampaignStatus {
+  Draft
+  Scheduled
+  Sent
+}
+
+model EmailSmsCampaign {
+  id             String                 @id @default(cuid())
+  name           String
+  channel        NotificationChannel
+  audienceTarget CampaignAudienceTarget
+  targetCustomerGroup CustomerGroup?
+  // Email only — null for SMS/WhatsApp, mirroring NotificationTemplate.
+  subject        String?
+  // {{name}} merge field, substituted by notification.service.ts::renderTemplate.
+  body           String
+  status         CampaignStatus         @default(Draft)
+  // Null = send immediately when triggered. Past-due + Scheduled rows are
+  // only actually sent when an admin triggers "Send due campaigns" — no
+  // cron exists in this codebase; see docs/architecture-decisions.md.
+  scheduledAt    DateTime?
+  sentAt         DateTime?
+  createdById    String
+  createdBy      AdminUser              @relation(fields: [createdById], references: [id])
+  createdAt      DateTime               @default(now())
+  updatedAt      DateTime               @updatedAt
+
+  @@index([status, scheduledAt])
+}
+
 // --- Admin Auth & RBAC (STORY-038) ---
 // A deliberately separate authentication system from User/Account/Session
 // above — a different NextAuth instance, a different session cookie, a
@@ -2180,6 +2223,8 @@ model AdminUser {
   fraudFlagsResolved FraudFlag[]
   // STORY-050a.
   popupsCreated      PromotionalPopup[]
+  // STORY-050d.
+  emailSmsCampaignsCreated EmailSmsCampaign[]
   createdAt          DateTime        @default(now())
   updatedAt          DateTime        @updatedAt
 }
