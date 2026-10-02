@@ -55,3 +55,8 @@ export function createLog(input: CreateLogInput, client: Client = prisma) {
 export function listLogsForUser(userId: string, client: Client = prisma) {
   return client.notificationLog.findMany({ where: { userId }, orderBy: { createdAt: "desc" } });
 }
+
+/** STORY-050d. A campaign's delivery summary — the same NotificationLog rows its send wrote, grouped by status. */
+export function getDeliverySummaryByTriggeringEventId(triggeringEventId: string, client: Client = prisma) {
+  return client.notificationLog.groupBy({ by: ["status"], where: { triggeringEventId }, _count: true });
+}
