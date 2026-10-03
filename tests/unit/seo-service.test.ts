@@ -89,6 +89,42 @@ describe("seo.service — getSeoMeta / updateSeoMeta", () => {
     expect(logCount).toBe(2);
   });
 
+  it("round-trips a jsonLdOverride value, and clearing it back to DbNull actually removes it (not a stored JSON null)", async () => {
+    const admin = await makeFullAccessAdmin();
+    const entityId = "seo-svc-test-entity-3";
+    const override = { "@context": "https://schema.org", "@type": "Product", name: "Custom Override" };
+
+    const created = await updateSeoMeta(admin.id, "Product", entityId, {
+      metaTitle: null,
+      metaDescription: null,
+      canonicalUrl: null,
+      ogImageUrl: null,
+      ogImageAlt: null,
+      robotsIndex: true,
+      robotsFollow: true,
+      focusKeyword: null,
+      jsonLdOverride: override,
+    });
+    expect(created.jsonLdOverride).toEqual(override);
+
+    const fetched = await getSeoMeta(admin.id, "Product", entityId);
+    expect(fetched?.jsonLdOverride).toEqual(override);
+
+    const { Prisma } = await import("@/generated/prisma/client");
+    const cleared = await updateSeoMeta(admin.id, "Product", entityId, {
+      metaTitle: null,
+      metaDescription: null,
+      canonicalUrl: null,
+      ogImageUrl: null,
+      ogImageAlt: null,
+      robotsIndex: true,
+      robotsFollow: true,
+      focusKeyword: null,
+      jsonLdOverride: Prisma.DbNull,
+    });
+    expect(cleared.jsonLdOverride).toBeNull();
+  });
+
   it("rejects a View-only admin's write but allows the read", async () => {
     const viewer = await makeViewOnlyAdmin();
     await expect(getSeoMeta(viewer.id, "Recipe", "seo-svc-test-entity-2")).resolves.toBeNull();

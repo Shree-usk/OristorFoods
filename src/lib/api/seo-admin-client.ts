@@ -20,6 +20,7 @@ export interface SeoMetaAdmin {
   robotsIndex: boolean;
   robotsFollow: boolean;
   focusKeyword: string | null;
+  jsonLdOverride: unknown;
 }
 
 export type SeoMetaFormInput = Omit<SeoMetaAdmin, "id" | "entityType" | "entityId">;

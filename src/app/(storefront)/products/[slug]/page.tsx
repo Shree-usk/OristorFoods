@@ -10,6 +10,7 @@ import { IngredientsList } from "@/components/storefront/product/ingredients-lis
 import { NutritionTable } from "@/components/storefront/product/nutrition-table";
 import { ProductActions } from "@/components/storefront/product/product-actions";
 import { ProductGallery } from "@/components/storefront/product/product-gallery";
+import { JsonLdScript } from "@/components/storefront/product/json-ld-script";
 import { ProductJsonLd } from "@/components/storefront/product/product-json-ld";
 import { RecentlyViewed, TrackRecentlyViewed } from "@/components/storefront/product/recently-viewed";
 import { RelatedProducts } from "@/components/storefront/product/related-products";
@@ -17,10 +18,9 @@ import { QuestionsSection } from "@/components/storefront/product/questions/ques
 import { ReviewsSection } from "@/components/storefront/product/reviews/reviews-section";
 import { ShareButtons } from "@/components/storefront/product/share-buttons";
 import { auth } from "@/lib/auth";
+import { SITE_URL } from "@/lib/site-url";
 import { resolveCustomerGroupForUser } from "@/services/pricing.service";
 import { getProductDetail } from "@/services/product.service";
-
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://oristor.com";
 
 // getProductDetail() runs the full PDP aggregation (price resolution,
 // listRelatedProducts, 3 extension-point summary calls, an ancestor-path
@@ -58,18 +58,22 @@ export default async function ProductDetailPage({ params }: ProductDetailPagePro
 
   return (
     <Section>
-      <ProductJsonLd
-        name={product.name}
-        description={product.shortDescription}
-        imageUrls={product.images.map((image) => image.url)}
-        sku={product.sku}
-        price={product.price}
-        currency={product.currency}
-        inStock={product.inStock}
-        url={pageUrl}
-        averageRating={product.reviewSummary?.averageRating}
-        reviewCount={product.reviewSummary?.reviewCount}
-      />
+      {product.jsonLdOverride ? (
+        <JsonLdScript data={product.jsonLdOverride} />
+      ) : (
+        <ProductJsonLd
+          name={product.name}
+          description={product.shortDescription}
+          imageUrls={product.images.map((image) => image.url)}
+          sku={product.sku}
+          price={product.price}
+          currency={product.currency}
+          inStock={product.inStock}
+          url={pageUrl}
+          averageRating={product.reviewSummary?.averageRating}
+          reviewCount={product.reviewSummary?.reviewCount}
+        />
+      )}
       <TrackRecentlyViewed
         product={{
           id: product.id,

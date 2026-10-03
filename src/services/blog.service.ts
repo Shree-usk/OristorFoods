@@ -123,6 +123,7 @@ export async function getPostBySlug(slug: string): Promise<BlogPostDetailData | 
     ogImage: seoMeta?.ogImageUrl ?? null,
     robotsIndex: seoMeta?.robotsIndex ?? true,
     robotsFollow: seoMeta?.robotsFollow ?? true,
+    jsonLdOverride: seoMeta?.jsonLdOverride ?? null,
   };
 }
 

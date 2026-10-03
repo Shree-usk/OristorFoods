@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import { Cormorant_Garamond, Inter } from "next/font/google";
+import { OrganizationJsonLd } from "@/components/storefront/organization-json-ld";
+import { SITE_URL } from "@/lib/site-url";
 import { cn } from "@/lib/utils";
 import { Providers } from "./providers";
 
@@ -21,7 +23,7 @@ export const metadata: Metadata = {
   // callback base and must track whatever environment is actually
   // running (localhost in dev). metadataBase should always resolve to
   // the real production domain regardless of environment.
-  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL ?? "https://oristor.com"),
+  metadataBase: new URL(SITE_URL),
   title: {
     default: "Oristor | Feel the Difference",
     template: "%s | Oristor",
@@ -38,6 +40,7 @@ export default function RootLayout({
   return (
     <html lang="en" className={cn(cormorantGaramond.variable, inter.variable)}>
       <body>
+        <OrganizationJsonLd />
         <Providers>{children}</Providers>
       </body>
     </html>

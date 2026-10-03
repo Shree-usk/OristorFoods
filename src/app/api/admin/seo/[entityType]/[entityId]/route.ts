@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { Prisma } from "@/generated/prisma/client";
 import { adminAuth } from "@/lib/admin-auth";
 import { serverErrorResponse, unauthorizedResponse, validationErrorResponse } from "@/lib/api/responses";
 import { PermissionDeniedError } from "@/services/permission.errors";
@@ -50,6 +51,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ en
       robotsIndex: parsed.data.robotsIndex ?? true,
       robotsFollow: parsed.data.robotsFollow ?? true,
       focusKeyword: parsed.data.focusKeyword ?? null,
+      jsonLdOverride: (parsed.data.jsonLdOverride ?? Prisma.DbNull) as Prisma.InputJsonValue | typeof Prisma.DbNull,
     });
     return NextResponse.json(seoMeta);
   } catch (error) {

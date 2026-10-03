@@ -22,6 +22,7 @@ const EMPTY_VALUES: SeoMetaFormInput = {
   robotsIndex: true,
   robotsFollow: true,
   focusKeyword: null,
+  jsonLdOverride: null,
 };
 
 /**
@@ -37,6 +38,11 @@ export function SeoFieldsPanel({ entityType, entityId }: { entityType: SeoEntity
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [picker, setPicker] = useState(false);
+  // The textarea edits raw JSON text, not the parsed value react-hook-form
+  // holds — kept as separate local state so a mid-edit keystroke never has
+  // to be valid JSON, only the value at save time does.
+  const [jsonLdText, setJsonLdText] = useState("");
+  const [jsonLdError, setJsonLdError] = useState<string | null>(null);
 
   const { data: existing } = useQuery({
     queryKey: ["admin-seo-meta", entityType, entityId],
@@ -52,6 +58,7 @@ export function SeoFieldsPanel({ entityType, entityId }: { entityType: SeoEntity
     if (!existing || seeded.current) return;
     seeded.current = true;
     reset(existing);
+    setJsonLdText(existing.jsonLdOverride ? JSON.stringify(existing.jsonLdOverride, null, 2) : "");
   }, [existing, reset]);
 
   const formValues = watch();
@@ -64,9 +71,21 @@ export function SeoFieldsPanel({ entityType, entityId }: { entityType: SeoEntity
   const onSave = handleSubmit(async (values) => {
     if (!entityId) return;
     setError(null);
+    setJsonLdError(null);
     setSaved(false);
+
+    let jsonLdOverride: unknown = null;
+    if (jsonLdText.trim()) {
+      try {
+        jsonLdOverride = JSON.parse(jsonLdText);
+      } catch {
+        setJsonLdError("Invalid JSON — fix it before saving, or clear the field to remove the override.");
+        return;
+      }
+    }
+
     try {
-      await updateSeoMetaAdmin(entityType, entityId, values);
+      await updateSeoMetaAdmin(entityType, entityId, { ...values, jsonLdOverride });
       queryClient.invalidateQueries({ queryKey: ["admin-seo-meta", entityType, entityId] });
       setSaved(true);
     } catch (err) {
@@ -128,6 +147,25 @@ export function SeoFieldsPanel({ entityType, entityId }: { entityType: SeoEntity
             <Checkbox checked={formValues.robotsFollow} onCheckedChange={(checked) => setValue("robotsFollow", checked === true)} id="seo-robots-follow" />
             <Label htmlFor="seo-robots-follow">Follow links</Label>
           </div>
+        </div>
+
+        <div>
+          <Label htmlFor="seo-json-ld-override">Advanced: custom structured data (JSON-LD)</Label>
+          <p className="mb-1 text-small text-charcoal/60">
+            Optional. When set, this completely replaces the page&apos;s auto-generated structured data — leave blank to use the default.
+          </p>
+          <Textarea
+            id="seo-json-ld-override"
+            rows={6}
+            className="font-mono text-small"
+            placeholder={'{\n  "@context": "https://schema.org",\n  "@type": "Product",\n  ...\n}'}
+            value={jsonLdText}
+            onChange={(event) => {
+              setJsonLdText(event.target.value);
+              setJsonLdError(null);
+            }}
+          />
+          {jsonLdError && <p className="mt-1 text-small text-destructive">{jsonLdError}</p>}
         </div>
 
         <Button type="button" className="mt-2 w-fit" onClick={onSave}>
