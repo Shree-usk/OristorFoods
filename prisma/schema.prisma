@@ -2286,6 +2286,11 @@ enum AdminUserStatus {
   Active
   Locked
   Deactivated
+  // STORY-057. An account created by inviteAdminUser() before the invited
+  // person has accepted and set a real password — status !== "Active"
+  // already rejects at login (admin-auth.service.ts), so this needs no
+  // new login-gate logic.
+  Invited
 }
 
 model AdminUser {

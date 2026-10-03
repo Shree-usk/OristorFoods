@@ -1,4 +1,4 @@
-import type { Prisma } from "@/generated/prisma/client";
+import type { AdminUserStatus, Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/db";
 
 /** STORY-038. The only place AdminUser is queried/mutated. */
@@ -48,4 +48,41 @@ export function lockUntil(adminUserId: string, lockedUntil: Date, client: Client
 
 export function countByRoleId(roleId: string, client: Client = prisma) {
   return client.adminUser.count({ where: { roleId, status: "Active" } });
+}
+
+// --- STORY-057. Admin console CRUD ---
+
+export function listAll(client: Client = prisma) {
+  return client.adminUser.findMany({ include: { role: true }, orderBy: { email: "asc" } });
+}
+
+export interface UpdateAdminUserInput {
+  name?: string;
+  roleId?: string;
+}
+
+export function update(adminUserId: string, input: UpdateAdminUserInput, client: Client = prisma) {
+  return client.adminUser.update({ where: { id: adminUserId }, data: input, include: { role: true } });
+}
+
+export function updateStatus(adminUserId: string, status: AdminUserStatus, client: Client = prisma) {
+  return client.adminUser.update({ where: { id: adminUserId }, data: { status }, include: { role: true } });
+}
+
+export function deleteAdminUser(adminUserId: string, client: Client = prisma) {
+  return client.adminUser.delete({ where: { id: adminUserId } });
+}
+
+/** The most recent "login_succeeded" AuditLog timestamp per actor, for the Users list's "last login" column — there's no dedicated AdminUser.lastLoginAt field, admin-auth.service.ts already writes this event on every successful login. */
+export async function listLastLoginTimestamps(client: Client = prisma): Promise<Map<string, Date>> {
+  const rows = await client.auditLog.groupBy({
+    by: ["actorId"],
+    where: { action: "login_succeeded", actorId: { not: null } },
+    _max: { createdAt: true },
+  });
+  const result = new Map<string, Date>();
+  for (const row of rows) {
+    if (row.actorId && row._max.createdAt) result.set(row.actorId, row._max.createdAt);
+  }
+  return result;
 }
