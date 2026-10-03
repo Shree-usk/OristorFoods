@@ -8,6 +8,7 @@ import * as referralRepository from "@/repositories/referral.repository";
 import * as reviewRepository from "@/repositories/review.repository";
 import * as rewardsRepository from "@/repositories/rewards.repository";
 import * as supportTicketRepository from "@/repositories/support-ticket.repository";
+import * as syncJobRepository from "@/repositories/sync-job.repository";
 import { getPermissionsForAdminUser } from "@/services/permission.service";
 import { getLowStockThreshold } from "@/services/system-settings.service";
 import type { AdminModule } from "@/generated/prisma/client";
@@ -44,7 +45,15 @@ export interface DashboardSummary {
   rewardsReferrals?: { redemptions: number; referralSignups: number };
   supportTickets?: { open: number; inProgress: number; resolved: number; closed: number };
   failedPayments?: { count: number };
-  erpSyncStatus?: { pending: number; failed: number; lastProcessedAt: string | null };
+  erpSyncStatus?: {
+    pending: number;
+    failed: number;
+    lastProcessedAt: string | null;
+    /** STORY-056's generic SyncJob queue — a separate signal from the OrderIntegrationEvent fields above. */
+    queueQueued?: number;
+    queueFailed?: number;
+    queueSucceededToday?: number;
+  };
   /**
    * Live Visitors/Export Enquiries/System Health have no backing data
    * source at all (see the module doc comment) — these three flags are
@@ -115,7 +124,13 @@ export async function getDashboardSummary(adminUserId: string): Promise<Dashboar
 
   if (permissions.has(permissionKey("ERPIntegration"))) {
     const erp = await safe(() => orderRepository.getErpSyncStatus(), "erpSyncStatus");
-    if (erp) summary.erpSyncStatus = erp;
+    const queue = await safe(() => syncJobRepository.getTodaySummary(), "erpSyncQueue");
+    if (erp) {
+      summary.erpSyncStatus = {
+        ...erp,
+        ...(queue ? { queueQueued: queue.queued, queueFailed: queue.failed, queueSucceededToday: queue.succeededToday } : {}),
+      };
+    }
   }
 
   return summary;

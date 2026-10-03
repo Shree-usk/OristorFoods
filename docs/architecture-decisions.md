@@ -6841,3 +6841,84 @@ rejection in the browser console with no user-facing message — caught
 by the e2e test's own console-error visibility, fixed with a proper
 try/catch and an inline error message, the same pattern every other
 admin panel in this codebase already uses.
+
+## 2026-10-03 — STORY-056 ERP Integration Console
+
+**A generic `SyncJob`/`SyncJobAttempt` queue, deliberately separate
+from STORY-028's existing `OrderIntegrationEvent` outbox.** Research
+found `OrderIntegrationEvent` already real and working for order-
+lifecycle events (`order.confirmed`/`cancelled`/`dispatched`/
+`delivered`, written by `order-integration.service.ts::emitOrderEvent`)
+but with zero retry capability — no attempt count, no backoff, no
+admin UI, and no concept of a non-order target entity. Its only
+consumer was the Admin Dashboard's `ErpSyncCard`. Retrofitting that
+table into a generic multi-entity queue (so "Stock Import"/"Product
+Sync" jobs — which touch no `Order` row — could live there too) would
+have meant a risky schema change to code `order.service.ts` already
+depends on, for a job type that table was never designed to hold.
+This story's `SyncJob`/`SyncJobAttempt` are new and fully independent;
+`order-integration.service.ts` and its existing tests are untouched.
+
+**The Admin Dashboard's `ErpSyncCard` gets additively extended, not
+replaced.** The AC's "echoed by the Admin Dashboard's ERP Sync Status
+widget" bullet is satisfied by adding three new optional fields
+(`queueQueued`/`queueFailed`/`queueSucceededToday`) onto the existing
+`erpSyncStatus` object, rendered as a second list under the existing
+one in `erp-sync-card.tsx` (shown only when present). The widget's
+original `pending`/`failed`/`lastProcessedAt` fields, their call site,
+and the one existing dashboard-service test assertion are all
+unchanged — confirmed via a live demo showing both sections rendering
+side by side with real data from each source.
+
+**`SyncConnector` is a single-slot swappable registration, same shape
+as `qa-notifications.ts`'s notifier (not `order-integration.service.ts`'s
+multi-consumer fan-out list) — one sync target at a time, kept on
+`globalThis` for the same instrumentation.ts-is-bundled-separately
+reason every other registration point in this codebase uses.
+`stubConnector` is the only implementation; a future story wires a
+real one via `registerSyncConnector()` once the ERP system is
+confirmed (`docs/blueprint.md` Section 10, same treatment STORY-026
+gave the payment gateway).**
+
+**The stub's `payload.forceFailure` hook is a deliberate test/demo
+seam, not a branch in the service.** `sync-job.service.ts` never
+checks for a "test mode" — it just calls `getSyncConnector().push(job)`
+and records whatever the connector returns. `stubConnector.push()`
+itself returns a failure when the job's persisted payload has
+`forceFailure: true`, success otherwise. This matters for retries
+too: a retry re-reads the job's *persisted* payload, so a job created
+with `forceFailure: true` keeps failing on every retry until an admin
+(or a test) clears that field — correctly modeling "the retry still
+hits the same broken input" rather than randomly recovering.
+
+**Retries are always admin-initiated; the exponential backoff only
+gates *when* a click is allowed to succeed, not an automatic
+re-attempt** — this codebase has no job-scheduling/cron
+infrastructure (STORY-050d's "Send due campaigns" precedent: a manual
+trigger, not a real scheduler). `MAX_ATTEMPTS`/`BASE_BACKOFF_MS` are
+module-level constants, not a new admin-editable setting — the AC's
+"configurable" was read as "not hardcoded to immediate infinite
+retries," not as "needs its own settings form" for two numbers.
+
+**Validation stays in the Zod schema + API route layer**, consistent
+with every other service in this codebase — except "an override's
+`startsAt`/retry's `nextRetryAt` can't be satisfied in the past,"
+which is a request-time check against `Date.now()` a static schema
+can't express; that one check lives in `sync-job.service.ts` itself
+(mirrors STORY-055's identical `delivery-override.service.ts`
+precedent for the same reason).
+
+**Testing caught two real UI bugs, both fixed before merge:** (1) the
+trigger form and the filter bar both had a field labeled plain "Job
+type," which is both a real accessibility issue (two identical labels
+on one page) and caused a literal Playwright strict-mode selector
+collision — fixed by renaming the filter's label to "Filter by job
+type." (2) React Compiler's purity lint rule flagged a direct
+`Date.now()` call inside the detail drawer component's render body
+(`react-hooks/purity`) — fixed by extracting the retry-eligibility
+check into a plain top-level function (`retryEligibility()`), the
+same pattern `admin-delivery-zones-list-view.tsx`'s `activeOverride()`
+helper already uses for the identical reason. Confirmed end-to-end via
+a live browser demo (trigger → success; trigger-and-force-fail via the
+real API → view error/payload/attempt-history in the drawer →
+backoff-blocked retry message) before opening the PR.

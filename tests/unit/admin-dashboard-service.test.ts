@@ -13,6 +13,7 @@ const ROLE_KEY_PREFIX = "admin-dash-svc-test-role-";
 const SKU_PREFIX = "ADMIN-DASH-SVC-SKU-";
 const ORDER_PREFIX = "ADMIN-DASH-SVC-ORDER-";
 const PAY_REF_PREFIX = "ADMIN-DASH-SVC-PAY-";
+const SYNC_JOB_TYPE_PREFIX = "ADMIN-DASH-SVC-SYNC-";
 let sequence = 0;
 
 async function makeRole(grants: { module: AdminModule; action?: AdminAction }[] = []) {
@@ -72,6 +73,8 @@ afterEach(async () => {
   await prisma.rolePermission.deleteMany({ where: { role: { key: { startsWith: ROLE_KEY_PREFIX } } } });
   await prisma.role.deleteMany({ where: { key: { startsWith: ROLE_KEY_PREFIX } } });
   await prisma.inventorySetting.deleteMany({});
+  await prisma.syncJobAttempt.deleteMany({ where: { job: { jobType: { startsWith: SYNC_JOB_TYPE_PREFIX } } } });
+  await prisma.syncJob.deleteMany({ where: { jobType: { startsWith: SYNC_JOB_TYPE_PREFIX } } });
   await prisma.orderIntegrationEvent.deleteMany({ where: { order: { orderNumber: { startsWith: ORDER_PREFIX } } } });
   await prisma.order.deleteMany({ where: { orderNumber: { startsWith: ORDER_PREFIX } } });
   await prisma.payment.deleteMany({ where: { providerReference: { startsWith: PAY_REF_PREFIX } } });
@@ -144,6 +147,11 @@ describe("admin-dashboard.service", () => {
       data: { orderId: erpOrder.id, eventType: "order.confirmed", payload: {}, status: "Processed", processedAt: new Date() },
     });
 
+    // STORY-056's separate SyncJob queue: one queued, one failed, one succeeded today.
+    await prisma.syncJob.create({ data: { jobType: `${SYNC_JOB_TYPE_PREFIX}1`, status: "Queued", createdById: admin.id } });
+    await prisma.syncJob.create({ data: { jobType: `${SYNC_JOB_TYPE_PREFIX}2`, status: "Failed", createdById: admin.id } });
+    await prisma.syncJob.create({ data: { jobType: `${SYNC_JOB_TYPE_PREFIX}3`, status: "Success", createdById: admin.id } });
+
     const summary = await getDashboardSummary(admin.id);
 
     // erpOrder (seeded above for the ERP widget) is also a Confirmed order
@@ -159,6 +167,13 @@ describe("admin-dashboard.service", () => {
     expect(summary.erpSyncStatus?.pending).toBe(1);
     expect(summary.erpSyncStatus?.failed).toBe(1);
     expect(summary.erpSyncStatus?.lastProcessedAt).not.toBeNull();
+    // getTodaySummary() counts globally across all SyncJob rows (no per-fixture
+    // scoping, unlike every other assertion in this test) — >= rather than
+    // === so this doesn't flake against other test files' own SyncJob fixtures
+    // when Vitest runs files in parallel against the same dev database.
+    expect(summary.erpSyncStatus?.queueQueued).toBeGreaterThanOrEqual(1);
+    expect(summary.erpSyncStatus?.queueFailed).toBeGreaterThanOrEqual(1);
+    expect(summary.erpSyncStatus?.queueSucceededToday).toBeGreaterThanOrEqual(1);
     expect(summary.placeholders).toEqual({ liveVisitors: false, exportEnquiries: false, systemHealth: false });
   });
 
