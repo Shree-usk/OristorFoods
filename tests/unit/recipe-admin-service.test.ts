@@ -91,6 +91,8 @@ function baseInput(categoryId: string, overrides: Partial<RecipeAdminValidatedIn
 
 afterEach(async () => {
   await prisma.auditLog.deleteMany({ where: { actor: { email: { endsWith: EMAIL_DOMAIN } } } });
+  // STORY-053. ContentVersion.entityId has no FK to Recipe by design — scoped by entityType instead.
+  await prisma.contentVersion.deleteMany({ where: { entityType: "Recipe" } });
   await prisma.recipe.deleteMany({ where: { createdBy: { email: { endsWith: EMAIL_DOMAIN } } } });
   await prisma.adminUser.deleteMany({ where: { email: { endsWith: EMAIL_DOMAIN } } });
   await prisma.rolePermission.deleteMany({ where: { role: { key: { startsWith: ROLE_KEY_PREFIX } } } });
@@ -147,6 +149,10 @@ describe("recipe-admin.service", () => {
     const published = await publish(admin.id, recipe.id);
     expect(published.status).toBe("Published");
     expect(published.publishedAt).not.toBeNull();
+
+    // STORY-053: publishing creates a ContentVersion snapshot.
+    const versions = await prisma.contentVersion.findMany({ where: { entityType: "Recipe", entityId: recipe.id } });
+    expect(versions).toHaveLength(1);
 
     const archived = await archive(admin.id, recipe.id);
     expect(archived.status).toBe("Archived");

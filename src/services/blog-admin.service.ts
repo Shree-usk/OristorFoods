@@ -10,6 +10,7 @@ import { computeReadingTimeMinutes } from "@/lib/blog-reading-time";
 export { deriveEffectiveStatus, type BlogPostEffectiveStatus } from "@/lib/blog-post-status";
 import { parseBodyBlocks } from "@/lib/blog-body-blocks";
 import type { BlogPostAdminValidatedInput } from "@/validation/blog-admin.schema";
+import * as versioningService from "@/services/versioning.service";
 
 function toWriteInput(input: BlogPostAdminValidatedInput): BlogPostAdminWriteInput {
   return { ...input, readingTimeMinutes: computeReadingTimeMinutes(input.bodyContent) };
@@ -131,7 +132,33 @@ export async function publishPost(adminUserId: string, id: string, publishedAt?:
   await requirePost(id);
   const updated = await blogRepository.updateBlogPostStatus(id, { status: "Published", publishedAt: publishedAt ?? new Date() });
   await writeAuditLog({ actorId: adminUserId, action: "blog_post_published", module: "Blog", targetType: "BlogPost", targetId: id, metadata: { publishedAt: (publishedAt ?? new Date()).toISOString() } });
+  // STORY-053 (additive scope). A version snapshot of every publish — see versioning.service.ts.
+  await versioningService.recordVersion("BlogPost", id, updated, adminUserId);
   return updated;
+}
+
+/** STORY-053 (additive scope). Restores an old version's snapshot onto the live row, forced back to Draft so the normal publish action is never bypassed. */
+export async function restoreFromVersion(adminUserId: string, id: string, versionId: string): Promise<BlogPostAdminDetail> {
+  await requirePermission(adminUserId, "Blog", "Edit");
+  await requirePost(id);
+  const version = await versioningService.getVersion(adminUserId, "BlogPost", versionId);
+  const snapshot = version.snapshot as unknown as BlogPostAdminDetail;
+
+  const input: BlogPostAdminWriteInput = {
+    slug: snapshot.slug,
+    title: snapshot.title,
+    excerpt: snapshot.excerpt,
+    heroImageUrl: snapshot.heroImageUrl,
+    bodyContent: snapshot.bodyContent,
+    authorId: snapshot.authorId,
+    readingTimeMinutes: snapshot.readingTimeMinutes,
+    tagIds: snapshot.tags.map((tag) => tag.tag.id),
+  };
+
+  await blogRepository.updateBlogPostAdmin(id, input, adminUserId);
+  const restored = await blogRepository.updateBlogPostStatus(id, { status: "Draft", publishedAt: null });
+  await writeAuditLog({ actorId: adminUserId, action: "blog_post_restored_from_version", module: "Blog", targetType: "BlogPost", targetId: id, metadata: { versionId } });
+  return restored;
 }
 
 export async function archivePost(adminUserId: string, id: string): Promise<BlogPostAdminDetail> {

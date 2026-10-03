@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { DndContext, KeyboardSensor, PointerSensor, closestCenter, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
 import { SortableContext, arrayMove, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
@@ -11,6 +12,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { CheckboxOption } from "@/components/storefront/listing/checkbox-option";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { VersionHistoryPanel } from "@/components/admin/cms/version-history-panel";
 import { HeroBannerEditor } from "@/components/admin/homepage-builder/hero-banner-editor";
 import { SectionEditor } from "@/components/admin/homepage-builder/section-editor";
 import { SECTION_TYPE_LABELS, SECTION_TYPE_ORDER } from "@/components/admin/homepage-builder/section-labels";
@@ -31,6 +33,7 @@ interface HomepageBuilderCanvasProps {
 
 export function HomepageBuilderCanvas({ layoutId }: HomepageBuilderCanvasProps) {
   const queryClient = useQueryClient();
+  const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [editingSectionId, setEditingSectionId] = useState<string | null>(null);
   const [addType, setAddType] = useState<HomepageSectionType | "">("");
@@ -195,6 +198,10 @@ export function HomepageBuilderCanvas({ layoutId }: HomepageBuilderCanvasProps) 
           onChanged={invalidate}
         />
       )}
+
+      <div className="mt-6">
+        <VersionHistoryPanel entityType="HomepageLayout" entityId={layoutId} onRestored={(restored) => router.push(`/admin/homepage-builder/${restored.id}`)} />
+      </div>
     </div>
   );
 }

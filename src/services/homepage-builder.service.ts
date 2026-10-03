@@ -13,6 +13,7 @@ import {
   NoArchivedLayoutError,
 } from "@/services/homepage-builder.errors";
 import { requirePermission } from "@/services/permission.service";
+import * as versioningService from "@/services/versioning.service";
 
 /** STORY-006's exact section order (docs/blueprint.md Section 4, minus Newsletter/Footer — already folded into the site-wide Footer, per STORY-006's own documented deviation). */
 export const DEFAULT_SECTION_ORDER: HomepageSectionType[] = [
@@ -54,54 +55,55 @@ export async function getLayout(adminUserId: string, id: string): Promise<Homepa
  * homepage.service.ts). Cloned: deep-copies the current Published
  * layout's sections + Hero Banner slides as the starting point.
  */
+/** Shared by createDraftLayout's clone-from-published branch and restoreLayoutFromVersion (STORY-053) — both need "reconstruct a sections-create payload from an existing sections/banners tree," just sourced from a different origin (the live published row vs. an old version snapshot). */
+function sectionsCreateFromLayout(sections: HomepageLayoutDetail["sections"]): Prisma.HomepageSectionCreateWithoutLayoutInput[] {
+  const sectionsCreate: Prisma.HomepageSectionCreateWithoutLayoutInput[] = sections.map((section) => ({
+    type: section.type,
+    sortOrder: section.sortOrder,
+    visible: section.visible,
+    titleOverride: section.titleOverride,
+    descriptionOverride: section.descriptionOverride,
+    banners: section.banners.length
+      ? {
+          create: section.banners.map((banner) => ({
+            sortOrder: banner.sortOrder,
+            visible: banner.visible,
+            headline: banner.headline,
+            subheadline: banner.subheadline,
+            supportingText: banner.supportingText,
+            ctaLabel: banner.ctaLabel,
+            ctaHref: banner.ctaHref,
+            secondaryCtaLabel: banner.secondaryCtaLabel,
+            secondaryCtaHref: banner.secondaryCtaHref,
+            desktopImageUrl: banner.desktopImageUrl,
+            desktopImageAlt: banner.desktopImageAlt,
+            mobileImageUrl: banner.mobileImageUrl,
+            mobileImageAlt: banner.mobileImageAlt,
+            videoUrl: banner.videoUrl,
+            overlayEnabled: banner.overlayEnabled,
+            alignment: banner.alignment,
+          })),
+        }
+      : undefined,
+  }));
+  // The source might predate a since-added default section type (or an
+  // admin removed one) — fill in any missing type at the end so the
+  // result always has somewhere to add it back from, matching the
+  // blank-draft's full-coverage guarantee.
+  for (const type of DEFAULT_SECTION_ORDER) {
+    if (!sectionsCreate.some((s) => s.type === type)) {
+      sectionsCreate.push({ type, sortOrder: sectionsCreate.length, visible: true });
+    }
+  }
+  return sectionsCreate;
+}
+
 export async function createDraftLayout(adminUserId: string, opts: { cloneFromPublished: boolean }): Promise<HomepageLayoutDetail> {
   await requirePermission(adminUserId, "HomepageBuilder", "Edit");
 
-  let sectionsCreate: Prisma.HomepageSectionCreateWithoutLayoutInput[];
-
-  if (opts.cloneFromPublished) {
-    const published = await homepageLayoutRepository.findPublishedLayout();
-    sectionsCreate = (published?.sections ?? []).map((section) => ({
-      type: section.type,
-      sortOrder: section.sortOrder,
-      visible: section.visible,
-      titleOverride: section.titleOverride,
-      descriptionOverride: section.descriptionOverride,
-      banners: section.banners.length
-        ? {
-            create: section.banners.map((banner) => ({
-              sortOrder: banner.sortOrder,
-              visible: banner.visible,
-              headline: banner.headline,
-              subheadline: banner.subheadline,
-              supportingText: banner.supportingText,
-              ctaLabel: banner.ctaLabel,
-              ctaHref: banner.ctaHref,
-              secondaryCtaLabel: banner.secondaryCtaLabel,
-              secondaryCtaHref: banner.secondaryCtaHref,
-              desktopImageUrl: banner.desktopImageUrl,
-              desktopImageAlt: banner.desktopImageAlt,
-              mobileImageUrl: banner.mobileImageUrl,
-              mobileImageAlt: banner.mobileImageAlt,
-              videoUrl: banner.videoUrl,
-              overlayEnabled: banner.overlayEnabled,
-              alignment: banner.alignment,
-            })),
-          }
-        : undefined,
-    }));
-    // A published layout might predate a since-added default section type
-    // (or an admin removed one) — fill in any missing type at the end so
-    // a clone always has somewhere to add it back from, matching the
-    // blank-draft's full-coverage guarantee.
-    for (const type of DEFAULT_SECTION_ORDER) {
-      if (!sectionsCreate.some((s) => s.type === type)) {
-        sectionsCreate.push({ type, sortOrder: sectionsCreate.length, visible: true });
-      }
-    }
-  } else {
-    sectionsCreate = DEFAULT_SECTION_ORDER.map((type, index) => ({ type, sortOrder: index, visible: true }));
-  }
+  const sectionsCreate = opts.cloneFromPublished
+    ? sectionsCreateFromLayout((await homepageLayoutRepository.findPublishedLayout())?.sections ?? [])
+    : DEFAULT_SECTION_ORDER.map((type, index) => ({ type, sortOrder: index, visible: true }));
 
   const layout = await homepageLayoutRepository.createLayout({
     createdBy: { connect: { id: adminUserId } },
@@ -110,6 +112,22 @@ export async function createDraftLayout(adminUserId: string, opts: { cloneFromPu
   });
 
   await writeAuditLog({ actorId: adminUserId, action: "homepage_layout_created", module: "HomepageBuilder", targetType: "HomepageLayout", targetId: layout.id });
+  return layout;
+}
+
+/** STORY-053 (additive scope). Restores an old version's snapshot as a fresh Draft — never an instant live overwrite, so the layout still goes through the normal publish action afterward. Mirrors createDraftLayout's clone-from-published path, sourced from the snapshot instead. */
+export async function restoreLayoutFromVersion(adminUserId: string, versionId: string): Promise<HomepageLayoutDetail> {
+  await requirePermission(adminUserId, "HomepageBuilder", "Edit");
+  const version = await versioningService.getVersion(adminUserId, "HomepageLayout", versionId);
+  const snapshot = version.snapshot as unknown as HomepageLayoutDetail;
+
+  const layout = await homepageLayoutRepository.createLayout({
+    createdBy: { connect: { id: adminUserId } },
+    updatedBy: { connect: { id: adminUserId } },
+    sections: { create: sectionsCreateFromLayout(snapshot.sections) },
+  });
+
+  await writeAuditLog({ actorId: adminUserId, action: "homepage_layout_restored", module: "HomepageBuilder", targetType: "HomepageLayout", targetId: layout.id, metadata: { versionId } });
   return layout;
 }
 
@@ -316,6 +334,8 @@ export async function publishLayout(adminUserId: string, id: string): Promise<Ho
 
   const published = await homepageLayoutRepository.publishLayoutSwappingPrevious(id);
   await writeAuditLog({ actorId: adminUserId, action: "homepage_layout_published", module: "HomepageBuilder", targetType: "HomepageLayout", targetId: id });
+  // STORY-053 (additive scope). A version snapshot of every publish — see versioning.service.ts.
+  await versioningService.recordVersion("HomepageLayout", id, published, adminUserId);
   return published;
 }
 

@@ -2300,6 +2300,8 @@ model AdminUser {
   // STORY-052.
   menusCreated       Menu[]          @relation("MenuCreatedBy")
   menusUpdated       Menu[]          @relation("MenuUpdatedBy")
+  // STORY-053.
+  contentVersionsCreated ContentVersion[]
   createdAt          DateTime        @default(now())
   updatedAt          DateTime        @updatedAt
 }
@@ -2879,4 +2881,27 @@ model MenuItem {
   updatedAt DateTime @updatedAt
 
   @@index([menuId, parentId])
+}
+
+// STORY-053 (additive scope). A generic, entity-agnostic version
+// snapshot — entityType is a free string, not a closed enum like
+// SeoEntityType, specifically so a future content type can start
+// calling versioning.service.ts::recordVersion() without a schema
+// migration. Deliberately NOT a replacement for HomepageLayout's/
+// Recipe's/BlogPost's own status enums or transition guards — see
+// docs/architecture-decisions.md's 2026-10-03 053 entry for why this
+// story stayed additive instead of retrofitting those three already-
+// shipped modules onto one shared state machine.
+model ContentVersion {
+  id            String     @id @default(cuid())
+  entityType    String
+  entityId      String
+  versionNumber Int
+  snapshot      Json
+  createdById   String?
+  createdBy     AdminUser? @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt     DateTime   @default(now())
+
+  @@unique([entityType, entityId, versionNumber])
+  @@index([entityType, entityId])
 }

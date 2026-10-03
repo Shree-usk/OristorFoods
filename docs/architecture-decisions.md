@@ -6543,3 +6543,111 @@ browser can: the real nested drag-and-drop, the link checker, and the
 Publish button's own UI feedback — confirmed by re-running
 `header.spec.ts`/`footer.spec.ts`/`search.spec.ts` together with this
 new spec to verify no cross-test interference.
+
+## 2026-10-03 — STORY-053 CMS Workflow & Versioning (additive scope)
+
+**The retrofit-vs-additive decision, confirmed with the user.** This
+story's own doc assumed it would ship *before or alongside* Homepage
+Builder (042), Recipes (043), and Blog (044), with those three
+building against its shared `entityType`/`entityId` workflow engine.
+`blueprint.md` Section 9a's own build order always had 053 landing
+after them instead — the story doc's "Dependencies" section was simply
+stale, confirmed by the fact that all three already shipped with their
+own bespoke status model: `HomepageLayout` (Draft/Published/Archived,
+no review step), `Recipe` (Draft/Review/Approved/Published/Archived,
+but one flat `Recipes:Approve` permission gates both the mid-pipeline
+review and the final publish — no separate reviewer tiers), `BlogPost`
+(Draft/Scheduled/Published/Archived, no review step at all).
+`recipe-admin.service.ts` already had a comment acknowledging the
+engine didn't exist and that every module built its own lightweight
+guard instead. Separately, `AdminAction` only has one `Approve` per
+module — expressing independent Marketing-Review/SEO-Review gates on
+one item isn't possible without a schema change, regardless of path.
+Retrofitting three already-shipped, independently-evolved modules (and
+whatever else has since adopted the same bespoke-status pattern) onto
+one shared state machine would have been a large, risky rewrite of
+stable code for AC items — configurable skippable transitions,
+per-step reviewer roles — that nothing in this codebase currently
+needs. Decision: build the genuinely missing value (version snapshots
+with diff/rollback, a cross-content-type review queue) additively,
+leave the 6-state pipeline and per-step RBAC unbuilt until a real
+content type actually needs them.
+
+**`ContentVersion.entityType` is a free string, not a closed Prisma
+enum like `SeoEntityType`.** `SeoMeta` (STORY-051a) deliberately used a
+closed 3-value enum since SEO fields were scoped to exactly those 3
+types. This table's whole purpose is the opposite: staying open to a
+content type adopting it later without a schema migration. The API
+layer's `versionedEntityTypeEnum` (Zod) and `versioning.service.ts`'s
+`MODULE_BY_ENTITY_TYPE` lookup are the only places that currently know
+about just the 3 wired types — adding a 4th is a one-line addition to
+each, not a schema change.
+
+**Restoring a version never goes instantly live — it always lands
+back in Draft (or, for Homepage's multi-row model, a brand-new Draft
+layout), full stop.** This is the one place a naive implementation
+could silently bypass each type's own approval gate: restoring
+straight to Published would let an admin skip review entirely via the
+back door. `recipe-admin.service.ts::restoreFromVersion` and
+`blog-admin.service.ts::restoreFromVersion` both force
+`status: "Draft"` after applying the snapshot's fields via each type's
+own existing `updateRecipeAdmin`/`updateBlogPostAdmin` full-replace
+update function; `homepage-builder.service.ts::restoreLayoutFromVersion`
+creates a new Draft layout from the snapshot's sections/banners,
+adapting `createDraftLayout`'s existing clone-from-published code path
+(extracted into a shared `sectionsCreateFromLayout` helper) to source
+from an arbitrary snapshot instead of the live published row. Every
+existing transition guard stays fully authoritative; the admin
+re-publishes through the normal path afterward.
+
+**`review-queue.service.ts`'s `QUEUE_SOURCES` registry mirrors
+`admin-reviews-queue-view.tsx`'s established shape** — a per-sourceType
+lookup (module, action, a `fetchPending` function) rather than one
+shared status machine, the same "thin read-side aggregation over
+independent lifecycles" pattern already used for customer-content
+moderation. Only Recipe contributes today (its `status: "Review"`
+items, previously only reachable by manually filtering the general
+recipe list — confirmed no dedicated queue UI existed for it before
+this story). "My queue" = every registered source the caller holds the
+gating permission for, via `hasPermission` (non-throwing) rather than
+`requirePermission` — this RBAC model has no per-item assignment, so
+personalization is by role, same as every other admin list in this
+codebase.
+
+**Testing caught three real issues, none of them application bugs in
+the end — all in the new e2e test itself:** (1) the fixture recipe
+needed at least one ingredient and one step for `assertPublishReady`
+to allow `submitForReview` — an existing, correct guard the test
+hadn't satisfied; (2) clicking "Restore as draft" only triggers an
+async request, and asserting "no error text visible" resolves
+immediately whether or not the request has finished, so the test's
+`page.reload()` was racing ahead of the mutation — fixed by explicitly
+awaiting the rollback response itself; a direct service-layer
+diagnostic script confirmed `restoreFromVersion` was correct all along
+before chasing the race down. (3) `admin-recipe-form.tsx`'s own
+`useEffect` only calls `reset()` once per recipe id (a pre-existing
+guard, unrelated to this story) — so after a same-id restore, the open
+form's fields don't visually update until a reload; the test accounts
+for this rather than changing that existing behavior, since "fix" risk
+here outweighed the benefit for a path only the version-restore button
+newly exercises.
+
+**Testing:** `tests/unit/versioning-service.test.ts` — sequential
+version numbers per `(entityType, entityId)`, listing newest-first,
+permission denial for the wrong module, `getVersion` rejecting a
+version from a different entityType, `diffVersions` reporting
+added/removed/changed fields including nested-object dotted paths.
+`tests/unit/review-queue-service.test.ts` — a Review-status recipe
+included for an admin with `Recipes:Approve`, excluded for one without
+it or for a Published recipe. One assertion added to each of
+`homepage-builder-service.test.ts`/`recipe-admin-service.test.ts`/
+`blog-admin-service.test.ts` confirming publish creates exactly one
+`ContentVersion` row. `tests/e2e/admin-cms-versioning.spec.ts` —
+publishes a real recipe twice (two different titles), confirms both
+versions appear in the real `VersionHistoryPanel`, diffs them, and
+restores the older one — confirmed via the real API response and a
+page reload that the title and status both revert, never going
+straight back to live. Also re-ran the existing
+`admin-homepage-builder.spec.ts`/`admin-recipes.spec.ts`/
+`admin-blog.spec.ts` e2e specs as a regression check for the new
+History tab embedded in each — all passing.

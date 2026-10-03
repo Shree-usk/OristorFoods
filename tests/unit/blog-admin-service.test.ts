@@ -69,6 +69,8 @@ function baseInput(authorId: string, overrides: Partial<BlogPostAdminValidatedIn
 
 afterEach(async () => {
   await prisma.auditLog.deleteMany({ where: { actor: { email: { endsWith: EMAIL_DOMAIN } } } });
+  // STORY-053. ContentVersion.entityId has no FK to BlogPost by design — scoped by entityType instead.
+  await prisma.contentVersion.deleteMany({ where: { entityType: "BlogPost" } });
   await prisma.blogComment.deleteMany({ where: { post: { createdBy: { email: { endsWith: EMAIL_DOMAIN } } } } });
   await prisma.blogPost.deleteMany({ where: { createdBy: { email: { endsWith: EMAIL_DOMAIN } } } });
   await prisma.adminUser.deleteMany({ where: { email: { endsWith: EMAIL_DOMAIN } } });
@@ -118,6 +120,10 @@ describe("blog-admin.service — posts", () => {
     const published = await publishPost(admin.id, post.id);
     expect(published.status).toBe("Published");
     expect(deriveEffectiveStatus(published.status, published.publishedAt)).toBe("Live");
+
+    // STORY-053: publishing creates a ContentVersion snapshot.
+    const versions = await prisma.contentVersion.findMany({ where: { entityType: "BlogPost", entityId: post.id } });
+    expect(versions).toHaveLength(1);
   });
 
   it("publishing with a future date writes status Published but is derived as Scheduled, never a stored Scheduled value", async () => {

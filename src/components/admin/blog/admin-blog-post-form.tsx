@@ -18,6 +18,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { AssetPickerDialog } from "@/components/admin/media/asset-picker-dialog";
 import { BlogBodyEditor } from "@/components/admin/blog/blog-body-editor";
+import { VersionHistoryPanel } from "@/components/admin/cms/version-history-panel";
 import { SeoFieldsPanel } from "@/components/admin/seo/seo-fields-panel";
 import {
   archiveBlogPost,
@@ -224,6 +225,7 @@ export function AdminBlogPostForm({ postId }: { postId?: string }) {
           <TabsTrigger value="body">Body</TabsTrigger>
           <TabsTrigger value="media">Media</TabsTrigger>
           <TabsTrigger value="seo">SEO</TabsTrigger>
+          <TabsTrigger value="history">History</TabsTrigger>
         </TabsList>
 
         <TabsContent value="details" className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -301,6 +303,9 @@ export function AdminBlogPostForm({ postId }: { postId?: string }) {
 
         <TabsContent value="seo" className="mt-4">
           <SeoFieldsPanel entityType="BlogPost" entityId={postId ?? null} />
+        </TabsContent>
+        <TabsContent value="history" className="mt-4">
+          {postId ? <VersionHistoryPanel entityType="BlogPost" entityId={postId} onRestored={() => queryClient.invalidateQueries({ queryKey: ["admin-blog-post", postId] })} /> : <p className="text-small text-charcoal/60">Save this post first to see its version history.</p>}
         </TabsContent>
       </Tabs>
     </form>
