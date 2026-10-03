@@ -1,6 +1,6 @@
 # STORY-055: Delivery Zone Management
 
-**Status:** Draft
+**Status:** Done (admin write-side only — see Scope Decision)
 **Epic:** 07 — Enterprise / Admin Platform
 **Priority:** High
 **Persona(s):** Super Administrator, Administrator, Warehouse Manager, Finance Manager
@@ -14,25 +14,51 @@ As a Warehouse Manager, I want to see which cities currently have no assigned de
 `docs/blueprint.md` Section 7 explicitly flags zone-wise delivery charges as underspecified in the source PRD ("the source spec only says shipping zones are 'configurable'... it does **not** spec a dedicated CRUD workflow the way it does for products, recipes, or reviews") and calls for Delivery Zone Management to be treated as its own module under System Settings / Shipping with the same level of admin control as Products or Recipes. The open questions have since been confirmed and are documented in `.claude/skills/delivery-zone-pricing/SKILL.md`: zones are defined by **city** (not postcode, district, or country), each zone independently chooses a flat/weight/value-based rate model, the free-shipping threshold is global (owned by STORY-054, not per zone), and marketing campaigns can temporarily override a zone's rate. This story is the admin authoring module for that confirmed model; STORY-027 is the related storefront-facing half that displays the resolved shipping cost at checkout.
 
 ## Acceptance Criteria
-- [ ] Admin can create, edit, and delete a `DeliveryZone`, each assigned a list of covered cities — not postcode ranges, districts, or countries, per the confirmed skill decision
-- [ ] Each zone has its own `DeliveryRate` record with a rate type chosen independently per zone: Flat Rate, Weight-Based (rate per weight bracket), or Order-Value-Based (rate per value bracket); changing one zone's rate type has no effect on any other zone
-- [ ] The zone list view shows each zone's city coverage, active rate type, and active/inactive status; saving a zone is blocked if it would assign a city to more than one currently-active zone (conflict validation)
-- [ ] Admin can activate or deactivate a zone (e.g. temporarily stop delivering to a city) without deleting its configuration
-- [ ] Admin can create a `DeliveryRateOverride` scoped to a zone and a date range, tied to a marketing campaign (STORY-050), specifying either an override rate or a free-shipping flag; overrides are stored separately from base rates and never modify the base `DeliveryRate` record
-- [ ] A zone with an active override clearly shows "Override active until [date]" alongside its base rate in the admin UI, so precedence is visible at a glance
-- [ ] No zone-level free-shipping threshold field exists anywhere in this module — the free-shipping threshold is a single global value owned by System Settings (STORY-054), and this module only links out to it
-- [ ] Saving a zone configuration surfaces any city with no matching active zone (a coverage gap), so admins can see and fix gaps proactively rather than customers discovering them at checkout via the fallback "contact us for a shipping quote" behavior
-- [ ] Every zone/rate/override create/edit/delete/activate/deactivate action is logged to the audit log (STORY-057)
-- [ ] This module provides full CRUD, city-list bulk editing, and a complete audit trail — the same level of admin control as the Products (STORY-040) and Recipes (STORY-043) modules, not a lightweight settings form
+- [x] Admin can create, edit, and delete a `DeliveryZone`, each assigned a list of covered cities — not postcode ranges, districts, or countries, per the confirmed skill decision
+- [x] Each zone has its own `DeliveryRate` record with a rate type chosen independently per zone: Flat Rate, Weight-Based (rate per weight bracket), or Order-Value-Based (rate per value bracket); changing one zone's rate type has no effect on any other zone
+- [x] The zone list view shows each zone's city coverage, active rate type, and active/inactive status; saving a zone (or activating it) is blocked if it would assign a city to more than one currently-active zone (conflict validation)
+- [x] Admin can activate or deactivate a zone (e.g. temporarily stop delivering to a city) without deleting its configuration
+- [x] Admin can create a `DeliveryRateOverride` scoped to a zone and a date range, tied to a marketing campaign — see Scope Decision for how "tied to" is satisfied without a new FK — specifying either an override rate or a free-shipping flag; overrides are stored separately from base rates and never modify the base `DeliveryRate` record
+- [x] A zone with an active override clearly shows "Override active until [date]" alongside its base rate in the admin UI
+- [x] No zone-level free-shipping threshold field exists anywhere in this module — the free-shipping threshold is the single global value owned by System Settings (STORY-054); the Shipping & Inventory settings panel already links out to this module
+- [x] Saving a zone configuration surfaces any city with no matching active zone — see Scope Decision for the "real observed data" source used instead of a speculative master city list
+- [x] Every zone/rate/override create/edit/delete/activate/deactivate action is logged to the audit log via `writeAuditLog`
+- [x] This module is its own top-level admin section (`/admin/delivery-zones`, gated on `AdminModule.DeliveryZones`) with full CRUD and an audit trail — the same level of admin control as Products/Recipes, not a System Settings tab
+
+## Scope Decision
+
+Research before implementation found the underlying data model
+(`DeliveryZone`/`DeliveryRate`/`DeliveryRateOverride`) and the entire
+checkout-side resolution logic (`shipping.service.ts::resolveDelivery`/
+`calculateDeliveryCharge`) **already built by STORY-027**, with
+`shipping.repository.ts`'s own header comment explicitly deferring the
+admin CRUD to this story. So STORY-055's real scope was the admin
+write-side only — no schema change to the resolution model, no change
+to checkout logic, no new/duplicate tests for resolution (already
+covered by `tests/unit/shipping-calc.test.ts`/`shipping-resolve.test.ts`).
+
+Two decisions, both additive/zero-risk to the existing checkout code:
+- **Campaign linkage** — `DeliveryRateOverride.campaignName` is a plain
+  string column (STORY-027). Rather than add a new FK for the AC's
+  loose "tied to a marketing campaign" wording, the override form's
+  Campaign field is a picker over live `SeasonalCampaign` rows (a
+  direct repository call, bypassing `Marketing:View`) plus a free-text
+  fallback, writing the chosen name into the existing column.
+- **Coverage-gap detection** — there is no master Sri-Lanka-city list
+  anywhere in this codebase (city is free text throughout). Coverage
+  gaps are computed from real observed data instead: distinct
+  `Address.city` + `Order.shipCity` values with no matching active
+  zone, normalized via `shipping.service.ts`'s existing exported
+  `normalizeCity()`.
 
 ## Tasks
-- [ ] **Database:** `DeliveryZone` (id, name, cities as a string array or a normalized join table, active boolean), `DeliveryRate` (zoneId, rateType enum FLAT/WEIGHT/VALUE, rate value(s)/brackets), `DeliveryRateOverride` (zoneId, startDate, endDate, overrideRate or freeShipping flag, campaignId referencing STORY-050's `MarketingCampaign`) — matching the model split specified in `.claude/skills/delivery-zone-pricing/SKILL.md` Section 1 (zone definition and rate definition kept as separate models since rates change far more often than city coverage).
-- [ ] **API:** `/api/admin/settings/shipping/zones` (CRUD), `/api/admin/settings/shipping/zones/[id]/rates`, `/api/admin/settings/shipping/zones/[id]/overrides`, `/api/admin/settings/shipping/zones/[id]/activate`, `/deactivate`.
-- [ ] **Service/Backend:** `delivery-zone.service.ts` (zone CRUD, city-conflict validation across active zones), `delivery-rate.service.ts` (rate CRUD per rate type), `delivery-override.service.ts` (override CRUD, date-range validation) — these are the write-side services that back the resolution logic (`shipping.service.ts`) consumed at checkout per the skill's Section 2 precedence rules (override wins if active and in date range, else base rate, then global free-shipping threshold applied last).
-- [ ] **Frontend:** `src/app/(admin)/settings/shipping/zones/page.tsx` (zone list with coverage-gap warnings) and `[id]/page.tsx` (zone detail: city multi-select, rate type selector with a type-specific bracket editor, an override scheduler tied to a campaign picker sourced from STORY-050).
-- [ ] **Validation:** Zod schemas per rate type (flat: a single positive number; weight/value: ordered, non-overlapping brackets); a city-uniqueness-across-active-zones guard; an override date range that cannot start in the past on creation.
-- [ ] **Testing:** Unit tests directly covering the skill's required test cases — zone resolution for a city matching no zone and for a city that would match multiple zones (should never happen, but must be tested); rate calculation for each of the three rate types; override precedence (active override wins, expired override falls back to base rate). E2e test: create two zones with different rate types plus one active campaign override, then verify checkout (STORY-027) computes the correct cost for each.
-- [ ] **Documentation:** Cross-reference `.claude/skills/delivery-zone-pricing/SKILL.md` as the source of truth for the data model and precedence rules — this story's docs should point at the skill file rather than re-describing the rules in a second place that can drift out of sync.
+- [x] **Database:** no schema change — `DeliveryZone`/`DeliveryRate`/`DeliveryRateOverride` already existed (STORY-027).
+- [x] **API:** `/api/admin/delivery-zones` (CRUD), `/[id]/activate`, `/[id]/deactivate`, `/[id]/rate`, `/[id]/overrides` (+ `/[overrideId]`), `/coverage-gaps`, `/campaigns` — a top-level module, not nested under `/api/admin/settings/shipping`, matching the dedicated `AdminModule.DeliveryZones` gate.
+- [x] **Service/Backend:** `delivery-zone.service.ts` (zone CRUD, city-conflict validation re-checked on activate), `delivery-rate.service.ts` (rate upsert per type), `delivery-override.service.ts` (override CRUD, date-range validation) — all read/write through the admin side only; `shipping.service.ts`'s resolution logic and its precedence rules (override → base rate → global threshold, applied last) are untouched.
+- [x] **Frontend:** `src/app/(admin)/admin/delivery-zones/page.tsx` (list, with a coverage-gap panel) + `new/page.tsx`/`[id]/page.tsx` (one form: zone fields, a rate-type-specific editor, and — existing zones only — an overrides panel).
+- [x] **Validation:** `src/validation/delivery-zone.schema.ts` — rate-type-specific requirements, an exactly-one-of XOR on `freeShipping`/`overrideAmount` (reusing the exact idiom from `product-admin.schema.ts`'s volume-discount-tier schema), `endsAt > startsAt`; "not in the past on creation" enforced in the service, not the schema (comparing against the request's own `Date.now()`, not a frozen schema-time value).
+- [x] **Testing:** `tests/unit/delivery-zone-service.test.ts` (CRUD, city-conflict on create/activate, deactivate always allowed, coverage-gap detection against real `Address` fixtures, permission denial), `tests/unit/delivery-rate-service.test.ts` (per-rate-type upsert + Zod-layer rejections), `tests/unit/delivery-override-service.test.ts` (CRUD, past-date rejection, Zod-layer XOR rejections), `tests/e2e/admin-delivery-zones.spec.ts` (create two zones through the real UI with different rate types, add an override, confirm the activation conflict guard via a real 409).
+- [x] **Documentation:** this doc, `docs/architecture-decisions.md`, `docs/blueprint.md` Section 9a.
 
 ## Dependencies
 - STORY-001, STORY-002, STORY-003 (Foundation)
