@@ -17,6 +17,8 @@ export interface SeoMetaAdmin {
   canonicalUrl: string | null;
   ogImageUrl: string | null;
   ogImageAlt: string | null;
+  ogImageWidth: number | null;
+  ogImageHeight: number | null;
   robotsIndex: boolean;
   robotsFollow: boolean;
   focusKeyword: string | null;

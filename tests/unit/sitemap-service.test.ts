@@ -1,4 +1,4 @@
-// @vitest-environment node
+﻿// @vitest-environment node
 import { afterEach, describe, expect, it } from "vitest";
 
 import { prisma } from "@/lib/db";
@@ -26,6 +26,8 @@ async function makeProduct(overrides: { robotsIndex?: boolean } = {}) {
       canonicalUrl: null,
       ogImageUrl: null,
       ogImageAlt: null,
+      ogImageWidth: null,
+      ogImageHeight: null,
       robotsIndex: false,
       robotsFollow: true,
       focusKeyword: null,

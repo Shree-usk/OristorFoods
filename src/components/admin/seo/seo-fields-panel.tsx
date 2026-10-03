@@ -19,6 +19,8 @@ const EMPTY_VALUES: SeoMetaFormInput = {
   canonicalUrl: null,
   ogImageUrl: null,
   ogImageAlt: null,
+  ogImageWidth: null,
+  ogImageHeight: null,
   robotsIndex: true,
   robotsFollow: true,
   focusKeyword: null,
@@ -179,6 +181,8 @@ export function SeoFieldsPanel({ entityType, entityId }: { entityType: SeoEntity
         onSelect={(asset) => {
           setValue("ogImageUrl", asset.url);
           setValue("ogImageAlt", asset.altText ?? "");
+          setValue("ogImageWidth", asset.width);
+          setValue("ogImageHeight", asset.height);
           setPicker(false);
         }}
       />

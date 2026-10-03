@@ -6324,3 +6324,93 @@ tag instead of the auto-generated `ProductJsonLd` output (checked
 across every ld+json script on the page, not by DOM position, since
 the sitewide `OrganizationJsonLd` script is also present on every
 page).
+
+## 2026-10-03 — STORY-051d Central Pages List: Bulk SEO Editing + Health Scoring
+
+The fourth and last STORY-051 sub-story, closing out the whole SEO
+Console split (051a-d all done).
+
+**OG-image dimensions are persisted on `SeoMeta` (`ogImageWidth`/
+`ogImageHeight`, `Int?`), not re-derived from `MediaAsset` by URL at
+health-check time.** `AssetPickerDialog`'s `onSelect` payload already
+carries `width`/`height` on its `MediaAsset` object — `SeoFieldsPanel`
+just wasn't capturing them. Re-deriving from `MediaAsset` later would
+be fragile: an admin can type an OG image URL by hand, with no
+`MediaAsset` row behind it at all. `computeSeoHealth`
+(`src/lib/seo-health.ts`, STORY-051a) gained a 5th check,
+`ogImageTooSmall` (warns below 1200x630, the standard Open-Graph-rich-
+preview minimum across Facebook/Twitter/LinkedIn), extending the
+existing pure function rather than building a parallel health system
+for the central list — the per-page checklist and the central audit
+share one set of rules.
+
+**The central list (`/admin/seo`, `listSeoPagesForAdmin`) reuses
+Product/Recipe/BlogPost's own admin list *services*
+(`listProductsForAdmin`/`listRecipesForAdmin`/`listPostsForAdmin`),
+not their repositories directly** — each already defaults to every
+status (not just Published) when no status filter is passed, so "give
+me everything" is just a `pageSize: 10_000` call (the same
+`BULK_LIST_SIZE` approach `sitemap.service.ts` already used for this
+catalog's size), no new "list all" repo functions needed. This also
+means `listSeoPagesForAdmin` inherits each service's own
+`requirePermission` check (`Products`/`Recipes`/`Blog` View) on top of
+its own `SEO` View check — belt and suspenders, but harmless: every
+admin role in this project already gets View everywhere outside its
+own home modules, so this never actually blocks the SEO Specialist
+persona this story is for. `AdminProductListRow`'s select gained
+`slug` (previously unused by the admin product table, which links by
+id) since the central list needs it to build each row's real
+storefront URL.
+
+**Duplicate-title detection and all list filtering happen in-memory
+over one unified, already-fetched list — no new DB-side duplicate
+query.** One new `seo.repository.ts::listSeoMetaForEntityIds(entityType,
+entityIds)` batch read per content type (3 queries total, not an N+1
+against each row) feeds a merge keyed on `entityType:entityId`.
+Duplicates are flagged on the *effective* title (`metaTitle ??
+ownTitle`), the same fallback the storefront's own `generateMetadata`
+calls already use — otherwise two pages with the same real SEO title
+but no explicit `metaTitle` override would go undetected.
+
+**The bulk title-template apply (`bulkApplyTitleTemplate`) is a
+`{title}`-placeholder string substitution, not a rich template
+engine**, matching the AC's own "e.g. a title formula" framing — no
+richer syntax was asked for. It delegates to `seo.service.ts`'s
+existing `updateSeoMeta` per ref (reading the row's current `SeoMeta`
+first so every other field survives untouched), the same way
+`product-admin.service.ts`'s `bulkChangeStatus` delegates to its own
+single-row `changeProductStatus` — reuses that function's permission
+check and audit log per row rather than duplicating either. Unlike
+`bulkChangeStatus`'s real illegal-transition failures, there is no
+natural per-row failure mode here (`SeoMeta` has no FK to its
+polymorphic target, so even a bogus `entityId` would just create a
+row) — the per-row try/catch stays anyway, for resilience and
+consistency with the house pattern, but isn't exercised by a forced
+failure case in the unit tests.
+
+**The bulk-edit UI convention gained one addition: surfacing per-row
+failure reasons, not just the succeeded count.** Every prior bulk
+action in this codebase (products, orders, reviews, etc.) only ever
+announced "`N of M updated`" — this story's list also renders each
+failure's reason, since an SEO specialist bulk-editing dozens of pages
+at once needs to know *which* ones didn't take, not just how many.
+
+**Testing:** `tests/unit/seo-pages-service.test.ts` (new,
+5 tests) — the unified list includes a Draft product/recipe/post (not
+just Published), two pages sharing an effective title are both flagged
+as duplicates while an unrelated third is not, a page with no `SeoMeta`
+row surfaces `missingDescription`; `bulkApplyTitleTemplate` expands the
+placeholder and preserves a row's other existing fields, and also
+correctly creates a first-ever row (robots flags defaulting to `true`)
+for an entity that never had one. `tests/unit/seo-service.test.ts`
+extended with `ogImageTooSmall` cases (below/above the threshold, and
+"no dimensions known yet" treated as nothing-to-flag, same convention
+`missingOgAlt` already uses for "no image set"). `tests/e2e/admin-seo-
+pages.spec.ts` — the real central list shows two real products; the
+"missing description" filter narrows to the incomplete one and hides
+the complete one; selecting the incomplete one and applying a title
+template updates it (confirmed by the Meta title column changing after
+the list's own refetch); picking a real, genuinely-small `MediaAsset`
+through the real `SeoFieldsPanel` on that product's own admin page
+shows the new "Social image is at least 1200x630" health check failing
+live, before any save.

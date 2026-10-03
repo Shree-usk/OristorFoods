@@ -13,6 +13,8 @@ export interface SeoMetaInput {
   canonicalUrl: string | null;
   ogImageUrl: string | null;
   ogImageAlt: string | null;
+  ogImageWidth: number | null;
+  ogImageHeight: number | null;
   robotsIndex: boolean;
   robotsFollow: boolean;
   focusKeyword: string | null;
@@ -34,4 +36,9 @@ export function upsertSeoMeta(entityType: SeoEntityType, entityId: string, input
 /** STORY-051c. The sitemap's own read — entityIds to exclude because an admin explicitly turned off search-engine indexing for them. */
 export function listRobotsExcludedEntityIds(entityType: SeoEntityType) {
   return prisma.seoMeta.findMany({ where: { entityType, robotsIndex: false }, select: { entityId: true } });
+}
+
+/** STORY-051d. The central pages list's own bulk read — one query per entityType instead of N, avoiding an N+1 when merging against Product/Recipe/BlogPost's own admin list rows. */
+export function listSeoMetaForEntityIds(entityType: SeoEntityType, entityIds: string[]) {
+  return prisma.seoMeta.findMany({ where: { entityType, entityId: { in: entityIds } } });
 }
