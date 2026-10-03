@@ -7170,3 +7170,85 @@ Fixed with the same `useRef(false)` seeded-guard pattern already
 established in `admin-landing-page-editor-view.tsx`, so the sync runs
 exactly once per mount rather than on every `existing` reference
 change.
+
+## 2026-10-04 — STORY-059b Analytics/BI Reports
+
+**The conversion funnel reports exactly two real numbers, not four
+fabricated ones.** Every order-creation path in this codebase
+(`createOrderWithStockDecrement`) writes `status: "Confirmed"`
+directly — `OrderStatus.PendingConfirmation` exists in the enum but is
+never actually produced, so there is no data distinguishing "reached
+checkout" from "placed an order." No visit-tracking exists anywhere
+either (the same gap already documented for Live Visitors and Core Web
+Vitals). `analytics.service.ts::getFunnelReport` reports **Carts with
+items** (`Cart` rows with ≥1 `CartItem`, filtered by `updatedAt` in
+range — a current-state approximation, since `Cart` is a mutable
+singleton per user/guest rather than an event log) and **Confirmed
+orders** (real, date-ranged, Cancelled excluded), with **Visits** and
+**Checkout started** rendered as explicit `{available: false}` cards —
+the same honest-placeholder treatment System Health gave its
+unavailable sections in STORY-057.
+
+**Retention is defined as a repeat-purchase rate anchored to the
+period's active customers, not a vague "retention %."**
+`analytics.repository.ts::getCustomerRetention(from, to)` finds the
+distinct customers with a non-Cancelled order inside the range, then
+counts how many of those have 2+ non-Cancelled orders all-time. The UI
+states the definition in plain English next to the number
+("Of the N customers who ordered in this period, M have placed 2+
+orders all-time") specifically so it's never read as something else,
+like month-over-month cohort retention.
+
+**One shared CSV utility, one shared PDF template, reused by every
+report — and by STORY-057's pre-existing audit-log export.**
+`src/lib/csv.ts::toCsv(headers, rows)` replaces
+`audit-log-admin.service.ts`'s original inline `csvEscape`/row-join
+logic (refactored to call the shared function, verified byte-identical
+output via its existing unit test) and is now the one CSV-writing
+implementation in the codebase. `analytics-pdf.service.tsx::
+renderAnalyticsReportPdf({title, dateRange, headers, rows})` is one
+`@react-pdf/renderer` template — same font/color/layout pattern as
+`invoice-pdf.service.tsx` — reused by all four reports instead of four
+near-identical PDF components.
+
+**Date-bucketed time series use `prisma.$queryRaw` with `DATE_TRUNC`,
+the precedent `search.repository.ts::findRankedProductMatches`
+(STORY-012) already established for anything Prisma's query builder
+can't express.** `getSalesTrend`/`getCustomerAcquisition` both
+parameterize every interpolated value through the tagged template —
+never string concatenation — and the enum comparison inside the sales
+query casts explicitly (`status != ${"Cancelled"}::"OrderStatus"`),
+since Postgres won't compare a parameterized string to an enum column
+without one.
+
+**A real date-range bug, caught by the e2e test, not the unit
+tests.** `analyticsQuerySchema` originally coerced `to` straight from a
+bare date string (`"2026-10-04"` → midnight UTC), so a report a human
+reads as "through today" silently excluded anything created later that
+same day — including, during the live e2e run, that day's own seeded
+order, which vanished from the Products & Recipes tab. The unit tests
+didn't catch this because they call `analytics.service.ts` directly
+with hand-constructed `Date` objects, bypassing the schema entirely;
+only the e2e test exercises the real validation layer. Fixed with a
+`.transform()` on the schema that bumps `to` to `23:59:59.999` UTC
+after the `from <= to` refinement runs — every report, not just the
+one tab that happened to surface it.
+
+**A near-miss worth recording as process, not just outcome:**
+`src/lib/csv.ts` already existed before this story touched it
+(STORY-051b's `parseSimpleCsv`, used by the redirect bulk importer). A
+first-pass `Write` of the new `toCsv` export overwrote the file
+entirely, silently deleting `parseSimpleCsv`. Caught immediately by
+`tsc --noEmit` reporting a missing export in two consuming files, not
+by a test failure — fixed by retrieving the original content
+(`git show master:src/lib/csv.ts`) and merging both functions into one
+file. The lesson generalizes: check with `Glob`/`Grep` whether a
+target path already exists before `Write`-ing it, especially for a
+small, plausibly-already-used utility filename like `csv.ts`.
+
+**Recharts is the first chart library in this codebase** — the
+original STORY-059 task list named it specifically, and nothing
+lighter was already present to prefer instead. `npm install recharts`
+resolved to `^3.10.1`, React 19-compatible; `npm audit` confirmed none
+of the pre-existing 34 vulnerabilities trace back to it (all are
+pre-existing in the Next.js/Auth.js/tooling dependency chains).

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { parseSimpleCsv } from "@/lib/csv";
+import { parseSimpleCsv, toCsv } from "@/lib/csv";
 
 describe("parseSimpleCsv", () => {
   it("parses plain comma-separated rows", () => {
@@ -39,5 +39,22 @@ describe("parseSimpleCsv", () => {
   it("returns an empty array for empty input", () => {
     expect(parseSimpleCsv("")).toEqual([]);
     expect(parseSimpleCsv("   \n  \n")).toEqual([]);
+  });
+});
+
+// STORY-059b. toCsv is the write-side counterpart, extracted from
+// audit-log-admin.service.ts's original inline builder (STORY-057).
+describe("toCsv", () => {
+  it("joins headers and rows with commas and newlines", () => {
+    expect(toCsv(["A", "B"], [["1", "2"], ["3", "4"]])).toBe("A,B\n1,2\n3,4");
+  });
+
+  it("quotes and escapes a field containing a comma, quote, or newline", () => {
+    expect(toCsv(["Note"], [['has, a comma and "quotes"']])).toBe('Note\n"has, a comma and ""quotes"""');
+    expect(toCsv(["Note"], [["line1\nline2"]])).toBe('Note\n"line1\nline2"');
+  });
+
+  it("produces just the header row for no data rows", () => {
+    expect(toCsv(["A", "B"], [])).toBe("A,B");
   });
 });
