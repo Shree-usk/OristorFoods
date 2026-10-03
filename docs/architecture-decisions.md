@@ -6753,3 +6753,91 @@ fixed by awaiting `expect(page.getByRole("dialog")).toBeHidden()` first.
 Neither was an application defect; both are now documented patterns
 for any future e2e test that mixes a UI action with a direct
 API/Prisma read-back against this dev database.
+
+## 2026-10-03 — STORY-055 Delivery Zone Management
+
+**This story turned out to be the admin write-side only — the entire
+data model and the checkout resolution logic already existed.**
+STORY-027 had already built `DeliveryZone`/`DeliveryRate`/
+`DeliveryRateOverride` and `shipping.service.ts::resolveDelivery`/
+`calculateDeliveryCharge` (override → base rate → global threshold,
+applied last, fail-safe on bad config) — `shipping.repository.ts`'s
+own header comment said as much explicitly ("the admin CRUD that
+writes those is STORY-055"). So this story added zero schema and
+touched zero resolution code; `tests/unit/shipping-calc.test.ts`/
+`shipping-resolve.test.ts` were left exactly as they were.
+
+**`AdminModule.DeliveryZones` goes from zero-usage to its first real
+consumer**, as its own top-level `/admin/delivery-zones` section —
+not a tab inside System Settings — matching the AC's explicit "same
+level of admin control as Products/Recipes" framing and the dedicated
+enum value already reserved for it. STORY-054's own Shipping &
+Inventory panel had already added a forward link to this route before
+this story existed.
+
+**Zone and rate are saved through separate API calls, not one combined
+nested write**, deliberately diverging from the Recipe admin precedent
+(ingredients/steps are replace-all within one `updateRecipeAdmin`
+call) — the skill's own schema reasoning is "a zone's cities rarely
+change, but its rates change often (seasonal campaigns)," so bundling
+them into one write would mean every rate tweak re-validates and
+re-writes the zone's city list for no reason. `delivery-rate.service.ts`
+upserts (`DeliveryRate` is 1:1 and nullable), while
+`delivery-zone.service.ts` owns city-conflict validation.
+
+**City-conflict validation runs on create, on update (when the
+result would be active), and again on activation** —
+`assertNoCityConflict()` in `delivery-zone.service.ts` checks every
+city in the proposed set against every other currently-active zone's
+cities (case/whitespace-normalized via `shipping.service.ts`'s
+existing exported `normalizeCity()`, reused rather than duplicated).
+Deactivating a zone never conflict-checks (freeing cities can't
+collide with anything); the AC's own "saving a zone is blocked" wording
+only makes sense for zones that are (or will become) active, so an
+inactive zone can freely share cities with an active one — only
+activating it re-validates.
+
+**Coverage-gap detection reads real `Address`/`Order` data, not a
+speculative city list** — there is no master Sri-Lanka-city list
+anywhere in this codebase; city is free text everywhere, including at
+checkout. `getCoverageGapCities()` takes the distinct union of
+`Address.city` and `Order.shipCity`, normalizes, and subtracts every
+active zone's normalized cities. This matches the AC's own framing
+("before a customer hits an error at checkout") better than inventing
+an administrative list this business has never needed before.
+
+**Campaign linkage stays a string, not a new FK.**
+`DeliveryRateOverride.campaignName` was already a plain string column
+from STORY-027; the AC's "tied to a marketing campaign" is satisfied
+by the override form's Campaign field being a `<Select>` sourced from
+live `SeasonalCampaign` rows (calling
+`seasonalCampaignRepository.listSeasonalCampaignsForAdmin()` directly,
+bypassing `Marketing:View` — this is a read-only picker for a
+different module's gate, not a Marketing-module action) plus a
+free-text fallback, still writing into the existing column. Zero
+migration, zero risk to `shipping.service.ts`'s read path, which only
+ever displays `campaignName` as a string.
+
+**Validation lives entirely in the Zod schema + API route layer, not
+duplicated in the service** — consistent with every other service in
+this codebase (none of them re-run Zod internally). The one exception
+is "an override's `startsAt` cannot be in the past," which is a
+request-time check against `Date.now()`, not something a schema can
+express meaningfully; it lives in `delivery-override.service.ts`'s
+`createOverride`, not the Zod schema (which `updateOverride` also
+uses without that check, since editing an in-flight override's other
+fields shouldn't re-demand a still-future start date).
+
+**Testing found two real UI bugs during e2e authoring, both fixed:**
+(1) `<Button nativeButton={false} render={<Link .../>}>` renders with
+an accessible role of `button`, not `link`, despite the underlying
+`<a>` tag — the e2e test's own `getByRole("link", { name: "New
+Zone" })` timed out until corrected to `getByRole("button", ...)`;
+worth remembering for any future admin list page using this exact
+"New X" button pattern. (2) `handleToggleActive` in
+`admin-delivery-zones-list-view.tsx` didn't catch the 409 from
+activating a conflicting zone, surfacing only as an unhandled promise
+rejection in the browser console with no user-facing message — caught
+by the e2e test's own console-error visibility, fixed with a proper
+try/catch and an inline error message, the same pattern every other
+admin panel in this codebase already uses.
