@@ -1,8 +1,9 @@
 import Link from "next/link";
 import { Mail, MapPin, Phone } from "lucide-react";
 
-import { contactInfo, legalLinks } from "@/lib/footer-config";
+import { legalLinks } from "@/lib/footer-config";
 import { getResolvedFooterColumns } from "@/services/navigation.service";
+import { getResolvedCompanyInfo } from "@/services/system-settings.service";
 import { Container } from "./container";
 import { FooterColumnsGrid } from "./footer-columns-grid";
 import { NewsletterForm } from "./newsletter-form";
@@ -16,13 +17,16 @@ import { SocialLinks } from "./social-links";
  * docs/architecture-decisions.md for the contrast reasoning behind every
  * text color choice in here.
  *
- * `footerColumns` (STORY-052) now comes from `getResolvedFooterColumns`,
- * which reads the published Footer menu and falls back to
- * footer-config.ts's static defaults until an admin has published one.
- * contactInfo/legalLinks stay hardcoded (flagged for STORY-054).
+ * `footerColumns` (STORY-052) comes from `getResolvedFooterColumns`;
+ * `contactInfo` (STORY-054) comes from `getResolvedCompanyInfo` — both
+ * read their own published/saved admin data and fall back to
+ * footer-config.ts's static defaults until an admin has saved one.
+ * `legalLinks`/`socialLinks` stay hardcoded (out of this story's
+ * scope — see system-settings.service.ts's own comment on why
+ * `CompanySetting.socialLinks` isn't wired to `<SocialLinks>` here).
  */
 export async function Footer() {
-  const footerColumns = await getResolvedFooterColumns();
+  const [footerColumns, contactInfo] = await Promise.all([getResolvedFooterColumns(), getResolvedCompanyInfo()]);
 
   return (
     // pb-16 reserves space for the fixed mobile bottom nav (MobileNav,

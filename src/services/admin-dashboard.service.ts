@@ -9,17 +9,8 @@ import * as reviewRepository from "@/repositories/review.repository";
 import * as rewardsRepository from "@/repositories/rewards.repository";
 import * as supportTicketRepository from "@/repositories/support-ticket.repository";
 import { getPermissionsForAdminUser } from "@/services/permission.service";
+import { getLowStockThreshold } from "@/services/system-settings.service";
 import type { AdminModule } from "@/generated/prisma/client";
-
-/**
- * STORY-039. No `lowStockThreshold` field exists on Product yet (it would
- * need a System Settings-backed value that has no admin UI home until
- * STORY-054 exists) — a documented constant placeholder until then.
- * Exported so product-admin.service.ts's (STORY-040) list-view stock-level
- * filter uses the exact same threshold, rather than a second magic number.
- * See docs/architecture-decisions.md.
- */
-export const LOW_STOCK_THRESHOLD = 10;
 
 function startOfToday(): Date {
   const now = new Date();
@@ -106,8 +97,9 @@ export async function getDashboardSummary(adminUserId: string): Promise<Dashboar
   }
 
   if (permissions.has(permissionKey("Products"))) {
-    const count = await safe(() => productRepository.countLowStockProducts(LOW_STOCK_THRESHOLD), "lowStock");
-    if (count !== undefined) summary.lowStock = { count, threshold: LOW_STOCK_THRESHOLD };
+    const threshold = await getLowStockThreshold();
+    const count = await safe(() => productRepository.countLowStockProducts(threshold), "lowStock");
+    if (count !== undefined) summary.lowStock = { count, threshold };
   }
 
   if (permissions.has(permissionKey("RewardsReferrals"))) {

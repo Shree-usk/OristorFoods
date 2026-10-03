@@ -6651,3 +6651,105 @@ straight back to live. Also re-ran the existing
 `admin-homepage-builder.spec.ts`/`admin-recipes.spec.ts`/
 `admin-blog.spec.ts` e2e specs as a regression check for the new
 History tab embedded in each — all passing.
+
+## 2026-10-03 — STORY-054 System Settings
+
+**Singleton-row reuse, not a new pattern.** `CompanySetting`,
+`CurrencySetting`, `LocaleSetting`, `TaxSetting`, `InventorySetting`
+all follow the `id: "global"`, upserted pattern already established by
+`ShippingSetting`/`RewardSetting`/`ReferralSetting` — one row, read
+with a plain `findUnique`, written with `upsert`. `TaxRateRule`,
+`PaymentMethodSetting`, and `FeatureFlag` are the three categories that
+are genuinely list-shaped, so they get ordinary tables instead.
+`PaymentMethodSetting.key`/`FeatureFlag.key` are free strings with a
+unique constraint, not a closed enum — the same "no migration for a
+new value" reasoning as `ContentVersion.entityType` (STORY-053) and
+`OrderIntegrationEvent.eventType` before it: a new payment method or
+flag is an admin action, not a deploy.
+
+**`AdminModule.SystemSettings` goes from zero-usage to its first real
+consumer** — every new category's service function is gated through it
+(View for reads, Edit for writes), mirroring `rewards.service.ts`'s
+exact shape: `requirePermission` then `writeAuditLog` on every write.
+Three internal helpers deliberately skip their own permission check
+because they're called from inside already-gated callers or from
+code paths with no admin session at all: `getResolvedCompanyInfo()`
+(the storefront footer, unauthenticated), `isFeatureEnabled(key)` (any
+future server code checking a flag), and `getLowStockThreshold()` (the
+admin dashboard/product list, gated on `Products`, not `SystemSettings`,
+since reading the threshold to compute a count isn't itself a
+Settings-module action).
+
+**Zero-downtime cutover for Company Info, same shape as STORY-052's
+nav/footer migration.** `getResolvedCompanyInfo()` reads `CompanySetting`
+and falls back field-by-field to the existing hardcoded
+`footer-config.ts::contactInfo` until an admin actually saves a row —
+`footer.tsx` switches to this resolver with no migration step and no
+behavior change for a site that's never touched System Settings yet.
+`socialLinks` is captured in the new `CompanySetting` row but
+deliberately **not** wired into the storefront's `<SocialLinks>`
+component in this story — doing so would mean passing a `LucideIcon`
+reference across the Server→Client boundary, exactly what STORY-052
+had to work around by passing icon names as strings and resolving them
+client-side. Re-threading that is real work with its own testing
+surface; out of scope for a settings-console story, left for whoever
+makes storefront social links admin-editable.
+
+**`Prisma.DbNull` again, for the same reason as STORY-051a/c.**
+`CompanySetting.socialLinks` and `CurrencySetting.manualExchangeRates`
+are both nullable `Json?` columns — clearing one to SQL `NULL` from
+application code requires passing `Prisma.DbNull`, not a JS `null`
+(TypeScript rejects a bare `null` for `NullableJsonNullValueInput`).
+Both services convert `input.field === null ? Prisma.DbNull : input.field`
+before the repository call.
+
+**Empty form fields normalize to `null` in the Zod schema, not the
+component.** `companySettingSchema`'s optional string fields
+(`legalName`, `address`, `phone`, etc.) use `z.preprocess((v) => v === ""
+? null : v, ...)` so a cleared form field persists as SQL `NULL`
+rather than an empty string. This matters beyond cosmetics:
+`getResolvedCompanyInfo()`'s fallback uses `??` (nullish coalescing)
+against the static config — an empty string is not nullish, so without
+this normalization a cleared field would resolve to a blank value on
+the storefront footer instead of falling back to the hardcoded
+default. Caught by the e2e test, not code review — it surfaced as a
+Zod validation error on every save with any field left blank, since
+the first schema draft used `.min(1)` directly with no empty-to-null
+step.
+
+**Low Stock threshold folds in as one more singleton setting**,
+replacing `admin-dashboard.service.ts`'s previously hardcoded
+`LOW_STOCK_THRESHOLD = 10` constant — a real value `docs/blueprint.md`
+already flagged as deferred to this story, not a speculative addition.
+Both call sites (`admin-dashboard.service.ts`, `product-admin.service.ts`)
+now `await getLowStockThreshold()` instead of importing the constant.
+
+**Notification Templates admin surface reuses STORY-032's model and
+render engine as-is.** `notification-template-admin.service.ts` is
+deliberately a separate file from `notification.service.ts` — the
+former is the admin authoring/preview surface (gated on
+`SystemSettings`), the latter is the real sending pipeline (no admin
+session involved). `previewTemplate()` thinly wraps the existing
+`renderTemplate()` so the preview pane's substitution behavior for
+unknown placeholders (left untouched, not blanked) is guaranteed
+identical to what a real send does, rather than a second
+reimplementation that could drift.
+
+**Testing caught a genuine PGlite single-connection race, not an app
+bug.** The e2e Feature Flags test originally did `const row = ...;
+await expect(row).toBeVisible(); const response = await
+page.request.get(...)` immediately after clicking "Add" — the row-visible
+check (driven by the browser's own `invalidateQueries` refetch) passed,
+but the test's own separate `page.request.get()` call, racing that
+refetch for the dev DB's single pooled connection
+(`DATABASE_POOL_MAX=1`), sometimes read an empty list despite the row
+already being visible on screen. Confirmed via a throwaway debug spec
+with response logging before fixing it, not just asserted: the fix is
+`expect.poll()` around the read rather than a single attempt. Separately,
+the notification-template test read `NotificationTemplate` back via a
+direct Prisma call immediately after clicking "Save" without waiting
+for the edit drawer to close, hitting the same category of race —
+fixed by awaiting `expect(page.getByRole("dialog")).toBeHidden()` first.
+Neither was an application defect; both are now documented patterns
+for any future e2e test that mixes a UI action with a direct
+API/Prisma read-back against this dev database.
