@@ -18,6 +18,8 @@ export interface CampaignContentInput {
   channel: NotificationChannel;
   audienceTarget: CampaignAudienceTarget;
   targetCustomerGroup: CustomerGroup | null;
+  // STORY-059a.
+  targetSegmentId: string | null;
   subject: string | null;
   body: string;
   scheduledAt: Date | null;

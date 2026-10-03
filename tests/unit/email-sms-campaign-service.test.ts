@@ -72,7 +72,17 @@ async function makeCustomer(overrides: CustomerOverrides = {}) {
   return user;
 }
 
-async function makeSmsCampaign(overrides: Partial<{ audienceTarget: "AllCustomers" | "CustomerGroupTarget" | "LoyaltyMembers" | "ReferralMembers"; targetCustomerGroup: "Retail" | "Wholesale" | null; status: "Draft" | "Scheduled" | "Sent"; scheduledAt: Date | null; body: string }> = {}, createdById: string) {
+async function makeSmsCampaign(
+  overrides: Partial<{
+    audienceTarget: "AllCustomers" | "CustomerGroupTarget" | "LoyaltyMembers" | "ReferralMembers" | "SavedSegment";
+    targetCustomerGroup: "Retail" | "Wholesale" | null;
+    targetSegmentId: string | null;
+    status: "Draft" | "Scheduled" | "Sent";
+    scheduledAt: Date | null;
+    body: string;
+  }> = {},
+  createdById: string,
+) {
   sequence += 1;
   return prisma.emailSmsCampaign.create({
     data: {
@@ -80,6 +90,7 @@ async function makeSmsCampaign(overrides: Partial<{ audienceTarget: "AllCustomer
       channel: "SMS",
       audienceTarget: overrides.audienceTarget ?? "AllCustomers",
       targetCustomerGroup: overrides.targetCustomerGroup ?? null,
+      targetSegmentId: overrides.targetSegmentId ?? null,
       body: overrides.body ?? "Hi {{name}}, enjoy a discount!",
       status: overrides.status ?? "Draft",
       scheduledAt: overrides.scheduledAt ?? null,
@@ -91,6 +102,7 @@ async function makeSmsCampaign(overrides: Partial<{ audienceTarget: "AllCustomer
 afterEach(async () => {
   await prisma.notificationLog.deleteMany({ where: { recipient: { startsWith: "+9477" } } });
   await prisma.emailSmsCampaign.deleteMany({ where: { createdBy: { email: { endsWith: EMAIL_DOMAIN } } } });
+  await prisma.savedSegment.deleteMany({ where: { createdBy: { email: { endsWith: EMAIL_DOMAIN } } } });
   await prisma.rewardTransaction.deleteMany({ where: { user: { email: { endsWith: EMAIL_DOMAIN } } } });
   await prisma.referralAttribution.deleteMany({ where: { referrer: { email: { endsWith: EMAIL_DOMAIN } } } });
   await prisma.notificationPreference.deleteMany({ where: { user: { email: { endsWith: EMAIL_DOMAIN } } } });
@@ -104,7 +116,7 @@ afterEach(async () => {
 describe("email-sms-campaign.service: permissions", () => {
   it("an Edit-only admin can create a campaign but cannot send it", async () => {
     const admin = await makeEditOnlyAdmin();
-    const campaign = await createCampaign(admin.id, { name: "x", channel: "SMS", audienceTarget: "AllCustomers", targetCustomerGroup: null, subject: null, body: "hi {{name}}", scheduledAt: null });
+    const campaign = await createCampaign(admin.id, { name: "x", channel: "SMS", audienceTarget: "AllCustomers", targetCustomerGroup: null, targetSegmentId: null, subject: null, body: "hi {{name}}", scheduledAt: null });
     expect(campaign.status).toBe("Draft");
     await expect(sendCampaignNow(admin.id, campaign.id)).rejects.toBeInstanceOf(PermissionDeniedError);
   });
@@ -112,7 +124,7 @@ describe("email-sms-campaign.service: permissions", () => {
   it("a View-only admin cannot create a campaign but can list", async () => {
     const role = await makeRole([{ module: "Marketing", action: "View" }]);
     const admin = await makeAdminUser(role.id);
-    await expect(createCampaign(admin.id, { name: "x", channel: "SMS", audienceTarget: "AllCustomers", targetCustomerGroup: null, subject: null, body: "hi", scheduledAt: null })).rejects.toBeInstanceOf(PermissionDeniedError);
+    await expect(createCampaign(admin.id, { name: "x", channel: "SMS", audienceTarget: "AllCustomers", targetCustomerGroup: null, targetSegmentId: null, subject: null, body: "hi", scheduledAt: null })).rejects.toBeInstanceOf(PermissionDeniedError);
     await expect(listCampaignsForAdmin(admin.id)).resolves.toBeInstanceOf(Array);
   });
 });
@@ -170,6 +182,20 @@ describe("email-sms-campaign.service: audience resolution + sending", () => {
     expect(await prisma.notificationLog.findFirst({ where: { triggeringEventId: campaign.id, userId: referrer.id } })).not.toBeNull();
     expect(await prisma.notificationLog.findFirst({ where: { triggeringEventId: campaign.id, userId: referred.id } })).not.toBeNull();
     expect(await prisma.notificationLog.findFirst({ where: { triggeringEventId: campaign.id, userId: uninvolved.id } })).toBeNull();
+  });
+
+  // STORY-059a.
+  it("SavedSegment sends to exactly the segment's live members", async () => {
+    const admin = await makeFullAccessAdmin();
+    const inSegment = await makeCustomer({ customerGroup: "Wholesale", smsOptIn: true });
+    const outOfSegment = await makeCustomer({ customerGroup: "Retail", smsOptIn: true });
+    const segment = await prisma.savedSegment.create({ data: { name: `${NAME_PREFIX}segment-${sequence}`, filterCriteria: { customerGroup: "Wholesale" }, createdById: admin.id } });
+    const campaign = await makeSmsCampaign({ audienceTarget: "SavedSegment", targetSegmentId: segment.id }, admin.id);
+
+    await sendCampaignNow(admin.id, campaign.id);
+
+    expect(await prisma.notificationLog.findFirst({ where: { triggeringEventId: campaign.id, userId: inSegment.id } })).not.toBeNull();
+    expect(await prisma.notificationLog.findFirst({ where: { triggeringEventId: campaign.id, userId: outOfSegment.id } })).toBeNull();
   });
 
   it("renders the {{name}} merge field into the message body actually sent", async () => {

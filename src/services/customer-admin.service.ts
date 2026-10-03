@@ -1,6 +1,7 @@
 import type { CouponDiscountType, CustomerGroup } from "@/generated/prisma/client";
 import * as adminNoteRepository from "@/repositories/admin-note.repository";
 import * as addressRepository from "@/repositories/address.repository";
+import * as customerSegmentRepository from "@/repositories/customer-segment.repository";
 import * as loginEventRepository from "@/repositories/login-event.repository";
 import type { CustomerAdminListFilters } from "@/repositories/user.repository";
 import * as userRepository from "@/repositories/user.repository";
@@ -90,7 +91,7 @@ export async function getCustomerAdminDetail(adminUserId: string, customerId: st
   await requirePermission(adminUserId, "Customers", "View");
   const customer = await requireCustomerRow(customerId);
 
-  const [addresses, orders, tickets, loginHistory, rewards, referrals, notes] = await Promise.all([
+  const [addresses, orders, tickets, loginHistory, rewards, referrals, notes, clv] = await Promise.all([
     addressRepository.listAddressesByUserId(customerId),
     getOrderListPage(customerId, page, pageSize),
     listTicketsForUser(customerId, page, pageSize),
@@ -98,9 +99,11 @@ export async function getCustomerAdminDetail(adminUserId: string, customerId: st
     getRewardsSummary(customerId),
     getReferralSummary(customerId),
     adminNoteRepository.findAdminNotesByCustomerId(customerId),
+    // STORY-059a.
+    customerSegmentRepository.getCustomerMetricsFor(customerId),
   ]);
 
-  return { customer: toCustomerAdminSummary(customer), addresses, orders, tickets, loginHistory, rewards, referrals, notes };
+  return { customer: toCustomerAdminSummary(customer), addresses, orders, tickets, loginHistory, rewards, referrals, notes, clv };
 }
 
 export async function getLoginHistory(adminUserId: string, customerId: string, page: number, pageSize: number) {

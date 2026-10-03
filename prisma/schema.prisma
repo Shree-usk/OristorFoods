@@ -2174,6 +2174,8 @@ enum CampaignAudienceTarget {
   CustomerGroupTarget
   LoyaltyMembers
   ReferralMembers
+  // STORY-059a.
+  SavedSegment
 }
 
 enum CampaignStatus {
@@ -2188,6 +2190,9 @@ model EmailSmsCampaign {
   channel        NotificationChannel
   audienceTarget CampaignAudienceTarget
   targetCustomerGroup CustomerGroup?
+  // STORY-059a. Resolved live at send time by crm-segmentation.service.ts::resolveSegmentMembers — not a frozen snapshot.
+  targetSegmentId String?
+  targetSegment  SavedSegment?          @relation(fields: [targetSegmentId], references: [id])
   // Email only — null for SMS/WhatsApp, mirroring NotificationTemplate.
   subject        String?
   // {{name}} merge field, substituted by notification.service.ts::renderTemplate.
@@ -2363,6 +2368,8 @@ model AdminUser {
   exportEnquiriesAssigned    ExportEnquiry[]      @relation("ExportEnquiryAssignee")
   exportEnquiryNotesAuthored ExportEnquiryNote[]
   distributorAccountsCreated DistributorAccount[] @relation("DistributorAccountCreatedBy")
+  // STORY-059a.
+  savedSegmentsCreated SavedSegment[]
   createdAt          DateTime        @default(now())
   updatedAt          DateTime        @updatedAt
 }
@@ -3133,4 +3140,23 @@ model DistributorAccount {
   createdById            String
   createdBy              AdminUser     @relation("DistributorAccountCreatedBy", fields: [createdById], references: [id])
   createdAt              DateTime      @default(now())
+}
+
+// --- CRM Segmentation (STORY-059a) ---
+
+// filterCriteria mirrors AuditLog.metadata's Json-column convention:
+// Prisma.InputJsonValue on the write side, a real Zod-validated
+// SegmentFilterCriteria TS interface (crm-segmentation.schema.ts) for
+// the actual shape. Segments are live — resolveSegmentMembers()
+// re-runs the filter at read/send time rather than storing a frozen
+// member list.
+model SavedSegment {
+  id             String             @id @default(cuid())
+  name           String
+  filterCriteria Json
+  createdById    String
+  createdBy      AdminUser          @relation(fields: [createdById], references: [id])
+  campaigns      EmailSmsCampaign[]
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
 }

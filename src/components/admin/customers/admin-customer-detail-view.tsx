@@ -80,6 +80,12 @@ export function AdminCustomerDetailView({ customerId }: { customerId: string }) 
         <Badge variant={isSuspended ? "destructive" : "default"}>{customer.status}</Badge>
       </div>
 
+      {/* STORY-059a. */}
+      <p className="mt-2 text-small text-charcoal/70">
+        Lifetime value: {detail.clv.totalSpent.toFixed(2)} · {detail.clv.orderCount} orders · Last order:{" "}
+        {detail.clv.lastOrderAt ? new Date(detail.clv.lastOrderAt).toLocaleDateString() : "never"}
+      </p>
+
       {actionError && <p className="mt-3 text-small text-destructive">{actionError}</p>}
       {isSuspended && customer.suspendedReason && (
         <p className="mt-2 text-small text-charcoal/70">
