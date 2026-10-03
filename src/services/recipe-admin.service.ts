@@ -14,6 +14,7 @@ import type { RecipeAdminValidatedInput } from "@/validation/recipe-admin.schema
 import { computeTotalTimeMinutes } from "@/lib/recipe-time";
 import { toRecipeDetail } from "@/services/recipe.service";
 import type { RecipeDetail } from "@/types/recipe";
+import * as versioningService from "@/services/versioning.service";
 
 function toWriteInput(input: RecipeAdminValidatedInput): RecipeAdminWriteInput {
   return { ...input, totalTimeMinutes: computeTotalTimeMinutes(input.prepTimeMinutes, input.cookTimeMinutes) };
@@ -165,7 +166,54 @@ export async function publish(adminUserId: string, id: string): Promise<RecipeAd
   await requirePermission(adminUserId, "Recipes", "Approve");
   const recipe = await requireRecipe(id);
   assertPublishReady(recipe);
-  return transition(adminUserId, id, "Published", { publishedAt: new Date() });
+  const published = await transition(adminUserId, id, "Published", { publishedAt: new Date() });
+  // STORY-053 (additive scope). A version snapshot of every publish — see versioning.service.ts.
+  await versioningService.recordVersion("Recipe", id, published, adminUserId);
+  return published;
+}
+
+/** STORY-053 (additive scope). Restores an old version's snapshot onto the live row, forced back to Draft so the normal review/approve pipeline is never bypassed. */
+export async function restoreFromVersion(adminUserId: string, id: string, versionId: string): Promise<RecipeAdminDetail> {
+  await requirePermission(adminUserId, "Recipes", "Edit");
+  await requireRecipe(id);
+  const version = await versioningService.getVersion(adminUserId, "Recipe", versionId);
+  const snapshot = version.snapshot as unknown as RecipeAdminDetail;
+
+  const input: RecipeAdminWriteInput = {
+    slug: snapshot.slug,
+    title: snapshot.title,
+    shortDescription: snapshot.shortDescription,
+    heroImage: snapshot.heroImage,
+    heroImageAlt: snapshot.heroImageAlt,
+    galleryImageUrls: snapshot.galleryImageUrls,
+    categoryId: snapshot.category.id,
+    cuisine: snapshot.cuisine,
+    difficulty: snapshot.difficulty,
+    prepTimeMinutes: snapshot.prepTimeMinutes,
+    cookTimeMinutes: snapshot.cookTimeMinutes,
+    totalTimeMinutes: snapshot.totalTimeMinutes,
+    servings: snapshot.servings,
+    isFeatured: snapshot.isFeatured,
+    chefNotes: snapshot.chefNotes,
+    nutritionCalories: snapshot.nutritionCalories,
+    nutritionProtein: snapshot.nutritionProtein,
+    nutritionCarbs: snapshot.nutritionCarbs,
+    nutritionFat: snapshot.nutritionFat,
+    nutritionFiber: snapshot.nutritionFiber,
+    nutritionSodium: snapshot.nutritionSodium,
+    videoUrl: snapshot.videoUrl,
+    videoProvider: snapshot.videoProvider,
+    videoDurationSeconds: snapshot.videoDurationSeconds,
+    captionsUrl: snapshot.captionsUrl,
+    dietaryTagIds: snapshot.dietaryTags.map((tag) => tag.dietaryTag.id),
+    ingredients: snapshot.ingredients.map((ingredient) => ({ productId: ingredient.product?.id ?? null, quantity: ingredient.quantity === null ? null : Number(ingredient.quantity), unit: ingredient.unit, displayText: ingredient.displayText })),
+    steps: snapshot.steps.map((step) => ({ instruction: step.instruction, imageUrl: step.imageUrl })),
+  };
+
+  await recipeRepository.updateRecipeAdmin(id, input, adminUserId);
+  const restored = await recipeRepository.updateRecipeStatus(id, { status: "Draft", reviewerComment: null });
+  await writeAuditLog({ actorId: adminUserId, action: "recipe_restored_from_version", module: "Recipes", targetType: "Recipe", targetId: id, metadata: { versionId } });
+  return restored;
 }
 
 export async function archive(adminUserId: string, id: string): Promise<RecipeAdminDetail> {

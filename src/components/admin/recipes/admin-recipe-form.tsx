@@ -17,6 +17,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { AssetPickerDialog } from "@/components/admin/media/asset-picker-dialog";
+import { VersionHistoryPanel } from "@/components/admin/cms/version-history-panel";
 import { RecipeIngredientProductPicker } from "@/components/admin/recipes/recipe-ingredient-product-picker";
 import { SeoFieldsPanel } from "@/components/admin/seo/seo-fields-panel";
 import {
@@ -295,6 +296,7 @@ export function AdminRecipeForm({ recipeId }: { recipeId?: string }) {
           <TabsTrigger value="nutrition">Nutrition</TabsTrigger>
           <TabsTrigger value="media">Media</TabsTrigger>
           <TabsTrigger value="seo">SEO</TabsTrigger>
+          <TabsTrigger value="history">History</TabsTrigger>
         </TabsList>
 
         <TabsContent value="details" className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -545,6 +547,9 @@ export function AdminRecipeForm({ recipeId }: { recipeId?: string }) {
 
         <TabsContent value="seo" className="mt-4">
           <SeoFieldsPanel entityType="Recipe" entityId={recipeId ?? null} />
+        </TabsContent>
+        <TabsContent value="history" className="mt-4">
+          {recipeId ? <VersionHistoryPanel entityType="Recipe" entityId={recipeId} onRestored={() => queryClient.invalidateQueries({ queryKey: ["admin-recipe", recipeId] })} /> : <p className="text-small text-charcoal/60">Save this recipe first to see its version history.</p>}
         </TabsContent>
       </Tabs>
     </form>

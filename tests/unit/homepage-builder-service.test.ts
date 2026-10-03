@@ -51,6 +51,11 @@ async function makeFullAccessAdmin() {
 
 afterEach(async () => {
   await prisma.auditLog.deleteMany({ where: { actor: { email: { endsWith: EMAIL_DOMAIN } } } });
+  // STORY-053. ContentVersion.entityId is a free string with no FK to
+  // HomepageLayout by design (see schema.prisma's own comment) — scoped
+  // by entityType instead, same blanket-delete convention this file
+  // already uses for auditLog.
+  await prisma.contentVersion.deleteMany({ where: { entityType: "HomepageLayout" } });
   await prisma.homepageLayout.deleteMany({ where: { createdBy: { email: { endsWith: EMAIL_DOMAIN } } } });
   await prisma.adminUser.deleteMany({ where: { email: { endsWith: EMAIL_DOMAIN } } });
   await prisma.rolePermission.deleteMany({ where: { role: { key: { startsWith: ROLE_KEY_PREFIX } } } });
@@ -149,6 +154,16 @@ describe("homepage-builder.service", () => {
 
     const categories = draft.sections.find((s) => s.type === "FeaturedCategories")!;
     await expect(updateSection(admin.id, draft.id, categories.id, { visible: false })).rejects.toBeInstanceOf(HomepageLayoutNotDraftError);
+  });
+
+  it("STORY-053: publishing creates a ContentVersion snapshot", async () => {
+    const admin = await makeFullAccessAdmin();
+    const draft = await createDraftLayout(admin.id, { cloneFromPublished: false });
+    await publishLayout(admin.id, draft.id);
+
+    const versions = await prisma.contentVersion.findMany({ where: { entityType: "HomepageLayout", entityId: draft.id } });
+    expect(versions).toHaveLength(1);
+    expect(versions[0].versionNumber).toBe(1);
   });
 
   it("publishing atomically archives the previously-published layout, and rollback republishes it", async () => {
