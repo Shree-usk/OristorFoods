@@ -300,7 +300,13 @@ placeholder (no admin-alert infra exists); Product CSV bulk import/
 export + bulk-edit modal (batched for a later sweep); review photos and
 profile photo upload blocked on the storage/hosting provider decision
 below; a cosmetic `SelectValue` display bug from STORY-043 (known, not
-fixed).
+fixed); **About Us and Sustainability 404 today** — both are in this
+section's own IA (line 99-100) and both are linked live from
+`nav-config.ts`/`footer-config.ts`, but no story was ever written to
+build either page's actual content/route (STORY-004 wired the About
+nav link; STORY-068's SEO QA checklist assumes About exists; neither
+builds it) — needs a small story for two static content pages,
+slotted in opportunistically like STORY-023.
 
 ---
 
