@@ -48,7 +48,7 @@ test.describe("Admin Dashboard (STORY-039)", () => {
     await prisma.role.deleteMany({ where: { key: { startsWith: ROLE_KEY_PREFIX } } });
   });
 
-  test("a Super Administrator-equivalent role sees every real widget plus all three placeholders", async ({ page }) => {
+  test("a Super Administrator-equivalent role sees every real widget plus both remaining placeholders", async ({ page }) => {
     const admin = await makeAdminUser(ALL_WIDGET_MODULES);
     await signIn(page, admin.email);
 

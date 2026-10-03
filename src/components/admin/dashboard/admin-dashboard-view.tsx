@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 
 import { ComingSoonCard } from "@/components/admin/dashboard/coming-soon-card";
 import { ErpSyncCard } from "@/components/admin/dashboard/erp-sync-card";
+import { ExportEnquiriesCard } from "@/components/admin/dashboard/export-enquiries-card";
 import { FailedPaymentsCard } from "@/components/admin/dashboard/failed-payments-card";
 import { LowStockCard } from "@/components/admin/dashboard/low-stock-card";
 import { PendingModerationCard } from "@/components/admin/dashboard/pending-moderation-card";
@@ -38,8 +39,8 @@ export function AdminDashboardView({ initialData }: { initialData: DashboardSumm
     summary.supportTickets ||
     summary.failedPayments ||
     summary.erpSyncStatus ||
+    summary.exportEnquiryStatus ||
     summary.placeholders.liveVisitors ||
-    summary.placeholders.exportEnquiries ||
     summary.placeholders.systemHealth;
 
   return (
@@ -57,11 +58,9 @@ export function AdminDashboardView({ initialData }: { initialData: DashboardSumm
           {summary.supportTickets && <SupportTicketsCard data={summary.supportTickets} />}
           {summary.failedPayments && <FailedPaymentsCard data={summary.failedPayments} />}
           {summary.erpSyncStatus && <ErpSyncCard data={summary.erpSyncStatus} />}
+          {summary.exportEnquiryStatus && <ExportEnquiriesCard data={summary.exportEnquiryStatus} />}
           {summary.placeholders.liveVisitors && (
             <ComingSoonCard title="Live Visitors" note="storefront session tracking isn't built yet." />
-          )}
-          {summary.placeholders.exportEnquiries && (
-            <ComingSoonCard title="Export Enquiries" note="the B2B Export Portal hasn't been built yet." />
           )}
           {summary.placeholders.systemHealth && (
             <ComingSoonCard title="System Health" note="uptime/error-rate monitoring hasn't been built yet." />

@@ -7006,3 +7006,73 @@ analog to Vitest's provider mock used in the unit tests, so the e2e
 spec instead raises its own test timeout to 60s and explicitly awaits
 the invite POST response (30s timeout) before asserting on UI state,
 rather than relying on the default 5s assertion-retry window.
+
+## 2026-10-03 — STORY-058 Export Portal
+
+**`/export` 404'd despite a real-looking CTA already linking to it.**
+The homepage's "Export Solutions" teaser section
+(`home-fixtures.ts:239-248`, built by STORY-006) has pointed
+`ctaHref: "/export"` at a page that never existed, the same gap just
+logged for `/about`/`/sustainability`. Confirmed with the user: this
+story builds *both* the admin console and the storefront enquiry form
+— not deferred, since the story doc's own `ExportEnquiry` model was
+meant to be the field contract such a form posts against, and the
+admin portal needs a real intake path to be useful at all.
+
+**`DistributorAccount` links a real `User`, not a CRM record.**
+STORY-071 had already shipped `CustomerGroup` (with `Distributor`/
+`Export`/`Wholesale` values) and `CustomerGroupPrice` tiered pricing,
+reading real data end to end through `pricing.service.ts`. The story
+doc's own `pricingTierRef` field is realized as `user.customerGroup`
+directly rather than a second pricing-tier model. Conversion:
+`userRepository.findByEmail(enquiry.contactEmail)` first — if found,
+just `updateCustomerGroup(user.id, "Distributor")` and link them (no
+new email, they can already sign in); if not, create a `User` with a
+random unusable bcrypt hash (exactly STORY-057's `inviteAdminUser`
+pattern) inside the same `prisma.$transaction` as the
+`DistributorAccount` row, then — outside that transaction, since an
+email send isn't transactional — call `auth.service.ts`'s
+`requestPasswordReset(email)` so they get a real "set your password"
+link through the *existing* customer flow. No new token type, no new
+invite plumbing.
+
+**Status transitions and the audit log, not a parallel history
+table.** `ExportEnquiryStatus` pipeline (`New → InDiscussion → Quoted
+→ Won`, with `Lost` reachable from any non-terminal state) is
+enforced by a `VALID_TRANSITIONS` guard in `export-enquiry.service.ts`,
+and the AC's "every status change, assignment, and note is logged" is
+satisfied entirely by STORY-057's existing `writeAuditLog()` — no new
+`ExportEnquiryStatusChange`-style table. The detail view's Activity
+panel calls `auditLogRepository.list({targetId: id}, 1)` directly,
+**not** `audit-log-admin.service.ts::listAuditLogs`, which gates on
+`UsersRolesAudit:Audit` — a module permission an Export Manager has no
+reason to hold. This was caught before writing any test, by reasoning
+through what `requirePermission` call a reused function would make,
+not by a failing assertion.
+
+**A real bug the e2e test caught: the "Assigned to" picker was
+empty.** The detail view originally reused STORY-057's
+`fetchUsers()` (`admin-user-admin.service.ts::listUsersForAdmin`) for
+the assignee dropdown — which requires `UsersRolesAudit:View`. An
+Export Manager with full `ExportPortal` permissions but no
+Users/Roles/Audit Logs access got a dropdown with only "Unassigned"
+and no error shown (the `useQuery` failed silently). Fixed by adding
+a dedicated `listAssignableAdmins` (service) /
+`GET /api/admin/export/admins` (route), gated on `ExportPortal:Edit`
+instead — the right fix was a new, correctly-scoped endpoint, not
+granting cross-module permission to use an existing one.
+
+**`Approve`, not `Edit`, gates the Distributor Account conversion.**
+Converting a Won enquiry grants a new entitlement (tiered pricing) and
+can't be undone — the same category this codebase already reserves
+`Approve` for (publish-approval, reward grants), confirmed against the
+one close precedent, `customer-admin.service.ts::setCustomerGroup`,
+which deliberately stays `Edit` because a plain group change isn't
+itself a conversion.
+
+**The e2e test's distributor-conversion step needed the same real-
+email timeout headroom as STORY-057's invite flow** — `requestPasswordReset`
+inside `convertToDistributorAccount` awaits the same ~10s Ethereal
+send, so the spec raises its own `test.setTimeout(60_000)` and
+explicitly `waitForResponse` on the `/convert` POST before asserting
+UI state, rather than the default 5s assertion-retry window.

@@ -1,4 +1,5 @@
 import * as blogRepository from "@/repositories/blog.repository";
+import * as exportEnquiryRepository from "@/repositories/export-enquiry.repository";
 import * as orderRepository from "@/repositories/order.repository";
 import * as paymentRepository from "@/repositories/payment.repository";
 import * as productRepository from "@/repositories/product.repository";
@@ -16,6 +17,11 @@ import type { AdminModule } from "@/generated/prisma/client";
 function startOfToday(): Date {
   const now = new Date();
   return new Date(now.getFullYear(), now.getMonth(), now.getDate());
+}
+
+function startOfMonth(): Date {
+  const now = new Date();
+  return new Date(now.getFullYear(), now.getMonth(), 1);
 }
 
 function permissionKey(module: AdminModule): string {
@@ -54,14 +60,16 @@ export interface DashboardSummary {
     queueFailed?: number;
     queueSucceededToday?: number;
   };
+  /** STORY-058. Real, ExportPortal-gated counts — no longer a placeholder (see `placeholders` below). */
+  exportEnquiryStatus?: { newCount: number; inDiscussionCount: number; quotedCount: number; wonThisMonth: number; lostThisMonth: number };
   /**
-   * Live Visitors/Export Enquiries/System Health have no backing data
-   * source at all (see the module doc comment) — these three flags are
-   * still gated on the module's View permission, same as every real
-   * widget, so an admin without that module never sees even a "coming
-   * soon" placeholder for it.
+   * Live Visitors/System Health have no backing data source at all (see
+   * the module doc comment) — these flags are still gated on the
+   * module's View permission, same as every real widget, so an admin
+   * without that module never sees even a "coming soon" placeholder
+   * for it.
    */
-  placeholders: { liveVisitors: boolean; exportEnquiries: boolean; systemHealth: boolean };
+  placeholders: { liveVisitors: boolean; systemHealth: boolean };
 }
 
 /**
@@ -69,9 +77,9 @@ export interface DashboardSummary {
  * already does a single DB read), then includes each widget's key only when
  * its module is granted View — an ungranted or placeholder-only widget is
  * simply absent from the result, true server-side omission rather than a
- * client-side hide. Live Visitors/Export Enquiries/System Health have no
- * backing data source at all and are never included here — those three
- * render as static "coming soon" cards on the frontend, see
+ * client-side hide. Live Visitors/System Health have no backing data
+ * source at all and are never included here — those two render as
+ * static "coming soon" cards on the frontend, see
  * docs/architecture-decisions.md.
  */
 export async function getDashboardSummary(adminUserId: string): Promise<DashboardSummary> {
@@ -79,7 +87,6 @@ export async function getDashboardSummary(adminUserId: string): Promise<Dashboar
   const summary: DashboardSummary = {
     placeholders: {
       liveVisitors: permissions.has(permissionKey("CRMAnalytics")),
-      exportEnquiries: permissions.has(permissionKey("ExportPortal")),
       systemHealth: permissions.has(permissionKey("UsersRolesAudit")),
     },
   };
@@ -120,6 +127,22 @@ export async function getDashboardSummary(adminUserId: string): Promise<Dashboar
   if (permissions.has(permissionKey("Customers"))) {
     const byStatus = await safe(() => supportTicketRepository.countTicketsByStatus(), "supportTickets");
     if (byStatus) summary.supportTickets = byStatus;
+  }
+
+  if (permissions.has(permissionKey("ExportPortal"))) {
+    const counts = await safe(() => exportEnquiryRepository.countsByStatus(), "exportEnquiryStatus.counts");
+    const wonThisMonth = await safe(() => exportEnquiryRepository.countWonSince(startOfMonth()), "exportEnquiryStatus.wonThisMonth");
+    const lostThisMonth = await safe(() => exportEnquiryRepository.countLostSince(startOfMonth()), "exportEnquiryStatus.lostThisMonth");
+    if (counts) {
+      const byStatus = new Map(counts.map((row) => [row.status, row.count]));
+      summary.exportEnquiryStatus = {
+        newCount: byStatus.get("New") ?? 0,
+        inDiscussionCount: byStatus.get("InDiscussion") ?? 0,
+        quotedCount: byStatus.get("Quoted") ?? 0,
+        wonThisMonth: wonThisMonth ?? 0,
+        lostThisMonth: lostThisMonth ?? 0,
+      };
+    }
   }
 
   if (permissions.has(permissionKey("ERPIntegration"))) {
