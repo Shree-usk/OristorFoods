@@ -94,6 +94,8 @@ export interface CustomerAdminDetail {
   rewards: { spendable: number; lifetimeAchievement: number; currentTier: { id: string; name: string } | null };
   referrals: { code: string; totalPointsEarned: number };
   notes: AdminNoteItem[];
+  // STORY-059a.
+  clv: { orderCount: number; totalSpent: number; lastOrderAt: string | null };
 }
 
 function queryString(filters: CustomerAdminListFilters): string {

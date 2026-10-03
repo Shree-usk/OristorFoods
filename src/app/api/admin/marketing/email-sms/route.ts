@@ -32,6 +32,7 @@ export async function POST(request: Request) {
       channel: parsed.data.channel,
       audienceTarget: parsed.data.audienceTarget,
       targetCustomerGroup: parsed.data.targetCustomerGroup ?? null,
+      targetSegmentId: parsed.data.targetSegmentId ?? null,
       subject: parsed.data.subject ?? null,
       body: parsed.data.body,
       scheduledAt: parsed.data.scheduledAt ?? null,

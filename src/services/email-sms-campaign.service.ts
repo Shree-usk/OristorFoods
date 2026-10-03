@@ -6,6 +6,7 @@ import type { CampaignRecipientCandidate } from "@/repositories/campaign-audienc
 import * as notificationRepository from "@/repositories/notification.repository";
 import { writeAuditLog } from "@/services/audit-log.service";
 import { CampaignNotFoundError, IllegalCampaignEditError, IllegalCampaignSendError } from "@/services/campaign.errors";
+import { resolveSegmentMembers } from "@/services/crm-segmentation.service";
 import { renderTemplate, sendCampaignMessage } from "@/services/notification.service";
 import { requirePermission } from "@/services/permission.service";
 
@@ -71,7 +72,7 @@ function contactForChannel(candidate: CampaignRecipientCandidate, channel: Notif
   return candidate.notificationPreference?.whatsappOptIn && candidate.notificationPreference.phone ? candidate.notificationPreference.phone : null;
 }
 
-async function resolveCandidates(campaign: Pick<EmailSmsCampaign, "audienceTarget" | "targetCustomerGroup">): Promise<CampaignRecipientCandidate[]> {
+async function resolveCandidates(campaign: Pick<EmailSmsCampaign, "audienceTarget" | "targetCustomerGroup" | "targetSegmentId">): Promise<CampaignRecipientCandidate[]> {
   switch (campaign.audienceTarget) {
     case "AllCustomers":
       return audienceRepository.listAllCustomers();
@@ -85,13 +86,18 @@ async function resolveCandidates(campaign: Pick<EmailSmsCampaign, "audienceTarge
       const ids = await audienceRepository.listReferralMemberUserIds();
       return ids.length > 0 ? audienceRepository.listCustomersByIds(ids) : [];
     }
+    case "SavedSegment": {
+      if (!campaign.targetSegmentId) return [];
+      const ids = await resolveSegmentMembers(campaign.targetSegmentId);
+      return ids.length > 0 ? audienceRepository.listCustomersByIds(ids) : [];
+    }
     default:
       return [];
   }
 }
 
 /** Segment lookup, then filtered down to actually-contactable + opted-in recipients for the campaign's own channel. */
-async function resolveRecipients(campaign: Pick<EmailSmsCampaign, "audienceTarget" | "targetCustomerGroup" | "channel">): Promise<ResolvedRecipient[]> {
+async function resolveRecipients(campaign: Pick<EmailSmsCampaign, "audienceTarget" | "targetCustomerGroup" | "targetSegmentId" | "channel">): Promise<ResolvedRecipient[]> {
   const candidates = await resolveCandidates(campaign);
   const resolved: ResolvedRecipient[] = [];
   for (const candidate of candidates) {

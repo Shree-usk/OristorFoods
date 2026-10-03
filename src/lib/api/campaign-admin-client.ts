@@ -7,7 +7,7 @@ async function assertOkWithServerMessage(response: Response, fallback: string): 
 }
 
 export type CampaignChannelValue = "Email" | "SMS" | "WhatsApp";
-export type CampaignAudienceTargetValue = "AllCustomers" | "CustomerGroupTarget" | "LoyaltyMembers" | "ReferralMembers";
+export type CampaignAudienceTargetValue = "AllCustomers" | "CustomerGroupTarget" | "LoyaltyMembers" | "ReferralMembers" | "SavedSegment";
 export type CampaignStatusValue = "Draft" | "Scheduled" | "Sent";
 
 export interface Campaign {
@@ -16,6 +16,7 @@ export interface Campaign {
   channel: CampaignChannelValue;
   audienceTarget: CampaignAudienceTargetValue;
   targetCustomerGroup: string | null;
+  targetSegmentId: string | null;
   subject: string | null;
   body: string;
   status: CampaignStatusValue;
@@ -29,6 +30,7 @@ export interface CampaignFormInput {
   channel: CampaignChannelValue;
   audienceTarget: CampaignAudienceTargetValue;
   targetCustomerGroup: string | null;
+  targetSegmentId: string | null;
   subject: string | null;
   body: string;
   scheduledAt: string | null;

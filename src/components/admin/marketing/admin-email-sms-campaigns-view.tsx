@@ -11,6 +11,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
+
 import {
   createCampaignAdmin,
   fetchCampaignDeliverySummary,
@@ -23,6 +24,7 @@ import {
   type CampaignChannelValue,
   type CampaignFormInput,
 } from "@/lib/api/campaign-admin-client";
+import { fetchSegments } from "@/lib/api/admin-crm-client";
 
 const CHANNELS: { value: CampaignChannelValue; label: string }[] = [
   { value: "Email", label: "Email" },
@@ -35,12 +37,13 @@ const AUDIENCE_TARGETS: { value: CampaignAudienceTargetValue; label: string }[] 
   { value: "CustomerGroupTarget", label: "A specific customer group" },
   { value: "LoyaltyMembers", label: "Loyalty members" },
   { value: "ReferralMembers", label: "Referral members" },
+  { value: "SavedSegment", label: "A saved segment" },
 ];
 
 const CUSTOMER_GROUPS = ["Retail", "Wholesale", "Distributor", "Export", "PrivateLabel"];
 
 function emptyForm(): CampaignFormInput {
-  return { name: "", channel: "Email", audienceTarget: "AllCustomers", targetCustomerGroup: null, subject: "", body: "", scheduledAt: null };
+  return { name: "", channel: "Email", audienceTarget: "AllCustomers", targetCustomerGroup: null, targetSegmentId: null, subject: "", body: "", scheduledAt: null };
 }
 
 function toFormInput(campaign: Campaign): CampaignFormInput {
@@ -49,6 +52,7 @@ function toFormInput(campaign: Campaign): CampaignFormInput {
     channel: campaign.channel,
     audienceTarget: campaign.audienceTarget,
     targetCustomerGroup: campaign.targetCustomerGroup,
+    targetSegmentId: campaign.targetSegmentId,
     subject: campaign.subject,
     body: campaign.body,
     scheduledAt: campaign.scheduledAt ? campaign.scheduledAt.slice(0, 16) : null,
@@ -74,6 +78,7 @@ export function AdminEmailSmsCampaignsView() {
 
   const { data } = useQuery({ queryKey: ["admin-campaigns"], queryFn: fetchCampaigns });
   const campaigns = data?.campaigns ?? [];
+  const { data: segments } = useQuery({ queryKey: ["admin-crm-segments"], queryFn: fetchSegments });
 
   function refresh() {
     queryClient.invalidateQueries({ queryKey: ["admin-campaigns"] });
@@ -169,7 +174,11 @@ export function AdminEmailSmsCampaignsView() {
               <TableCell className="font-medium">{campaign.name}</TableCell>
               <TableCell>{campaign.channel}</TableCell>
               <TableCell>
-                {campaign.audienceTarget === "CustomerGroupTarget" ? `${campaign.targetCustomerGroup}` : campaign.audienceTarget}
+                {campaign.audienceTarget === "CustomerGroupTarget"
+                  ? `${campaign.targetCustomerGroup}`
+                  : campaign.audienceTarget === "SavedSegment"
+                    ? (segments?.find((s) => s.id === campaign.targetSegmentId)?.name ?? "Saved segment")
+                    : (AUDIENCE_TARGETS.find((t) => t.value === campaign.audienceTarget)?.label ?? campaign.audienceTarget)}
               </TableCell>
               <TableCell>
                 <UiBadge variant={campaign.status === "Sent" ? "default" : "outline"}>{campaign.status}</UiBadge>
@@ -244,7 +253,7 @@ export function AdminEmailSmsCampaignsView() {
           </Label>
           <Select value={form.audienceTarget} onValueChange={(value) => setForm({ ...form, audienceTarget: value as CampaignAudienceTargetValue })}>
             <SelectTrigger id="campaign-audience">
-              <SelectValue />
+              <SelectValue>{(selected: string | null) => AUDIENCE_TARGETS.find((t) => t.value === selected)?.label ?? "Choose an audience"}</SelectValue>
             </SelectTrigger>
             <SelectContent>
               {AUDIENCE_TARGETS.map((target) => (
@@ -262,12 +271,32 @@ export function AdminEmailSmsCampaignsView() {
               </Label>
               <Select value={form.targetCustomerGroup ?? ""} onValueChange={(value) => setForm({ ...form, targetCustomerGroup: value })}>
                 <SelectTrigger id="campaign-customer-group">
-                  <SelectValue placeholder="Select a group" />
+                  <SelectValue>{(selected: string | null) => selected ?? "Select a group"}</SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   {CUSTOMER_GROUPS.map((group) => (
                     <SelectItem key={group} value={group}>
                       {group}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </>
+          )}
+
+          {form.audienceTarget === "SavedSegment" && (
+            <>
+              <Label htmlFor="campaign-segment" className="mt-3 block">
+                Saved segment
+              </Label>
+              <Select value={form.targetSegmentId ?? ""} onValueChange={(value) => setForm({ ...form, targetSegmentId: value })}>
+                <SelectTrigger id="campaign-segment">
+                  <SelectValue>{(selected: string | null) => segments?.find((s) => s.id === selected)?.name ?? "Select a segment"}</SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  {(segments ?? []).map((segment) => (
+                    <SelectItem key={segment.id} value={segment.id}>
+                      {segment.name}
                     </SelectItem>
                   ))}
                 </SelectContent>

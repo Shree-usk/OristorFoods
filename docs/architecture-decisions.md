@@ -7076,3 +7076,97 @@ inside `convertToDistributorAccount` awaits the same ~10s Ethereal
 send, so the spec raises its own `test.setTimeout(60_000)` and
 explicitly `waitForResponse` on the `/convert` POST before asserting
 UI state, rather than the default 5s assertion-retry window.
+
+## 2026-10-04 — STORY-059 split into 059a/b/c, and STORY-059a CRM Segmentation
+
+**STORY-059 (CRM, Analytics & Executive Dashboard) combined three
+loosely-coupled surfaces** — CRM segmentation, general BI/analytics
+reporting, and a distinct Executive Dashboard + scheduled reports —
+each needing its own new aggregation logic, with two of the three
+(a conversion funnel, Core Web Vitals) having zero backing data
+anywhere in this codebase. The same shape that triggered the
+STORY-050/051 splits. Confirmed with the user: split into **059a (CRM
+Segmentation)** → 059b (Analytics/BI Reports) → 059c (Executive
+Dashboard + Scheduled Reports), each its own PR, following the
+STORY-050/051 precedent exactly — the original
+`STORY-059-crm-analytics-executive-dashboard.md` stays as the
+unmodified umbrella reference; each sub-story gets its own file
+(`STORY-059a-crm-segmentation.md` for this one).
+
+**STORY-059a (CRM Segmentation) is the first customer-spend
+aggregation in this codebase.** `user.repository.ts::listCustomersForAdmin`
+(STORY-048) was a plain filtered `findMany`, no joins. New
+`customer-segment.repository.ts::getCustomerMetrics()` does one
+`prisma.order.groupBy({by: ["userId"], ...})` for every customer's
+`{orderCount, totalSpent, lastOrderAt}`, excluding Cancelled orders —
+the exact inclusion rule `admin-dashboard.service.ts`'s `revenueToday`
+already uses, so this CLV figure and the dashboard's own revenue stay
+consistent with each other. Because Prisma can't filter `where` on a
+relation's `SUM`/`COUNT` directly, segmentation is a two-step
+aggregate-then-intersect: `listCandidateUsers()` does a plain `where`
+for reward-tier/city/customer-group, and
+`crm-segmentation.service.ts::filterCustomers()` combines both in
+memory. Reasonable at this business's scale; revisit with real SQL
+aggregation if the customer table grows large enough for this to
+matter.
+
+**`SegmentFilterCriteria`'s date fields needed an explicit
+serialize/deserialize boundary, not a direct Json-column round-trip.**
+Zod's `z.coerce.date()` produces real JS `Date` objects, which are
+neither valid `Prisma.InputJsonValue` nor what a stored `Json` column
+hands back on read. `crm-segmentation.service.ts` converts
+`lastOrderAfter`/`lastOrderBefore` to ISO strings at the write
+boundary (`serializeCriteria`) and parses them back to `Date` at the
+read boundary (`deserializeCriteria`) — both `resolveSegmentMembers`
+and `getSegment`'s preview go through this, so `filterCustomers()`
+always operates on real `Date`s regardless of whether criteria came
+from a live request or a stored segment. Caught before writing any
+test, by reasoning through the type boundary, not by a failing
+assertion.
+
+**Segments are live, not snapshotted — `resolveSegmentMembers(id)`
+re-runs the same filter at campaign-send time**, the same behavior
+`LoyaltyMembers`/`ReferralMembers` already have (both compute
+membership live on every send, never a frozen list). A segment that
+changes composition between creation and a later campaign send always
+reflects current data.
+
+**The Marketing Console integration is a real, scoped code change, not
+just a description.** `CampaignAudienceTarget` gained a `SavedSegment`
+value; `EmailSmsCampaign` gained `targetSegmentId`; and
+`email-sms-campaign.service.ts::resolveCandidates()` gained a case
+calling the new `resolveSegmentMembers()` then the existing
+`campaign-audience.repository.ts::listCustomersByIds()` — the exact
+same resolution shape `LoyaltyMembers`/`ReferralMembers` already use.
+No parallel sending path was created.
+
+**A real bug avoided by checking a permission gate before reusing a
+function, not after:** the segment builder's reward-tier picker needed
+a tier list. `rewards.service.ts::listTiersForAdmin` already existed
+but is gated on `RewardsReferrals:View` — an unrelated module an admin
+building a CRM segment shouldn't need (the exact cross-module-
+permission-reuse bug STORY-058's assignee picker hit, caught there
+only after it shipped with an empty dropdown). This time, checked the
+existing function's own `requirePermission` call before reusing it,
+found the mismatch, and added a correctly-scoped
+`listRewardTiersForSegmentation` (gated `CRMAnalytics:View`) that
+reuses the `rewards.repository.ts` read directly instead.
+
+**Fixed a pre-existing cosmetic Select-label bug while in the exact
+file being touched for the `SavedSegment` case.**
+`admin-email-sms-campaigns-view.tsx`'s Audience and Customer-group
+`<Select>`s both used a bare `<SelectValue />` with no label-mapping
+children function — the same Base UI gotcha STORY-055 fixed elsewhere
+— so they showed the raw enum value instead of a label. Fixed both in
+the same edit that added the segment picker, rather than adding a
+fifth option to an already-broken display.
+
+**React Compiler's `react-hooks/purity` rule flagged the segment
+builder's "populate form state from a fetched existing segment"
+effect** (`admin-segment-builder-view.tsx`) as risking cascading
+renders — three `setState` calls in one `useEffect` keyed on a
+react-query result object that gets a new reference on every refetch.
+Fixed with the same `useRef(false)` seeded-guard pattern already
+established in `admin-landing-page-editor-view.tsx`, so the sync runs
+exactly once per mount rather than on every `existing` reference
+change.
