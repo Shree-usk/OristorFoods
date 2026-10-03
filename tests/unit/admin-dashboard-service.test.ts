@@ -174,7 +174,7 @@ describe("admin-dashboard.service", () => {
     expect(summary.erpSyncStatus?.queueQueued).toBeGreaterThanOrEqual(1);
     expect(summary.erpSyncStatus?.queueFailed).toBeGreaterThanOrEqual(1);
     expect(summary.erpSyncStatus?.queueSucceededToday).toBeGreaterThanOrEqual(1);
-    expect(summary.placeholders).toEqual({ liveVisitors: false, exportEnquiries: false, systemHealth: false });
+    expect(summary.placeholders).toEqual({ liveVisitors: false, systemHealth: false });
   });
 
   it("omits every real widget and placeholder for a role with no permissions", async () => {
@@ -183,18 +183,34 @@ describe("admin-dashboard.service", () => {
 
     const summary = await getDashboardSummary(admin.id);
 
-    expect(summary).toEqual({ placeholders: { liveVisitors: false, exportEnquiries: false, systemHealth: false } });
+    expect(summary).toEqual({ placeholders: { liveVisitors: false, systemHealth: false } });
   });
 
-  it("gates the placeholder widgets on their own module permission, independent of real widgets", async () => {
-    const role = await makeRole([{ module: "CRMAnalytics" }, { module: "ExportPortal" }]);
+  it("gates the placeholder widget on its own module permission, independent of real widgets", async () => {
+    const role = await makeRole([{ module: "CRMAnalytics" }]);
     const admin = await makeAdminUser(role.id);
     await makeOrder({ status: "Confirmed", grandTotal: "123.00" });
 
     const summary = await getDashboardSummary(admin.id);
 
     expect(summary.revenueToday).toBeUndefined();
-    expect(summary.placeholders).toEqual({ liveVisitors: true, exportEnquiries: true, systemHealth: false });
+    expect(summary.placeholders).toEqual({ liveVisitors: true, systemHealth: false });
+  });
+
+  // STORY-058.
+  it("includes real exportEnquiryStatus counts for a role granted ExportPortal", async () => {
+    const role = await makeRole([{ module: "ExportPortal" }]);
+    const admin = await makeAdminUser(role.id);
+    await prisma.exportEnquiry.create({ data: { companyName: "Dash Co", contactName: "Dash", contactEmail: `dash-${sequence}@admin-dash-svc-test.test`, country: "LK", productsOfInterest: "Tea", message: "m", status: "New" } });
+    await prisma.exportEnquiry.create({ data: { companyName: "Dash Co 2", contactName: "Dash 2", contactEmail: `dash2-${sequence}@admin-dash-svc-test.test`, country: "LK", productsOfInterest: "Tea", message: "m", status: "Won" } });
+
+    const summary = await getDashboardSummary(admin.id);
+
+    expect(summary.exportEnquiryStatus?.newCount).toBeGreaterThanOrEqual(1);
+    expect(summary.exportEnquiryStatus?.wonThisMonth).toBeGreaterThanOrEqual(1);
+    expect(summary.placeholders).toEqual({ liveVisitors: false, systemHealth: false });
+
+    await prisma.exportEnquiry.deleteMany({ where: { companyName: { in: ["Dash Co", "Dash Co 2"] } } });
   });
 
   it("a role granted only Orders:View sees revenue and failed payments but nothing else", async () => {

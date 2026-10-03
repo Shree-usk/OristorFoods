@@ -86,6 +86,8 @@ model User {
   fraudFlags              FraudFlag[]
   // STORY-050a.
   popupInteractions       PopupInteraction[]
+  // STORY-058.
+  distributorAccount      DistributorAccount?
   createdAt         DateTime   @default(now())
   updatedAt         DateTime   @updatedAt
 }
@@ -2357,6 +2359,10 @@ model AdminUser {
   contentVersionsCreated ContentVersion[]
   // STORY-056.
   syncJobsCreated    SyncJob[]
+  // STORY-058.
+  exportEnquiriesAssigned    ExportEnquiry[]      @relation("ExportEnquiryAssignee")
+  exportEnquiryNotesAuthored ExportEnquiryNote[]
+  distributorAccountsCreated DistributorAccount[] @relation("DistributorAccountCreatedBy")
   createdAt          DateTime        @default(now())
   updatedAt          DateTime        @updatedAt
 }
@@ -3054,4 +3060,77 @@ model InventorySetting {
   id                String   @id @default("global")
   lowStockThreshold Int      @default(10)
   updatedAt         DateTime @updatedAt
+}
+
+// --- Export Portal (STORY-058) ---
+
+enum ExportEnquiryStatus {
+  New
+  InDiscussion
+  Quoted
+  Won
+  Lost
+}
+
+// Submitted anonymously via the public /export storefront form — no
+// User relation at submission time. productsOfInterest/volumeEstimate
+// are free-text, not a Product relation: the AC's "filterable by ...
+// product interest" is satisfied by a contains search, same shape as
+// other free-text admin filters in this codebase (e.g. AuditLog.targetId).
+model ExportEnquiry {
+  id                 String              @id @default(cuid())
+  companyName        String
+  contactName        String
+  contactEmail       String
+  contactPhone       String?
+  country            String
+  productsOfInterest String
+  volumeEstimate     String?
+  message            String              @db.VarChar(4000)
+  status             ExportEnquiryStatus @default(New)
+  assignedToId       String?
+  assignedTo         AdminUser?          @relation("ExportEnquiryAssignee", fields: [assignedToId], references: [id], onDelete: SetNull)
+  notes              ExportEnquiryNote[]
+  distributorAccount DistributorAccount?
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+
+  @@index([status])
+  @@index([country])
+  @@index([assignedToId])
+}
+
+// Strictly internal — never visible to the enquirer (AC). A reply sent
+// to the enquirer is tracked via writeAuditLog instead, not here; see
+// docs/architecture-decisions.md's STORY-058 entry.
+model ExportEnquiryNote {
+  id        String        @id @default(cuid())
+  enquiryId String
+  enquiry   ExportEnquiry @relation(fields: [enquiryId], references: [id], onDelete: Cascade)
+  authorId  String
+  author    AdminUser     @relation(fields: [authorId], references: [id])
+  body      String        @db.VarChar(2000)
+  createdAt DateTime      @default(now())
+
+  @@index([enquiryId])
+}
+
+// Created only by converting a Won ExportEnquiry. `userId` links a real
+// User (customerGroup set to Distributor at conversion time) so the
+// distributor actually receives STORY-071's CustomerGroupPrice tiered
+// pricing at checkout — this is not a CRM-only record.
+model DistributorAccount {
+  id                     String        @id @default(cuid())
+  companyName            String
+  region                 String
+  contactName            String
+  contactEmail           String
+  contactPhone           String?
+  userId                 String        @unique
+  user                   User          @relation(fields: [userId], references: [id])
+  convertedFromEnquiryId String        @unique
+  convertedFromEnquiry   ExportEnquiry @relation(fields: [convertedFromEnquiryId], references: [id])
+  createdById            String
+  createdBy              AdminUser     @relation("DistributorAccountCreatedBy", fields: [createdById], references: [id])
+  createdAt              DateTime      @default(now())
 }
