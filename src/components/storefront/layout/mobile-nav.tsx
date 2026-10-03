@@ -6,16 +6,21 @@ import { useState } from "react";
 
 import { cn } from "@/lib/utils";
 import { mobileNavItems } from "@/lib/nav-config";
+import type { NavItem } from "@/lib/nav-config";
+import { resolveMenuIcon } from "@/lib/menu-icons";
 import { useCart } from "@/hooks/use-cart";
 import { MobileMenuDrawer } from "./mobile-menu-drawer";
 
 /**
  * Fixed bottom nav bar, mobile-only (`md:hidden`) — the exact 8-item
  * list from docs/blueprint.md Section 4: Home, Products, Recipes,
- * Search, Rewards, Account, Menu, Cart. "Menu" opens the off-canvas
- * drawer with the remaining desktop-only links instead of navigating.
+ * Search, Rewards, Account, Menu, Cart. This fixed bar itself stays
+ * hardcoded (STORY-052 scope decision: it mixes content links with
+ * system actions — cart, account — not pure editable content); "Menu"
+ * opens the off-canvas drawer with `drawerItems`, which the parent
+ * Server Component chain resolves from the published Mobile menu.
  */
-export function MobileNav() {
+export function MobileNav({ drawerItems }: { drawerItems: NavItem[] }) {
   const pathname = usePathname();
   const { cart } = useCart();
   const cartCount = cart?.itemCount ?? 0;
@@ -41,6 +46,7 @@ export function MobileNav() {
           const isMenuButton = item.href === "#menu";
           const isActive = !isMenuButton && (item.href === "/" ? pathname === "/" : pathname.startsWith(item.href));
           const showCartBadge = item.label === "Cart" && cartCount > 0;
+          const Icon = resolveMenuIcon(item.icon ?? null);
 
           const content = (
             <>
@@ -51,7 +57,7 @@ export function MobileNav() {
                   instead — see docs/architecture-decisions.md's contrast
                   table from STORY-002, which flagged this exact combo. */}
               <span className={cn("relative", isActive ? "text-primary" : "text-stone")}>
-                <item.icon className="size-5" aria-hidden="true" />
+                {Icon && <Icon className="size-5" aria-hidden="true" />}
                 {showCartBadge && (
                   <span className="absolute -top-1 -right-1.5 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-primary px-0.5 text-[9px] leading-none text-primary-foreground">
                     {cartCount > 99 ? "99+" : cartCount}
@@ -90,7 +96,7 @@ export function MobileNav() {
           );
         })}
       </nav>
-      <MobileMenuDrawer open={isDrawerOpen} onOpenChange={setIsDrawerOpen} />
+      <MobileMenuDrawer open={isDrawerOpen} onOpenChange={setIsDrawerOpen} items={drawerItems} />
     </>
   );
 }

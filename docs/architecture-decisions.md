@@ -6414,3 +6414,132 @@ the list's own refetch); picking a real, genuinely-small `MediaAsset`
 through the real `SeoFieldsPanel` on that product's own admin page
 shows the new "Social image is at least 1200x630" health check failing
 live, before any save.
+
+## 2026-10-03 — STORY-052 Navigation & Menu Management
+
+Replaces `src/lib/nav-config.ts`/`footer-config.ts`'s hardcoded arrays
+with an admin-editable, DB-backed system — both files' own header
+comments already anticipated this story. Confirmed genuinely
+greenfield: no `Menu` model existed, only an `AdminModule.Navigation`
+enum placeholder with no consumer. Built as one story (user's explicit
+choice over a 050/051-style split, despite comparable combined scope).
+
+**Mega Menu is a 4th admin *tab*, not a 4th `MenuLocation`.** Only 3
+real locations (`Header`/`Footer`/`Mobile`) — mega-menu content is
+nested `MenuItem` children under a Header item via the self-relation
+`parentId`, matching `nav-config.ts`'s existing `NavItem.megaMenu?:
+MegaMenuSection[]` shape. The Mega Menu tab is a separate `MenuTreeEditor`
+instance scoped to one Header item's subtree (`rootParentId`/`rootDepth`
+props added to support this), not a parallel data structure. Max
+nesting depth is enforced in the service layer only (Prisma can't
+express recursive depth constraints): Header 2 levels (top item →
+section → link/promo), Footer 1 (column → link), Mobile flat.
+
+**Publish/rollback mirrors STORY-042's `HomepageLayout` exactly** — a
+`Draft`/`Published`/`Archived` status enum on `Menu` itself, no
+separate version/snapshot table. `menu.repository.ts::publishMenuSwappingPrevious`
+is `homepage-layout.repository.ts::publishLayoutSwappingPrevious` with
+one addition: the swap's `findFirst` is scoped by `location`, so
+publishing Header never archives Footer's or Mobile's published row.
+Rollback republishes the most-recently-Archived row for that location
+via the same primitive, same as `homepage-builder.service.ts`'s
+`rollbackToPrevious`. Unlike Homepage Builder's multi-draft workflow,
+Navigation keeps exactly one Draft per location at a time, auto-
+vivified (`getDraftMenu`) rather than requiring an explicit "new draft"
+action — simpler mental model, appropriate since nav items change far
+less often than homepage layouts and don't need parallel draft
+branches.
+
+**Visibility is a scoped-down `PopupAudienceTarget`.** `MenuItemVisibility`
+has 3 cases (`Always`/`Authenticated`/`CustomerGroupTarget`) instead of
+`popup.service.ts`'s full 7-case audience targeting — loyalty/referral
+targeting doesn't make sense for a nav item. `menu-visibility.service.ts`'s
+`matchesMenuVisibility` mirrors `matchesAudience`'s switch shape at a
+smaller scale.
+
+**Internal-route validation reuses `sitemap.service.ts`'s
+`buildSitemapEntries()`, plus a separate, broader static-routes list.**
+The sitemap's own static-page list is scoped to SEO indexing and
+deliberately excludes real, legitimate routes (account pages, legal
+pages, search) that a nav item can still validly link to — confirmed
+by checking it omits `/about`, `/account`, `/legal/*`, etc.
+`link-check.service.ts::checkInternalPath` strips the query string
+before comparing (nav links commonly point at a base route with
+filters, e.g. `/products?collection=best-sellers`, not a discrete
+sitemap entry) and checks against the static list first, falling back
+to the sitemap's entries for detail pages. External URL checking
+(`checkExternalUrl`, a single `fetch(..., { method: "HEAD" })`) has an
+injectable `ExternalUrlChecker` parameter specifically so tests never
+make a real network call.
+
+**The nested drag-and-drop tree (`menu-tree-editor.tsx`) is the one
+genuinely novel piece of UI in this codebase** — every prior dnd-kit
+usage (`homepage-builder-canvas.tsx`, `hero-banner-editor.tsx`) is a
+single flat `SortableContext`. This is the standard dnd-kit "multiple
+containers" pattern: one `DndContext`, one `SortableContext` per
+container (siblings sharing a parent), each container also a
+`useDroppable` zone (needed so an empty container is still a valid
+drop target), and `onDragEnd` compares the dragged item's current
+`parentId` against the drop target's container to decide reorder vs.
+reparent. An early version had a real off-by-one bug here: the "Add
+item" button's visibility check used `depth < maxDepth` (correct for
+"can this item have children," since a child sits one level deeper)
+copy-pasted into the wrong place — the container's own "can I add one
+more item at my own depth" check needs `depth <= maxDepth`, since the
+container's items sit *at* `depth`, not one below it. Caught by the e2e
+test, which would have shown a nonfunctional "Add item" button on the
+Header tab's own top-level editor (the first thing any admin would try)
+had it shipped.
+
+**`NavItem.icon` had to become a string (an icon *name*), not the
+`LucideIcon` component reference it was before this story.**
+`navigation.service.ts`'s storefront-resolution functions now run in an
+async Server Component (`Header`) and pass their result as a prop into
+a Client Component (`NavLinks`) — a React component/function reference
+cannot cross that serialization boundary (Next.js throws "Functions
+cannot be passed directly to Client Components"). Fixed by storing an
+icon *name* string (a key into the existing `src/lib/menu-icons.ts`
+curated map, already used for the admin icon picker) on `NavItem`
+instead, resolved to a component only by whichever Client Component
+actually renders one (`mobile-nav.tsx`, `mobile-drawer-links-list.tsx`
+— desktop `NavLinks` never renders an icon at all). This also required
+rewriting `nav-config.ts`'s static arrays to use the same string
+convention, for type consistency between the hardcoded and DB-backed
+cases. Caught by the e2e test's dev-server crash, not a type error —
+`LucideIcon` objects are structurally valid at compile time; the
+violation is a runtime RSC-boundary rule TypeScript doesn't model.
+
+**`MegaMenuPanel` needs a `NavigationMenuRoot` context even in the
+standalone admin preview.** It's normally rendered inside
+`NavigationMenuContent` as part of `NavLinks`' real hover/trigger flow,
+and its links use `NavigationMenuLink` internally, which throws
+without that ancestor context. The Mega Menu tab's own preview
+(`MegaMenuPreview`) has no real trigger to hover, so it wraps the panel
+in a minimal `NavigationMenu`/`NavigationMenuList`/`NavigationMenuItem`
+with a fixed `defaultValue` to force the content open uncontrolled by
+any interaction, rather than reimplementing `MegaMenuPanel`'s markup
+without the primitive (which would stop being a faithful preview).
+
+**Two small, genuinely reusable presentational components were
+extracted, not duplicated, for the preview pane:** `FooterColumnsGrid`
+(out of `footer.tsx`) and `MobileDrawerLinksList` (out of
+`mobile-menu-drawer.tsx`). Both the real storefront component and the
+admin preview pane import the same one — the preview is pixel-faithful
+by construction, not a maintained-separately mock.
+
+**The e2e test deliberately never publishes-and-checks a real
+storefront page load.** Header/Footer/Mobile are global, every-page
+content, and this project's Playwright config runs with
+`fullyParallel: true` — `header.spec.ts`/`footer.spec.ts`/`search.spec.ts`
+all assert against the real, default nav content on every run. A
+published test menu sitting in the shared dev database for even a few
+seconds (the time between this spec's own `publish` call and its
+cleanup) risks flaking those unrelated specs if their workers happen to
+load a storefront page in that window. The publish/rollback atomic-swap
+and the published-menu-to-`NavItem` mapping are both already covered at
+the service layer in `navigation-service.test.ts` with zero real HTTP
+exposure, so `admin-navigation.spec.ts` instead covers what only a
+browser can: the real nested drag-and-drop, the link checker, and the
+Publish button's own UI feedback — confirmed by re-running
+`header.spec.ts`/`footer.spec.ts`/`search.spec.ts` together with this
+new spec to verify no cross-test interference.

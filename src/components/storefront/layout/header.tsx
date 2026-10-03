@@ -1,3 +1,4 @@
+import { getResolvedHeaderItems } from "@/services/navigation.service";
 import { Container } from "./container";
 import { HeaderActions } from "./header-actions";
 import { Logo } from "./logo";
@@ -15,8 +16,14 @@ import { StickyHeaderShell } from "./sticky-header-shell";
  * keeps the compact MobileNav pattern (fixed bottom bar, see
  * mobile-nav.tsx) through the `md` breakpoint too, only switching to the
  * full desktop header at `lg`. Below `lg`, only the logo shows here.
+ *
+ * `getResolvedHeaderItems` (STORY-052) reads the published Header menu
+ * and falls back to nav-config.ts's static defaults until an admin has
+ * published one — this component doesn't need to know which.
  */
-export function Header() {
+export async function Header() {
+  const items = await getResolvedHeaderItems();
+
   return (
     <StickyHeaderShell>
       {/* Tighter gaps below `xl`: at 1024px the 13 nav links plus 7 action
@@ -24,7 +31,7 @@ export function Header() {
       <Container size="wide" className="flex h-full items-center justify-between gap-2 xl:gap-4">
         <Logo />
         <div className="hidden lg:flex">
-          <NavLinks />
+          <NavLinks items={items} />
         </div>
         <div className="hidden lg:flex">
           <HeaderActions />

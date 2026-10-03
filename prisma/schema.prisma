@@ -2297,6 +2297,9 @@ model AdminUser {
   seasonalCampaignsCreated SeasonalCampaign[]
   // STORY-051b.
   redirectsCreated   Redirect[]
+  // STORY-052.
+  menusCreated       Menu[]          @relation("MenuCreatedBy")
+  menusUpdated       Menu[]          @relation("MenuUpdatedBy")
   createdAt          DateTime        @default(now())
   updatedAt          DateTime        @updatedAt
 }
@@ -2785,4 +2788,95 @@ model LandingPageBlock {
   updatedAt         DateTime         @updatedAt
 
   @@index([landingPageId])
+}
+
+// STORY-052. Mega Menu is NOT a 4th location here — it's nested MenuItem
+// children under whichever Header item has mega-menu content, matching
+// nav-config.ts's existing NavItem.megaMenu?: MegaMenuSection[] shape. The
+// admin UI still presents it as its own tab for discoverability.
+enum MenuLocation {
+  Header
+  Footer
+  Mobile
+}
+
+// Same 3-value shape as HomepageLayoutStatus — publish/rollback mirrors
+// homepage-layout.repository.ts's publishLayoutSwappingPrevious exactly,
+// scoped by location instead of being global.
+enum MenuStatus {
+  Draft
+  Published
+  Archived
+}
+
+// None is for a pure grouping node (a mega-menu section heading, a footer
+// column heading) that isn't itself clickable.
+enum MenuLinkType {
+  None
+  Internal
+  External
+}
+
+// Scoped-down version of PopupAudienceTarget (popup.service.ts) — a nav
+// item doesn't need loyalty/referral targeting, just these 3 cases.
+enum MenuItemVisibility {
+  Always
+  Authenticated
+  CustomerGroupTarget
+}
+
+enum MenuContentBlockType {
+  Link
+  PromoTile
+}
+
+model Menu {
+  id          String       @id @default(cuid())
+  location    MenuLocation
+  status      MenuStatus   @default(Draft)
+  publishedAt DateTime?
+  items       MenuItem[]
+  createdById String?
+  createdBy   AdminUser?   @relation("MenuCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  updatedById String?
+  updatedBy   AdminUser?   @relation("MenuUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  @@index([location, status])
+}
+
+model MenuItem {
+  id       String     @id @default(cuid())
+  menuId   String
+  menu     Menu       @relation(fields: [menuId], references: [id], onDelete: Cascade)
+  parentId String?
+  parent   MenuItem?  @relation("MenuItemParent", fields: [parentId], references: [id], onDelete: Cascade)
+  children MenuItem[] @relation("MenuItemParent")
+  sortOrder Int
+
+  label        String
+  linkType     MenuLinkType @default(None)
+  internalPath String?
+  externalUrl  String?
+  openInNewTab Boolean      @default(false)
+  // A curated name key into src/lib/menu-icons.ts's MENU_ICON_OPTIONS map,
+  // not a free string — never rendered as raw HTML/executable content.
+  icon String?
+
+  visibility          MenuItemVisibility @default(Always)
+  targetCustomerGroup CustomerGroup?
+  active              Boolean            @default(true)
+
+  // Only meaningful for Mega Menu children (location: Header, depth 2).
+  contentBlockType MenuContentBlockType @default(Link)
+  promoImageUrl    String?
+  promoImageAlt    String?
+  promoHeading     String?
+  promoCtaLabel    String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([menuId, parentId])
 }

@@ -3,6 +3,7 @@ import { Footer } from "@/components/storefront/layout/footer";
 import { Header } from "@/components/storefront/layout/header";
 import { MobileNav } from "@/components/storefront/layout/mobile-nav";
 import { PopupTriggerController } from "@/components/storefront/popup/popup-trigger-controller";
+import { getResolvedMobileDrawerItems } from "@/services/navigation.service";
 
 /**
  * Customer-facing shell: header, main content landmark, mobile bottom
@@ -19,7 +20,9 @@ import { PopupTriggerController } from "@/components/storefront/popup/popup-trig
  * server, so there's no hydration mismatch to guard against. Revisit if
  * a persisted store (zustand/middleware persist) is ever added.
  */
-export default function StorefrontLayout({ children }: { children: React.ReactNode }) {
+export default async function StorefrontLayout({ children }: { children: React.ReactNode }) {
+  const drawerItems = await getResolvedMobileDrawerItems();
+
   return (
     <div className="flex min-h-dvh flex-col">
       <div className="print:hidden">
@@ -29,7 +32,7 @@ export default function StorefrontLayout({ children }: { children: React.ReactNo
         <PageTransition>{children}</PageTransition>
       </main>
       <div className="print:hidden">
-        <MobileNav />
+        <MobileNav drawerItems={drawerItems} />
       </div>
       <div className="print:hidden">
         <Footer />
