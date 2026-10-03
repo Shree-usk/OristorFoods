@@ -1,3 +1,4 @@
+import { toCsv } from "@/lib/csv";
 import type { AuditLogFilters } from "@/repositories/audit-log.repository";
 import * as auditLogRepository from "@/repositories/audit-log.repository";
 import { requirePermission } from "@/services/permission.service";
@@ -9,29 +10,20 @@ export async function listAuditLogs(adminUserId: string, filters: AuditLogFilter
   return auditLogRepository.list(filters, page);
 }
 
-function csvEscape(value: string): string {
-  if (/[",\n]/.test(value)) return `"${value.replace(/"/g, '""')}"`;
-  return value;
-}
-
 export async function exportAuditLogsCsv(adminUserId: string, filters: AuditLogFilters): Promise<string> {
   await requirePermission(adminUserId, "UsersRolesAudit", "Export");
   const rows = await auditLogRepository.listForExport(filters);
 
   const header = ["Timestamp", "Actor", "Action", "Module", "Target Type", "Target ID", "Metadata"];
-  const lines = rows.map((row) =>
-    [
-      row.createdAt.toISOString(),
-      row.actor?.email ?? "(system)",
-      row.action,
-      row.module ?? "",
-      row.targetType ?? "",
-      row.targetId ?? "",
-      row.metadata ? JSON.stringify(row.metadata) : "",
-    ]
-      .map((value) => csvEscape(String(value)))
-      .join(","),
-  );
+  const lines = rows.map((row) => [
+    row.createdAt.toISOString(),
+    row.actor?.email ?? "(system)",
+    row.action,
+    row.module ?? "",
+    row.targetType ?? "",
+    row.targetId ?? "",
+    row.metadata ? JSON.stringify(row.metadata) : "",
+  ]);
 
-  return [header.join(","), ...lines].join("\n");
+  return toCsv(header, lines);
 }
