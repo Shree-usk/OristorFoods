@@ -6922,3 +6922,87 @@ helper already uses for the identical reason. Confirmed end-to-end via
 a live browser demo (trigger → success; trigger-and-force-fail via the
 real API → view error/payload/attempt-history in the drawer →
 backoff-blocked retry message) before opening the PR.
+
+## 2026-10-03 — STORY-057 Users, Roles & Audit Logs
+
+**Almost nothing here is new infrastructure — this story is CRUD UI
+wired onto guards STORY-038 already built and left explicitly waiting.**
+`permission.service.ts::assertCanModifyRolePermission(roleKey, granting)`
+and `::assertNotLastSuperAdmin(adminUserId)` both carried doc comments
+naming this story as their first caller; `audit-log.service.ts::writeAuditLog()`
+is the exact shared logger this story's own task list asked for under
+the name `audit.service.ts::logAction()`, already called by every
+admin service built this session. `AuditLog`, `AdminUser`, `Role`,
+`RolePermission` all pre-existed. The only schema change is additive:
+one new `AdminUserStatus.Invited` enum value.
+
+**The admin invite token reuses `VerificationToken` a third time**,
+after NextAuth's own unused default and STORY-033's customer
+password-reset. Namespacing the `identifier` as `admin-invite:${email}`
+is load-bearing, not cosmetic — without it, an admin inviting
+`someone@example.com` and that same person later requesting a
+customer password reset on the same address would read/delete each
+other's tokens from the same table.
+
+**The accept-invite page had to move outside the `(admin)` route
+group.** It was first placed at `/admin/users/accept-invite`, inside
+that group — unreachable, because `src/app/(admin)/layout.tsx`
+unconditionally redirects any unauthenticated request to
+`/admin/login`, and an invited admin has no session yet. Caught by
+reading that layout during implementation, not by a test failure.
+Fixed by moving it to `/admin/accept-invite`, mirroring where
+`/admin/login` itself already lives outside the group.
+
+**A role's permission matrix save is all-or-nothing, not a per-cell
+diff.** `updateRolePermissions` takes the entries the UI currently
+shows as the role's entire desired state and calls
+`roleRepository.replacePermissions` (the `coupon.repository.ts`
+delete-all-then-create-many idiom) in one transaction. Before writing
+anything, every entry that would *revoke* from the Super Administrator
+role is checked against `assertCanModifyRolePermission` — if any one
+of them would fail, the whole save is rejected and nothing is
+written, rather than partially applying a weaker-than-intended matrix.
+
+**System Health reports three sections as explicit `available: false`
+rather than fabricating numbers.** This codebase has no uptime
+monitoring, no error-rate tracking, and no backup system — inventing
+plausible-looking numbers for them would be actively misleading in a
+panel whose whole purpose is operational trust. Only the ERP section
+is real, reusing STORY-056's `syncJobRepository.getTodaySummary()`
+and `orderRepository.getErpSyncStatus()` directly. The UI renders the
+three placeholder sections as visible "Not available yet" cards
+instead of hiding them, so the gap is legible rather than silent —
+the same treatment the Admin Dashboard already gives its own
+`liveVisitors`/`exportEnquiries` flags.
+
+**Four separate routes, not one tabbed page.** Settings' nine tabs
+are genuinely homogeneous key/value panels sharing one shape; Users,
+Roles, Audit Logs, and System Health each have their own distinct
+list/detail/data shape, closer to the Marketing module's five
+separate routes than to Settings. All four gate on
+`AdminModule.UsersRolesAudit`, using **Audit** and **Export** as
+real, distinct permission actions (not just View/Edit) for the first
+time outside their original STORY-038 enum definition.
+
+**A real local dev-DB discovery, not a code bug:** this session's
+own repeated targeted `vitest` runs had, over time, left the seeded
+`super_administrator` role in the local PGlite dev DB with zero
+`RolePermission` rows (`tests/unit/global-setup.ts` truncates all
+data before every run with no re-seed step). A test helper that
+assumed that role always had full permissions failed with
+`permission_denied` instead of the expected guard error until fixed
+to find-or-create the role and explicitly grant the specific
+permissions its own calls need — mirroring the existing precedent in
+`tests/unit/permission-service.test.ts`. Anyone demoing Super
+Administrator features against this same local DB should expect to
+need the same re-grant.
+
+**The invite flow's e2e test needed real timeout headroom, not a
+mock.** `inviteAdminUser` awaits a real email send;
+`notification/email.provider.ts` auto-provisions an Ethereal sandbox
+inbox when `SMTP_HOST` isn't set, a genuine ~10s external network
+round trip in this environment. Playwright has no module-mocking
+analog to Vitest's provider mock used in the unit tests, so the e2e
+spec instead raises its own test timeout to 60s and explicitly awaits
+the invite POST response (30s timeout) before asserting on UI state,
+rather than relying on the default 5s assertion-retry window.
