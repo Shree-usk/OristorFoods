@@ -1937,6 +1937,54 @@ model OrderIntegrationEvent {
   @@index([status, createdAt])
 }
 
+// --- ERP Integration Console (STORY-056) ---
+// A generic, connector-agnostic sync job queue — deliberately separate
+// from OrderIntegrationEvent above (STORY-028's real, order-only outbox,
+// which has no retry concept). Job types ("Order Export", "Stock
+// Import", "Product Sync", ...) are a free string, not a closed enum,
+// so a future job type never needs a migration — same reasoning as
+// OrderIntegrationEvent.eventType. No real ERP is connected yet per
+// docs/blueprint.md Section 10; see sync-connector.ts's stub.
+enum SyncJobStatus {
+  Queued
+  Processing
+  Success
+  Failed
+}
+
+model SyncJob {
+  id               String        @id @default(cuid())
+  jobType          String
+  status           SyncJobStatus @default(Queued)
+  targetEntityType String?
+  targetEntityId   String?
+  payload          Json?
+  errorMessage     String?
+  attemptCount     Int           @default(0)
+  nextRetryAt      DateTime?
+  createdById      String?
+  createdBy        AdminUser?    @relation(fields: [createdById], references: [id])
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+  attempts         SyncJobAttempt[]
+
+  @@index([status, createdAt])
+  @@index([jobType])
+}
+
+model SyncJobAttempt {
+  id            String        @id @default(cuid())
+  jobId         String
+  job           SyncJob       @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  attemptNumber Int
+  result        SyncJobStatus
+  errorDetail   String?
+  startedAt     DateTime      @default(now())
+  completedAt   DateTime?
+
+  @@index([jobId])
+}
+
 // --- Referral Programme (STORY-031) ---
 // Every registered customer gets a shareable code (lazily generated on
 // first request, or eagerly at registration). Attribution before
@@ -2302,6 +2350,8 @@ model AdminUser {
   menusUpdated       Menu[]          @relation("MenuUpdatedBy")
   // STORY-053.
   contentVersionsCreated ContentVersion[]
+  // STORY-056.
+  syncJobsCreated    SyncJob[]
   createdAt          DateTime        @default(now())
   updatedAt          DateTime        @updatedAt
 }
