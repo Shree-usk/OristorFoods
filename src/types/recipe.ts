@@ -89,6 +89,7 @@ export interface RecipeDetail {
   metaDescription: string | null;
   robotsIndex: boolean;
   robotsFollow: boolean;
+  jsonLdOverride: unknown;
   publishedAt: string | null;
   relatedRecipes: RecipeCard[];
   video: { url: string; provider: "Youtube" | "Vimeo" | "SelfHosted"; durationSeconds: number | null; captionsUrl: string | null } | null;

@@ -11,4 +11,10 @@ export const seoMetaSchema = z.object({
   robotsIndex: z.boolean().optional(),
   robotsFollow: z.boolean().optional(),
   focusKeyword: z.string().trim().min(1).nullable().optional(),
+  // Raw structured data (schema.org JSON-LD), a full override of the
+  // storefront's own auto-generated template for this page when set — not
+  // schema.org-validated, just required to be real JSON (the admin panel
+  // parses the textarea client-side before sending, so this is already a
+  // parsed value by the time it reaches here, never a raw string).
+  jsonLdOverride: z.unknown().nullable().optional(),
 });

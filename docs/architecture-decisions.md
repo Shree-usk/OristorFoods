@@ -6221,3 +6221,106 @@ full-access admin creates a redirect through the real console; a
 separate, real storefront visitor hitting the old path is actually
 redirected once the cache TTL elapses, proving the `proxy.ts`
 integration end-to-end, not just the admin CRUD.
+
+## 2026-10-03 — STORY-051c Sitemap.xml / robots.txt + Structured Data
+
+Third of the four STORY-051 sub-stories. Depends on 051a's `SeoMeta`
+and 051b's `Redirect`. Research before planning found the AC's
+structured-data bullet already half-satisfied by earlier stories:
+`ProductJsonLd`/`RecipeJsonLd`/`BlogJsonLd` (Product/Recipe/Article-
+BlogPosting) already existed, each rendering through one shared
+`JsonLdScript` helper (`src/components/storefront/product/json-ld-script.tsx`),
+wired into their own detail pages. Organization was the one content
+type with zero existing implementation, and no per-page override
+mechanism existed at all — `SeoMeta` had nothing JSON-LD-related.
+Nothing for `sitemap.xml`/`robots.txt` existed anywhere.
+
+**Reused, did not rebuild, the existing Product/Recipe/BlogPosting
+JSON-LD components.** The AC's "default JSON-LD template per content
+type with field mapping" is satisfied by what already shipped — each
+is a working, already-tested, hardcoded-but-correct field mapping.
+Rebuilding them as a generic DB-driven template system would have been
+a risky rewrite of stable code for no practical gain — nothing asks
+for admin-configurable *field mapping*, just that a template exists
+per type. Only two genuine gaps got built: Organization (new, static —
+site identity doesn't vary per page, so no admin CRUD; STORY-054
+System Settings is the natural future home if it ever needs to be
+admin-editable) and a per-page override (new, on `SeoMeta`).
+
+**Per-page override (`SeoMeta.jsonLdOverride Json?`) is a full
+replacement, not a deep merge.** When set, the page renders exactly
+that JSON instead of calling `ProductJsonLd`/etc. at all. A partial
+merge risks producing an invalid combined schema.org object from
+incomplete admin input; a full replacement is simpler and predictable.
+`SeoFieldsPanel`'s new "Advanced: custom structured data (JSON-LD)"
+textarea edits raw JSON text as its own local component state (not
+react-hook-form's value) — parsed client-side immediately before save,
+with an inline error on invalid JSON, so the wire format and the
+stored Prisma `Json` field are always real JSON, never an unparsed
+string. Clearing the field back to "no override" uses `Prisma.DbNull`
+(SQL `NULL`), not `Prisma.JsonNull` (the JSON value `null`) — the two
+are genuinely different things for a Prisma `Json?` column, and only
+the former means "nothing here."
+
+**No logo in the Organization schema — confirmed absent, not
+guessed.** schema.org's `logo` field is optional; the real Oristor
+logo is a webpack-bundled static import (`src/assets/logo/Logo.png`,
+used only via `next/image`), not a file at any stable, public,
+absolute-URL-resolvable path. Fabricating a `public/`-rooted guess
+would just 404 for crawlers. Add it once a logo file actually lives at
+a fixed `public/` path.
+
+**`sitemap.ts`/`robots.ts` are thin callers into a service
+(`sitemap.service.ts`), not inline logic** — matches this project's
+Service Layer rule and makes the entry-building logic unit-testable
+without the Next.js metadata-route runtime. Reuses every content
+type's existing bulk "published" repository function
+(`findPublishedProductsForListing`, `findPublishedRecipes`,
+`findPublishedBlogPosts`, `findPublishedCookingTips`,
+`findPublishedFoodAcademyEntries`, `listAllCategories` filtered to
+`Active`, `listActiveCollections`) — Landing Pages were the one gap (no
+bulk "published-only" listing existed, only a single-by-slug read and
+an admin list spanning every status), closed with a small new
+`listPublishedLandingPages()` the same shape as every other content
+type's. Excludes anything `SeoMeta.robotsIndex: false` (new
+`seo.repository.ts::listRobotsExcludedEntityIds`, reused for Product/
+Recipe/BlogPost — the only three `SeoEntityType` values) and any path
+that's an active `Redirect.sourcePath` (reusing 051b's existing
+`listActiveRedirects()` — no new redirect-side code). `robots.txt`
+stays fully static, no DB dependency — "stays in sync with redirect
+settings" is satisfied by the real HTTP redirect behavior itself
+(051b, already live in `proxy.ts`); a crawler hitting a redirected path
+gets redirected regardless of what `robots.txt` says, so there's
+nothing here that needs to read the `Redirect` table.
+
+**Extracted the copy-pasted `SITE_URL` fallback into one shared module
+(`src/lib/site-url.ts`)** — confirmed duplicated 5 times across the
+codebase before this story (2 as a named constant in
+`products/[slug]/page.tsx` and `recipes/[slug]/page.tsx`, 3 as an
+inline expression in unrelated services, plus a 6th inline occurrence
+in the root `layout.tsx`'s own `metadataBase`). The sitemap, robots,
+and the new Organization JSON-LD all needed it; this story updated the
+3 in-scope call sites (the 2 named constants plus `layout.tsx`) to
+import the shared one instead of adding a 7th copy. The 3 inline
+expressions in `auth.service.ts`/`customer-referrals-dashboard.service.ts`/
+`profile.service.ts` were left alone — unrelated purpose, out of this
+story's blast radius, a documented future cleanup opportunity.
+
+**Testing:** `tests/unit/sitemap-service.test.ts` (5 tests) —
+`buildSitemapEntries()` against real created fixtures (reusing
+`tests/unit/recipe-fixtures.ts`'s shared `makeRecipe`/`makeBlogPost`/
+etc. helpers rather than duplicating fixture setup): static pages
+present, a published product/recipe/post included, a
+`robotsIndex: false` product excluded, a redirected path excluded,
+categories/collections/a published landing page included.
+`tests/unit/seo-service.test.ts` extended with the `jsonLdOverride`
+round-trip + `DbNull`-clears-it case. `tests/e2e/sitemap-and-structured-data.spec.ts`
+— `robots.txt`'s disallow rules and sitemap pointer; a real product's
+`/sitemap.xml` entry confirmed present, then confirmed gone after
+toggling `robotsIndex` off through the real `SeoFieldsPanel`; a real,
+separate storefront visitor loading the product's real PDP sees the
+custom `jsonLdOverride` content in a `<script type="application/ld+json">`
+tag instead of the auto-generated `ProductJsonLd` output (checked
+across every ld+json script on the page, not by DOM position, since
+the sitewide `OrganizationJsonLd` script is also present on every
+page).

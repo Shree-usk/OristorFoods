@@ -1109,6 +1109,12 @@ model SeoMeta {
   robotsIndex     Boolean       @default(true)
   robotsFollow    Boolean       @default(true)
   focusKeyword    String?
+  // STORY-051c. A full replacement, not a merge — when set, the storefront
+  // page renders exactly this instead of calling its own ProductJsonLd/
+  // RecipeJsonLd/BlogJsonLd component at all. A partial merge risks
+  // producing an invalid combined schema.org object from incomplete admin
+  // input; a full override is simpler and predictable.
+  jsonLdOverride  Json?
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
 

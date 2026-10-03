@@ -17,6 +17,11 @@ export function findLandingPageById(id: string): Promise<LandingPageWithBlocks |
   return prisma.landingPage.findUnique({ where: { id }, include: withBlocks });
 }
 
+/** STORY-051c. The sitemap's own read — every live landing page, not just one by slug. */
+export function listPublishedLandingPages() {
+  return prisma.landingPage.findMany({ where: { status: "Published" }, select: { slug: true, updatedAt: true } });
+}
+
 /** The storefront's own read — Published only, visible blocks only. */
 export function findPublishedLandingPageBySlug(slug: string) {
   return prisma.landingPage.findFirst({

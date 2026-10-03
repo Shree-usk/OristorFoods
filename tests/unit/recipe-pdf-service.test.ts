@@ -34,6 +34,7 @@ function makeMinimalRecipe(overrides: Partial<RecipeDetail> = {}): RecipeDetail 
     metaDescription: null,
     robotsIndex: true,
     robotsFollow: true,
+    jsonLdOverride: null,
     publishedAt: null,
     relatedRecipes: [],
     video: null,

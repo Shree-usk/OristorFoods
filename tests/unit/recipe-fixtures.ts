@@ -168,6 +168,7 @@ export function buildRecipeDetail(overrides: Partial<RecipeDetail> = {}): Recipe
     metaDescription: null,
     robotsIndex: true,
     robotsFollow: true,
+    jsonLdOverride: null,
     publishedAt: "2026-09-01T00:00:00.000Z",
     relatedRecipes: [],
     video: null,

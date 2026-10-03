@@ -10,6 +10,7 @@ import { MethodSteps } from "@/components/storefront/recipes/method-steps";
 import { RecipeBookmarkButton } from "@/components/storefront/recipes/recipe-bookmark-button";
 import { RecipeDetailView } from "@/components/storefront/recipes/recipe-detail-view";
 import { RecipeHero } from "@/components/storefront/recipes/recipe-hero";
+import { JsonLdScript } from "@/components/storefront/product/json-ld-script";
 import { RecipeJsonLd } from "@/components/storefront/recipes/recipe-json-ld";
 import { RecipeRatingStars } from "@/components/storefront/recipes/recipe-rating-stars";
 import { RecipeQuestionsSection } from "@/components/storefront/recipes/questions/recipe-questions-section";
@@ -17,13 +18,12 @@ import { RecipeReviewsSection } from "@/components/storefront/recipes/reviews/re
 import { RelatedRecipes } from "@/components/storefront/recipes/related-recipes";
 import { formatIngredientLine, formatScaledQuantity } from "@/lib/recipe-scaling";
 import { formatRecipeTime } from "@/lib/recipe-time";
+import { SITE_URL } from "@/lib/site-url";
 import { listPublishedQuestionsForRecipe } from "@/services/recipe-qa.service";
 import { listApprovedReviewsForRecipe } from "@/services/recipe-review.service";
 import { getRecipeBySlug } from "@/services/recipe.service";
 import { RECIPE_QUESTION_PAGE_SIZE } from "@/types/recipe-question";
 import { RECIPE_REVIEW_PAGE_SIZE } from "@/types/recipe-review";
-
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://oristor.com";
 
 // generateMetadata and the page body both need the recipe; cache() dedupes
 // the fetch (including the related-recipes lookup and the view-count
@@ -68,18 +68,22 @@ export default async function RecipeDetailPage({ params }: RecipeDetailPageProps
 
   return (
     <Section>
-      <RecipeJsonLd
-        name={recipe.title}
-        description={recipe.shortDescription}
-        imageUrls={[recipe.heroImage, ...recipe.galleryImageUrls]}
-        totalTimeMinutes={recipe.totalTimeMinutes}
-        recipeYield={recipe.servings}
-        ingredientTexts={ingredientTexts}
-        instructionTexts={recipe.steps.map((s) => s.instruction)}
-        nutritionCalories={recipe.nutrition.calories}
-        averageRating={recipe.avgRating ?? undefined}
-        ratingCount={recipe.ratingCount > 0 ? recipe.ratingCount : undefined}
-      />
+      {recipe.jsonLdOverride ? (
+        <JsonLdScript data={recipe.jsonLdOverride} />
+      ) : (
+        <RecipeJsonLd
+          name={recipe.title}
+          description={recipe.shortDescription}
+          imageUrls={[recipe.heroImage, ...recipe.galleryImageUrls]}
+          totalTimeMinutes={recipe.totalTimeMinutes}
+          recipeYield={recipe.servings}
+          ingredientTexts={ingredientTexts}
+          instructionTexts={recipe.steps.map((s) => s.instruction)}
+          nutritionCalories={recipe.nutrition.calories}
+          averageRating={recipe.avgRating ?? undefined}
+          ratingCount={recipe.ratingCount > 0 ? recipe.ratingCount : undefined}
+        />
+      )}
       <div className="print:hidden">
         <Breadcrumbs
           items={[

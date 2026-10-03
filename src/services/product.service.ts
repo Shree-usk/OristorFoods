@@ -306,6 +306,7 @@ export interface ProductDetail {
   canonicalUrl: string | null;
   robotsIndex: boolean;
   robotsFollow: boolean;
+  jsonLdOverride: unknown;
 }
 
 export interface CompareItem {
@@ -430,6 +431,7 @@ export async function getProductDetail(
     canonicalUrl: seoMeta?.canonicalUrl ?? null,
     robotsIndex: seoMeta?.robotsIndex ?? true,
     robotsFollow: seoMeta?.robotsFollow ?? true,
+    jsonLdOverride: seoMeta?.jsonLdOverride ?? null,
   };
 }
 

@@ -140,7 +140,7 @@ export async function getRelatedRecipes(recipe: RecipeDetailRow, limit = 6): Pro
 export function toRecipeDetail(
   row: RecipeDetailRow,
   relatedRecipes: RecipeCard[],
-  seoMeta: { metaTitle: string | null; metaDescription: string | null; robotsIndex: boolean; robotsFollow: boolean } | null = null,
+  seoMeta: { metaTitle: string | null; metaDescription: string | null; robotsIndex: boolean; robotsFollow: boolean; jsonLdOverride: unknown } | null = null,
 ): RecipeDetail {
   return {
     id: row.id,
@@ -177,6 +177,7 @@ export function toRecipeDetail(
     metaDescription: seoMeta?.metaDescription ?? null,
     robotsIndex: seoMeta?.robotsIndex ?? true,
     robotsFollow: seoMeta?.robotsFollow ?? true,
+    jsonLdOverride: seoMeta?.jsonLdOverride ?? null,
     publishedAt: row.publishedAt?.toISOString() ?? null,
     relatedRecipes,
     video:

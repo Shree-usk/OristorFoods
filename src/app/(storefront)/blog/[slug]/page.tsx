@@ -8,6 +8,7 @@ import { BlogJsonLd } from "@/components/storefront/blog/blog-json-ld";
 import { BlogPostBody } from "@/components/storefront/blog/blog-post-body";
 import { BlogPostCard } from "@/components/storefront/blog/blog-post-card";
 import { CommentSection } from "@/components/storefront/blog/comment-section";
+import { JsonLdScript } from "@/components/storefront/product/json-ld-script";
 import { parseBodyBlocks } from "@/lib/blog-body-blocks";
 import { getPostBySlug } from "@/services/blog.service";
 
@@ -43,7 +44,11 @@ export default async function BlogDetailPage({ params }: BlogDetailPageProps) {
   return (
     <Section>
       <Breadcrumbs items={[{ name: "Blog", href: "/blog" }, { name: post.title, href: post.href }]} />
-      <BlogJsonLd title={post.title} description={post.excerpt} imageUrl={post.heroImageUrl} authorName={post.authorName} publishedAt={post.publishedAt} />
+      {post.jsonLdOverride ? (
+        <JsonLdScript data={post.jsonLdOverride} />
+      ) : (
+        <BlogJsonLd title={post.title} description={post.excerpt} imageUrl={post.heroImageUrl} authorName={post.authorName} publishedAt={post.publishedAt} />
+      )}
 
       <h1 className="mt-4 text-h1 font-heading text-charcoal">{post.title}</h1>
       <div className="mt-2 flex flex-wrap items-center gap-3 text-caption text-charcoal/70">
