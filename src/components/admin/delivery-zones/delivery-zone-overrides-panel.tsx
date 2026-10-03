@@ -24,6 +24,12 @@ const EMPTY_FORM = {
   overrideAmount: "0",
 };
 
+/** Select.Value shows the raw item value unless given a label-mapping render function (Base UI, not shadcn's Radix wrapper). */
+const OVERRIDE_KIND_LABELS: Record<"freeShipping" | "overrideAmount", string> = {
+  freeShipping: "Free shipping",
+  overrideAmount: "Fixed override amount",
+};
+
 /**
  * STORY-055. Scoped to one zone, rendered only on an existing zone's
  * detail page. Campaign field is a picker over live SeasonalCampaign
@@ -113,7 +119,9 @@ export function DeliveryZoneOverridesPanel({ zoneId }: { zoneId: string }) {
           <Label>Campaign</Label>
           <Select value={form.campaignOption} onValueChange={(value) => setForm((prev) => ({ ...prev, campaignOption: value ?? "" }))}>
             <SelectTrigger>
-              <SelectValue placeholder="Choose a campaign" />
+              <SelectValue placeholder="Choose a campaign">
+                {(selected: string | null) => (selected === "__other__" ? "Other (type manually)" : selected || "Choose a campaign")}
+              </SelectValue>
             </SelectTrigger>
             <SelectContent>
               {(campaigns ?? []).map((campaign) => (
@@ -138,7 +146,7 @@ export function DeliveryZoneOverridesPanel({ zoneId }: { zoneId: string }) {
           <Label>Effect</Label>
           <Select value={form.overrideKind} onValueChange={(value) => setForm((prev) => ({ ...prev, overrideKind: value as typeof prev.overrideKind }))}>
             <SelectTrigger>
-              <SelectValue />
+              <SelectValue>{(selected: typeof form.overrideKind | null) => OVERRIDE_KIND_LABELS[selected ?? "freeShipping"]}</SelectValue>
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="freeShipping">Free shipping</SelectItem>

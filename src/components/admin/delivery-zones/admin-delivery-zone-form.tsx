@@ -23,6 +23,13 @@ interface AdminDeliveryZoneFormProps {
   zoneId: string | null;
 }
 
+/** Select.Value shows the raw item value unless given a label-mapping render function (Base UI, not shadcn's Radix wrapper). */
+const RATE_TYPE_LABELS: Record<DeliveryRateTypeValue, string> = {
+  Flat: "Flat rate",
+  WeightBased: "Weight-based",
+  ValueBased: "Order-value-based",
+};
+
 /**
  * STORY-055. Mirrors admin-recipe-form.tsx's single-page, multi-
  * section pattern. Zone fields and the rate are saved independently
@@ -135,7 +142,7 @@ export function AdminDeliveryZoneForm({ zoneId }: AdminDeliveryZoneFormProps) {
             <Label>Rate type</Label>
             <Select value={rateType} onValueChange={(value) => setRateType(value as DeliveryRateTypeValue)}>
               <SelectTrigger className="w-64">
-                <SelectValue />
+                <SelectValue>{(selected: DeliveryRateTypeValue | null) => RATE_TYPE_LABELS[selected ?? "Flat"]}</SelectValue>
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="Flat">Flat rate</SelectItem>

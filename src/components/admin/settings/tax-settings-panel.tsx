@@ -19,6 +19,12 @@ import {
 
 const EMPTY_RULE = { region: "", category: "", ratePercent: "0", isActive: true };
 
+/** Select.Value shows the raw item value unless given a label-mapping render function (Base UI, not shadcn's Radix wrapper). */
+const PRICING_DISPLAY_LABELS: Record<TaxPricingDisplayModeValue, string> = {
+  Exclusive: "Tax-exclusive (shown separately)",
+  Inclusive: "Tax-inclusive (built into the price)",
+};
+
 export function TaxSettingsPanel() {
   const queryClient = useQueryClient();
   const [error, setError] = useState<string | null>(null);
@@ -69,7 +75,7 @@ export function TaxSettingsPanel() {
         <Label>Pricing display</Label>
         <Select value={data?.setting?.pricingDisplayMode ?? "Exclusive"} onValueChange={(value) => handleDisplayModeChange(value as TaxPricingDisplayModeValue)}>
           <SelectTrigger className="w-64">
-            <SelectValue />
+            <SelectValue>{(selected: TaxPricingDisplayModeValue | null) => PRICING_DISPLAY_LABELS[selected ?? "Exclusive"]}</SelectValue>
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="Exclusive">Tax-exclusive (shown separately)</SelectItem>
