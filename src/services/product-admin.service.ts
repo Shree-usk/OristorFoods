@@ -5,9 +5,9 @@ import * as collectionRepository from "@/repositories/collection.repository";
 import * as pricingRepository from "@/repositories/pricing.repository";
 import * as productRepository from "@/repositories/product.repository";
 import type { AdminProductListFilters, ProductAdminDetail } from "@/repositories/product.repository";
-import { LOW_STOCK_THRESHOLD } from "@/services/admin-dashboard.service";
 import { writeAuditLog } from "@/services/audit-log.service";
 import { requirePermission } from "@/services/permission.service";
+import { getLowStockThreshold } from "@/services/system-settings.service";
 import {
   ProductAdminIllegalTransitionError,
   ProductAdminNotFoundError,
@@ -173,7 +173,8 @@ export async function getProductFormReferenceData(adminUserId: string) {
 
 export async function listProductsForAdmin(adminUserId: string, filters: AdminProductListFilters, page: number, pageSize: number) {
   await requirePermission(adminUserId, "Products", "View");
-  return productRepository.listProductsForAdmin(filters, page, pageSize, LOW_STOCK_THRESHOLD);
+  const lowStockThreshold = await getLowStockThreshold();
+  return productRepository.listProductsForAdmin(filters, page, pageSize, lowStockThreshold);
 }
 
 export async function getProductForAdmin(adminUserId: string, id: string): Promise<ProductAdminDetail> {

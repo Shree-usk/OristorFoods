@@ -2905,3 +2905,98 @@ model ContentVersion {
   @@unique([entityType, entityId, versionNumber])
   @@index([entityType, entityId])
 }
+
+// STORY-054. Each of the following is a singleton row (id: "global",
+// upserted) — the same pattern ShippingSetting/RewardSetting already
+// established — except PaymentMethodSetting/FeatureFlag, which are
+// genuinely lists.
+
+model CompanySetting {
+  id                     String   @id @default("global")
+  legalName              String?
+  brandName              String?
+  logoUrl                String?
+  logoAlt                String?
+  address                String?
+  phone                  String?
+  email                  String?
+  businessRegistrationId String?
+  taxId                  String?
+  // {label, href}[] — small and unstructured enough not to need its own table.
+  socialLinks            Json?
+  updatedAt              DateTime @updatedAt
+}
+
+model CurrencySetting {
+  id                  String   @id @default("global")
+  baseCurrency        String   @default("LKR")
+  supportedCurrencies String[] @default(["LKR"])
+  // {[currencyCode]: rate} manual override — no automated rate source
+  // exists or is scoped yet (multi-currency launch scope is still open,
+  // docs/blueprint.md Section 10).
+  manualExchangeRates Json?
+  updatedAt           DateTime @updatedAt
+}
+
+model LocaleSetting {
+  id               String   @id @default("global")
+  defaultLocale    String   @default("en")
+  supportedLocales String[] @default(["en"])
+  updatedAt        DateTime @updatedAt
+}
+
+enum TaxPricingDisplayMode {
+  Inclusive
+  Exclusive
+}
+
+model TaxSetting {
+  id                 String                @id @default("global")
+  pricingDisplayMode TaxPricingDisplayMode @default(Exclusive)
+  updatedAt          DateTime              @updatedAt
+}
+
+model TaxRateRule {
+  id          String   @id @default(cuid())
+  region      String
+  category    String?
+  ratePercent Decimal  @db.Decimal(5, 2)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([region, category])
+}
+
+// key is a free string, not an enum — same "no migration for a new
+// one" reasoning as STORY-053's ContentVersion.entityType. The actual
+// payment gateway provider(s) are still unconfirmed (blueprint Section
+// 10), so this lists configured methods generically rather than
+// hardcoding one gateway's shape.
+model PaymentMethodSetting {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  label     String
+  enabled   Boolean  @default(true)
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model FeatureFlag {
+  id          String   @id @default(cuid())
+  key         String   @unique
+  enabled     Boolean  @default(false)
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+// Replaces admin-dashboard.service.ts's hardcoded LOW_STOCK_THRESHOLD
+// constant — docs/blueprint.md's own "Known deferred/leftover items"
+// list ties it to this story by name.
+model InventorySetting {
+  id                String   @id @default("global")
+  lowStockThreshold Int      @default(10)
+  updatedAt         DateTime @updatedAt
+}

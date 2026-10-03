@@ -5,6 +5,7 @@ import { prisma } from "@/lib/db";
 import type { AdminAction, AdminModule } from "@/generated/prisma/client";
 import { createProduct } from "@/repositories/product.repository";
 import { getDashboardSummary } from "@/services/admin-dashboard.service";
+import { updateLowStockThreshold } from "@/services/system-settings.service";
 import { cleanupRecipes, makeCategory, makeRecipe } from "./recipe-fixtures";
 
 const EMAIL_DOMAIN = "@admin-dash-svc-test.test";
@@ -70,6 +71,7 @@ afterEach(async () => {
   await prisma.adminUser.deleteMany({ where: { email: { endsWith: EMAIL_DOMAIN } } });
   await prisma.rolePermission.deleteMany({ where: { role: { key: { startsWith: ROLE_KEY_PREFIX } } } });
   await prisma.role.deleteMany({ where: { key: { startsWith: ROLE_KEY_PREFIX } } });
+  await prisma.inventorySetting.deleteMany({});
   await prisma.orderIntegrationEvent.deleteMany({ where: { order: { orderNumber: { startsWith: ORDER_PREFIX } } } });
   await prisma.order.deleteMany({ where: { orderNumber: { startsWith: ORDER_PREFIX } } });
   await prisma.payment.deleteMany({ where: { providerReference: { startsWith: PAY_REF_PREFIX } } });
@@ -194,5 +196,22 @@ describe("admin-dashboard.service", () => {
     expect(summary.rewardsReferrals).toBeUndefined();
     expect(summary.supportTickets).toBeUndefined();
     expect(summary.erpSyncStatus).toBeUndefined();
+  });
+
+  it("reads the low-stock threshold from system-settings.service.ts, not a hardcoded constant", async () => {
+    const settingsRole = await makeRole([{ module: "SystemSettings", action: "Edit" }]);
+    const settingsAdmin = await makeAdminUser(settingsRole.id);
+    // 15 > the old hardcoded 10 — a stock level of 12 only counts as
+    // low stock if the dashboard is actually reading this configured
+    // value rather than the former hardcoded constant.
+    await updateLowStockThreshold(settingsAdmin.id, 15);
+
+    const role = await makeRole([{ module: "Products" }]);
+    const admin = await makeAdminUser(role.id);
+    await makeProduct({ stockQuantity: 12 });
+
+    const summary = await getDashboardSummary(admin.id);
+
+    expect(summary.lowStock).toEqual({ count: 1, threshold: 15 });
   });
 });

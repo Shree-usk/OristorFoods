@@ -9,6 +9,26 @@ export function findTemplate(templateKey: string, channel: NotificationChannel, 
   return client.notificationTemplate.findUnique({ where: { templateKey_channel: { templateKey, channel } } });
 }
 
+// --- STORY-054. Admin authoring — findTemplate above stays the sending path's own single-lookup read. ---
+
+export function listTemplates(client: Client = prisma) {
+  return client.notificationTemplate.findMany({ orderBy: [{ templateKey: "asc" }, { channel: "asc" }] });
+}
+
+export function findTemplateById(id: string, client: Client = prisma) {
+  return client.notificationTemplate.findUnique({ where: { id } });
+}
+
+export interface UpdateTemplateInput {
+  subject?: string | null;
+  body?: string;
+  isActive?: boolean;
+}
+
+export function updateTemplate(id: string, input: UpdateTemplateInput, client: Client = prisma) {
+  return client.notificationTemplate.update({ where: { id }, data: input });
+}
+
 export function findPreferenceByUserId(userId: string, client: Client = prisma) {
   return client.notificationPreference.findUnique({ where: { userId } });
 }

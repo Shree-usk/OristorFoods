@@ -29,9 +29,10 @@ function getActiveStorageProvider(): StorageProvider {
 }
 
 /**
- * Placeholder pending a real System Settings-backed value — same
- * "documented constant until an admin-configurable one exists" treatment
- * as admin-dashboard.service.ts's LOW_STOCK_THRESHOLD.
+ * Placeholder pending a real System Settings-backed value — not in
+ * STORY-054's own scope (that story's Low Stock threshold was the
+ * analogous case this comment used to point at, now resolved to a
+ * real `InventorySetting` row — see system-settings.service.ts).
  */
 const MAX_UPLOAD_SIZE_BYTES = 20 * 1024 * 1024; // 20 MB
 
