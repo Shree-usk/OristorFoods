@@ -1,10 +1,12 @@
 import Link from "next/link";
 import { Mail, MapPin, Phone } from "lucide-react";
 
+import { contactInfo, legalLinks } from "@/lib/footer-config";
+import { getResolvedFooterColumns } from "@/services/navigation.service";
 import { Container } from "./container";
+import { FooterColumnsGrid } from "./footer-columns-grid";
 import { NewsletterForm } from "./newsletter-form";
 import { SocialLinks } from "./social-links";
-import { contactInfo, footerColumns, legalLinks } from "@/lib/footer-config";
 
 /**
  * Site-wide footer. Server Component — NewsletterForm is the only
@@ -13,8 +15,15 @@ import { contactInfo, footerColumns, legalLinks } from "@/lib/footer-config";
  * light Ivory/Charcoal storefront default — see
  * docs/architecture-decisions.md for the contrast reasoning behind every
  * text color choice in here.
+ *
+ * `footerColumns` (STORY-052) now comes from `getResolvedFooterColumns`,
+ * which reads the published Footer menu and falls back to
+ * footer-config.ts's static defaults until an admin has published one.
+ * contactInfo/legalLinks stay hardcoded (flagged for STORY-054).
  */
-export function Footer() {
+export async function Footer() {
+  const footerColumns = await getResolvedFooterColumns();
+
   return (
     // pb-16 reserves space for the fixed mobile bottom nav (MobileNav,
     // lg:hidden) so it doesn't cover the last section when scrolled to
@@ -30,22 +39,7 @@ export function Footer() {
           <SocialLinks />
         </div>
 
-        <div className="grid grid-cols-2 gap-8 sm:grid-cols-4">
-          {footerColumns.map((column) => (
-            <div key={column.heading}>
-              <p className="text-small font-medium text-ivory">{column.heading}</p>
-              <ul className="mt-3 space-y-2">
-                {column.links.map((link) => (
-                  <li key={link.href}>
-                    <Link href={link.href} className="text-small text-ivory/70 hover:text-ivory">
-                      {link.label}
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ))}
-        </div>
+        <FooterColumnsGrid columns={footerColumns} />
       </Container>
 
       <div className="border-t border-ivory/10">

@@ -11,22 +11,26 @@ import {
   NavigationMenuList,
   NavigationMenuTrigger,
 } from "@/components/ui/navigation-menu";
-import { primaryNavItems } from "@/lib/nav-config";
+import type { NavItem } from "@/lib/nav-config";
 import { MegaMenuPanel } from "./mega-menu";
 
 /**
  * Desktop primary nav (Home, Products, Recipes, Food Academy, Export,
- * Blog, About, Contact). Products/Recipes get a mega-menu flyout; the
- * rest are plain links. Active route is highlighted via `usePathname` —
- * requires this to be a Client Component boundary.
+ * Blog, About, Contact by default). Items come from the parent Server
+ * Component (header.tsx), which resolves the published Header menu
+ * (STORY-052) and falls back to nav-config.ts's static defaults until
+ * one's been published — this component itself is presentational.
+ * Products/Recipes get a mega-menu flyout; the rest are plain links.
+ * Active route is highlighted via `usePathname` — requires this to be a
+ * Client Component boundary.
  */
-export function NavLinks() {
+export function NavLinks({ items }: { items: NavItem[] }) {
   const pathname = usePathname();
 
   return (
     <NavigationMenu>
       <NavigationMenuList>
-        {primaryNavItems.map((item) => {
+        {items.map((item) => {
           const isActive = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
 
           if (item.megaMenu) {
