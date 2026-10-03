@@ -1,4 +1,4 @@
-// @vitest-environment node
+﻿// @vitest-environment node
 import { afterEach, describe, expect, it } from "vitest";
 
 import { prisma } from "@/lib/db";
@@ -62,6 +62,8 @@ describe("seo.service — getSeoMeta / updateSeoMeta", () => {
       canonicalUrl: null,
       ogImageUrl: null,
       ogImageAlt: null,
+      ogImageWidth: null,
+      ogImageHeight: null,
       robotsIndex: true,
       robotsFollow: true,
       focusKeyword: null,
@@ -74,6 +76,8 @@ describe("seo.service — getSeoMeta / updateSeoMeta", () => {
       canonicalUrl: null,
       ogImageUrl: null,
       ogImageAlt: null,
+      ogImageWidth: null,
+      ogImageHeight: null,
       robotsIndex: false,
       robotsFollow: true,
       focusKeyword: null,
@@ -100,6 +104,8 @@ describe("seo.service — getSeoMeta / updateSeoMeta", () => {
       canonicalUrl: null,
       ogImageUrl: null,
       ogImageAlt: null,
+      ogImageWidth: null,
+      ogImageHeight: null,
       robotsIndex: true,
       robotsFollow: true,
       focusKeyword: null,
@@ -117,6 +123,8 @@ describe("seo.service — getSeoMeta / updateSeoMeta", () => {
       canonicalUrl: null,
       ogImageUrl: null,
       ogImageAlt: null,
+      ogImageWidth: null,
+      ogImageHeight: null,
       robotsIndex: true,
       robotsFollow: true,
       focusKeyword: null,
@@ -135,6 +143,8 @@ describe("seo.service — getSeoMeta / updateSeoMeta", () => {
         canonicalUrl: null,
         ogImageUrl: null,
         ogImageAlt: null,
+        ogImageWidth: null,
+        ogImageHeight: null,
         robotsIndex: true,
         robotsFollow: true,
         focusKeyword: null,
@@ -177,7 +187,23 @@ describe("computeSeoHealth", () => {
       canonicalUrl: "https://oristor.com/products/x",
       ogImageUrl: "https://example.com/x.jpg",
       ogImageAlt: "A photo",
+      ogImageWidth: 1200,
+      ogImageHeight: 630,
     });
     expect(checks.every((c) => c.ok)).toBe(true);
+  });
+
+  it("flags an OG image below the 1200x630 minimum, but only once dimensions are actually known", () => {
+    const noDimensions = computeSeoHealth({ ...base, ogImageUrl: "https://example.com/x.jpg" });
+    expect(noDimensions.find((c) => c.id === "ogImageTooSmall")?.ok).toBe(true);
+
+    const tooSmall = computeSeoHealth({ ...base, ogImageUrl: "https://example.com/x.jpg", ogImageWidth: 600, ogImageHeight: 315 });
+    expect(tooSmall.find((c) => c.id === "ogImageTooSmall")?.ok).toBe(false);
+
+    const bigEnough = computeSeoHealth({ ...base, ogImageUrl: "https://example.com/x.jpg", ogImageWidth: 1200, ogImageHeight: 630 });
+    expect(bigEnough.find((c) => c.id === "ogImageTooSmall")?.ok).toBe(true);
+
+    const noImageAtAll = computeSeoHealth(base);
+    expect(noImageAtAll.find((c) => c.id === "ogImageTooSmall")?.ok).toBe(true);
   });
 });

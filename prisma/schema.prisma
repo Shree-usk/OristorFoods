@@ -1106,6 +1106,13 @@ model SeoMeta {
   canonicalUrl    String?
   ogImageUrl      String?
   ogImageAlt      String?
+  // STORY-051d. Captured from AssetPickerDialog's onSelect payload at the
+  // same moment ogImageUrl/ogImageAlt are — not re-derived from MediaAsset
+  // by URL at health-check time, which would be fragile (an admin can type
+  // a URL by hand, with no MediaAsset row to look up). Feeds
+  // computeSeoHealth's ogImageTooSmall check (src/lib/seo-health.ts).
+  ogImageWidth    Int?
+  ogImageHeight   Int?
   robotsIndex     Boolean       @default(true)
   robotsFollow    Boolean       @default(true)
   focusKeyword    String?

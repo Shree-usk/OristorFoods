@@ -48,6 +48,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ en
       canonicalUrl: parsed.data.canonicalUrl || null,
       ogImageUrl: parsed.data.ogImageUrl ?? null,
       ogImageAlt: parsed.data.ogImageAlt ?? null,
+      ogImageWidth: parsed.data.ogImageWidth ?? null,
+      ogImageHeight: parsed.data.ogImageHeight ?? null,
       robotsIndex: parsed.data.robotsIndex ?? true,
       robotsFollow: parsed.data.robotsFollow ?? true,
       focusKeyword: parsed.data.focusKeyword ?? null,

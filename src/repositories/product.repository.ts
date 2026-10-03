@@ -326,6 +326,7 @@ export interface AdminProductListFilters {
 export interface AdminProductListRow {
   id: string;
   sku: string;
+  slug: string;
   name: string;
   status: ProductStatus;
   inStock: boolean;
@@ -379,6 +380,7 @@ export async function listProductsForAdmin(
       select: {
         id: true,
         sku: true,
+        slug: true,
         name: true,
         status: true,
         inStock: true,
