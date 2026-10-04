@@ -10,6 +10,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { AdminAiInsightsPanel } from "@/components/admin/analytics/admin-ai-insights-panel";
+import { AdminChurnRiskTable } from "@/components/admin/analytics/admin-churn-risk-table";
+import { AdminCampaignSuggestionCards } from "@/components/admin/analytics/admin-campaign-suggestion-cards";
 import { fetchSalesReport } from "@/lib/api/admin-analytics-client";
 import {
   createScheduledReportAdmin,
@@ -188,6 +191,12 @@ export function AdminExecutiveDashboardView() {
           </ResponsiveContainer>
         </>
       )}
+
+      <section aria-label="AI Insights">
+        <AdminAiInsightsPanel />
+        <AdminChurnRiskTable />
+        <AdminCampaignSuggestionCards />
+      </section>
 
       <div className="mt-8 flex items-center justify-between">
         <h3 className="text-h5 font-heading text-charcoal">Scheduled Reports</h3>

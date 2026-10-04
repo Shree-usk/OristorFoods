@@ -12,7 +12,11 @@ import type { CreateSegmentInput, SegmentFilterCriteria, UpdateSegmentInput } fr
  * View/Edit/Delete; its first real use) and audit-logged. Segments are
  * live, not snapshotted — previewSegment/resolveSegmentMembers both
  * re-run the same filterCustomers() combination against current data,
- * never a frozen member list.
+ * never a frozen member list. The one intentional exception is
+ * STORY-064's customerIds filter field: a segment built from it is a
+ * point-in-time snapshot by design (e.g. today's High churn-risk
+ * customers), not a live recomputation — see that field's own schema
+ * comment.
  */
 
 /**
@@ -50,7 +54,7 @@ interface SegmentMember {
 }
 
 async function filterCustomers(criteria: SegmentFilterCriteria): Promise<SegmentMember[]> {
-  const [candidates, metricsByUser] = await Promise.all([
+  const [allCandidates, metricsByUser] = await Promise.all([
     customerSegmentRepository.listCandidateUsers({
       rewardTierId: criteria.rewardTierId,
       city: criteria.city,
@@ -58,6 +62,13 @@ async function filterCustomers(criteria: SegmentFilterCriteria): Promise<Segment
     }),
     customerSegmentRepository.getCustomerMetrics(),
   ]);
+
+  // STORY-064. customerIds restricts to a point-in-time snapshot (e.g. a
+  // churn-risk tier's members at export time) before the other, live
+  // filters below apply — see the field's own schema comment.
+  const candidates = criteria.customerIds
+    ? allCandidates.filter((candidate) => criteria.customerIds!.includes(candidate.id))
+    : allCandidates;
 
   const members: SegmentMember[] = [];
   for (const candidate of candidates) {

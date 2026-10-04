@@ -19,6 +19,8 @@ export interface SegmentFilterCriteria {
   customerGroup?: CustomerGroupValue;
   lastOrderAfter?: string;
   lastOrderBefore?: string;
+  /** STORY-064. Restricts the candidate set to exactly these ids — a point-in-time snapshot, used by churn-tier exports. */
+  customerIds?: string[];
 }
 
 export interface SegmentMember {
