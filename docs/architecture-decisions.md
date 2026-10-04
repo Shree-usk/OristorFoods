@@ -8122,3 +8122,94 @@ new flow nor the existing `ExportEnquiry`/`CreateExportEnquiryInput` it
 submits into has one — adding it would mean touching a shared,
 already-shipped model for one new caller's convenience; a website
 mention fits naturally into Company name or the message instead).
+
+## 2026-10-04 — STORY-073 Our Story (Epic 11, closes the epic)
+
+An interactive, scroll-driven About page at `/about` — the second and
+final story in Epic 11, closing the gap STORY-072 left for Contact Us.
+The user's own brief had an explicit, hard "brand authenticity"
+constraint (real imagery/text only, nothing invented), which made a
+dedicated content/asset-inventory research pass load-bearing before any
+planning — run via a fork before the plan was drafted, per the story's
+own documented scope-decision gate.
+
+**Real product photography exists, but was never meant for this.**
+43 real uploaded files under `public/images/products/{best-sellers,
+domestic,export,gifts,misc}/` — not DB-linked `Product.images`, but
+already reused directly by `prisma/seed-recipes.ts` as static paths,
+confirming this is an established, safe precedent to extend rather
+than a workaround. Mapped onto 6 real category groups (Pickles,
+Pickled Vegetables/Brine, Chilli Pastes, Seafood, Masalas, Spices) for
+the product-story sequence — the brief's own 7-item list (which
+included "Thokku") was adapted down to what this project genuinely has
+photography for, not padded with an invented category.
+
+**Two real content gaps needed the user's own decision, not a silent
+judgment call**: (1) no Sri Lanka/landscape imagery exists anywhere in
+this project — asked directly, the user chose real ingredient/product
+close-ups over either sourcing new photography or redesigning the
+opening to be text-forward; (2) the brief's own O-R-I-S-T-O-R
+seven-value acrostic doesn't exist anywhere else in this project
+(`docs/blueprint.md` has a different, real 10-value "Brand values"
+list) — asked directly, the user chose to use the brief's framework
+as-is, as their own authored content for this page specifically, not
+a replacement for the project's operational values list. Both
+decisions are recorded in `STORY-073`'s own Scope Decisions section,
+not just this entry, since they shape the page's actual content.
+
+**The real company text used is blueprint.md's own Vision/Mission/
+positioning block, not the brief's quoted sentence** — the brief
+quotes "Oristor Food Products (Pvt) Ltd is a Sri Lankan manufacturer
+and trader of ready-to-eat food products and spices," which doesn't
+appear anywhere in approved project content. The real tagline "Feel
+the Difference" (blueprint.md Section 2) is used for the brief's own
+closing section of the same name — a genuine match confirmed during
+research, not a coincidence assumed without checking.
+
+**No certification claim is made anywhere on the page.** A real
+`Certification` Prisma model exists, but zero rows are ever seeded,
+and no ISO/HACCP/GMP claim appears in blueprint.md. The Quality
+chapter keeps a real-process narrative (ingredients → production →
+packaging → finished product, real product imagery) but drops every
+certification badge/claim entirely — the same honesty standard every
+other "no real data" gap this session has used, applied here to a
+page whose entire premise is brand authenticity.
+
+**The one genuinely new piece of motion infrastructure this story
+adds**: `product-story-scroll.tsx`'s pinned, horizontally-scrolling
+product sequence, via `framer-motion`'s `useScroll`/`useTransform` —
+no precedent existed anywhere in this codebase before (only
+`ScrollReveal`'s `whileInView` trigger did). A Plan-agent validation
+pass caught two real design risks before implementation: (1) the
+desktop/mobile split should follow `compare-view.tsx`'s own established
+pattern exactly (a single component, `useMediaQuery` resolved client-side,
+exactly one layout mounted) rather than a CSS-hide-both approach, which
+would leave a hidden pinned-scroll tree's `useScroll` listeners attached
+to a collapsed, zero-height layout box; (2) this codebase genuinely does
+have a component-test precedent (`scroll-reveal.test.tsx`/`compare-view.test.tsx`,
+~70 `.test.tsx` files total) that the draft plan had wrongly assumed
+might not exist — a unit test was added for `product-story-scroll.tsx`
+specifically (the one component with real conditional logic), while the
+purely compositional pieces stayed untested, matching STORY-072's own
+precedent for presentational components.
+
+**A real bug the unit test caught before any browser testing**: calling
+`useScroll({ target: containerRef, ... })` unconditionally — even in
+render paths where the pinned container is never mounted, so
+`containerRef.current` stays `null` — throws "Target ref is defined but
+not hydrated" once Framer Motion's internal RAF loop tries to read from
+it. Fixed by only passing the `target` option when the pinned variant is
+actually the one rendering (`useScroll(usePinned ? { target: ... } : {})`)
+— the hook itself is still always called (satisfying React's rules of
+hooks), only its argument varies.
+
+**A real bug the e2e test caught before merge**: the Values section's
+"What We Stand For" title was a plain `<p>`, not a heading — missed in
+review, caught the moment the e2e test tried to assert on it as a
+heading and failed. Fixed to a real `<h2>`, restoring correct semantic
+hierarchy for that chapter.
+
+**Closes Epic 11.** Both user-supplied briefs (STORY-072 Contact Us,
+STORY-073 Our Story) are now shipped. No further Epic 11 work is
+currently queued; Epic 09 (Quality & Security) remains next in the
+confirmed sequence.
