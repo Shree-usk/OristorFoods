@@ -7,7 +7,11 @@ import { useRef } from "react";
 import { ScrollReveal } from "@/components/motion";
 import { useMediaQuery } from "@/hooks/use-media-query";
 import { useReducedMotion } from "@/hooks/use-reduced-motion";
-import { productStoryCategories } from "@/lib/story-content";
+import type { ProductCategoryContent } from "@/types/story";
+
+interface ProductStoryScrollProps {
+  categories: ProductCategoryContent[];
+}
 
 /**
  * STORY-073. The one genuinely new piece of motion infrastructure this
@@ -23,7 +27,7 @@ import { productStoryCategories } from "@/lib/story-content";
  * explicitly rejects: a hidden pinned-scroll tree would still attach
  * `useScroll`'s listeners against a collapsed, zero-height layout box.
  */
-export function ProductStoryScroll() {
+export function ProductStoryScroll({ categories }: ProductStoryScrollProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const isDesktop = useMediaQuery("(min-width: 1024px)");
   const prefersReducedMotion = useReducedMotion();
@@ -36,12 +40,12 @@ export function ProductStoryScroll() {
   // attach but never does, which is exactly what happens in the fallback
   // branch where the pinned container is never rendered.
   const { scrollYProgress } = useScroll(usePinned ? { target: containerRef, offset: ["start start", "end end"] } : {});
-  const x = useTransform(scrollYProgress, [0, 1], ["0%", `-${(productStoryCategories.length - 1) * 100}%`]);
+  const x = useTransform(scrollYProgress, [0, 1], ["0%", `-${(categories.length - 1) * 100}%`]);
 
   if (!usePinned) {
     return (
       <div className="space-y-12">
-        {productStoryCategories.map((category) => (
+        {categories.map((category) => (
           <ScrollReveal key={category.id}>
             <div className="relative aspect-4/3 overflow-hidden rounded-lg bg-cream">
               <Image src={category.image.src} alt={category.image.alt} fill sizes="100vw" className="object-cover" />
@@ -55,10 +59,10 @@ export function ProductStoryScroll() {
   }
 
   return (
-    <div ref={containerRef} style={{ height: `${productStoryCategories.length * 100}vh` }}>
+    <div ref={containerRef} style={{ height: `${categories.length * 100}vh` }}>
       <div className="sticky top-0 h-screen overflow-hidden">
         <motion.div style={{ x }} className="flex h-full">
-          {productStoryCategories.map((category) => (
+          {categories.map((category) => (
             <div key={category.id} className="relative h-full w-screen shrink-0">
               <Image src={category.image.src} alt={category.image.alt} fill sizes="100vw" className="object-cover" />
               <div className="absolute inset-0 bg-charcoal/30" />

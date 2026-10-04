@@ -2,12 +2,12 @@ import Image from "next/image";
 
 import { ScrollReveal } from "@/components/motion";
 import { cn } from "@/lib/utils";
-import type { StoryChapterContent } from "@/lib/story-content";
+import type { StoryChapterContent } from "@/types/story";
 
 /** STORY-073. Generic text+image chapter — reused for Land/Tradition/Company/Quality, not 4 bespoke components. */
 export function StoryChapter({ eyebrow, title, body, image, align }: StoryChapterContent) {
   return (
-    <div className={cn("grid grid-cols-1 items-center gap-8 lg:grid-cols-2", align === "right" && "lg:[&>*:first-child]:order-2")}>
+    <div className={cn("grid grid-cols-1 items-center gap-8 lg:grid-cols-2", align === "Right" && "lg:[&>*:first-child]:order-2")}>
       <ScrollReveal>
         <p className="text-small font-medium tracking-wide text-chilli uppercase">{eyebrow}</p>
         <h2 className="mt-2 text-h2 font-heading text-charcoal">{title}</h2>

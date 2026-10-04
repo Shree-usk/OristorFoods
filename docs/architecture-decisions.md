@@ -8213,3 +8213,100 @@ hierarchy for that chapter.
 STORY-073 Our Story) are now shipped. No further Epic 11 work is
 currently queued; Epic 09 (Quality & Security) remains next in the
 confirmed sequence.
+
+## 2026-10-04 — STORY-074 Page Content Management (About Us & Contact Us)
+
+Both STORY-072/073 shipped as fully static pages, violating the
+project's own Admin Console Principle ("could a non-technical admin
+change this later without redeploying?"). The user asked directly to
+wire both pages into the admin console for text + image edits.
+
+**Schema: two tables, not one universal table.** A new `StoryPageBlock`
+model (`page: StoryPage`, `blockType: StoryBlockType`, `blockKey`,
+`sortOrder`, flat nullable fields — eyebrow/title/body/imageUrl/
+imageAlt/ctaLabel/ctaHref/secondaryCtaLabel/secondaryCtaHref/align/
+letter) covers About's 7 content shapes (Hero, 4 Chapters, 3
+Ingredients, 6 Product Categories, 7 Values, Global Journey, closing
+CTA — 23 rows total), matching `HeroBannerSlide`'s own precedent of
+flat typed fields over a JSON blob. Contact's remaining 4 hardcoded
+strings (hero eyebrow/headline/subcopy, location heading — no images
+anywhere on that page) went onto `CompanySetting` instead, as
+additional nullable fields, following the exact precedent
+`businessHours` set in STORY-072: singleton values with no repeating
+structure, and `CompanySetting` already resolves this exact page's
+other company info.
+
+**Reused, not duplicated**: `AssetPickerDialog` (STORY-041's Media
+Library "Browse Library" picker, already wired into 7 other admin
+forms) for every image field; `HeroBannerSlide`'s flat-field schema
+style; `useFieldArray`-based admin forms (`admin-product-form.tsx`) for
+the 3 repeating list types. The existing 43 real product photos stay
+as static `public/images/...` paths referenced via the picker's manual-
+URL field — no migration into the Media Library's own asset store.
+
+**`story-content.ts` is deleted**, not kept as "just seed input" — its
+literals were copied once into `prisma/seed-story-pages.ts` (the new
+seed step, wired into `seed.ts`), and the 7 About components (plus 2
+Contact components) now take content as props from their page's own
+Server Component fetch, instead of importing the static module
+directly. Keeping the old module around would have recreated the exact
+dead, duplicate-content problem this feature removes.
+
+**A real cross-module permission bug, caught by the new e2e spec, not
+assumed away**: the plan's own stated design ("Contact tab... saved via
+the existing System Settings company save call") meant the Contact
+tab's fields were gated on `SystemSettings`, not `StoryPages` — so a
+role granted `StoryPages` (e.g. `content_editor`) could edit the About
+tab but silently fail to load the Contact tab at all (403, stuck on
+"Loading…" forever — see the second bug below). Fixed by adding
+`getContactPageCopyForAdmin`/`saveContactPageCopy` to
+`story-page.service.ts`, gated on `StoryPages`, calling
+`system-settings.repository.ts`'s `CompanySetting` functions directly
+rather than going through `system-settings.service.ts`'s own
+`SystemSettings`-gated wrappers. One permission now covers the whole
+admin page, as a user granted "StoryPages" would reasonably expect.
+
+**A real client-side bug, also caught by the e2e spec**: the Contact
+tab's loading check was `isLoading || !data`, but `fetchContactPageCopy()`
+resolves to `null` (a valid, successfully-loaded state — `CompanySetting`
+is never pre-seeded) when no row exists yet. `!data` being `true` forever
+after load kept the tab stuck on "Loading…" indefinitely. Fixed by
+checking TanStack Query's `isSuccess` instead of `!data`.
+
+**A second client-side bug, same spec**: the Contact tab originally
+remounted itself (via a content-derived `key`) whenever its query's data
+changed — including right after its own successful save, since
+`invalidateQueries` triggers a refetch. The remount reset local `saved`
+state back to `false` before the "Saved." confirmation was ever visible
+to the user (or to Playwright). Fixed by dropping the remount-on-data-
+change key entirely: after a successful save, the form's own local
+state already *is* the saved values, so there's nothing to resync.
+
+**A real, known environmental risk made more consequential by this
+feature, not a code defect**: this session's local PGlite instance has
+repeatedly, silently reset to empty mid-session (see
+`pglite-restart-can-lose-data.md` in project memory). Hit again during
+this story's own verification pass. Because the admin editor's
+`saveStoryPageBlocks`/`replaceBlocksForPage` replaces **all** of a
+page's blocks in one submit (by design — the plan explicitly chose this
+over per-row saves), an admin who loads the editor during exactly such
+a wedge and saves will faithfully persist that incomplete snapshot,
+permanently overwriting the rest of the page's real content. Observed
+directly in this session: a wedge emptied `StoryPageBlock` between test
+runs, and the next admin save (editing just the Hero headline) replaced
+the full 23-row set with 3 rows (Hero/GlobalJourney/Cta — the only
+blockTypes `blocksToForm`'s fallback defaults cover when the table is
+otherwise empty). Recovered by reseeding; no code change made, since
+this is the same pre-existing instability already documented, now
+simply with a sharper edge for admin content than it had for read-only
+pages. Flagged here rather than silently patched, since a real fix
+(e.g. refusing to save when the loaded block count looks suspiciously
+low) is a genuine product decision, not an obvious bug fix.
+
+**RBAC**: new `AdminModule.StoryPages` value, added to `ALL_MODULES` and
+`content_editor`'s `homeModules` in `seed-admin.ts`. For the
+already-seeded local dev DB, granted via the same disposable one-off
+script workaround STORY-072 used for `ContactEnquiries` (write it, run
+it once, delete it) — `seedAdmin()` is still not idempotent against an
+already-seeded database, a pre-existing limitation unrelated to this
+story.

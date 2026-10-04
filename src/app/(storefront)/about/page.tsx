@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { connection } from "next/server";
 
 import { JsonLdScript } from "@/components/storefront/product/json-ld-script";
 import { Section } from "@/components/storefront/layout/section";
@@ -9,8 +10,9 @@ import { StoryChapter } from "@/components/storefront/story/story-chapter";
 import { StoryCTA } from "@/components/storefront/story/story-cta";
 import { StoryHero } from "@/components/storefront/story/story-hero";
 import { ValueReveal } from "@/components/storefront/story/value-reveal";
-import { companyChapter, landChapter, qualityChapter, traditionChapter } from "@/lib/story-content";
+import { getPublishedStoryBlocks } from "@/services/story-page.service";
 import { getResolvedCompanyInfo } from "@/services/system-settings.service";
+import type { StoryChapterContent } from "@/types/story";
 
 export const metadata: Metadata = {
   title: "Our Story",
@@ -19,8 +21,50 @@ export const metadata: Metadata = {
   alternates: { canonical: "/about" },
 };
 
+function toChapter(block: Awaited<ReturnType<typeof getPublishedStoryBlocks>>[number]): StoryChapterContent {
+  return {
+    id: block.blockKey,
+    eyebrow: block.eyebrow ?? "",
+    title: block.title ?? "",
+    body: block.body ?? "",
+    image: { src: block.imageUrl ?? "", alt: block.imageAlt ?? "" },
+    align: block.align === "Right" ? "Right" : "Left",
+  };
+}
+
 export default async function AboutPage() {
-  const companyInfo = await getResolvedCompanyInfo();
+  // Forces this route dynamic, same as (storefront)/page.tsx's own
+  // Homepage Builder precedent — without it, `next build` statically
+  // prerenders this page once (and in CI, before any seed has run,
+  // crashes outright on the missing-content check below). Admin edits
+  // via /admin/story-pages also need this: a static page would keep
+  // serving its build-time snapshot until the next redeploy.
+  await connection();
+
+  const [companyInfo, blocks] = await Promise.all([getResolvedCompanyInfo(), getPublishedStoryBlocks("AboutUs")]);
+
+  const hero = blocks.find((block) => block.blockType === "Hero");
+  const chapters = blocks.filter((block) => block.blockType === "Chapter").map(toChapter);
+  const landChapter = chapters.find((chapter) => chapter.id === "the-land");
+  const traditionChapter = chapters.find((chapter) => chapter.id === "tradition-in-every-recipe");
+  const companyChapter = chapters.find((chapter) => chapter.id === "from-tradition-to-the-oristor");
+  const qualityChapter = chapters.find((chapter) => chapter.id === "quality-and-trust");
+  const ingredients = blocks
+    .filter((block) => block.blockType === "IngredientItem")
+    .map((block) => ({ name: block.title ?? "", tagline: block.body ?? "", image: { src: block.imageUrl ?? "", alt: block.imageAlt ?? "" } }));
+  const categories = blocks
+    .filter((block) => block.blockType === "ProductCategoryItem")
+    .map((block) => ({ id: block.blockKey, name: block.title ?? "", tagline: block.body ?? "", image: { src: block.imageUrl ?? "", alt: block.imageAlt ?? "" } }));
+  const values = blocks
+    .filter((block) => block.blockType === "ValueItem")
+    .map((block) => ({ letter: block.letter ?? "", word: block.title ?? "", description: block.body ?? "" }));
+  const globalJourney = blocks.find((block) => block.blockType === "GlobalJourney");
+  const cta = blocks.find((block) => block.blockType === "Cta");
+
+  if (!hero || !landChapter || !traditionChapter || !companyChapter || !qualityChapter || !globalJourney || !cta) {
+    // Never happens once the seed has run (prisma db seed) — StoryPageBlock is never left empty in a real environment.
+    throw new Error("About page content is missing. Run `npx prisma db seed` to populate StoryPageBlock rows.");
+  }
 
   return (
     <>
@@ -35,14 +79,14 @@ export default async function AboutPage() {
         }}
       />
 
-      <StoryHero />
+      <StoryHero eyebrow={hero.eyebrow ?? ""} headline={hero.title ?? ""} subcopy={hero.body ?? ""} image={{ src: hero.imageUrl ?? "", alt: hero.imageAlt ?? "" }} />
 
       <Section>
         <StoryChapter {...landChapter} />
       </Section>
 
       <Section className="bg-cream">
-        <IngredientReveal />
+        <IngredientReveal ingredients={ingredients} />
       </Section>
 
       <Section>
@@ -54,12 +98,12 @@ export default async function AboutPage() {
       </Section>
 
       <Section containerSize={false} spacing="sm">
-        <ProductStoryScroll />
+        <ProductStoryScroll categories={categories} />
       </Section>
 
       <Section>
         <div className="mx-auto max-w-2xl">
-          <ValueReveal />
+          <ValueReveal values={values} />
         </div>
       </Section>
 
@@ -68,11 +112,18 @@ export default async function AboutPage() {
       </Section>
 
       <Section>
-        <GlobalJourney />
+        <GlobalJourney title={globalJourney.title ?? ""} body={globalJourney.body ?? ""} ctaLabel={globalJourney.ctaLabel ?? ""} ctaHref={globalJourney.ctaHref ?? ""} />
       </Section>
 
       <Section className="bg-cream">
-        <StoryCTA />
+        <StoryCTA
+          headline={cta.title ?? ""}
+          subcopy={cta.body ?? ""}
+          primaryLabel={cta.ctaLabel ?? ""}
+          primaryHref={cta.ctaHref ?? ""}
+          secondaryLabel={cta.secondaryCtaLabel ?? ""}
+          secondaryHref={cta.secondaryCtaHref ?? ""}
+        />
       </Section>
     </>
   );

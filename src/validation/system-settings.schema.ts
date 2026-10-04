@@ -17,6 +17,10 @@ export const companySettingSchema = z.object({
     .array(z.object({ label: z.string().trim().min(1), href: z.string().trim().url("Enter a valid URL.") }))
     .nullable()
     .optional(),
+  contactHeroEyebrow: z.preprocess(emptyToNull, z.string().trim().min(1).nullable().optional()),
+  contactHeroHeadline: z.preprocess(emptyToNull, z.string().trim().min(1).nullable().optional()),
+  contactHeroSubcopy: z.preprocess(emptyToNull, z.string().trim().min(1).nullable().optional()),
+  contactLocationHeading: z.preprocess(emptyToNull, z.string().trim().min(1).nullable().optional()),
 });
 
 export const currencySettingSchema = z.object({

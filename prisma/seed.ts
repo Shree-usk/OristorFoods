@@ -19,6 +19,7 @@ import { seedNotificationTemplates } from "./seed-notifications";
 import { seedRecipes } from "./seed-recipes";
 import { seedReferrals } from "./seed-referrals";
 import { seedRewards } from "./seed-rewards";
+import { seedStoryPages } from "./seed-story-pages";
 import { recomputeProductAssociations } from "../src/services/recommendation.service";
 import { recomputeAllEmbeddings } from "../src/services/embedding.service";
 
@@ -345,6 +346,10 @@ async function main() {
   // layout matching STORY-006's original fixture-driven default.
   const homepageSeed = await seedHomepage();
 
+  // About page content blocks (STORY-074 — core scope): the real copy
+  // that used to live in the now-deleted src/lib/story-content.ts.
+  const storyPagesSeed = await seedStoryPages();
+
   // AI Product Recommendations (STORY-060). No cron exists in this
   // codebase — this exercises the same admin-triggered recompute path
   // production uses, so local/demo/e2e environments never start from
@@ -379,6 +384,7 @@ async function main() {
     notifications: notificationsSeed,
     admin: adminSeed,
     homepage: homepageSeed,
+    storyPages: storyPagesSeed,
     recommendations: recommendationsSeed,
     embeddings: embeddingsSeed,
   });

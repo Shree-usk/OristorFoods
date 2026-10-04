@@ -2301,6 +2301,7 @@ enum AdminModule {
   ExportPortal
   CRMAnalytics
   ContactEnquiries
+  StoryPages
 }
 
 enum AdminAction {
@@ -3039,7 +3040,69 @@ model CompanySetting {
   // existed anywhere before this; admin-filled via System Settings, omitted
   // from the Contact page entirely if unset, never fabricated.
   businessHours          String?
+  // STORY-074. The Contact page's hero copy and location heading — the
+  // only still-hardcoded text on that page (everything else already
+  // reads from this model). Singleton strings, not a repeating list, so
+  // they live here rather than in StoryPageBlock. Falls back to the
+  // page's original literal copy when unset, same pattern as
+  // businessHours/address/phone above.
+  contactHeroEyebrow     String?
+  contactHeroHeadline    String?
+  contactHeroSubcopy     String?
+  contactLocationHeading String?
   updatedAt              DateTime @updatedAt
+}
+
+// STORY-074. Admin-editable content blocks for the About page (originally
+// shipped as the fully-static src/lib/story-content.ts in STORY-073).
+// One flat-fields table covers all 7 of the page's content shapes — each
+// leaves only a few fields null (e.g. ValueItem never uses image/CTA
+// fields) — matching HeroBannerSlide's own flat-typed-fields convention
+// rather than a JSON blob. Scoped to a `page` enum (currently only
+// AboutUs) so a future static page can reuse this model instead of
+// inventing a parallel one.
+enum StoryPage {
+  AboutUs
+}
+
+enum StoryBlockType {
+  Hero
+  Chapter
+  IngredientItem
+  ProductCategoryItem
+  ValueItem
+  GlobalJourney
+  Cta
+}
+
+model StoryPageBlock {
+  id                String            @id @default(cuid())
+  page              StoryPage
+  blockType         StoryBlockType
+  // Stable per-row key (e.g. "hero", "the-land", "ingredient-chilli",
+  // "category-pickles", "value-o", "global-journey", "cta") — the admin
+  // save route upserts by (page, blockKey) so a full-page re-save never
+  // needs to juggle generated ids.
+  blockKey          String
+  sortOrder         Int               @default(0)
+  eyebrow           String?
+  title             String?
+  body              String?           @db.VarChar(4000)
+  imageUrl          String?
+  imageAlt          String?
+  ctaLabel          String?
+  ctaHref           String?
+  secondaryCtaLabel String?
+  secondaryCtaHref  String?
+  // Chapter only; reuses the existing enum rather than a second left|right type.
+  align             ContentAlignment?
+  // ValueItem only (the O-R-I-S-T-O-R acrostic letter).
+  letter            String?
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+
+  @@unique([page, blockKey])
+  @@index([page, blockType, sortOrder])
 }
 
 model CurrencySetting {

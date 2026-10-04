@@ -65,6 +65,8 @@ export interface DashboardSummary {
   exportEnquiryStatus?: { newCount: number; inDiscussionCount: number; quotedCount: number; wonThisMonth: number; lostThisMonth: number };
   /** STORY-072. Real, ContactEnquiries-gated counts. */
   contactEnquiryStatus?: { newCount: number; inProgressCount: number; respondedCount: number };
+  /** STORY-074. No counts to show, just a permission-gated flag. */
+  storyPagesEnabled?: boolean;
   /**
    * Live Visitors/System Health have no backing data source at all (see
    * the module doc comment) — these flags are still gated on the
@@ -158,6 +160,11 @@ export async function getDashboardSummary(adminUserId: string): Promise<Dashboar
         respondedCount: byStatus.get("Responded") ?? 0,
       };
     }
+  }
+
+  // STORY-074. No data source to fail against — just a permission-gated flag.
+  if (permissions.has(permissionKey("StoryPages"))) {
+    summary.storyPagesEnabled = true;
   }
 
   if (permissions.has(permissionKey("ERPIntegration"))) {
