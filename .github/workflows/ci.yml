@@ -11,7 +11,12 @@ jobs:
     runs-on: ubuntu-latest
     services:
       postgres:
-        image: postgres:16
+        # STORY-061. pgvector/pgvector:pg16, not plain postgres:16 — the
+        # official pgvector-enabled build of the same Postgres 16 base
+        # image, needed for `CREATE EXTENSION vector` (ProductEmbedding/
+        # ContentEmbedding). pg_trgm already ships in the base image either
+        # way; this image is a strict superset, not a different one.
+        image: pgvector/pgvector:pg16
         env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
