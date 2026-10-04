@@ -13,7 +13,7 @@ import { ProductGallery } from "@/components/storefront/product/product-gallery"
 import { JsonLdScript } from "@/components/storefront/product/json-ld-script";
 import { ProductJsonLd } from "@/components/storefront/product/product-json-ld";
 import { RecentlyViewed, TrackRecentlyViewed } from "@/components/storefront/product/recently-viewed";
-import { RelatedProducts } from "@/components/storefront/product/related-products";
+import { RecommendationRail } from "@/components/storefront/recommendations/recommendation-rail";
 import { QuestionsSection } from "@/components/storefront/product/questions/questions-section";
 import { ReviewsSection } from "@/components/storefront/product/reviews/reviews-section";
 import { ShareButtons } from "@/components/storefront/product/share-buttons";
@@ -21,11 +21,17 @@ import { auth } from "@/lib/auth";
 import { SITE_URL } from "@/lib/site-url";
 import { resolveCustomerGroupForUser } from "@/services/pricing.service";
 import { getProductDetail } from "@/services/product.service";
+import { getFrequentlyBoughtTogether, getSimilarProducts } from "@/services/recommendation.service";
 
-// getProductDetail() runs the full PDP aggregation (price resolution,
-// listRelatedProducts, 3 extension-point summary calls, an ancestor-path
-// walk) — generateMetadata and the page body both call it, so cache() dedupes
-// the work to one call per request instead of running it twice per page view.
+// getProductDetail() runs the full PDP aggregation (price resolution, 3
+// extension-point summary calls, an ancestor-path walk, a best-effort
+// View-interaction write) — generateMetadata and the page body both call
+// it, so cache() dedupes the work to one call per request instead of
+// running it twice per page view. "You May Also Like"/"Frequently Bought
+// Together" are fetched separately (recommendation.service.ts) rather than
+// from inside getProductDetail, since that service imports
+// listRelatedProducts from product.service.ts as its own fallback — folding
+// the call back in here would create a circular import.
 const getCachedProductDetail = cache(getProductDetail);
 
 interface ProductDetailPageProps {
@@ -36,7 +42,7 @@ export async function generateMetadata({ params }: ProductDetailPageProps): Prom
   const { slug } = await params;
   const session = await auth();
   const customerGroup = await resolveCustomerGroupForUser(session?.user?.id ?? null);
-  const product = await getCachedProductDetail(slug, customerGroup);
+  const product = await getCachedProductDetail(slug, customerGroup, session?.user?.id ?? null);
   if (!product) return {};
 
   return {
@@ -51,10 +57,14 @@ export default async function ProductDetailPage({ params }: ProductDetailPagePro
   const { slug } = await params;
   const session = await auth();
   const customerGroup = await resolveCustomerGroupForUser(session?.user?.id ?? null);
-  const product = await getCachedProductDetail(slug, customerGroup);
+  const product = await getCachedProductDetail(slug, customerGroup, session?.user?.id ?? null);
   if (!product) notFound();
 
   const pageUrl = `${SITE_URL}/products/${product.slug}`;
+  const [similarProducts, frequentlyBoughtTogether] = await Promise.all([
+    getSimilarProducts({ productId: product.id, categoryIds: product.categoryIds, customerGroup }),
+    getFrequentlyBoughtTogether({ productId: product.id, customerGroup }),
+  ]);
 
   return (
     <Section>
@@ -191,8 +201,13 @@ export default async function ProductDetailPage({ params }: ProductDetailPagePro
         <QuestionsSection productSlug={product.slug} summary={product.qaSummary} />
       </div>
 
+      {frequentlyBoughtTogether.length > 0 && (
+        <div className="mt-12">
+          <RecommendationRail title="Frequently Bought Together" products={frequentlyBoughtTogether} placement="Pdp" />
+        </div>
+      )}
       <div className="mt-12">
-        <RelatedProducts products={product.relatedProducts} />
+        <RecommendationRail title="You May Also Like" products={similarProducts} placement="Pdp" />
       </div>
       <div className="mt-12">
         <RecentlyViewed excludeProductId={product.id} />

@@ -13,7 +13,6 @@ import { ProductCollections } from "@/components/storefront/home/product-collect
 import { RewardsClubTeaser } from "@/components/storefront/home/rewards-club-teaser";
 import { WhyChooseOristor } from "@/components/storefront/home/why-choose-oristor";
 import {
-  bestSellingProducts,
   customerReviews,
   exportSolutions,
   featuredCategories,
@@ -64,7 +63,7 @@ export default async function Home() {
       <HeroBanner data={heroBanner} />
       <FeaturedCategories categories={featuredCategories} />
       <WhyChooseOristor features={whyChooseFeatures} />
-      <BestSellingProducts products={bestSellingProducts} />
+      <BestSellingProducts />
       <FeaturedRecipes />
       <ProductCollections collections={productCollections} />
       <FoodAcademyTeaser data={foodAcademyTeaser} />

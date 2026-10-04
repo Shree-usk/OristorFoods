@@ -1,5 +1,6 @@
 import type { Prisma } from "@/generated/prisma/client";
 import { signCartToken, verifyCartCookieValue } from "@/lib/cart-token";
+import { getOrCreateSessionId } from "@/lib/recommendation-session";
 import { findProductById } from "@/repositories/product.repository";
 import * as cartRepository from "@/repositories/cart.repository";
 import type { CartItemWithProduct } from "@/repositories/cart.repository";
@@ -13,6 +14,7 @@ import {
 import { resolveDiscountForCart } from "@/services/discount.service";
 import type { DiscountableLine } from "@/services/discount.service";
 import { resolveCustomerGroupForUser, resolvePrice } from "@/services/pricing.service";
+import { trackInteraction } from "@/services/recommendation.service";
 import { resolveActiveMultiplier } from "@/services/reward-campaign.service";
 import { calculatePointsRedemption } from "@/services/rewards-calc";
 import type { CartLineItem, CartSummary } from "@/types/cart";
@@ -217,7 +219,23 @@ export async function addItem(
   const unitPrice = resolved?.price.toFixed(2) ?? "0.00";
 
   await cartRepository.upsertCartItem(identity.cart.id, product.id, quantity, unitPrice);
+
+  // Best-effort — never block the cart mutation on a tracking write. The
+  // whole block (not just trackInteraction's own promise) is guarded:
+  // getOrCreateSessionId() itself can reject (e.g. cookies() outside a
+  // request scope — a real unit-test regression this caught), and an
+  // unguarded await would otherwise fail the mutation above it already
+  // committed.
+  recordAddToCartInteraction(userId, product.id).catch((error) => {
+    console.error("[cart] failed to record AddToCart interaction", error);
+  });
+
   return identity;
+}
+
+async function recordAddToCartInteraction(userId: string | null, productId: string): Promise<void> {
+  const sessionId = userId ? null : await getOrCreateSessionId();
+  await trackInteraction({ customerId: userId, sessionId, productId, eventType: "AddToCart" });
 }
 
 async function requireOwnCartItem(userId: string | null, guestCookieValue: string | null | undefined, itemId: string) {

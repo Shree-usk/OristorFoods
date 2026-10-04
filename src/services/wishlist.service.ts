@@ -3,6 +3,7 @@ import { findProductById } from "@/repositories/product.repository";
 import * as wishlistRepository from "@/repositories/wishlist.repository";
 import { toProductListItem } from "@/services/product.service";
 import { resolveCustomerGroupForUser, resolvePricesForProducts } from "@/services/pricing.service";
+import { trackInteraction } from "@/services/recommendation.service";
 import type { ProductListItem } from "@/types/product";
 
 export async function getWishlist(userId: string): Promise<ProductListItem[]> {
@@ -48,6 +49,11 @@ export async function addToWishlist(userId: string, productId: string): Promise<
     }
     throw error;
   }
+
+  // Best-effort — never block the wishlist mutation on a tracking write.
+  trackInteraction({ customerId: userId, sessionId: null, productId, eventType: "WishlistAdd" }).catch((error) => {
+    console.error("[wishlist] failed to record WishlistAdd interaction", error);
+  });
 }
 
 export async function removeFromWishlist(userId: string, productId: string): Promise<void> {

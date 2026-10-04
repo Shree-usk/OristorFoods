@@ -297,7 +297,7 @@ export interface ProductDetail {
   originalPrice: number | null;
   currency: string;
   categoryPath: categoryRepository.CategoryPathItem[];
-  relatedProducts: ProductListItem[];
+  categoryIds: string[];
   reviewSummary: ReviewSummary | null;
   qaSummary: QaSummary | null;
   recipeSummary: RecipeSummary | null;
@@ -331,20 +331,28 @@ export interface CompareItem {
  * options object — generateMetadata and the page body both call this
  * through the same `cache()` wrapper (see products/[slug]/page.tsx),
  * which dedupes by argument equality; a fresh object literal per call
- * would defeat that even when its value is identical.
+ * would defeat that even when its value is identical. STORY-060's
+ * `userId` param follows the same rule.
+ *
+ * "You May Also Like" is no longer computed here — it moved to
+ * recommendation.service.ts::getSimilarProducts (precomputed
+ * similarity, falling back to this file's own listRelatedProducts),
+ * called directly by the PDP page using this function's `categoryIds`.
+ * Keeping it here would create a circular import (recommendation.service.ts
+ * already imports listRelatedProducts from this file as ITS OWN fallback).
  */
 export async function getProductDetail(
   slug: string,
   customerGroup?: CustomerGroup,
+  userId?: string | null,
 ): Promise<ProductDetail | null> {
   const product = await productRepository.findProductDetailBySlug(slug);
   if (!product || product.status !== "Published") return null;
 
   const categoryIds = product.categories.map((category) => category.id);
 
-  const [resolvedPrice, relatedProducts, reviewSummary, qaSummary, recipeSummary, seoMeta] = await Promise.all([
+  const [resolvedPrice, reviewSummary, qaSummary, recipeSummary, seoMeta] = await Promise.all([
     pricingService.resolvePrice({ productId: product.id, customerGroup: customerGroup ?? "Retail" }),
-    listRelatedProducts({ productId: product.id, categoryIds, customerGroup }),
     getReviewSummary(product.id),
     getQaSummary(product.id),
     getRecipeSummary(product.id),
@@ -373,7 +381,7 @@ export async function getProductDetail(
     ? await categoryRepository.getCategoryAncestorPath(product.categories[0].id)
     : [];
 
-  return {
+  const detail: ProductDetail = {
     id: product.id,
     sku: product.sku,
     slug: product.slug,
@@ -422,7 +430,7 @@ export async function getProductDetail(
     originalPrice,
     currency: resolvedPrice.currency,
     categoryPath,
-    relatedProducts,
+    categoryIds,
     reviewSummary,
     qaSummary,
     recipeSummary,
@@ -433,6 +441,24 @@ export async function getProductDetail(
     robotsFollow: seoMeta?.robotsFollow ?? true,
     jsonLdOverride: seoMeta?.jsonLdOverride ?? null,
   };
+
+  // Best-effort — never block the page render on a tracking write. The
+  // whole function (not just trackInteraction's own promise) is guarded:
+  // getSessionId() itself can reject (e.g. cookies() outside a request
+  // scope, which every getProductDetail unit test hits directly), and an
+  // unguarded rejection here would surface as an unhandled promise
+  // rejection since this call is intentionally not awaited.
+  recordProductView(product.id, userId ?? null).catch((error) => {
+    console.error("[product] failed to record View interaction", error);
+  });
+
+  return detail;
+}
+
+async function recordProductView(productId: string, userId: string | null): Promise<void> {
+  const { trackInteraction } = await import("@/services/recommendation.service");
+  const sessionId = userId ? null : await (await import("@/lib/recommendation-session")).getSessionId();
+  await trackInteraction({ customerId: userId, sessionId, productId, eventType: "View" });
 }
 
 export async function getProductsForCompare(productIds: string[], customerGroup?: CustomerGroup): Promise<CompareItem[]> {

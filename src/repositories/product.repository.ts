@@ -18,6 +18,15 @@ export function findProductById(id: string) {
   return prisma.product.findUnique({ where: { id } });
 }
 
+// STORY-060. The /api/recommendations/product/[id] route's own lookup —
+// just enough to drive getSimilarProducts' category-match fallback,
+// not the full findProductById/findProductDetailBySlug payload.
+export async function findProductCategoryIds(id: string): Promise<string[] | null> {
+  const product = await prisma.product.findUnique({ where: { id }, select: { categories: { select: { id: true } } } });
+  if (!product) return null;
+  return product.categories.map((category) => category.id);
+}
+
 // STORY-036. Same include shape as cart.repository.ts's `withProduct` —
 // one primary-image thumbnail per product, batched by id for order-history
 // list/detail rendering and the reorder stock/status check, so both never
