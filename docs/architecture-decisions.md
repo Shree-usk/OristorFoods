@@ -7493,3 +7493,151 @@ option to real data is a change to an already-shipped, tested listing
 feature with its own call sites and tests, out of scope for this
 story. Noted as a related, still-open gap rather than silently fixed
 in passing.
+
+## 2026-10-04 — STORY-061 AI Smart Search
+
+**The first story in Epic 08 that genuinely needs an external AI
+dependency.** No embedding/LLM provider was decided anywhere in this
+project before this story (`docs/blueprint.md` Section 10 listed it as
+an open question). Asked the user directly rather than guessing:
+OpenAI (`text-embedding-3-small`, 1536-dim) was chosen over
+self-hosted/Google/Cohere. The user supplied a real `OPENAI_API_KEY`
+(added to `.env`, confirmed gitignored and never tracked by git — it
+must never be echoed, logged, or committed). The account currently has
+**no billing credits** (`429 insufficient_quota`, verified directly
+against the real API). The user explicitly chose to build the full
+real integration now rather than wait for credits: every embedding
+call is a real network call, gated behind a single ~2s-timeout
+attempt with no retry, and any failure (including today's real
+no-credits case) falls back to the existing keyword search — exactly
+what the story's own AC already required for "AI service
+unavailable," so there is no special-casing for "no credits yet"
+versus any other outage. This also means the real failure→fallback
+path is this environment's own natural test case, not a mock —
+`embedding-service.test.ts`'s and `smart-search-service.test.ts`'s
+fallback tests use a fake failing provider for determinism, but the
+live app, the seed script's recompute call, and a from-scratch manual
+run (verified directly) all exercise the real `429` today.
+
+**pgvector verified working end-to-end against this project's local
+PGlite (`prisma dev`) instance, before committing to the plan around
+it.** Directly tested: `CREATE EXTENSION vector`, a `vector(3)`
+column, the `<=>` cosine-distance operator, and
+`CREATE INDEX ... USING hnsw` all succeed. More importantly,
+**Prisma's native `datasource.extensions` array (already used for
+`pg_trgm`) manages `vector` too** — adding it to the array and running
+`prisma db push` creates the extension automatically; no manual
+bootstrap script was needed (confirmed by dropping the extension
+manually and re-running `db push`, which recreated it and reported
+"now in sync," not "already in sync"). **`Unsupported("vector(N)")`
+is a real, working Prisma column type for this**: `db push` creates an
+actual Postgres `vector` column (`udt_name: vector`, confirmed via
+`information_schema.columns`), fully readable/writable via
+`$queryRaw`/`$executeRaw` through `@prisma/adapter-pg` — the same
+raw-SQL-for-unsupported-types precedent `search.repository.ts`/
+`recommendation.repository.ts` already established. All reads/writes
+go through a new `embedding.repository.ts`, the only file touching
+`ProductEmbedding`/`ContentEmbedding` directly — kept separate from
+`search.repository.ts` to leave the existing, tested trigram file
+completely untouched.
+
+**The autocomplete overlay and the full results page are now two
+genuinely separate code paths, not one function differentiated by
+`pageSize`.** Before this story, the overlay's "autocomplete" *was*
+`searchCatalogue` with `pageSize=5` — there was no separate
+low-latency path. AC #6 wants two explicitly different budgets
+(<150ms autocomplete, <500ms full search); adding a synchronous
+embedding round-trip to the path called on every keystroke would have
+blown the tighter one. `GET /api/search/autocomplete` (new) wraps the
+untouched `searchCatalogue`; `GET /api/search` now calls the new
+`smart-search.service.ts::getSmartSearchResults`. `useSearchSuggestions`
+was updated to call the new autocomplete route — a one-line change,
+the overlay's own behavior is otherwise identical to before this
+story.
+
+**The semantic layer is additive, never a replacement, by
+construction.** Every existing keyword path
+(`search.repository.ts::findRankedProductMatches`, and new ILIKE
+providers for blog/Food Academy mirroring the recipe one STORY-012
+already had) runs exactly as it would without this story. A new
+embedding call runs alongside it; on success, its candidate ids are
+unioned in (keyword-matched items stay first, semantic-only items
+appended) — on failure, the union step is simply skipped and the
+result is byte-for-byte the pure keyword result, satisfying AC #7's
+"transparently" literally rather than approximately. No degraded-mode
+UI banner was built — a fallback that announces itself as a fallback
+isn't transparent.
+
+**`SearchGlossaryTerm` ships as a real, working admin-managed
+feature — model, service, CRUD at `/admin/search-glossary`, and
+search-time query expansion — with an empty seed dataset, not
+fabricated Sinhala/Tamil entries.** This is a different judgment call
+than this session's prior "no data exists yet" cases (STORY-059b's
+funnel, STORY-059c's Core Web Vitals): glossary data *could* exist
+today, but inventing Sinhala/Tamil transliterations without domain
+confidence would be worse than an honest empty table the business can
+populate for real through the admin page that now exists for exactly
+that purpose.
+
+**Embeddings refresh two ways — the fourth time this session has hit
+the "no cron exists in this codebase" constraint (after STORY-050d,
+STORY-059c, STORY-060), resolved the same way again.** (1) A
+best-effort, fire-and-forget call at each content type's *existing*
+publish/update service function — `product-admin.service.ts::createProduct`/
+`updateProduct`, `recipe-admin.service.ts::createRecipe`/`updateRecipe`/`publish`,
+`blog-admin.service.ts::createPost`/`updatePost`/`publishPost`. Each
+call site is a single `void refreshProductEmbeddingBestEffort(id)` (or
+`refreshContentEmbeddingBestEffort`) with no arguments to build beyond
+a plain id — the STORY-060 "guard the *whole* block, not just the
+inner promise" lesson is satisfied by construction here, since
+`embedding.service.ts`'s own functions wrap their entire bodies in
+try/catch and never reject, rather than requiring a `.catch()` at
+every call site. (2) `POST /api/admin/search/recompute-embeddings`, a
+real, gated (`Products:Edit`), cooldown-rate-limited, audit-logged
+endpoint for a full backfill, also run once from `prisma/seed.ts` —
+real and successful even against this account's zero credits, since
+`recomputeAllEmbeddings` counts a per-item provider failure rather
+than throwing.
+
+**Food Academy has no admin CRUD service layer anywhere in this
+codebase** (`findFoodAcademyEntryById`'s own repository file shows
+`createFoodAcademyEntry` is called only by the seed script) — so
+unlike Product/Recipe/BlogPost, it gets no inline best-effort refresh
+hook; there is no existing publish/update path to hang one off. It is
+still fully covered by the admin-triggered recompute, which reads
+every Published entry directly. A real, honest scope adjustment, not
+a hidden gap.
+
+**Both AI-triggering endpoints are rate-limited using the existing
+`src/lib/rate-limit.ts::checkRateLimit` (STORY-033) — not a new
+mechanism.** `GET /api/search` (now a real paid call per request) is
+capped per customer id or IP; the admin recompute endpoint gets a
+short per-admin cooldown. `/api/search/autocomplete` carries no AI
+cost and isn't rate-limited. Neither 062/063/064's docs mention this
+existing primitive at all — flagged below.
+
+**Every embedding call logs OpenAI's own reported `usage.total_tokens`,
+not an estimated dollar figure** — `SearchQueryLog.embeddingTokens`
+(`Int?`, null when the semantic layer didn't run for that query). A
+real, queryable cost-observability signal that doesn't require this
+codebase to keep a per-token price in sync with OpenAI's own pricing
+changes.
+
+**Recommendation for whoever scopes STORY-062 (AI Recipe Assistant):
+build a shared chat/completion provider layer before or alongside it,
+rather than each remaining AI Platform story inventing its own OpenAI
+integration independently.** This story's own `EmbeddingProvider`
+interface is deliberately narrow — embeddings only, not a general
+chat/completion abstraction — so it would be an awkward, premature fit
+for 062/063's actual multi-turn conversational needs, which aren't
+known yet. An architecture review conducted before this story's
+implementation (at the user's request, covering STORY-060 through
+064) found: no story names a model-selection-by-task policy; no story
+but this one has a cost cap or rate limit; no story but this one logs
+token/cost; 062/063 (multi-turn, conversational) have no stated bound
+on conversation length/context; and none of the five stories' docs
+reference the existing `rate-limit.ts` primitive. A shared gateway
+designed once 062's real shape is known — covering provider
+abstraction, per-task model selection, a spend cap, token logging, and
+rate limiting from the start — would avoid each of 062/063/064
+re-deriving the same decisions STORY-061 already had to make here.

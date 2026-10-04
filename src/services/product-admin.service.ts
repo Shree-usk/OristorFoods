@@ -6,6 +6,7 @@ import * as pricingRepository from "@/repositories/pricing.repository";
 import * as productRepository from "@/repositories/product.repository";
 import type { AdminProductListFilters, ProductAdminDetail } from "@/repositories/product.repository";
 import { writeAuditLog } from "@/services/audit-log.service";
+import { refreshProductEmbeddingBestEffort } from "@/services/embedding.service";
 import { requirePermission } from "@/services/permission.service";
 import { getLowStockThreshold } from "@/services/system-settings.service";
 import {
@@ -205,6 +206,8 @@ export async function createProduct(adminUserId: string, input: ProductAdminInpu
   try {
     const created = await productRepository.createProductAdmin(data);
     await writeAuditLog({ actorId: adminUserId, action: "product_created", module: "Products", targetType: "Product", targetId: created.id });
+    // STORY-061. Best-effort — never blocks this mutation; no-ops internally for a non-Published product.
+    void refreshProductEmbeddingBestEffort(created.id);
     return created;
   } catch (error) {
     mapWriteError(error, input);
@@ -238,6 +241,8 @@ export async function updateProduct(adminUserId: string, id: string, input: Prod
   try {
     const updated = await productRepository.updateProductAdmin(id, data);
     await writeAuditLog({ actorId: adminUserId, action: "product_updated", module: "Products", targetType: "Product", targetId: id });
+    // STORY-061. Best-effort — never blocks this mutation; no-ops internally for a non-Published product.
+    void refreshProductEmbeddingBestEffort(id);
     return updated;
   } catch (error) {
     mapWriteError(error, input);

@@ -20,6 +20,7 @@ import { seedRecipes } from "./seed-recipes";
 import { seedReferrals } from "./seed-referrals";
 import { seedRewards } from "./seed-rewards";
 import { recomputeProductAssociations } from "../src/services/recommendation.service";
+import { recomputeAllEmbeddings } from "../src/services/embedding.service";
 
 async function main() {
   const brand = await brandRepository.createBrand({
@@ -353,6 +354,15 @@ async function main() {
   const initialSuperAdmin = await prisma.adminUser.findUniqueOrThrow({ where: { email: adminSeed.initialSuperAdministrator } });
   const recommendationsSeed = await recomputeProductAssociations(initialSuperAdmin.id);
 
+  // AI Smart Search (STORY-061). Same "no cron exists" pattern as the
+  // recommendations recompute above. This environment's OPENAI_API_KEY
+  // has no billing credits, so every embedding call fails — a real,
+  // successful call that reports failures per item rather than
+  // throwing, exactly the fallback-on-failure path production relies
+  // on; ProductEmbedding/ContentEmbedding simply stay empty until
+  // credits exist and this is re-run (or an admin re-triggers it).
+  const embeddingsSeed = await recomputeAllEmbeddings(initialSuperAdmin.id);
+
   console.log("Seed complete:", {
     brand: brand.slug,
     categories: [spices.slug, giftSets.slug],
@@ -370,6 +380,7 @@ async function main() {
     admin: adminSeed,
     homepage: homepageSeed,
     recommendations: recommendationsSeed,
+    embeddings: embeddingsSeed,
   });
 }
 

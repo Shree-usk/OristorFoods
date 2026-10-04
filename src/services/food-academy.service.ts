@@ -2,6 +2,7 @@ import * as foodAcademyRepository from "@/repositories/food-academy.repository";
 import type { FoodAcademyEntryCardRow, FoodAcademyEntryDetailRow } from "@/repositories/food-academy.repository";
 import { getRecipesByIds } from "@/services/recipe.service";
 import { getProductsByIds } from "@/services/product.service";
+import { registerFoodAcademySearchProvider, type SearchSuggestionItem } from "@/services/search-extensions";
 import type { FoodAcademyEntryCard, FoodAcademyEntryDetail, FoodAcademyListResult } from "@/types/food-academy";
 import type { FoodAcademyListQuery } from "@/validation/food-academy.schema";
 
@@ -67,4 +68,32 @@ export async function getEntryBySlug(slug: string): Promise<FoodAcademyEntryDeta
     relatedProducts,
     relatedEntries: relatedEntryRows.map(toEntryCard),
   };
+}
+
+function toFoodAcademySuggestionItem(row: FoodAcademyEntryCardRow): SearchSuggestionItem {
+  return { id: row.id, label: row.title, href: entryHref(row.slug), imageSrc: row.heroImageUrl ?? undefined, type: "FoodAcademyEntry" };
+}
+
+// STORY-061. Keyword-only (ILIKE) — the AI Smart Search fallback
+// path, same shape as recipe.service.ts::searchRecipeSuggestions.
+export async function searchFoodAcademySuggestions(query: string, limit: number): Promise<SearchSuggestionItem[]> {
+  const q = query.trim();
+  if (!q) return [];
+  const { rows } = await foodAcademyRepository.findPublishedFoodAcademyEntries({
+    where: { OR: [{ title: { contains: q, mode: "insensitive" } }, { summary: { contains: q, mode: "insensitive" } }] },
+    skip: 0,
+    take: limit,
+  });
+  return rows.map(toFoodAcademySuggestionItem);
+}
+
+/** STORY-061. Resolves a candidate id list (e.g. vector-similarity matches) to the same suggestion shape — published-only via findPublishedFoodAcademyEntries. */
+export async function getFoodAcademySuggestionsByIds(ids: string[], limit: number): Promise<SearchSuggestionItem[]> {
+  if (ids.length === 0) return [];
+  const { rows } = await foodAcademyRepository.findPublishedFoodAcademyEntries({ where: { id: { in: ids } }, skip: 0, take: limit });
+  return rows.map(toFoodAcademySuggestionItem);
+}
+
+export function registerFoodAcademyProviders(): void {
+  registerFoodAcademySearchProvider(searchFoodAcademySuggestions);
 }

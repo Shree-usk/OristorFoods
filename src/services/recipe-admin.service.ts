@@ -2,6 +2,7 @@ import { Prisma, type RecipeStatus } from "@/generated/prisma/client";
 import * as recipeRepository from "@/repositories/recipe.repository";
 import type { RecipeAdminDetail, RecipeAdminListFilters, RecipeAdminWriteInput } from "@/repositories/recipe.repository";
 import { writeAuditLog } from "@/services/audit-log.service";
+import { refreshContentEmbeddingBestEffort } from "@/services/embedding.service";
 import { requirePermission } from "@/services/permission.service";
 import {
   RecipeAdminIllegalTransitionError,
@@ -106,6 +107,8 @@ export async function createRecipe(adminUserId: string, input: RecipeAdminValida
   try {
     const created = await recipeRepository.createRecipeAdmin(toWriteInput(input), adminUserId);
     await writeAuditLog({ actorId: adminUserId, action: "recipe_created", module: "Recipes", targetType: "Recipe", targetId: created.id });
+    // STORY-061. Best-effort — never blocks this mutation; no-ops internally unless the recipe is Published.
+    void refreshContentEmbeddingBestEffort("Recipe", created.id);
     return created;
   } catch (error) {
     mapWriteError(error, input.slug);
@@ -118,6 +121,8 @@ export async function updateRecipe(adminUserId: string, id: string, input: Recip
   try {
     const updated = await recipeRepository.updateRecipeAdmin(id, toWriteInput(input), adminUserId);
     await writeAuditLog({ actorId: adminUserId, action: "recipe_updated", module: "Recipes", targetType: "Recipe", targetId: id });
+    // STORY-061. Best-effort — never blocks this mutation; no-ops internally unless the recipe is Published.
+    void refreshContentEmbeddingBestEffort("Recipe", id);
     return updated;
   } catch (error) {
     mapWriteError(error, input.slug);
@@ -169,6 +174,8 @@ export async function publish(adminUserId: string, id: string): Promise<RecipeAd
   const published = await transition(adminUserId, id, "Published", { publishedAt: new Date() });
   // STORY-053 (additive scope). A version snapshot of every publish — see versioning.service.ts.
   await versioningService.recordVersion("Recipe", id, published, adminUserId);
+  // STORY-061. Best-effort — never blocks this mutation.
+  void refreshContentEmbeddingBestEffort("Recipe", id);
   return published;
 }
 

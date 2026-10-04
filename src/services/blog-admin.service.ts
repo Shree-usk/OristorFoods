@@ -4,6 +4,7 @@ import type { BlogPostAdminDetail, BlogPostAdminListFilters, BlogPostAdminWriteI
 import { canTransitionComment, changeCommentStatus } from "@/services/blog.service";
 import { getRecipeCardsBySlugs } from "@/services/recipe.service";
 import { writeAuditLog } from "@/services/audit-log.service";
+import { refreshContentEmbeddingBestEffort } from "@/services/embedding.service";
 import { requirePermission } from "@/services/permission.service";
 import { BlogCommentIllegalTransitionError, BlogCommentNotFoundError, BlogPostNotDraftError, BlogPostNotFoundError, BlogPostSlugConflictError } from "@/services/blog-admin.errors";
 import { computeReadingTimeMinutes } from "@/lib/blog-reading-time";
@@ -98,6 +99,8 @@ export async function createPost(adminUserId: string, input: BlogPostAdminValida
   try {
     const created = await blogRepository.createBlogPostAdmin(toWriteInput(input), adminUserId);
     await writeAuditLog({ actorId: adminUserId, action: "blog_post_created", module: "Blog", targetType: "BlogPost", targetId: created.id });
+    // STORY-061. Best-effort — never blocks this mutation; no-ops internally unless the post is Published.
+    void refreshContentEmbeddingBestEffort("BlogPost", created.id);
     return created;
   } catch (error) {
     mapWriteError(error, input.slug);
@@ -110,6 +113,8 @@ export async function updatePost(adminUserId: string, id: string, input: BlogPos
   try {
     const updated = await blogRepository.updateBlogPostAdmin(id, toWriteInput(input), adminUserId);
     await writeAuditLog({ actorId: adminUserId, action: "blog_post_updated", module: "Blog", targetType: "BlogPost", targetId: id });
+    // STORY-061. Best-effort — never blocks this mutation; no-ops internally unless the post is Published.
+    void refreshContentEmbeddingBestEffort("BlogPost", id);
     return updated;
   } catch (error) {
     mapWriteError(error, input.slug);
@@ -134,6 +139,8 @@ export async function publishPost(adminUserId: string, id: string, publishedAt?:
   await writeAuditLog({ actorId: adminUserId, action: "blog_post_published", module: "Blog", targetType: "BlogPost", targetId: id, metadata: { publishedAt: (publishedAt ?? new Date()).toISOString() } });
   // STORY-053 (additive scope). A version snapshot of every publish — see versioning.service.ts.
   await versioningService.recordVersion("BlogPost", id, updated, adminUserId);
+  // STORY-061. Best-effort — never blocks this mutation.
+  void refreshContentEmbeddingBestEffort("BlogPost", id);
   return updated;
 }
 

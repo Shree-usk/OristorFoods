@@ -2,12 +2,14 @@ import { randomUUID } from "node:crypto";
 import { cookies } from "next/headers";
 
 /**
- * STORY-060. Anonymous-visitor correlation for recommendation
- * tracking only — a lightweight, unsigned cookie, deliberately NOT a
- * reuse of cart-token.ts's signed HMAC mechanism (that guards cart
- * content integrity, a materially higher-stakes concern than this
- * soft personalization/telemetry signal; tampering here has no
- * security or data-integrity impact).
+ * STORY-060, reused by STORY-061's SearchQueryLog/rate limiting.
+ * Anonymous-visitor correlation for soft telemetry — a lightweight,
+ * unsigned cookie, deliberately NOT a reuse of cart-token.ts's signed
+ * HMAC mechanism (that guards cart content integrity, a materially
+ * higher-stakes concern than this; tampering here has no security or
+ * data-integrity impact). Both consumers are the same kind of signal
+ * (recommendation personalization, search query logging/rate-limit
+ * keying) — one shared cookie, not a proliferating one-per-feature set.
  */
 const COOKIE_NAME = "rec_sid";
 const MAX_AGE_SECONDS = 60 * 60 * 24 * 365;

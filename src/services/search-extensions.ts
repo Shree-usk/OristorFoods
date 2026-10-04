@@ -3,17 +3,22 @@ export interface SearchSuggestionItem {
   label: string;
   href: string;
   imageSrc?: string;
-  type: "Product" | "Recipe";
+  type: "Product" | "Recipe" | "BlogPost" | "FoodAcademyEntry";
 }
 
-export type SearchRecipes = (query: string, limit: number) => Promise<SearchSuggestionItem[]>;
+export type SearchContentProvider = (query: string, limit: number) => Promise<SearchSuggestionItem[]>;
 
 interface SearchProviders {
-  recipes: SearchRecipes;
+  recipes: SearchContentProvider;
+  // STORY-061. Same shape as recipes — registered at startup from
+  // instrumentation.ts, so search.service.ts never imports blog/Food
+  // Academy code directly either.
+  blog: SearchContentProvider;
+  foodAcademy: SearchContentProvider;
 }
 
 function defaultProviders(): SearchProviders {
-  return { recipes: async () => [] };
+  return { recipes: async () => [], blog: async () => [], foodAcademy: async () => [] };
 }
 
 // Kept on globalThis, not in module scope. Providers register at server
@@ -26,18 +31,39 @@ const providers = (globalForSearch.__oristorSearchProviders ??= defaultProviders
 
 /**
  * Epic 04 (Recipes & Food Academy) registers this through
- * registerRecipeProviders() in src/instrumentation.ts (and later STORY-061,
- * AI Smart Search), so search.service.ts never imports recipe code.
+ * registerRecipeProviders() in src/instrumentation.ts, so
+ * search.service.ts never imports recipe code.
  */
-export function registerRecipeSearchProvider(provider: SearchRecipes) {
+export function registerRecipeSearchProvider(provider: SearchContentProvider) {
   providers.recipes = provider;
+}
+
+/** STORY-061. Registered from blog.service.ts's own registerBlogProviders(). */
+export function registerBlogSearchProvider(provider: SearchContentProvider) {
+  providers.blog = provider;
+}
+
+/** STORY-061. Registered from food-academy.service.ts's own registerFoodAcademyProviders(). */
+export function registerFoodAcademySearchProvider(provider: SearchContentProvider) {
+  providers.foodAcademy = provider;
 }
 
 export function searchRecipes(query: string, limit: number) {
   return providers.recipes(query, limit);
 }
 
-/** Test-only: restores the provider to its default stub. */
+export function searchBlogPosts(query: string, limit: number) {
+  return providers.blog(query, limit);
+}
+
+export function searchFoodAcademy(query: string, limit: number) {
+  return providers.foodAcademy(query, limit);
+}
+
+/** Test-only: restores every provider to its default stub. */
 export function resetSearchExtensionsForTesting() {
-  providers.recipes = defaultProviders().recipes;
+  const defaults = defaultProviders();
+  providers.recipes = defaults.recipes;
+  providers.blog = defaults.blog;
+  providers.foodAcademy = defaults.foodAcademy;
 }

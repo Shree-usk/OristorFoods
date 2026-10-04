@@ -1,13 +1,15 @@
 // src/app/(storefront)/search/page.tsx
 import type { Metadata } from "next";
+import Image from "next/image";
 import Link from "next/link";
 
 import { Section } from "@/components/storefront/layout/section";
 import { ProductCard } from "@/components/storefront/product/product-card";
 import { SearchInput } from "@/components/storefront/search/search-input";
+import { getSmartSearchResults } from "@/services/smart-search.service";
+import type { SearchSuggestionItem } from "@/services/search-extensions";
 import { auth } from "@/lib/auth";
 import { resolveCustomerGroupForUser } from "@/services/pricing.service";
-import { searchCatalogue } from "@/services/search.service";
 import { searchQuerySchema } from "@/validation/search.schema";
 
 interface SearchPageProps {
@@ -26,11 +28,56 @@ export async function generateMetadata({ searchParams }: SearchPageProps): Promi
   };
 }
 
+function ContentResultCard({ item }: { item: SearchSuggestionItem }) {
+  return (
+    <Link href={item.href} className="group block">
+      <div className="relative aspect-square overflow-hidden rounded-lg bg-cream">
+        {item.imageSrc && (
+          <Image
+            src={item.imageSrc}
+            alt=""
+            fill
+            sizes="(min-width: 1024px) 25vw, (min-width: 640px) 33vw, 50vw"
+            className="object-cover transition-transform group-hover:scale-105"
+          />
+        )}
+      </div>
+      <p className="mt-3 text-small font-medium text-charcoal">{item.label}</p>
+    </Link>
+  );
+}
+
+function ContentResultGroup({ title, items }: { title: string; items: SearchSuggestionItem[] }) {
+  if (items.length === 0) return null;
+  return (
+    <div className="mt-10">
+      <h2 className="text-h3 font-heading text-charcoal">{title}</h2>
+      <div className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
+        {items.map((item) => (
+          <ContentResultCard key={item.id} item={item} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * STORY-061. AI Smart Search's unified results page — products,
+ * recipes, blog posts, and Food Academy entries grouped by type, from
+ * a single semantic-blended query. No "degraded mode" indicator is
+ * shown when the semantic layer didn't run (AC #7's "transparently");
+ * the keyword-matched results are the same either way. Unlike the
+ * prior products-only version, results are a fixed top-N per
+ * category rather than paginated — a flat page number doesn't map
+ * cleanly onto four independently-ranked groups.
+ */
 export default async function SearchPage({ searchParams }: SearchPageProps) {
-  const { q, page } = searchQuerySchema.parse(await searchParams);
+  const { q } = searchQuerySchema.parse(await searchParams);
   const session = await auth();
   const customerGroup = await resolveCustomerGroupForUser(session?.user?.id ?? null);
-  const results = await searchCatalogue(q, { page, customerGroup });
+  const results = await getSmartSearchResults(q, { customerGroup, customerId: session?.user?.id ?? null });
+
+  const totalResults = results.products.length + results.recipes.length + results.blogPosts.length + results.foodAcademyEntries.length;
 
   return (
     <Section>
@@ -48,11 +95,11 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
 
       {q && (
         <div aria-live="polite" className="mt-1 text-small text-charcoal/70">
-          {results.products.length} result{results.products.length === 1 ? "" : "s"}
+          {totalResults} result{totalResults === 1 ? "" : "s"}
         </div>
       )}
 
-      {q && results.products.length === 0 && page === 1 ? (
+      {q && totalResults === 0 ? (
         <div className="mt-8 text-body text-charcoal/70">
           <p>No results found for &quot;{q}&quot;.</p>
           <p className="mt-2">
@@ -67,44 +114,22 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
             instead.
           </p>
         </div>
-      ) : q && results.products.length === 0 && page > 1 ? (
-        <div className="mt-8 text-body text-charcoal/70">
-          <p>No more results.</p>
-          <p className="mt-2">
-            Back to{" "}
-            <Link href={`/search?q=${encodeURIComponent(q)}&page=1`} className="text-chilli hover:underline">
-              the first page
-            </Link>
-            .
-          </p>
-        </div>
       ) : (
-        <div className="mt-8 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
-          {results.products.map((product) => (
-            <ProductCard key={product.id} product={product} />
-          ))}
-        </div>
-      )}
-
-      {(page > 1 || results.hasNextPage) && (
-        <div className="mt-8 flex justify-center gap-6">
-          {page > 1 && (
-            <Link
-              href={`/search?q=${encodeURIComponent(q)}&page=${page - 1}`}
-              className="text-small text-chilli hover:underline"
-            >
-              Previous page
-            </Link>
+        <>
+          {results.products.length > 0 && (
+            <div className="mt-10">
+              <h2 className="text-h3 font-heading text-charcoal">Products</h2>
+              <div className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
+                {results.products.map((product) => (
+                  <ProductCard key={product.id} product={product} />
+                ))}
+              </div>
+            </div>
           )}
-          {results.hasNextPage && (
-            <Link
-              href={`/search?q=${encodeURIComponent(q)}&page=${page + 1}`}
-              className="text-small text-chilli hover:underline"
-            >
-              Next page
-            </Link>
-          )}
-        </div>
+          <ContentResultGroup title="Recipes" items={results.recipes} />
+          <ContentResultGroup title="Blog" items={results.blogPosts} />
+          <ContentResultGroup title="Food Academy" items={results.foodAcademyEntries} />
+        </>
       )}
     </Section>
   );
