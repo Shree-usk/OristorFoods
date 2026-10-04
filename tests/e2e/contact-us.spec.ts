@@ -24,6 +24,24 @@ test.describe("Contact Us (STORY-072)", () => {
     await expect(page.getByLabel("Hi, I'm")).toBeVisible();
   });
 
+  /**
+   * Regression: nav-config.ts/footer-config.ts both pre-dated this story
+   * and already pointed their "Contact" link at `/contact` — a 404,
+   * never cross-checked during the original implementation (only the
+   * brief's own "Target: /contact-us" was followed). Confirmed and fixed
+   * directly with the user; this test pins the real, live header/footer
+   * links to the real page so this can't silently regress.
+   */
+  test("the header and footer Contact links resolve to the real page, not a 404", async ({ page }) => {
+    await page.goto("/");
+    await page.locator("header").getByRole("link", { name: "Contact" }).click();
+    await expect(page).toHaveURL(/\/contact-us$/);
+    await expect(page.getByRole("heading", { name: "Let's talk about good food." })).toBeVisible();
+
+    await page.goto("/");
+    await expect(page.locator("footer").getByRole("link", { name: "Contact", exact: true })).toHaveAttribute("href", "/contact-us");
+  });
+
   test("selecting Wholesale reveals the business fields, selecting General hides them again", async ({ page }) => {
     await page.goto("/contact-us");
 
