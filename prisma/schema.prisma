@@ -103,6 +103,8 @@ model User {
   recipeAssistantConversations RecipeAssistantConversation[]
   // STORY-063.
   supportAssistantConversations SupportAssistantConversation[]
+  // STORY-064.
+  churnScore         CustomerChurnScore?
   createdAt         DateTime   @default(now())
   updatedAt         DateTime   @updatedAt
 }
@@ -3499,4 +3501,65 @@ model PolicyDocument {
   updatedBy   AdminUser? @relation(fields: [updatedById], references: [id], onDelete: SetNull)
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
+}
+
+// STORY-064. RFM-based churn risk — classical statistics computed from
+// customer-segment.repository.ts::getCustomerMetrics(), not an LLM
+// feature (same precedent as STORY-060's recommendation logic).
+// signalBreakdown records engagementSignalsAvailable: false — no
+// site-visit/email-open tracking exists anywhere in this codebase, so
+// that half of the churn definition is honestly omitted, never
+// fabricated.
+enum ChurnRiskTier {
+  Low
+  Medium
+  High
+}
+
+model CustomerChurnScore {
+  id              String        @id @default(cuid())
+  customerId      String        @unique
+  customer        User          @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  score           Float
+  riskTier        ChurnRiskTier
+  signalBreakdown Json
+  computedAt      DateTime      @default(now())
+
+  @@index([riskTier])
+}
+
+// STORY-064. One row per scheduled-batch-job recompute per metric
+// type/period. periodStart/periodEnd are real DateTime fields (not a
+// free-text label) so "has today's job already run for this window?"
+// and "latest snapshot per metricType" are real range queries, not
+// string parsing — a greenfield decision, no existing snapshot-style
+// model in this codebase to match a convention from.
+// sourceQueryRef grounds every narrative claim in the real query that
+// produced it (AC #6); structuredPayload carries a CampaignSuggestion
+// row's {title, rationale, suggestedProductIds, suggestedFilterCriteria}
+// — the real data the "Send to Marketing" action acts on.
+enum BusinessInsightMetricType {
+  Trend
+  Anomaly
+  CampaignSuggestion
+}
+
+model BusinessInsightSnapshot {
+  id                String                    @id @default(cuid())
+  periodStart       DateTime
+  periodEnd         DateTime
+  metricType        BusinessInsightMetricType
+  narrativeText     String
+  sourceQueryRef    Json
+  structuredPayload Json?
+  // Discriminator within one recompute batch — Trend/Anomaly always use
+  // sequence 0 (exactly one row per period); CampaignSuggestion uses
+  // 0..N-1, one row per suggested idea in that batch, each independently
+  // actionable from the UI. Needed because the unique constraint below
+  // would otherwise cap every metricType at one row per period.
+  sequence          Int                       @default(0)
+  generatedAt       DateTime                  @default(now())
+
+  @@index([metricType, generatedAt])
+  @@unique([metricType, periodStart, periodEnd, sequence])
 }

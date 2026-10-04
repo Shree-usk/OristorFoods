@@ -98,6 +98,31 @@ export async function getTopProducts(from: Date, to: Date, limit: number): Promi
     .map((row) => ({ productId: row.productId!, productName: row.productName, quantity: row._sum.quantity ?? 0, revenue: Number(row._sum.lineTotal ?? 0) }));
 }
 
+/**
+ * STORY-064. Targeted revenue lookup for a specific set of product ids,
+ * no `take` limit — complements getTopProducts(). Diffing two independent
+ * top-N calls (current vs. prior period) can't correctly surface a
+ * genuinely emerging product: if it wasn't in the PRIOR period's top-N,
+ * that call simply never returns it, indistinguishable from zero revenue.
+ * Callers get the current period's top-N ids first, then pass those same
+ * ids here for the prior period, so true-zero and ranked-out are never
+ * conflated.
+ */
+export async function getProductRevenueForIds(productIds: string[], from: Date, to: Date): Promise<Map<string, { revenue: number; quantity: number }>> {
+  if (productIds.length === 0) return new Map();
+  const grouped = await prisma.orderItem.groupBy({
+    by: ["productId"],
+    where: { productId: { in: productIds }, order: { createdAt: { gte: from, lte: to }, status: { not: "Cancelled" } } },
+    _sum: { quantity: true, lineTotal: true },
+  });
+  const result = new Map<string, { revenue: number; quantity: number }>();
+  for (const row of grouped) {
+    if (!row.productId) continue;
+    result.set(row.productId, { revenue: Number(row._sum.lineTotal ?? 0), quantity: row._sum.quantity ?? 0 });
+  }
+  return result;
+}
+
 export interface TopRecipeRow {
   recipeId: string;
   title: string;

@@ -7867,3 +7867,153 @@ audit-adjacent table this project has — `AuditLog`, `SearchQueryLog`,
 something to improvise narrowly for this story alone. Flagged as a
 real, open follow-up for whoever picks up a future data-governance
 pass, not silently dropped.
+
+## 2026-10-04 — STORY-064 AI Business Insights & Personalization (closes Epic 08)
+
+The last story in Epic 08 (AI Platform). Layers trend/anomaly narrative
+summaries, RFM-based churn-risk scoring, and human-reviewable campaign
+suggestions onto the Executive Dashboard (STORY-059c).
+
+**Churn scoring is classical RFM statistics, not an LLM feature** —
+the same precedent STORY-060 established ("classical recommendation
+logic, not an LLM feature"). `customer-segment.repository.ts::getCustomerMetrics()`
+(STORY-059a) already computes exactly Recency/Frequency/Monetary per
+customer in one `groupBy`; `churn-scoring.service.ts` reuses it
+directly rather than recomputing RFM itself. Score (0-100, higher =
+more at risk) is a weighted blend of three documented, recalibratable
+components — recency (weight 0.6, capped at 365 days), frequency
+(weight 0.25, capped at 10 orders), monetary (weight 0.15, capped at
+LKR 100,000) — tiered Low/Medium/High at 30/60. Only the narrative and
+campaign-suggestion generation need a real OpenAI call, reusing
+STORY-062/063's `ChatCompletionProvider`/`OpenAiChatProvider` directly
+— no new provider infrastructure, no shared "AI Gateway" (the user's
+standing decision from 062/063).
+
+**No engagement-signal data exists anywhere in this codebase.** AC #2
+asks for churn risk from "recency/frequency/monetary purchase signals
+plus engagement signals (site visits, email opens where available)" —
+grepped for any open/visit tracking: none exists, the same gap
+STORY-059b's funnel (`Visits: {available: false}`) and STORY-059c's
+Core Web Vitals already documented. `signalBreakdown.engagementSignalsAvailable`
+is honestly `false` rather than fabricating a signal.
+
+**Anomaly detection is honestly order-volume-only.** AC #1 asks for
+"unusual traffic or conversion drop" detection; no traffic/conversion
+data exists in this codebase, so detection is scoped to a day whose
+order count is more than 40% below its trailing 7-day average
+(`getSalesTrend`'s existing daily buckets). Critically, **the
+generated narrative text itself states this limitation explicitly**
+("based on order volume; traffic/conversion data isn't tracked"), not
+just a code comment — AC #6 ("no unverifiable black-box claims") means
+an Executive reading the panel must never be left assuming traffic was
+analyzed when it wasn't.
+
+**Trend computation edge case, caught by a Plan-agent validation pass
+before implementation**: diffing two independent `getTopProducts`
+top-N calls (current period vs. prior period) can't correctly surface
+a genuinely emerging product — if it wasn't in the PRIOR period's
+top-N, that call simply never returns a revenue figure for it,
+indistinguishable from zero. Fixed with a new targeted repository
+function, `analytics.repository.ts::getProductRevenueForIds(productIds,
+from, to)` — after getting the current period's top-N product ids, a
+second query fetches those SAME products' prior-period revenue
+directly (no `take` limit), so true-zero and ranked-out are never
+conflated.
+
+**Churn-tier export to Marketing is an exact snapshot, not an
+RFM-threshold approximation — a second Plan-agent-validated fix.**
+`crm-segmentation.service.ts` documents segments as explicitly "live,
+not snapshotted" — `filterCustomers()` re-runs its filter combination
+against current data every time. The first-draft plan mapped a churn
+tier to an equivalent `lastOrderBefore` threshold and called the
+existing `createSegment` as-is; the validation pass caught that this
+under-delivers AC #2's actual churn definition (RFM plus engagement),
+since a pure recency filter both misses true High-risk customers
+(recent order, hypothetically low engagement) and wrongly includes
+Low-risk ones (old order, high engagement — even though engagement
+itself isn't tracked, the point stands that recency alone is not the
+whole churn score). Fixed by adding an additive, optional `customerIds?:
+string[]` field to `SegmentFilterCriteria` (`admin-crm-client.ts`, its
+Zod schema, and a new branch in `filterCustomers()` restricting
+candidates to that set before other filters apply) — existing stored
+segments are entirely unaffected since the field is new and optional.
+Exporting a tier passes the real current `CustomerChurnScore` ids for
+that tier, reusing `createSegment`/`filterCustomers` directly (AC #3's
+"without duplicating segment-building logic"). This is an intentional
+point-in-time snapshot — documented in the field's own schema comment
+as a stated divergence from the rest of that file's live-filter
+design, not left to silently conflict with STORY-059a's own invariant.
+
+**Rate-limit correction, also caught in validation**: there is no
+dedicated "cooldown" API in this codebase — `rate-limit.ts::checkRateLimit(key,
+{max, windowMs})` is a generic fixed-window counter; a cooldown is
+simulated via `max: 1` with the cooldown duration as `windowMs`, the
+same way STORY-061's own recompute route already does it. The two
+recompute actions (churn scoring, insight narratives) are kept as
+separate triggers with independent rate-limit keys — a full RFM pass
+over the customer base and a paid LLM narrative call have different
+cost/latency profiles, and coupling one to the other's cooldown would
+be unnecessary.
+
+**Schema**: `BusinessInsightSnapshot` uses real `periodStart`/`periodEnd`
+`DateTime` fields, not a free-text period label — a greenfield
+decision (no existing snapshot-style model in this codebase to match a
+string convention from), needed for real range queries ("has today's
+job already run for this window?", "latest snapshot per metricType").
+A `sequence Int @default(0)` discriminator (caught as a real
+pre-implementation bug: the original `@@unique([metricType,
+periodStart, periodEnd])` constraint only allowed ONE row per
+metricType per period, but campaign suggestions are naturally a LIST —
+multiple ideas per batch, each independently actionable from the UI)
+extends the unique constraint to `[metricType, periodStart, periodEnd,
+sequence]`: Trend/Anomaly always use sequence 0, CampaignSuggestion
+uses 0..N-1 per batch.
+
+**AC #5's "AI-derived personalization segments"** is read as the
+churn-risk tiers themselves — no separate purchase-pattern/persona-
+affinity clustering algorithm was in the Tasks list to build, and
+inventing one beyond what was asked would be scope creep. **AC #7/#8's
+role-gating** is read the same way the rest of the Executive Dashboard
+already reads an analogous requirement: this codebase's RBAC has no
+first-class named-role gating concept (confirmed by grep: the only
+`role.key ===` check anywhere in `src/` is an unrelated last-Super-
+Administrator safeguard, not feature-gating) — every story this
+session gates via `requirePermission(adminUserId, module, action)`,
+and the AI Insights panel is gated on the same `CRMAnalytics` module
+the rest of the dashboard already uses.
+
+**Opportunistic finding, not fixed here**: this story's e2e axe check
+is the first time this codebase has ever run axe against its shared
+`<Table>`/`TableHead` component, and it revealed the `text-muted-foreground`
+header style fails WCAG AA contrast at 14px (3.75:1 vs. the required
+4.5:1) — a pre-existing, codebase-wide design-token gap affecting
+every admin table (confirmed: the Scheduled Reports table on this same
+page, from STORY-059c, has the identical issue). The story's own new
+paragraphs used `/60` opacity and were fixed to `/70` (the
+confirmed-passing convention from 063's widget), and the e2e axe check
+excludes `thead` with a comment explaining why — but the shared
+primitive itself is flagged for Epic 09 (Quality & Security), not
+touched here, since fixing it is a cross-cutting change affecting
+every admin page, well beyond this story's scope.
+
+**Epic 08 (AI Platform) closing summary.** Five stories (060-064), all
+on the same OpenAI account/key, no billing credits in this
+environment — every real narrative/completion call across all five
+stories hits the same genuine `429`, and every one of them has a
+transparent, tested fallback rather than a crash. No shared "AI
+Gateway" was ever built, by the user's own repeated, explicit choice
+(raised and deferred during 062 planning, reconfirmed before 063). Each
+story's provider interfaces (`ChatCompletionProvider`,
+`EmbeddingProvider`) stayed deliberately narrow at first (STORY-062
+scoped `ChatCompletionProvider` to the Recipe Assistant alone) and were
+reused forward — by 063, then 064 — exactly where the need was
+genuinely the same shape, never duplicated and never speculatively
+generalized ahead of an actual second caller. The recurring
+retrieve → ground → generate → validate pattern (real data first, LLM
+constrained to reference only that real data, a guardrail re-verifying
+every returned reference before persisting) was established in 062 for
+recipe ids, extended in 063 to order numbers under much higher security
+stakes (cross-customer isolation), and extended again here to business-
+metric references under lower stakes (internal aggregate data, no PII
+vector) — the same shape held across three very different domains
+without needing to be redesigned. Next: Epic 09 (Quality & Security).

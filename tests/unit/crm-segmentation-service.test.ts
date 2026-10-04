@@ -199,3 +199,28 @@ describe("crm-segmentation.service — segment CRUD", () => {
     await expect(resolveSegmentMembers("nonexistent-id")).resolves.toEqual([]);
   });
 });
+
+describe("crm-segmentation.service — customerIds filter (STORY-064)", () => {
+  it("restricts the candidate set to exactly the given ids, composing with other filters", async () => {
+    const admin = await makeFullAccessAdmin();
+    const included = await makeCustomer({ customerGroup: "Wholesale" });
+    await makeOrder(included.id, { grandTotal: "50.00" });
+    const excludedByIds = await makeCustomer({ customerGroup: "Wholesale" });
+    await makeOrder(excludedByIds.id, { grandTotal: "50.00" });
+    const excludedByGroup = await makeCustomer({ customerGroup: "Retail" });
+    await makeOrder(excludedByGroup.id, { grandTotal: "50.00" });
+
+    const preview = await previewSegment(admin.id, { customerIds: [included.id, excludedByGroup.id], customerGroup: "Wholesale" });
+    const ids = preview.members.map((m) => m.id);
+    expect(ids).toEqual([included.id]);
+  });
+
+  it("leaves an existing segment with no customerIds set completely unaffected", async () => {
+    const admin = await makeFullAccessAdmin();
+    const customer = await makeCustomer({ customerGroup: "Export" });
+
+    const segment = await createSegment(admin.id, { name: `${SEGMENT_NAME_PREFIX}3`, filterCriteria: { customerGroup: "Export" } });
+    const resolved = await resolveSegmentMembers(segment.id);
+    expect(resolved).toContain(customer.id);
+  });
+});
