@@ -10,8 +10,9 @@ export function useSearchSuggestions(query: string) {
   return useQuery({
     queryKey: ["search-suggestions", query],
     queryFn: async () => {
+      // STORY-061. The low-latency keyword-only path — never the semantic-blended /api/search.
       const response = await fetch(
-        `/api/search?q=${encodeURIComponent(query)}&pageSize=${SUGGESTIONS_PAGE_SIZE}`,
+        `/api/search/autocomplete?q=${encodeURIComponent(query)}&pageSize=${SUGGESTIONS_PAGE_SIZE}`,
       );
       if (!response.ok) throw new Error("Failed to load search suggestions");
       return (await response.json()) as SearchResultsPage;

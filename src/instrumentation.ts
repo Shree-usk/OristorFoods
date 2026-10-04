@@ -9,6 +9,8 @@ export async function register() {
       { registerReviewProviders },
       { registerQaProviders },
       { registerRecipeProviders },
+      { registerBlogProviders },
+      { registerFoodAcademyProviders },
       { registerOrderEventConsumer },
       { rewardsConsumer },
       { referralConsumer },
@@ -17,6 +19,8 @@ export async function register() {
       import("@/services/review.service"),
       import("@/services/qa.service"),
       import("@/services/recipe.service"),
+      import("@/services/blog.service"),
+      import("@/services/food-academy.service"),
       import("@/services/order-integration.service"),
       import("@/services/rewards.service"),
       import("@/services/referral.service"),
@@ -25,6 +29,9 @@ export async function register() {
     registerReviewProviders();
     registerQaProviders();
     registerRecipeProviders();
+    // STORY-061.
+    registerBlogProviders();
+    registerFoodAcademyProviders();
     // order-integration.service.ts fans out to every registered consumer
     // (STORY-031 turned what used to be a single slot into a list).
     registerOrderEventConsumer(rewardsConsumer);

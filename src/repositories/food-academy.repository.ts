@@ -82,6 +82,22 @@ export function findPublishedFoodAcademyEntryBySlug(slug: string): Promise<FoodA
   });
 }
 
+// STORY-061. By id (any status, unlike every other read here) — the
+// one lookup embedding.service.ts needs for its best-effort refresh,
+// which must see `status` to skip a non-Published entry. A dedicated
+// select, not a reuse of foodAcademyEntryCardSelect (which omits
+// status — it's a public-facing card shape).
+const foodAcademyEntryEmbeddingSelect = {
+  id: true,
+  title: true,
+  summary: true,
+  status: true,
+} satisfies Prisma.FoodAcademyEntrySelect;
+
+export function findFoodAcademyEntryById(id: string) {
+  return prisma.foodAcademyEntry.findUnique({ where: { id }, select: foodAcademyEntryEmbeddingSelect });
+}
+
 export async function findRelatedFoodAcademyEntries(
   entry: { id: string; categoryId: string },
   limit: number,

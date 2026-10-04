@@ -11,7 +11,13 @@ generator client {
 
 datasource db {
   provider   = "postgresql"
-  extensions = [pg_trgm]
+  // STORY-061. pgvector, for ProductEmbedding/ContentEmbedding's
+  // similarity search — verified working end-to-end against this
+  // project's local PGlite (prisma dev) instance before adding it
+  // here: CREATE EXTENSION vector, a vector(N) column, the <=>
+  // cosine-distance operator, and CREATE INDEX ... USING hnsw all
+  // succeed. See docs/architecture-decisions.md.
+  extensions = [pg_trgm, vector]
 }
 
 // --- Auth.js (NextAuth) required models ---
@@ -91,6 +97,8 @@ model User {
   // STORY-060.
   productInteractionEvents ProductInteractionEvent[]
   recommendationEvents     RecommendationEvent[]
+  // STORY-061.
+  searchQueryLogs          SearchQueryLog[]
   createdAt         DateTime   @default(now())
   updatedAt         DateTime   @updatedAt
 }
@@ -294,6 +302,8 @@ model Product {
   associationsAsSource   ProductAssociation[]      @relation("AssociationSource")
   associationsAsTarget   ProductAssociation[]      @relation("AssociationTarget")
   recommendationEvents   RecommendationEvent[]
+  // STORY-061.
+  embedding              ProductEmbedding?
 
   @@index([status])
   @@index([status, inStock])
@@ -3280,4 +3290,80 @@ model RecommendationEvent {
 
   @@index([productId])
   @@index([placement, action])
+}
+
+// STORY-061. AI Smart Search.
+
+// One embedding per product, upserted by embedding.service.ts on
+// publish/update and by the admin-triggered recompute (no cron exists
+// in this codebase — same constraint STORY-050d/STORY-059c/STORY-060
+// already resolved the same way). All reads/writes go through
+// embedding.repository.ts's raw SQL — Unsupported("vector(N)") isn't
+// readable/writable through the generated client directly.
+model ProductEmbedding {
+  id           String                      @id @default(cuid())
+  productId    String                      @unique
+  product      Product                     @relation(fields: [productId], references: [id], onDelete: Cascade)
+  embedding    Unsupported("vector(1536)")
+  modelVersion String
+  updatedAt    DateTime                    @updatedAt
+}
+
+enum ContentSourceType {
+  Recipe
+  BlogPost
+  FoodAcademyEntry
+}
+
+// Polymorphic by (sourceType, sourceId) — deliberately no FK to
+// Recipe/BlogPost/FoodAcademyEntry (a single relation can't target
+// three different tables), the same plain-reference pattern
+// AuditLog.targetId/OrderIntegrationEvent already use for this shape.
+model ContentEmbedding {
+  id           String            @id @default(cuid())
+  sourceType   ContentSourceType
+  sourceId     String
+  embedding    Unsupported("vector(1536)")
+  modelVersion String
+  updatedAt    DateTime          @updatedAt
+
+  @@unique([sourceType, sourceId])
+}
+
+// Real sink for search.service.ts::logProductSearch, a typed hook
+// point STORY-012 already left explicitly for this story (and
+// STORY-064) — previously console.debug-only outside production.
+// embeddingTokens is OpenAI's own reported usage.total_tokens, not an
+// estimated dollar figure (see docs/architecture-decisions.md) — null
+// when the semantic layer didn't run for this query.
+model SearchQueryLog {
+  id              String   @id @default(cuid())
+  query           String
+  resultCount     Int
+  isZeroResult    Boolean
+  embeddingTokens Int?
+  customerId      String?
+  customer        User?    @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  sessionId       String?
+  createdAt       DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([isZeroResult])
+}
+
+// Sinhala/Tamil dish/ingredient transliteration + general synonym
+// glossary, admin-managed (Admin Console Principle — see
+// docs/architecture-decisions.md for why this ships with zero seeded
+// entries rather than fabricated ones). targetType/targetId are
+// optional: most terms are plain synonym expansions (e.g. "hot" ->
+// "spicy") with no single target; a term CAN optionally point at one
+// specific catalog record when it unambiguously maps to one.
+model SearchGlossaryTerm {
+  id            String   @id @default(cuid())
+  term          String   @unique
+  canonicalTerm String
+  targetType    String?
+  targetId      String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 }

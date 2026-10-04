@@ -3,6 +3,7 @@ import * as blogRepository from "@/repositories/blog.repository";
 import type { BlogPostCardRow, BlogPostDetailRow } from "@/repositories/blog.repository";
 import { parseBodyBlocks } from "@/lib/blog-body-blocks";
 import { getRecipeCardsBySlugs } from "@/services/recipe.service";
+import { registerBlogSearchProvider, type SearchSuggestionItem } from "@/services/search-extensions";
 import * as seoRepository from "@/repositories/seo.repository";
 import type { BlogListResult, BlogPostCardData, BlogPostDetailData } from "@/types/blog";
 import type { BlogCommentInput, BlogListQuery } from "@/validation/blog.schema";
@@ -190,4 +191,32 @@ export async function submitComment(
     body: input.body,
   });
   return { status: "pending-review" };
+}
+
+function toBlogSuggestionItem(row: BlogPostCardRow): SearchSuggestionItem {
+  return { id: row.id, label: row.title, href: postHref(row.slug), imageSrc: row.heroImageUrl ?? undefined, type: "BlogPost" };
+}
+
+// STORY-061. Keyword-only (ILIKE) — the AI Smart Search fallback
+// path, same shape as recipe.service.ts::searchRecipeSuggestions.
+export async function searchBlogPostSuggestions(query: string, limit: number): Promise<SearchSuggestionItem[]> {
+  const q = query.trim();
+  if (!q) return [];
+  const { rows } = await blogRepository.findPublishedBlogPosts({
+    where: { OR: [{ title: { contains: q, mode: "insensitive" } }, { excerpt: { contains: q, mode: "insensitive" } }] },
+    skip: 0,
+    take: limit,
+  });
+  return rows.map(toBlogSuggestionItem);
+}
+
+/** STORY-061. Resolves a candidate id list (e.g. vector-similarity matches) to the same suggestion shape — published-only via findPublishedBlogPosts. */
+export async function getBlogPostSuggestionsByIds(ids: string[], limit: number): Promise<SearchSuggestionItem[]> {
+  if (ids.length === 0) return [];
+  const { rows } = await blogRepository.findPublishedBlogPosts({ where: { id: { in: ids } }, skip: 0, take: limit });
+  return rows.map(toBlogSuggestionItem);
+}
+
+export function registerBlogProviders(): void {
+  registerBlogSearchProvider(searchBlogPostSuggestions);
 }

@@ -1,4 +1,9 @@
-// tests/unit/search-route.test.ts
+// tests/unit/search-autocomplete-route.test.ts
+// STORY-061. This exact keyword-only, unchanged-searchCatalogue behavior
+// moved from GET /api/search to GET /api/search/autocomplete — the
+// low-latency path the overlay calls on every keystroke. GET /api/search
+// now calls the semantic-blended getSmartSearchResults instead (see
+// smart-search-service.test.ts and smart-search-route.test.ts).
 // @vitest-environment node
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Mock } from "vitest";
@@ -12,7 +17,7 @@ import { createStandardPrice } from "@/repositories/pricing.repository";
 vi.mock("@/lib/auth", () => ({ auth: vi.fn() }));
 
 const { auth } = await import("@/lib/auth");
-const { GET } = await import("@/app/api/search/route");
+const { GET } = await import("@/app/api/search/autocomplete/route");
 const mockAuth = auth as unknown as Mock<() => Promise<Session | null>>;
 
 beforeEach(() => {
@@ -24,7 +29,7 @@ afterEach(async () => {
   vi.clearAllMocks();
 });
 
-describe("GET /api/search", () => {
+describe("GET /api/search/autocomplete", () => {
   it("returns matching published products for a query", async () => {
     const product = await createProduct({
       sku: "SEARCH-ROUTE-1",
@@ -34,7 +39,7 @@ describe("GET /api/search", () => {
     });
     await createStandardPrice({ product: { connect: { id: product.id } }, price: "450.00" });
 
-    const response = await GET(new Request("http://localhost/api/search?q=curry"));
+    const response = await GET(new Request("http://localhost/api/search/autocomplete?q=curry"));
     const body = await response.json();
 
     expect(response.status).toBe(200);
@@ -42,7 +47,7 @@ describe("GET /api/search", () => {
   });
 
   it("returns an empty result for a blank query, not an error", async () => {
-    const response = await GET(new Request("http://localhost/api/search?q="));
+    const response = await GET(new Request("http://localhost/api/search/autocomplete?q="));
     const body = await response.json();
 
     expect(response.status).toBe(200);
@@ -60,7 +65,7 @@ describe("GET /api/search", () => {
       await createStandardPrice({ product: { connect: { id: product.id } }, price: "100.00" });
     }
 
-    const response = await GET(new Request("http://localhost/api/search?q=curry&pageSize=2"));
+    const response = await GET(new Request("http://localhost/api/search/autocomplete?q=curry&pageSize=2"));
     const body = await response.json();
 
     expect(body.products).toHaveLength(2);

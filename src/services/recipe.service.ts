@@ -87,6 +87,10 @@ export function createRecipe(input: NewRecipeInput) {
   });
 }
 
+function toRecipeSuggestionItem(row: RecipeCardRow): SearchSuggestionItem {
+  return { id: row.id, label: row.title, href: recipeHref(row.slug), imageSrc: row.heroImage, type: "Recipe" };
+}
+
 /** Header search suggestions: same title/description match as the listing, most viewed first. */
 export async function searchRecipeSuggestions(query: string, limit: number): Promise<SearchSuggestionItem[]> {
   const q = query.trim();
@@ -97,13 +101,13 @@ export async function searchRecipeSuggestions(query: string, limit: number): Pro
     skip: 0,
     take: limit,
   });
-  return rows.map((row) => ({
-    id: row.id,
-    label: row.title,
-    href: recipeHref(row.slug),
-    imageSrc: row.heroImage,
-    type: "Recipe",
-  }));
+  return rows.map(toRecipeSuggestionItem);
+}
+
+/** STORY-061. Resolves a candidate id list (e.g. vector-similarity matches) to the same suggestion shape — published-only via findRecipesByIds. */
+export async function getRecipeSuggestionsByIds(ids: string[], limit: number): Promise<SearchSuggestionItem[]> {
+  const rows = await recipeRepository.findRecipesByIds(ids, limit);
+  return rows.map(toRecipeSuggestionItem);
 }
 
 function toIngredientItem(row: RecipeDetailRow["ingredients"][number]): RecipeIngredientItem {
