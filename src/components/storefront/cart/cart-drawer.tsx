@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 
 import { Button, buttonVariants } from "@/components/ui/button";
+import { CartCrossSell } from "@/components/storefront/cart/cart-cross-sell";
 import { CartLineItemRow } from "@/components/storefront/cart/cart-line-item";
 import { CouponInput } from "@/components/storefront/cart/coupon-input";
 import { EmptyCart } from "@/components/storefront/cart/empty-cart";
@@ -56,6 +57,11 @@ export function CartDrawer({ open, onClose }: CartDrawerProps) {
                 }
               />
             ))
+          )}
+          {cart && cart.items.length > 0 && (
+            <div className="mt-6">
+              <CartCrossSell productIds={cart.items.map((item) => item.productId)} />
+            </div>
           )}
         </div>
 

@@ -7344,3 +7344,152 @@ objects, same as 059b's own unit tests), so the e2e test remains the
 one place that exercises the real validation layer — confirmed working
 on the first e2e run this time, precisely because the schema was
 written with that prior lesson already applied.
+
+## 2026-10-04 — STORY-060 AI Product Recommendations
+
+**The first story of Epic 08 is classical recommendation logic, not an
+LLM feature — no AI-provider decision was needed, or blocked on.**
+`docs/blueprint.md` Section 10 lists no AI/LLM provider as confirmed
+anywhere; that question is real for later AI Platform stories (smart
+search, the recipe/support assistants) but not this one, which is pure
+SQL aggregation and co-occurrence counting over existing Order/
+OrderItem/ProductInteractionEvent data.
+
+**`ProductInteractionEvent` deliberately has no `Purchase` event
+type.** `OrderItem` already captures every purchase with full fidelity
+(`userId` via `Order`, `productId`, `quantity`, `createdAt`) —
+duplicating it into a second table would be redundant storage with no
+new signal. Every strategy that needs purchase/co-purchase data reads
+`OrderItem` directly (`recommendation.repository.ts::getBestSellingProductIds`/
+`getCoPurchasePairs`), the same "don't duplicate an existing signal"
+call 059a's CLV already made for order data. The table tracks exactly
+three event types — View, AddToCart, WishlistAdd — the three behaviors
+nothing in this codebase persisted server-side before this story.
+
+**VIEW/ADD_TO_CART/WISHLIST_ADD are recorded inline, server-side, at
+each signal's natural read/mutation point — not through a generic
+client-side tracking endpoint.** VIEW is recorded inside
+`product.service.ts::getProductDetail` (the same shape
+`Recipe.viewCount`'s inline incrementing already uses); ADD_TO_CART
+inside `cart.service.ts::addItem`; WISHLIST_ADD inside
+`wishlist.service.ts::addToWishlist` (always customer-attributed —
+wishlist has no anonymous path). `POST /api/recommendations/track` is
+reserved for `RecommendationEvent` only: impression/click/add-to-cart
+*of a product shown as a recommendation specifically* — the server has
+no way to know that without the client reporting it, so that one
+signal genuinely needs a client-driven call; the other three don't.
+
+**A real regression, caught by the existing test suite, not a new
+one — `cookies()` called outside a request scope broke `addItem` and
+`getProductDetail`'s own already-passing unit tests.** The first
+version of the inline-tracking code looked like:
+```ts
+const sessionId = userId ? null : await getOrCreateSessionId();
+trackInteraction({...}).catch((error) => { ... });
+```
+The `.catch()` only guards `trackInteraction`'s own promise —
+`getOrCreateSessionId()`'s `await` sits *outside* that guard, so when
+it rejects (which `cookies()` from `next/headers` always does outside
+a real Next.js request — exactly what every unit test calling these
+functions directly does), the rejection propagates out of the whole
+calling function, not just the tracking side-effect. `cart-service.test.ts`
+and `product-detail-service.test.ts` — both already-shipped, already
+passing — caught this immediately. Fixed by wrapping the *entire*
+best-effort block in its own async function and `.catch()`ing that
+function's call, not just the inner promise
+(`recordAddToCartInteraction`/`recordProductView` in
+`cart.service.ts`/`product.service.ts`). **Lesson: a `.catch()` on an
+inner promise doesn't protect the code that builds that promise's
+arguments — wrap the outer async call, not just its return value.**
+
+**Anonymous session correlation is a new, lightweight, unsigned
+`rec_sid` cookie (`src/lib/recommendation-session.ts`) — deliberately
+not a reuse of `cart-token.ts`'s signed HMAC guest-token mechanism.**
+That mechanism guards cart content integrity, a materially
+higher-stakes concern than this soft personalization/telemetry signal
+(worst case of tampering: slightly wrong personalization, no security
+or data-integrity impact). `getOrCreateSessionId()` (mint-and-set) is
+callable only from Route Handlers, which can set cookies;
+`getSessionId()` (read-only) is for Server Components, which cannot —
+`best-selling-products.tsx` and `product.service.ts`'s View-tracking
+both use the read-only variant, so anonymous VIEW tracking is
+best-effort by design, not a bug. This doesn't affect AC compliance:
+anonymous visitors always get the same cold-start fallback regardless
+of session, per the AC's own wording.
+
+**"You May Also Like" absorbed the PDP's existing category-match
+baseline rather than running alongside it as a second, visually
+duplicate section.** `product.service.ts::listRelatedProducts`
+(same-category `Product.findMany`) already existed and was already
+rendered via a `RelatedProducts` component. Building a second
+"similar products" section next to it would have shown two
+near-identical grids on the same page. Instead,
+`recommendation.service.ts::getSimilarProducts` reads precomputed
+`Similar`-type `ProductAssociation` rows when they exist, and falls
+back to calling `listRelatedProducts` directly — the exact same query
+— for a product with no association data yet (every product, until
+the first recompute runs). The old `RelatedProducts` component and its
+dedicated unit test were deleted as redundant; `getProductDetail`'s
+own `relatedProducts` field was replaced with a plain `categoryIds:
+string[]`, since computing it inside `getProductDetail` would have
+created a circular import (`recommendation.service.ts` already imports
+`listRelatedProducts` from `product.service.ts` as its own fallback).
+
+**"Frequently Bought Together" has no rules-based fallback — it's
+honestly omitted when there's no real co-purchase data**, the same
+honesty standard this session has applied to every prior missing-data
+case (059b's conversion-funnel Visits/Checkout, 059c's Core Web
+Vitals). Unlike "You May Also Like," there's no meaningful
+non-fabricated fallback for "frequently bought with X" — a random
+same-category pairing isn't actually a co-purchase signal.
+
+**The homepage's "Best Selling Products" section is this story's real
+home, not a new 11th section** — confirmed by re-reading the 2026-09-30
+STORY-042 entry, which explicitly deferred "a Best Selling Products
+override list... to later stories once their individual requirements
+are defined" and left it rendering a typed fixture array
+(`@/lib/fixtures/home-fixtures.ts::bestSellingProducts`, now deleted)
+at both call sites (`page.tsx`'s fallback path and
+`homepage-sections.tsx`'s Builder path). `BestSellingProducts` itself
+became an async, self-fetching Server Component — the exact pattern
+`featured-recipes.tsx` already established (an async component a sync
+parent renders directly, no prop threading, `await connection()` to
+force per-request freshness) — so both call sites got real,
+personalized-when-possible data for free with zero changes to either
+site beyond dropping the now-dead `products` prop. The section's own
+title flips between "Best Selling Products" and "Recommended for You"
+based on which strategy actually produced the result, unless an admin
+set an explicit `titleOverride` via the Homepage Builder.
+
+**No cron exists in this codebase — the third time this session hit
+this exact constraint (STORY-050d, STORY-059c), resolved the same way
+again rather than re-litigated.** `POST /api/admin/recommendations/recompute`
+is a real, gated (`Products:Edit`), audit-logged, callable endpoint —
+not a placeholder — triggerable via curl/an ops runbook today, and the
+real target once an actual cron (or Vercel Cron, once hosting is
+confirmed) exists. No new admin console page was built for it: unlike
+STORY-059c's Scheduled Reports, this story's AC never asked for an
+admin UI, and adding one would have been unrequested scope. It's also
+run once, unconditionally, at the end of `prisma/seed.ts` (writing
+zero rows against the base seed's order-less catalogue, but a real,
+successful call — not a stub) so local/demo/e2e environments are never
+stuck with a never-computed `ProductAssociation` table.
+
+**`ProductAssociation` is the caching layer — there is still no
+separate cache of any kind anywhere in this codebase.** Every read
+path (homepage, PDP, cart) reads precomputed rows at request time,
+never computes similarity live, meeting the AC's <300ms budget the
+same way every other story in this codebase already does when it
+needs to be fast: a precomputed table, not an in-memory/Redis cache
+layered on top (confirmed none exists via the same grep sweep 059c's
+own entry already ran).
+
+**`getBestSellingProductIds` is new, not a fix to `product.service.ts`'s
+pre-existing `"best-selling"` list-sort option, which stays a known,
+separate no-op.** That sort option's own code comment already
+documents it as a placeholder ("there's no Order model yet") left over
+from before `Order` existed — Order is real now, but wiring that sort
+option to real data is a change to an already-shipped, tested listing
+feature with its own call sites and tests, out of scope for this
+story. Noted as a related, still-open gap rather than silently fixed
+in passing.

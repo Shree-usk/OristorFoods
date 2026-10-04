@@ -19,6 +19,7 @@ import { seedNotificationTemplates } from "./seed-notifications";
 import { seedRecipes } from "./seed-recipes";
 import { seedReferrals } from "./seed-referrals";
 import { seedRewards } from "./seed-rewards";
+import { recomputeProductAssociations } from "../src/services/recommendation.service";
 
 async function main() {
   const brand = await brandRepository.createBrand({
@@ -343,6 +344,15 @@ async function main() {
   // layout matching STORY-006's original fixture-driven default.
   const homepageSeed = await seedHomepage();
 
+  // AI Product Recommendations (STORY-060). No cron exists in this
+  // codebase — this exercises the same admin-triggered recompute path
+  // production uses, so local/demo/e2e environments never start from
+  // a never-computed ProductAssociation table. A no-op (zero rows
+  // written) until real orders/views exist — this base seed doesn't
+  // create any — but still a real, successful call, not a stub.
+  const initialSuperAdmin = await prisma.adminUser.findUniqueOrThrow({ where: { email: adminSeed.initialSuperAdministrator } });
+  const recommendationsSeed = await recomputeProductAssociations(initialSuperAdmin.id);
+
   console.log("Seed complete:", {
     brand: brand.slug,
     categories: [spices.slug, giftSets.slug],
@@ -359,6 +369,7 @@ async function main() {
     notifications: notificationsSeed,
     admin: adminSeed,
     homepage: homepageSeed,
+    recommendations: recommendationsSeed,
   });
 }
 

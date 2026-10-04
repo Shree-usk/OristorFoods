@@ -88,6 +88,9 @@ model User {
   popupInteractions       PopupInteraction[]
   // STORY-058.
   distributorAccount      DistributorAccount?
+  // STORY-060.
+  productInteractionEvents ProductInteractionEvent[]
+  recommendationEvents     RecommendationEvent[]
   createdAt         DateTime   @default(now())
   updatedAt         DateTime   @updatedAt
 }
@@ -286,6 +289,11 @@ model Product {
   recipeIngredients   RecipeIngredient[]
   cookingTipRefs      CookingTipProductRef[]
   foodAcademyRefs     FoodAcademyProductRef[]
+  // STORY-060.
+  interactionEvents      ProductInteractionEvent[]
+  associationsAsSource   ProductAssociation[]      @relation("AssociationSource")
+  associationsAsTarget   ProductAssociation[]      @relation("AssociationTarget")
+  recommendationEvents   RecommendationEvent[]
 
   @@index([status])
   @@index([status, inStock])
@@ -3187,4 +3195,89 @@ model ScheduledReport {
   createdBy   AdminUser                @relation(fields: [createdById], references: [id])
   createdAt   DateTime                 @default(now())
   updatedAt   DateTime                 @updatedAt
+}
+
+// STORY-060. AI Product Recommendations.
+
+enum ProductInteractionEventType {
+  View
+  AddToCart
+  WishlistAdd
+}
+
+// VIEW/ADD_TO_CART/WISHLIST_ADD only — deliberately no Purchase type.
+// Order/OrderItem already captures purchases with full fidelity
+// (userId, productId, quantity, createdAt); every recommendation
+// strategy reads purchase signal from there directly rather than
+// duplicating it into a second table.
+model ProductInteractionEvent {
+  id         String                       @id @default(cuid())
+  customerId String?
+  customer   User?                        @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  // Anonymous-visitor correlation only — a lightweight, unsigned
+  // crypto.randomUUID() cookie value, NOT Cart.guestToken's signed
+  // HMAC mechanism (that guards cart content integrity, a materially
+  // higher-stakes concern than this soft personalization signal).
+  sessionId  String?
+  productId  String
+  product    Product                      @relation(fields: [productId], references: [id], onDelete: Cascade)
+  eventType  ProductInteractionEventType
+  createdAt  DateTime                     @default(now())
+
+  @@index([customerId])
+  @@index([productId])
+}
+
+enum ProductAssociationType {
+  Similar
+  FrequentlyBoughtTogether
+}
+
+// Precomputed by recommendation.service.ts::recomputeProductAssociations
+// (admin-triggered — no cron exists in this codebase, same constraint
+// STORY-050d/STORY-059c already resolved the same way). Every read
+// path reads these rows directly; nothing computes similarity live.
+model ProductAssociation {
+  id               String                 @id @default(cuid())
+  sourceProductId  String
+  sourceProduct    Product                @relation("AssociationSource", fields: [sourceProductId], references: [id], onDelete: Cascade)
+  targetProductId  String
+  targetProduct    Product                @relation("AssociationTarget", fields: [targetProductId], references: [id], onDelete: Cascade)
+  associationType  ProductAssociationType
+  score            Float
+  computedAt       DateTime               @default(now())
+
+  @@unique([sourceProductId, targetProductId, associationType])
+  @@index([sourceProductId, associationType])
+}
+
+enum RecommendationPlacement {
+  Homepage
+  Pdp
+  Cart
+}
+
+enum RecommendationAction {
+  Impression
+  Click
+  AddToCart
+}
+
+// Telemetry for a product shown AS A RECOMMENDATION specifically —
+// distinct from ProductInteractionEvent's general behavior signal,
+// since the server has no way to know a product was shown as a
+// recommendation vs. organically without the client reporting it.
+model RecommendationEvent {
+  id         String                   @id @default(cuid())
+  customerId String?
+  customer   User?                    @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  sessionId  String?
+  placement  RecommendationPlacement
+  productId  String
+  product    Product                  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  action     RecommendationAction
+  createdAt  DateTime                 @default(now())
+
+  @@index([productId])
+  @@index([placement, action])
 }

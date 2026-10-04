@@ -11,7 +11,6 @@ import { ProductCollections } from "@/components/storefront/home/product-collect
 import { RewardsClubTeaser } from "@/components/storefront/home/rewards-club-teaser";
 import { WhyChooseOristor } from "@/components/storefront/home/why-choose-oristor";
 import {
-  bestSellingProducts,
   customerReviews,
   exportSolutions,
   featuredCategories,
@@ -74,7 +73,7 @@ export function HomepageSections({ layout }: { layout: HomepageLayoutDetail }) {
           case "WhyChooseOristor":
             return <WhyChooseOristor key={section.id} features={whyChooseFeatures} titleOverride={section.titleOverride} />;
           case "BestSellingProducts":
-            return <BestSellingProducts key={section.id} products={bestSellingProducts} titleOverride={section.titleOverride} />;
+            return <BestSellingProducts key={section.id} titleOverride={section.titleOverride} />;
           case "FeaturedRecipes":
             return <FeaturedRecipes key={section.id} titleOverride={section.titleOverride} />;
           case "ProductCollections":

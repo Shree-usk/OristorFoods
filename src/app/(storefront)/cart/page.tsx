@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 
 import { Section } from "@/components/storefront/layout/section";
+import { CartCrossSell } from "@/components/storefront/cart/cart-cross-sell";
 import { CartLineItemRow } from "@/components/storefront/cart/cart-line-item";
 import { CouponInput } from "@/components/storefront/cart/coupon-input";
 import { EmptyCart } from "@/components/storefront/cart/empty-cart";
@@ -76,6 +77,12 @@ export default function CartPage() {
               Proceed to Checkout
             </Link>
           </div>
+        </div>
+      )}
+
+      {cart && cart.items.length > 0 && (
+        <div className="mt-12">
+          <CartCrossSell productIds={cart.items.map((item) => item.productId)} />
         </div>
       )}
     </Section>

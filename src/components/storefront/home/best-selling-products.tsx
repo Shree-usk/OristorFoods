@@ -1,21 +1,47 @@
 import Image from "next/image";
 import Link from "next/link";
+import { connection } from "next/server";
 import { Star } from "lucide-react";
 
 import { ScrollReveal } from "@/components/motion";
 import { Badge } from "@/components/ui/badge";
 import { Section } from "@/components/storefront/layout/section";
-import type { ProductCardData } from "@/types/home";
+import { auth } from "@/lib/auth";
+import { getSessionId } from "@/lib/recommendation-session";
+import { resolveCustomerGroupForUser } from "@/services/pricing.service";
+import { getHomepageRecommendations } from "@/services/recommendation.service";
 
 function formatPrice(price: number, currency: string) {
   return `${currency} ${price.toLocaleString()}`;
 }
 
-export function BestSellingProducts({ products, titleOverride }: { products: ProductCardData[]; titleOverride?: string | null }) {
+const LIMIT = 10;
+
+/**
+ * STORY-060. Upgraded from STORY-042's typed-fixture placeholder to
+ * real data — same async-Server-Component-fetches-its-own-data
+ * pattern FeaturedRecipes already established, so both homepage call
+ * sites (the fallback path and HomepageSections' Builder path) get
+ * personalization for free with no prop-threading change at either.
+ * `titleOverride` still wins when an admin set one; otherwise the
+ * title reflects whichever strategy actually ran.
+ */
+export async function BestSellingProducts({ titleOverride }: { titleOverride?: string | null } = {}) {
+  await connection();
+  const session = await auth();
+  const customerId = session?.user?.id ?? null;
+  const customerGroup = await resolveCustomerGroupForUser(customerId);
+  const sessionId = customerId ? null : await getSessionId();
+
+  const { products, personalized } = await getHomepageRecommendations({ customerId, sessionId, customerGroup, limit: LIMIT });
+  if (products.length === 0) return null;
+
+  const heading = titleOverride || (personalized ? "Recommended for You" : "Best Selling Products");
+
   return (
     <Section>
       <div className="flex items-baseline justify-between">
-        <h2 className="text-h2 font-heading text-charcoal">{titleOverride || "Best Selling Products"}</h2>
+        <h2 className="text-h2 font-heading text-charcoal">{heading}</h2>
         <Link href="/products?collection=best-sellers" className="text-small text-chilli hover:underline">
           View all
         </Link>
