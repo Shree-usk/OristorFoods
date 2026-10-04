@@ -7745,3 +7745,125 @@ draft had neither — and fixed before shipping: the widget now states
 "This is an AI assistant — it can make mistakes... Conversations are
 saved to help us improve it," alongside the already-present "Browse
 the Recipe Centre instead" fallback link.
+
+## 2026-10-04 — STORY-063 AI Customer Support Assistant
+
+**Higher security stakes than any AI Platform story before it:** AC #2
+is a hard requirement — "strict auth-scoping, no cross-customer data
+access under any phrasing of the query." The design choice that makes
+this actually enforceable: **the guarantee comes from controlling what
+the LLM is ever given, not from trusting it to self-censor or from
+filtering its free-text output afterward.**
+
+- A **guest** (`session.customerId` is null) never has any order data
+  fetched or placed in the prompt at all — structurally absent, not
+  "instructed not to mention it." An order-related guest message gets
+  a fixed, deterministic `requiresSignIn: true` response.
+- An **authenticated customer**'s prompt only ever contains *that*
+  customer's own orders, fetched through the already ownership-scoped
+  `order.service.ts::listOrdersForUser` (their recent orders) and
+  `getOrderForConfirmation` (a specific order number mentioned in
+  their message, extracted via a plain regex against this codebase's
+  `ORS-YYYYMMDD-XXXXXX` order-number format). The model cannot leak
+  another customer's order because it was never given any — this is
+  an input-side guarantee, structurally impossible to violate via
+  prompt phrasing, not an output-side filter that has to anticipate
+  every way a model might be tricked into revealing something.
+- **Defense in depth, mirroring STORY-062's `recommendedRecipeIds`
+  guardrail exactly**: the structured output's `referencedOrderNumbers`
+  is filtered down to only the order numbers actually present in that
+  turn's real, ownership-scoped data before anything is persisted or
+  returned to the client.
+- **A hard identity-exclusivity invariant**, copied from STORY-062's
+  own route handler: `customerId` is derived only from `auth()`,
+  never accepted from client input; `sessionId` is set only when
+  there is no `customerId`. `support-assistant.service.ts`'s
+  conversation-ownership check adds explicit defense-in-depth beyond
+  that route-level invariant: once a conversation has a non-null
+  `customerId`, a sessionId-only match attempt against it is rejected
+  outright, never treated as an OR-fallback. Directly tested
+  (`support-assistant-service.test.ts`'s "strict conversation
+  ownership" suite).
+- **A guest conversation is never "upgraded" to authenticated in
+  place.** Signing in mid-conversation starts a fresh conversation
+  bound to the customer id — `use-support-assistant.ts` clears the
+  stored conversation id on a `useSession()` signed-out→signed-in
+  transition, so the client never even attempts to continue the old
+  one under a new identity.
+
+**A real bug the security-focused test suite caught before
+shipping, not after:** `order.service.ts::getOrderForConfirmation`
+throws `OrderForbiddenError` for an order that exists but isn't the
+caller's — a *different* exception class from `OrderNotFoundError`
+(thrown when the order doesn't exist at all). The first draft of
+`fetchOrderContext` only caught `OrderNotFoundError`, so a crafted
+message naming another customer's real order number crashed the
+entire turn into the generic fallback path instead of being silently,
+correctly excluded. No data ever leaked (the crash path never
+reveals order data either), but the behavior wasn't the intended
+"never confirm or deny — just silently exclude it," and it would have
+degraded every cross-customer-lookup attempt to a generic error
+rather than a normal response. Caught by
+`support-assistant-service.test.ts`'s own cross-customer-isolation
+test, fixed by catching both `OrderNotFoundError` and
+`OrderForbiddenError` identically. **Lesson: when reusing an existing
+ownership-checked lookup function for a new caller, check *every*
+exception class it can throw for the "not allowed" case, not just the
+one named most obviously — a service can legitimately distinguish
+"doesn't exist" from "exists but isn't yours" as two different error
+types even when the caller needs to treat both identically.**
+
+**No token streaming**, same reasoning as STORY-062: "never fabricate
+order numbers, tracking, refund amounts" is incompatible with showing
+unvalidated tokens before a guardrail has run.
+
+**STORY-062's chat infrastructure is reused directly, not
+duplicated**, confirming it was scoped correctly the first time:
+`ChatCompletionProvider`/`OpenAiChatProvider` and
+`isFlaggedByModeration` were already generic (not recipe-specific) and
+are imported as-is here — no new provider class, no new moderation
+function. This is the kind of natural, narrow reuse the user's own
+"no shared AI Gateway yet" decision (STORY-062's entry above) was
+meant to still allow, distinguished from building a cross-story
+abstraction neither story asked for.
+
+**`PolicyDocument` ships with no seeded content** — the same honesty
+standard STORY-061's empty glossary set: no real returns/refund/
+exchange policy text exists anywhere in this codebase, and inventing
+one would be fabrication. Admin-managed under System Settings (a new
+10th tab, `AdminModule.SystemSettings`, no new module), mirroring
+`system-settings.service.ts`'s own permission-gated, audit-logged
+per-category function shape rather than growing that already-large
+file directly — a new `policy-document.service.ts`/`.repository.ts`
+pair instead.
+
+**No guest escalation/ticket capability was built.**
+`SupportTicket.userId` is non-null everywhere in this codebase (STORY-036's
+own design); giving guests a ticket path would mean relaxing that
+constraint on an already-shipped, tested model — out of scope for this
+story. A guest who asks for a human gets the same "please sign in"
+treatment as a guest asking an order-specific question, not a new
+capability.
+
+**`SupportTicketSource` is a new, separate enum field, not an overload
+of `SupportTicketCategory`** — `category` (OrderIssue/Product/Delivery/
+Billing/Other) is an orthogonal *topic* axis already used for
+dashboard triage (`countTicketsByStatus`-style reads); collapsing
+"this ticket was AI-created" into it would destroy that signal for
+every AI-escalated ticket. The assistant's own structured output
+includes a best-guess `escalationCategory` so an AI-created ticket
+still carries a real topic rather than a blanket "Other."
+
+**AC #10's data-retention-policy requirement is honestly left
+unchecked, not quietly reinterpreted as "disclosure is enough."** The
+widget does show a privacy disclosure (conversations are saved, may be
+reviewed) — but no *retention* policy (how long transcripts are kept,
+when/whether they're purged) is documented or enforced, because no
+retention/automated-purge mechanism exists anywhere in this codebase
+for any model today, not just this one. Building one is a genuinely
+separate, cross-cutting piece of scope (likely touching every
+audit-adjacent table this project has — `AuditLog`, `SearchQueryLog`,
+`RecipeAssistantMessage`, now `SupportAssistantMessage`), not
+something to improvise narrowly for this story alone. Flagged as a
+real, open follow-up for whoever picks up a future data-governance
+pass, not silently dropped.

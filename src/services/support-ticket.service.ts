@@ -25,6 +25,9 @@ export interface CreateTicketInput {
   subject: string;
   message: string;
   orderNumber?: string;
+  /** STORY-063. Optional — the Recipe/Support Assistant escalation path only. */
+  source?: "AiAssistant";
+  conversationId?: string;
 }
 
 function toSummary(ticket: { id: string; category: SupportTicketCategory; subject: string; message: string; status: SupportTicketStatus; createdAt: Date }, orderNumber: string | null): TicketSummary {
@@ -52,6 +55,8 @@ export async function createTicket(userId: string, input: CreateTicketInput): Pr
     category: input.category,
     subject: input.subject,
     message: input.message,
+    source: input.source,
+    conversationId: input.conversationId,
   });
 
   return toSummary(ticket, input.orderNumber ?? null);

@@ -64,7 +64,8 @@ export default async function Home() {
   // larger, unrequested change) — present regardless of which
   // published layout (or the fallback below) is active.
   const recipeAssistant = (
-    <div className="fixed right-4 bottom-4 z-40">
+    // bottom-20 clears MobileNav's h-16 fixed bar on small screens (lg:hidden); lg:bottom-4 once it's gone.
+    <div className="fixed right-4 bottom-20 z-40 lg:bottom-4">
       <RecipeAssistantEntryPoint />
     </div>
   );

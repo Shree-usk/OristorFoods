@@ -3,6 +3,7 @@ import { Footer } from "@/components/storefront/layout/footer";
 import { Header } from "@/components/storefront/layout/header";
 import { MobileNav } from "@/components/storefront/layout/mobile-nav";
 import { PopupTriggerController } from "@/components/storefront/popup/popup-trigger-controller";
+import { SupportAssistantLauncher } from "@/components/storefront/ai/support-assistant-launcher";
 import { getResolvedMobileDrawerItems } from "@/services/navigation.service";
 
 /**
@@ -39,6 +40,9 @@ export default async function StorefrontLayout({ children }: { children: React.R
       </div>
       <div className="print:hidden">
         <PopupTriggerController />
+      </div>
+      <div className="print:hidden">
+        <SupportAssistantLauncher />
       </div>
     </div>
   );

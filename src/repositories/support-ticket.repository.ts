@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/db";
-import type { SupportTicketCategory, SupportTicketStatus } from "@/generated/prisma/client";
+import type { SupportTicketCategory, SupportTicketSource, SupportTicketStatus } from "@/generated/prisma/client";
 
-/** STORY-036. The only place SupportTicket is queried/mutated. */
+/** STORY-036 (extended STORY-063). The only place SupportTicket is queried/mutated. */
 
 export interface CreateSupportTicketInput {
   userId: string;
@@ -9,6 +9,9 @@ export interface CreateSupportTicketInput {
   category: SupportTicketCategory;
   subject: string;
   message: string;
+  /** STORY-063. Optional — existing callers omit both and get the model's Customer/null defaults. */
+  source?: SupportTicketSource;
+  conversationId?: string;
 }
 
 export function createSupportTicket(input: CreateSupportTicketInput) {
