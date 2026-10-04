@@ -7252,3 +7252,95 @@ lighter was already present to prefer instead. `npm install recharts`
 resolved to `^3.10.1`, React 19-compatible; `npm audit` confirmed none
 of the pre-existing 34 vulnerabilities trace back to it (all are
 pre-existing in the Next.js/Auth.js/tooling dependency chains).
+
+## 2026-10-04 — STORY-059c Executive Dashboard + Scheduled Reports (closes Epic 07)
+
+**The Executive Dashboard is a genuinely separate, strategic-level
+view from STORY-039's operational Admin Dashboard, not a retrofit or
+duplicate.** `admin-dashboard.service.ts` (`/admin`) is a "today"
+snapshot — revenue today, low stock, support tickets, each
+independently gated and `safe()`-wrapped. This story's dashboard lives
+at `/admin/executive-dashboard`, composes period-over-period KPI
+comparisons, and reuses existing reads rather than inventing new
+aggregation logic: revenue and average order value call STORY-039's
+own `order.repository.ts::getOrderSummaryForRange` (current period +
+an equal-length prior period); returning-customer rate calls 059b's
+`analytics.repository.ts::getCustomerRetention` the same way. Only two
+genuinely new reads were needed — `executive-dashboard.repository.ts::getLoyaltyEngagementForRange`/
+`getExportEnquiryVolumeForRange` — small, period-bounded siblings of
+STORY-039's existing "since X" dashboard reads (`rewards.repository.ts::countRedemptionsSince`,
+`export-enquiry.repository.ts::countWonSince`), added as new functions
+rather than changing the already-shipped ones STORY-039 depends on.
+
+**Core Web Vitals is the sixth KPI's honest placeholder — the pattern
+this session has used consistently every time real data doesn't
+exist** (059b's funnel Visits/Checkout, STORY-057's System Health
+uptime/error-rate/backup). No performance or visit tracking exists
+anywhere in this codebase. `executive-dashboard.service.ts::getExecutiveSummary`
+returns `coreWebVitals: {available: false}` rather than a fabricated
+number, and the UI renders it as "Not available" exactly like those
+prior cases.
+
+**Period-over-period comparison has one definition, computed once, and
+is honest about zero-to-nonzero growth.** "This period vs. the
+immediately preceding period of equal length" — e.g. the last 30 days
+vs. the 30 days before that — computed by `priorPeriod(from, to)` and
+reused by every KPI, not a bespoke calculation per card. A `KpiComparison`'s
+`changePercent` is `null`, not a number, when the prior period was
+zero and the current period is not: "grew from zero" has no meaningful
+percentage, and reporting it as `+100%` or `Infinity%` would be the
+same kind of fabrication this session has consistently avoided for
+missing data elsewhere. `0` is reported only when both periods are
+genuinely zero.
+
+**Scheduled reports repeat STORY-050d's already-validated
+no-cron-exists pattern exactly, rather than re-litigating it as a new
+open question.** `email-sms-campaign.service.ts`'s own header comment
+states the constraint plainly: *"this codebase has none anywhere, and
+hosting/cloud provider is still unconfirmed (Section 10). A Scheduled
+campaign only actually sends when an admin explicitly triggers
+processDueCampaigns."* `scheduled-report.service.ts::processDueScheduledReports`
+mirrors `processDueCampaigns` structurally: gated `CRMAnalytics:Approve`
+(the same money/visibility-moving bar campaign-send and refund
+processing already use, since this dispatches real emails to real
+recipients), looks up `scheduled-report.repository.ts::listDueScheduledReports(now)`
+(a row is due when `lastSentAt` is null or older than its frequency's
+interval — 7 days for Weekly, 30 for Monthly), dispatches each,
+updates `lastSentAt`, and audit-logs the batch. A "Send due reports
+now" button in the admin UI is the only trigger, exactly like
+Marketing's "Send due campaigns."
+
+**`ScheduledReport.reportType` is a free string covering all 5 report
+shapes this codebase now has, not scoped down to "only the executive
+summary."** The umbrella doc's own schema design for this field — a
+plain string, not an enum — mirrors `OrderIntegrationEvent.eventType`/
+`NotificationTemplate.templateKey`'s established precedent, and the
+data layer to render any of 059b's four reports (`sales`/`customers`/
+`products-recipes`/`funnel`) plus this story's own `executive-summary`
+already exists. `frequency` is a small `Weekly`/`Monthly` enum — the
+AC's own example is "a weekly summary," and a daily or custom-cron
+option would overstate what a manually-triggered action can honestly
+promise.
+
+**The scheduled report email body is a plain-text summary, not a PDF
+attachment — a real, documented constraint, not a shortcut.**
+`notification.service.ts::sendTransactionalEmail`'s underlying
+`EmailProvider.send(recipient, subject, body)` takes only a string
+body; it has no attachment support, and extending it would touch the
+one shared interface every other notification flow in this codebase
+relies on. For the four 059b-era report types, the email body reuses
+their existing `exportXReportCsv` string directly — already-tested
+logic, one less formatter to maintain — rather than building a second
+text-table renderer; the executive summary (which has no existing CSV
+export) gets its own small formatter.
+
+**A real date-range bug surfaced once more by the e2e test, not the
+unit tests — the same class of lesson 059b's own `to`-parses-to-midnight
+fix already taught.** `executiveSummaryQuerySchema` reuses 059b's
+exact end-of-day `to` transform pattern from the start this time,
+rather than rediscovering the bug. The unit tests still bypass the
+schema (calling `getExecutiveSummary` directly with hand-built `Date`
+objects, same as 059b's own unit tests), so the e2e test remains the
+one place that exercises the real validation layer — confirmed working
+on the first e2e run this time, precisely because the schema was
+written with that prior lesson already applied.

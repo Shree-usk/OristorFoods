@@ -2370,6 +2370,8 @@ model AdminUser {
   distributorAccountsCreated DistributorAccount[] @relation("DistributorAccountCreatedBy")
   // STORY-059a.
   savedSegmentsCreated SavedSegment[]
+  // STORY-059c.
+  scheduledReportsCreated ScheduledReport[]
   createdAt          DateTime        @default(now())
   updatedAt          DateTime        @updatedAt
 }
@@ -3159,4 +3161,30 @@ model SavedSegment {
   campaigns      EmailSmsCampaign[]
   createdAt      DateTime           @default(now())
   updatedAt      DateTime           @updatedAt
+}
+
+enum ScheduledReportFrequency {
+  Weekly
+  Monthly
+}
+
+// STORY-059c. No cron exists in this codebase (same constraint
+// email-sms-campaign.service.ts's processDueCampaigns already
+// documents) — a due row is only actually sent when an admin
+// triggers "Send due reports now"; lastSentAt is how that action
+// decides what's due.
+model ScheduledReport {
+  id          String                   @id @default(cuid())
+  // "sales" | "customers" | "products-recipes" | "funnel" |
+  // "executive-summary" — a plain string, not an enum, mirroring
+  // OrderIntegrationEvent.eventType/NotificationTemplate.templateKey's
+  // established precedent, so a future report type never needs a migration.
+  reportType  String
+  recipients  String[]
+  frequency   ScheduledReportFrequency
+  lastSentAt  DateTime?
+  createdById String
+  createdBy   AdminUser                @relation(fields: [createdById], references: [id])
+  createdAt   DateTime                 @default(now())
+  updatedAt   DateTime                 @updatedAt
 }
