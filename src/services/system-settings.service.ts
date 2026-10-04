@@ -64,6 +64,11 @@ export async function getResolvedCompanyInfo() {
     address: setting?.address ?? staticContactInfo.address,
     phone: setting?.phone ?? staticContactInfo.phone,
     email: setting?.email ?? staticContactInfo.email,
+    // STORY-072. No static fallback for either — unlike the fields above,
+    // nothing was ever configured anywhere for these, so null means "an
+    // admin hasn't set this yet," never a fabricated value.
+    businessHours: setting?.businessHours ?? null,
+    socialLinks: (setting?.socialLinks as { label: string; href: string }[] | null) ?? null,
   };
 }
 

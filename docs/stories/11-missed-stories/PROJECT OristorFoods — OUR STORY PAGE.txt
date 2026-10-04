@@ -1,0 +1,477 @@
+PROJECT CINNAMON — OUR STORY PAGE
+Interactive Storytelling Experience
+1. Design Direction
+
+Create a premium, immersive Our Story / About Us page for The Oristor.
+
+Use the linked Kumo Interactive Matcha landing page as UX inspiration only:
+
+Kumo Interactive Matcha — Dribbble reference
+
+DO NOT copy Kumo's:
+
+Layout
+Graphics
+Illustrations
+Typography
+Colour combinations
+Product presentation
+Animations
+Text
+Composition
+Branding
+
+Instead, understand the underlying concept:
+
+Turn a normal About Us page into an interactive visual story.
+
+The user should feel that they are travelling through the story of Sri Lankan food and The Oristor, rather than scrolling through blocks of company information.
+
+2. Core Concept
+“FROM OUR ROOTS TO YOUR TABLE”
+
+The page should tell the Oristor story through a sequence of visual chapters.
+
+The experience should communicate:
+
+Sri Lanka → Heritage → Ingredients → Traditional Recipes → Craftsmanship → Quality → Innovation → The World
+
+The user should discover each stage naturally while scrolling.
+
+3. Hero — “A Taste of Where We Come From”
+
+Create an immersive hero section.
+
+Suggested headline:
+
+OUR STORY
+A Taste of Sri Lanka,
+Crafted for the World.
+
+Supporting text:
+
+Rooted in Sri Lanka's rich culinary traditions, The Oristor brings authentic flavours, time-honoured recipes and carefully selected ingredients to kitchens around the world.
+
+Use a large cinematic Sri Lankan food image/video as the visual hero.
+
+Possible imagery:
+
+Sri Lankan landscape
+spices
+chilli
+cinnamon
+traditional food preparation
+fresh ingredients
+Oristor products
+
+The hero should feel premium, emotional and cinematic, not like a corporate About Us page.
+
+4. Interactive Story — “Where It Begins”
+
+As the user scrolls, introduce Sri Lanka visually.
+
+CHAPTER 01
+
+THE LAND
+
+Show:
+
+Sri Lankan landscape
+spice-growing regions
+tropical ingredients
+chilli
+cinnamon
+curry leaves
+coconut
+vegetables
+
+Use subtle parallax movement.
+
+Text:
+
+Born from Sri Lanka
+
+Our story begins in Sri Lanka — an island where food is deeply connected to culture, family and tradition.
+
+The background imagery should slowly move while the text remains anchored.
+
+5. CHAPTER 02 — “The Flavours We Grew Up With”
+
+Transition from landscape into ingredients.
+
+Create floating / layered ingredient imagery.
+
+Examples:
+
+Chilli
+Garlic
+Red Onion
+Mango
+Moringa
+Spices
+
+When the user scrolls, individual ingredients can appear sequentially.
+
+Each ingredient can briefly reveal a small story.
+
+Example:
+
+CHILLI
+The heart of Sri Lankan heat.
+
+MANGO
+Sweet, sour and unmistakably Sri Lankan.
+
+SPICES
+The foundation of our flavour.
+
+Do not overuse text.
+
+6. CHAPTER 03 — “Tradition in Every Recipe”
+
+Now transition from ingredients to finished food.
+
+Show authentic Sri Lankan dishes and traditional preparation.
+
+Headline:
+
+Recipes With a Memory
+
+Supporting text:
+
+Some flavours are more than recipes. They are memories passed from one generation to another.
+
+Use large food photography with subtle motion.
+
+Possible visual transition:
+
+Ingredient → preparation → finished dish → Oristor product
+
+This should be one of the emotional highlights of the page.
+
+7. CHAPTER 04 — “From Tradition to The Oristor”
+
+Now introduce the company.
+
+Use the actual Oristor product photography.
+
+Headline:
+
+From Our Kitchen to Yours
+
+Text based on the approved company profile:
+
+Oristor Food Products (Pvt) Ltd is a Sri Lankan manufacturer and trader of ready-to-eat food products and spices.
+
+Our heritage is rooted in Sri Lanka's culinary traditions, carried to kitchens worldwide through time-honoured recipes.
+
+Do not invent company history, dates or achievements that are not documented.
+
+Use real product images wherever possible.
+
+8. Interactive Product Story
+
+Instead of a conventional product grid, create a horizontal or pinned scrolling sequence.
+
+As the user scrolls:
+
+Pickles → Sambols → Thokku → Chilli Pastes → Seafood → Masalas → Spices
+
+The central product changes while supporting ingredients move around it.
+
+This is where we take the core interaction idea from Kumo.
+
+For example:
+
+MANGO PICKLE
+
+Mango imagery appears.
+
+Then:
+
+Mango → spices → preparation → finished product
+
+Then transition to:
+
+GARLIC CURRY
+
+Garlic → chilli → spices → finished product
+
+Then:
+
+RED ONION THOKKU
+
+etc.
+
+The interaction should feel like discovering flavour, not browsing a product catalogue.
+
+9. CHAPTER 05 — “What We Stand For”
+
+Introduce the existing ORISTOR values.
+
+Use the established seven-value framework:
+
+O — ORIGINALITY
+
+Authentic Sri Lankan flavours from time-honoured recipes.
+
+R — RELIABILITY
+
+Consistent quality and trust in every product.
+
+I — INNOVATION
+
+Continuously refining and enhancing our offerings.
+
+S — SUSTAINABILITY
+
+Responsible sourcing and eco-friendly practices.
+
+T — TRADITION
+
+Honouring Sri Lanka's rich culinary heritage.
+
+O — OUTSTANDING QUALITY
+
+The highest standards in ingredients and production.
+
+R — RESPECT
+
+Valuing customers, suppliers and ethical business practices.
+
+These should appear progressively rather than as a static seven-column block.
+
+10. Quality & Trust
+
+Transition visually from tradition to modern production.
+
+Show:
+
+Ingredients → Production → Quality Control → Packaging → Finished Product
+
+Introduce the company's quality credentials only where verified.
+
+Use the established visual language:
+
+ISO
+HACCP
+GMP
+Quality assurance
+Natural ingredients
+Export quality
+
+Do not create certifications or claims that are not supported by the project data.
+
+11. “From Sri Lanka to the World”
+
+This should be the climax of the story.
+
+Use a world map / Sri Lanka-to-world visual.
+
+Animation:
+
+Sri Lanka
+
+↓
+
+Asia
+
+↓
+
+Middle East
+
+↓
+
+Europe
+
+↓
+
+Global
+
+Headline:
+
+From Sri Lanka to the World
+
+Supporting copy:
+
+Our ambition is to share the distinctive flavours of Sri Lanka with kitchens around the world.
+
+Then introduce:
+
+EXPORT
+
+Discover The Oristor Globally
+
+CTA:
+
+EXPLORE OUR EXPORT RANGE →
+
+12. Final Emotional Section
+
+Finish with a large cinematic product/food composition.
+
+Headline:
+
+FEEL THE DIFFERENCE
+
+Supporting line:
+
+Authentic Sri Lankan flavour.
+Crafted with care.
+Made to be shared.
+
+CTA:
+
+EXPLORE PRODUCTS
+
+Secondary CTA:
+
+MEET THE ORISTOR
+
+13. Animation Philosophy
+
+Animation must tell the story, not simply decorate the page.
+
+Use Framer Motion according to the existing Cinnamon architecture.
+
+Preferred effects:
+
+Scroll-triggered reveals
+Parallax photography
+Image scaling
+Ingredient floating
+Product transitions
+Horizontal product storytelling
+Mask reveals
+Subtle text movement
+Layered depth
+Sticky/pinned storytelling sections
+
+Avoid:
+
+excessive bouncing
+flashy transitions
+unnecessary 3D
+excessive particle effects
+slow animations that hurt usability
+animation on every element
+Rule:
+
+Every animation must have a storytelling or UX purpose.
+
+14. Cinnamon Visual Language
+
+Strictly maintain the existing Project Cinnamon design system.
+
+Primary palette
+Ivory
+Charcoal
+Gold
+Chilli Red
+Leaf Green
+Typography
+
+Cormorant Garamond
+For emotional / editorial headlines.
+
+Inter
+For body text, navigation, UI and functional information.
+
+Maintain the existing Oristor premium food aesthetic rather than adopting Kumo's visual identity. The Cinnamon specification explicitly establishes these colours and typography.
+
+15. Important — Brand Authenticity
+
+Use actual Oristor product images and approved company information wherever available.
+
+Do not generate imaginary products.
+
+Do not alter:
+
+Product labels
+Logo
+Packaging
+Product colours
+Product texture
+Product names
+
+Product photography can be creatively composed, cropped, masked or animated, but the actual product identity must remain intact.
+
+16. Responsive Experience
+
+The experience must work beautifully on:
+
+Desktop → Tablet → Mobile
+
+Do not simply shrink the desktop animation for mobile.
+
+For mobile:
+
+simplify complex interactions
+reduce simultaneous animations
+convert horizontal sequences into vertical storytelling where necessary
+maintain readable typography
+maintain fast loading
+respect prefers-reduced-motion
+
+Target WCAG AA accessibility in accordance with the Cinnamon specification.
+
+17. Technical Requirements
+
+Use the existing Cinnamon stack:
+
+Next.js
+React
+TypeScript
+Tailwind CSS
+Shadcn UI
+Framer Motion
+Existing design tokens
+Existing reusable components
+
+Do not introduce a new animation framework unless there is a documented technical reason.
+
+Create reusable components such as:
+
+StoryHero
+StoryChapter
+IngredientReveal
+ProductStory
+ValueReveal
+QualityStory
+GlobalJourney
+StoryCTA
+
+Keep the page modular and maintainable.
+
+18. Most Important Instruction to Claude
+DO NOT BUILD A CLONE OF KUMO.
+
+Use Kumo only to understand the design philosophy:
+
+Product + imagery + motion + scrolling = storytelling
+
+Then reinterpret that philosophy through:
+
+Sri Lankan heritage + Oristor products + ingredients + craftsmanship + quality + global ambition
+
+The finished page should feel unmistakably ORISTOR / PROJECT CINNAMON, not like a matcha website with the colours changed.
+
+My recommendation
+
+I think this direction is better than a conventional About Us page for Project Cinnamon.
+
+Your existing profile already gives us the factual foundation: Oristor's mission is to craft authentic Sri Lankan condiments and spices and bring them to kitchens worldwide, while the vision is to become a global front-runner in the category.
+
+So rather than making the page:
+
+About Us → Mission → Vision → Values → Certifications → Contact
+
+we make it:
+
+SRI LANKA → INGREDIENTS → HERITAGE → RECIPES → ORISTOR → QUALITY → VALUES → WORLD
+
+That gives Claude a story to build, rather than just another page to fill with text.
+
+And importantly, it fits the existing Cinnamon vision of creating a world-class digital destination for authentic Sri Lankan food, rather than simply an e-commerce website.
+
+Output in

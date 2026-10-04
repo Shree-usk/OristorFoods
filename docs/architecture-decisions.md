@@ -8017,3 +8017,108 @@ stakes (cross-customer isolation), and extended again here to business-
 metric references under lower stakes (internal aggregate data, no PII
 vector) — the same shape held across three very different domains
 without needing to be redesigned. Next: Epic 09 (Quality & Security).
+
+## 2026-10-04 — STORY-072 Contact Us (Epic 11 — Missed Stories)
+
+The user supplied detailed, self-written briefs for a Contact Us page and
+an "Our Story" About page, discovered at `docs/stories/11-missed-stories/`
+(a new epic folder, outside the original 01-10 build sequence). The
+Contact Us brief self-labeled itself "STORY-069," which collided with the
+already-shipped `STORY-069-deployment-infrastructure-launch.md` (Epic 10)
+— renumbered to STORY-072, the next free number after STORY-071 (Customer
+Group Pricing Context, already shipped). Confirmed via a full scan of
+`docs/stories/**/STORY-*.md` that no other number above 071 was in use.
+
+**The single most important pre-implementation finding**: this codebase
+already has a mature, fully-built Export Portal (STORY-058) —
+`ExportEnquiry`/`ExportEnquiryNote`, a full admin pipeline (status
+workflow, assignment, notes, reply, Won→DistributorAccount conversion),
+live at `/export` → `/admin/export`. The brief's own "Export /
+International Business" enquiry type asks for almost exactly the same
+fields STORY-058 already collects. Building a new generic
+`ContactEnquiry` model that also captured export enquiries would have
+directly violated the brief's own "reuse existing... do not duplicate
+business logic" instruction. Resolved by having the Contact page's
+Export-type submissions call `export-enquiry.service.ts::submitEnquiry`
+directly, unmodified — confirmed via a Plan-agent validation pass that
+this (a new service importing a sibling service's exported function
+directly) is this codebase's established pattern, not an exception
+(`checkout.service.ts` alone imports from seven sibling services this
+way). A new, simpler `ContactEnquiry` model covers every other enquiry
+type.
+
+**`export-enquiry.service.ts::submitEnquiry` sends no email at all today**
+— confirmed directly, a real pre-existing gap in STORY-058, not something
+this story touches (per the brief's "do not modify unrelated modules").
+The AC's "every enquiry gets a confirmation + internal notification
+email, Export included" is met by having the NEW `contact-enquiry.service.ts`
+independently send both emails around its (unmodified) call into the
+export service, using `notification.service.ts::sendTransactionalEmail`
+— the same simple, no-template sender already used for password reset
+and ExportPortal's own admin-triggered reply (the full
+`sendNotification`/template system is built for authenticated-user
+lifecycle events with per-user opt-in preferences, a poor fit for a
+guest contact form).
+
+**Real company contact info already existed, but was explicitly
+placeholder.** `system-settings.service.ts::getResolvedCompanyInfo()`
+(STORY-054) was already the real, admin-manageable source for
+address/phone/email, falling back field-by-field to a static config
+whose own comment says "replace with real values before production
+launch" — reused as-is, no fabrication risk either way. No
+`businessHours` field existed anywhere (confirmed by a clean grep
+miss); one was added to `CompanySetting` (additive, optional) rather
+than inventing hours or dropping a section the brief explicitly asked
+for — the page simply omits that line until an admin sets it.
+`CompanySetting.socialLinks` already existed as an admin field but was
+deliberately never wired to the storefront — not an oversight, but a
+real Server→Client icon-serialization constraint from STORY-052 (an
+icon component can't cross that boundary as a prop). The Contact
+page's social section sidesteps this entirely rather than solving it:
+it renders `socialLinks` as plain text/href links, with no icon
+component ever crossing the boundary.
+
+**A working honeypot pattern already existed** (blog comments:
+`honeypot: z.string()` with deliberately no `.max(0)` so the schema
+itself can't reject before the service's silent no-op runs; `if
+(input.honeypot.length > 0) return <same shape as success>`; a
+visually-hidden-but-tabbable input field) — mirrored byte-for-byte,
+confirmed via a Plan-agent validation pass, not reinvented.
+
+**A real RBAC seeding gap, caught by the same validation pass**: adding
+`ContactEnquiries` to the `AdminModule` enum alone grants nothing —
+`prisma/seed-admin.ts`'s `ALL_MODULES` array and a role's `homeModules`
+entry both needed updating too (added to `customer_support`'s). Because
+`seedAdmin()` uses raw `prisma.role.create` with no upsert, re-running
+the full seed script against this session's already-seeded dev database
+failed on a duplicate `Role.key` — a pre-existing limitation of every
+prior story that added an `AdminModule` value (ExportPortal,
+CRMAnalytics), not unique to this one, and with no backfill-migration
+infrastructure anywhere in this codebase to reach for instead. A
+one-off dev-environment script granted the equivalent `RolePermission`
+rows directly to already-seeded roles as the pragmatic fix.
+
+**Discoverability**: this codebase's admin console has no persistent
+sidebar (confirmed: `(admin)/layout.tsx` is a minimal top bar by
+design, navigation between console pages happens via the Admin
+Dashboard's card grid, STORY-039). A new Contact Enquiries card was
+added there, mirroring the existing Export Enquiries card's exact
+`permissions.has(permissionKey(...))`-gated pattern — otherwise the new
+`/admin/contact-enquiries` console would only be reachable by typing
+its URL directly.
+
+**e2e flakiness, a new environment gotcha**: the first e2e run under
+Playwright's default `fullyParallel` workers hit the same PGlite
+"Connection terminated unexpectedly" wedge this session has seen
+repeatedly during vitest sweeps — but this is the first time it was
+observed from Playwright's own concurrent workers rather than vitest's.
+Wrapping the spec in `test.describe.configure({ mode: "serial" })` (the
+same precaution already used in other admin e2e specs this session)
+resolved it, confirmed by re-running with default settings afterward —
+`Running 6 tests using 1 worker` — and all six passing.
+
+Not built: a separate "Website" field for the Export flow (neither this
+new flow nor the existing `ExportEnquiry`/`CreateExportEnquiryInput` it
+submits into has one — adding it would mean touching a shared,
+already-shipped model for one new caller's convenience; a website
+mention fits naturally into Company name or the message instead).
