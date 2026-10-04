@@ -201,6 +201,18 @@ export function findPublishedRecipeBySlug(slug: string): Promise<RecipeDetailRow
   });
 }
 
+// STORY-062. By id list, Published-only — reuses recipeDetailSelect
+// as-is (already has ingredients.product and dietaryTags, exactly
+// what the Recipe Assistant's product-gap analysis and LLM context
+// need) rather than defining a second, narrower select.
+export function findRecipeDetailsForAssistant(ids: string[]): Promise<RecipeDetailRow[]> {
+  if (ids.length === 0) return Promise.resolve([]);
+  return prisma.recipe.findMany({
+    where: { id: { in: ids }, status: "Published" },
+    select: recipeDetailSelect,
+  });
+}
+
 export function findRelatedRecipes(
   recipe: { id: string; categoryId: string; cuisine: string | null },
   limit: number,

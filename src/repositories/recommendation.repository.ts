@@ -75,6 +75,19 @@ export async function getBestSellingProductIds(from: Date, limit: number): Promi
   return grouped.filter((row) => row.productId !== null).map((row) => row.productId!);
 }
 
+// STORY-062. Distinct products a customer has ever purchased — the
+// "already own" vs "needs to buy" signal for the Recipe Assistant's
+// product-gap analysis. Same OrderItem-direct, Cancelled-excluded
+// precedent as getBestSellingProductIds above, not a new table.
+export async function getPurchasedProductIds(customerId: string): Promise<Set<string>> {
+  const rows = await prisma.orderItem.findMany({
+    where: { order: { userId: customerId, status: { not: "Cancelled" } }, productId: { not: null } },
+    select: { productId: true },
+    distinct: ["productId"],
+  });
+  return new Set(rows.map((row) => row.productId!));
+}
+
 /** Replaces every precomputed association of the given type in one transaction — recompute is always a full rebuild, never an incremental patch. */
 export async function replaceAssociations(type: ProductAssociationType, rows: { sourceProductId: string; targetProductId: string; score: number }[]) {
   await prisma.$transaction([

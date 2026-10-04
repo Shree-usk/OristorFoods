@@ -1,5 +1,6 @@
 import { connection } from "next/server";
 
+import { RecipeAssistantEntryPoint } from "@/components/storefront/ai/recipe-assistant-entry-point";
 import { BestSellingProducts } from "@/components/storefront/home/best-selling-products";
 import { CustomerReviews } from "@/components/storefront/home/customer-reviews";
 import { ExportSolutions } from "@/components/storefront/home/export-solutions";
@@ -56,7 +57,26 @@ export default async function Home() {
   // publishes/rollbacks (found while testing STORY-042's publish flow).
   await connection();
   const layout = await getPublishedHomepageLayout();
-  if (layout) return <HomepageSections layout={layout} />;
+
+  // STORY-062. A fixed floating entry point, outside the Homepage
+  // Builder's admin-configurable section registry entirely (adding a
+  // new registry-managed section type for this would be a much
+  // larger, unrequested change) — present regardless of which
+  // published layout (or the fallback below) is active.
+  const recipeAssistant = (
+    <div className="fixed right-4 bottom-4 z-40">
+      <RecipeAssistantEntryPoint />
+    </div>
+  );
+
+  if (layout) {
+    return (
+      <>
+        <HomepageSections layout={layout} />
+        {recipeAssistant}
+      </>
+    );
+  }
 
   return (
     <>
@@ -71,6 +91,7 @@ export default async function Home() {
       <ExportSolutions data={exportSolutions} />
       <RewardsClubTeaser data={rewardsClubTeaser} />
       <InstagramGallery posts={instagramPosts} />
+      {recipeAssistant}
     </>
   );
 }

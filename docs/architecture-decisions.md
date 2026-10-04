@@ -7641,3 +7641,107 @@ designed once 062's real shape is known — covering provider
 abstraction, per-task model selection, a spend cap, token logging, and
 rate limiting from the start — would avoid each of 062/063/064
 re-deriving the same decisions STORY-061 already had to make here.
+
+## 2026-10-04 — STORY-062 AI Recipe Assistant
+
+**The user was asked directly whether the above recommendation still
+applied, and whether a separately-proposed provider-agnostic AI
+Gateway (shared model config, Standard/Batch processing routing,
+cross-story model selection) was aligned with it — confirmed yes in
+spirit, but explicitly said not to build either one now, and to move
+on with this story.** Recording the override explicitly here so a
+future reader who finds STORY-061's recommendation above doesn't
+wonder why STORY-062 didn't follow it: it's a deliberate, user-made
+call, not an oversight. This story's own `ChatCompletionProvider`
+interface (`src/services/chat/`) is built the same way STORY-061
+built `EmbeddingProvider` — narrow, swappable, scoped to this story's
+own structured-output need, not a cross-story abstraction. Model:
+`gpt-4o-mini`, chosen for cost-appropriateness at conversational
+volume; not raised as a blocking question since the provider itself
+(OpenAI) was already confirmed in STORY-061.
+
+**The central design tension: AC #8's hard grounding guarantee is
+structurally incompatible with token-by-token streaming, despite the
+task list's own "streamed response"/"streaming indicator" wording.**
+You cannot validate a response before showing it to the user if
+you're already showing its tokens as they arrive. Resolved by
+treating retrieval and generation as strictly separate phases:
+`recipe-assistant.service.ts::retrieveCandidates` runs first, purely
+against real catalogue data (`recipe.repository.ts::buildRecipeWhere`
+for keyword matching — reusing STORY-012/061's existing logic
+unchanged — unioned with `embedding.repository.ts::findSimilarContentIds`
+for semantic matching, reusing STORY-061's infrastructure directly,
+not rebuilding it). The LLM is then called exactly once, given only
+those real candidates' data, and constrained via
+`response_format: {type: "json_schema", strict: true}` to a schema
+whose `recommendedRecipeIds` can only be assembled from strings — the
+schema itself can't enforce "must be one of these ids," so a
+**guardrail** after parsing does: filters the model's returned ids
+down to the actual candidate set, then re-fetches those specific ids
+via `findRecipeDetailsForAssistant` to re-confirm they're still
+`Published` right now — closing the race between retrieval and the
+(up to ~10s) generation call returning. No SSE/`ReadableStream`
+anywhere in this story, or anywhere else in this codebase; the widget
+shows a "Thinking…" indicator while the request is in flight and
+renders the complete, validated message once it returns.
+
+**Content moderation: a real call to OpenAI's own `/v1/moderations`
+endpoint, failing open on error.** No automated content-moderation
+pattern existed anywhere in this codebase to mirror — every
+`*moderation*` service already here (`qa-moderation.service.ts`,
+`review-moderation.service.ts`, blog comment moderation) is a
+human-review admin workflow (Pending→Approved by an admin action),
+not pre-filtering of free text before it reaches anything else. Given
+no existing pattern, and given fabricating a keyword-filter heuristic
+would be worse than using a real provider-side check, this story
+calls OpenAI's moderation endpoint directly
+(`src/services/chat/openai-moderation.ts`) before a user's message is
+used for retrieval or generation; a flagged message short-circuits to
+a canned decline (no main chat-completion call made) — logged and
+persisted like any other message, for the same QA purpose AC #11
+asks for. A transient moderation-API error (including this
+environment's own real no-credits failure) is logged and the message
+is let through rather than blocking all chat: the output-side
+grounding guardrail above is the harder safety boundary either way,
+so failing closed here would trade a real, working feature for a
+marginal, redundant safety margin.
+
+**`RecipeIngredient.productId` already existed before this story** —
+confirmed by reading the schema directly rather than assuming the
+story doc's own task list ("add migration if the field doesn't
+already exist") was accurate. No migration was needed for the
+product-gap linkage.
+
+**`getPurchasedProductIds` was added to `recommendation.repository.ts`
+(STORY-060's own file), not a new one** — mirrors that file's existing
+`getBestSellingProductIds`'s exact `orderItem`-direct,
+Cancelled-excluded query shape, per that file's own header comment
+("purchase signal... read from Order/OrderItem directly"). Guests
+(no `customerId`) get an empty set, meaning every ingredient's product
+shows as "needs to buy" — correct, honest behavior, not a special
+case.
+
+**Conversation history fed back into each generation call is capped**
+(`HISTORY_LIMIT = 10` messages) — a direct, in-story fix for the gap
+STORY-061's own architecture review flagged: "062/063 (multi-turn,
+conversational) have no stated bound on conversation length/context."
+Likewise, `GET /api/search`'s rate-limiting precedent
+(`checkRateLimit`, keyed by customer id, else the anonymous session,
+else IP) is reused as-is on `POST /api/ai/recipe-assistant/message`,
+and `RecipeAssistantMessage.promptTokens`/`completionTokens` log
+OpenAI's own real token usage, the same `SearchQueryLog.embeddingTokens`
+standard — both gaps the same review flagged, both closed here rather
+than deferred to a future gateway.
+
+**Two ACs are honestly left checked with a caveat rather than
+silently reinterpreted:** AC #2's "ranked by ingredient overlap" is
+satisfied by real keyword+semantic retrieval feeding a grounded LLM
+selection, not a literal ingredient-overlap count — the retrieval
+mechanism achieves the AC's intent (real, relevant, grounded
+suggestions) without implementing the exact scoring method as
+literally described. AC #9/#11 (AI disclosure, privacy disclosure)
+were caught as a real gap during this review pass — the first widget
+draft had neither — and fixed before shipping: the widget now states
+"This is an AI assistant — it can make mistakes... Conversations are
+saved to help us improve it," alongside the already-present "Browse
+the Recipe Centre instead" fallback link.

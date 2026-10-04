@@ -5,6 +5,7 @@ import { cache } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Breadcrumbs } from "@/components/storefront/layout/breadcrumbs";
 import { Section } from "@/components/storefront/layout/section";
+import { RecipeAssistantEntryPoint } from "@/components/storefront/ai/recipe-assistant-entry-point";
 import { ChefNotes } from "@/components/storefront/recipes/chef-notes";
 import { MethodSteps } from "@/components/storefront/recipes/method-steps";
 import { RecipeBookmarkButton } from "@/components/storefront/recipes/recipe-bookmark-button";
@@ -137,7 +138,10 @@ export default async function RecipeDetailPage({ params }: RecipeDetailPageProps
 
           <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
             <RecipeRatingStars avgRating={recipe.avgRating} ratingCount={recipe.ratingCount} />
-            <RecipeBookmarkButton recipeId={recipe.id} recipeSlug={recipe.slug} variant="labelled" />
+            <div className="flex items-center gap-3">
+              <RecipeAssistantEntryPoint />
+              <RecipeBookmarkButton recipeId={recipe.id} recipeSlug={recipe.slug} variant="labelled" />
+            </div>
           </div>
         </div>
       </div>
