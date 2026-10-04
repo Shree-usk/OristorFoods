@@ -10,6 +10,7 @@ import { FeatureFlagsPanel } from "./feature-flags-panel";
 import { LocaleSettingsPanel } from "./locale-settings-panel";
 import { NotificationTemplatesPanel } from "./notification-templates-panel";
 import { PaymentMethodsPanel } from "./payment-methods-panel";
+import { PolicyDocumentsPanel } from "./policy-documents-panel";
 import { ShippingInventorySettingsPanel } from "./shipping-inventory-settings-panel";
 import { TaxSettingsPanel } from "./tax-settings-panel";
 
@@ -36,6 +37,7 @@ export function AdminSettingsView() {
           <TabsTrigger value="notifications">Notifications</TabsTrigger>
           <TabsTrigger value="rewards-referrals">Rewards &amp; Referrals</TabsTrigger>
           <TabsTrigger value="feature-flags">Feature Flags</TabsTrigger>
+          <TabsTrigger value="policy-documents">Policy Content</TabsTrigger>
         </TabsList>
 
         <TabsContent value="company" className="mt-4">
@@ -72,6 +74,9 @@ export function AdminSettingsView() {
         </TabsContent>
         <TabsContent value="feature-flags" className="mt-4">
           <FeatureFlagsPanel />
+        </TabsContent>
+        <TabsContent value="policy-documents" className="mt-4">
+          <PolicyDocumentsPanel />
         </TabsContent>
       </Tabs>
     </div>

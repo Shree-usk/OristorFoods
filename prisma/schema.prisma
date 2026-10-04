@@ -101,6 +101,8 @@ model User {
   searchQueryLogs          SearchQueryLog[]
   // STORY-062.
   recipeAssistantConversations RecipeAssistantConversation[]
+  // STORY-063.
+  supportAssistantConversations SupportAssistantConversation[]
   createdAt         DateTime   @default(now())
   updatedAt         DateTime   @updatedAt
 }
@@ -1912,6 +1914,15 @@ enum SupportTicketStatus {
   Closed
 }
 
+// STORY-063. Customer vs AiAssistant — an orthogonal axis from
+// SupportTicketCategory (topic), not a value added to that enum: a
+// ticket's topic (OrderIssue/Product/...) stays meaningful for triage
+// regardless of who/what opened it.
+enum SupportTicketSource {
+  Customer
+  AiAssistant
+}
+
 model SupportTicket {
   id        String                 @id @default(cuid())
   userId    String
@@ -1922,6 +1933,11 @@ model SupportTicket {
   subject   String
   message   String                 @db.VarChar(4000)
   status    SupportTicketStatus    @default(Open)
+  // STORY-063. Both additive/nullable-or-defaulted — no existing
+  // SupportTicket caller needs to change.
+  source         SupportTicketSource @default(Customer)
+  conversationId String?
+  conversation   SupportAssistantConversation? @relation(fields: [conversationId], references: [id], onDelete: SetNull)
   createdAt DateTime               @default(now())
   updatedAt DateTime               @updatedAt
 
@@ -2392,6 +2408,8 @@ model AdminUser {
   savedSegmentsCreated SavedSegment[]
   // STORY-059c.
   scheduledReportsCreated ScheduledReport[]
+  // STORY-063.
+  policyDocumentsUpdated PolicyDocument[]
   createdAt          DateTime        @default(now())
   updatedAt          DateTime        @updatedAt
 }
@@ -3412,4 +3430,73 @@ model RecipeAssistantMessage {
   createdAt         DateTime                     @default(now())
 
   @@index([conversationId, createdAt])
+}
+
+// STORY-063. AI Customer Support Assistant.
+
+// escalated tracks whether this conversation led to a real
+// SupportTicket (STORY-036) — see SupportTicket.source/conversationId
+// above. The security-critical identity-exclusivity invariant
+// (customerId XOR sessionId, enforced at the route layer, re-checked
+// strictly in support-assistant.service.ts) lives here: once a
+// conversation has a non-null customerId, a sessionId-only match
+// attempt against it must be rejected outright, never treated as an
+// OR-fallback. See docs/architecture-decisions.md.
+model SupportAssistantConversation {
+  id             String                     @id @default(cuid())
+  customerId     String?
+  customer       User?                      @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  sessionId      String?
+  startedAt      DateTime                   @default(now())
+  lastMessageAt  DateTime                   @default(now())
+  escalated      Boolean                    @default(false)
+  messages       SupportAssistantMessage[]
+  supportTickets SupportTicket[]
+
+  @@index([customerId])
+  @@index([sessionId])
+  @@index([lastMessageAt])
+}
+
+enum SupportAssistantMessageRole {
+  User
+  Assistant
+}
+
+// structuredPayload is the guardrail-validated {message,
+// referencedOrderNumbers, requiresSignIn, escalate, escalationReason,
+// confidenceScore} shape — same real-token-logging standard as
+// RecipeAssistantMessage/SearchQueryLog.
+model SupportAssistantMessage {
+  id                String                       @id @default(cuid())
+  conversationId    String
+  conversation      SupportAssistantConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  role              SupportAssistantMessageRole
+  content           String
+  structuredPayload Json?
+  confidenceScore   Float?
+  promptTokens      Int?
+  completionTokens  Int?
+  createdAt         DateTime                     @default(now())
+
+  @@index([conversationId, createdAt])
+}
+
+// The single canonical policy content source (AC #4) — admin-managed
+// under System Settings, ships with no seeded content (no real
+// returns/refund/exchange policy text exists anywhere in this
+// codebase to seed it with; inventing one would be fabrication, the
+// same standard STORY-061's empty glossary set). slug is free-string
+// and extensible (e.g. "returns-refunds-exchanges"), not a closed
+// enum, matching this codebase's FeatureFlag/TaxRateRule key
+// convention for an open-ended admin-defined set.
+model PolicyDocument {
+  id          String    @id @default(cuid())
+  slug        String    @unique
+  title       String
+  content     String
+  updatedById String?
+  updatedBy   AdminUser? @relation(fields: [updatedById], references: [id], onDelete: SetNull)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 }
