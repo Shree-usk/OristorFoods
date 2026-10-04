@@ -20,7 +20,7 @@ const STATIC_ROUTES = [
   "/export",
   "/blog",
   "/about",
-  "/contact",
+  "/contact-us",
   "/account",
   "/account/wishlist",
   "/account/rewards",

@@ -77,7 +77,7 @@ export const primaryNavItems: NavItem[] = [
   { label: "Export", href: "/export", icon: "Globe2" },
   { label: "Blog", href: "/blog", icon: "Newspaper" },
   { label: "About", href: "/about", icon: "Info" },
-  { label: "Contact", href: "/contact", icon: "Mail" },
+  { label: "Contact", href: "/contact-us", icon: "Mail" },
 ];
 
 /** Right-aligned desktop action cluster, in blueprint Section 4 order. */
