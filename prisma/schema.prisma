@@ -99,6 +99,8 @@ model User {
   recommendationEvents     RecommendationEvent[]
   // STORY-061.
   searchQueryLogs          SearchQueryLog[]
+  // STORY-062.
+  recipeAssistantConversations RecipeAssistantConversation[]
   createdAt         DateTime   @default(now())
   updatedAt         DateTime   @updatedAt
 }
@@ -3366,4 +3368,48 @@ model SearchGlossaryTerm {
   targetId      String?
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
+}
+
+// STORY-062. AI Recipe Assistant.
+
+// One conversation thread. customerId is nullable (guest, correlated
+// via the shared rec_sid cookie — see recommendation-session.ts)
+// following SearchQueryLog's own nullable-FK convention.
+model RecipeAssistantConversation {
+  id            String                   @id @default(cuid())
+  customerId    String?
+  customer      User?                    @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  sessionId     String?
+  startedAt     DateTime                 @default(now())
+  lastMessageAt DateTime                 @default(now())
+  messages      RecipeAssistantMessage[]
+
+  @@index([customerId])
+  @@index([sessionId])
+  @@index([lastMessageAt])
+}
+
+enum RecipeAssistantMessageRole {
+  User
+  Assistant
+}
+
+// structuredPayload is the guardrail-validated {message,
+// recommendedRecipeIds, clarifyingQuestion} shape for an Assistant
+// row — null for a User row, and null for a graceful-fallback
+// Assistant row (no structured data to show, just the apology text).
+// promptTokens/completionTokens are OpenAI's own reported usage, same
+// real-not-estimated standard as SearchQueryLog.embeddingTokens.
+model RecipeAssistantMessage {
+  id                String                       @id @default(cuid())
+  conversationId    String
+  conversation      RecipeAssistantConversation  @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  role              RecipeAssistantMessageRole
+  content           String
+  structuredPayload Json?
+  promptTokens      Int?
+  completionTokens  Int?
+  createdAt         DateTime                     @default(now())
+
+  @@index([conversationId, createdAt])
 }
