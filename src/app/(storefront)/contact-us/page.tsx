@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { connection } from "next/server";
 
 import { JsonLdScript } from "@/components/storefront/product/json-ld-script";
 import { ContactEnquiryForm } from "@/components/storefront/contact/contact-enquiry-form";
@@ -17,6 +18,13 @@ export const metadata: Metadata = {
 };
 
 export default async function ContactUsPage() {
+  // Forces this route dynamic, same as (storefront)/page.tsx's own
+  // Homepage Builder precedent — this page's hero/location copy are now
+  // admin-editable via /admin/story-pages (STORY-074); a statically
+  // prerendered page would keep serving its build-time snapshot until
+  // the next redeploy.
+  await connection();
+
   const companyInfo = await getResolvedCompanyInfo();
 
   return (

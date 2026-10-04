@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { connection } from "next/server";
 
 import { JsonLdScript } from "@/components/storefront/product/json-ld-script";
 import { Section } from "@/components/storefront/layout/section";
@@ -32,6 +33,14 @@ function toChapter(block: Awaited<ReturnType<typeof getPublishedStoryBlocks>>[nu
 }
 
 export default async function AboutPage() {
+  // Forces this route dynamic, same as (storefront)/page.tsx's own
+  // Homepage Builder precedent — without it, `next build` statically
+  // prerenders this page once (and in CI, before any seed has run,
+  // crashes outright on the missing-content check below). Admin edits
+  // via /admin/story-pages also need this: a static page would keep
+  // serving its build-time snapshot until the next redeploy.
+  await connection();
+
   const [companyInfo, blocks] = await Promise.all([getResolvedCompanyInfo(), getPublishedStoryBlocks("AboutUs")]);
 
   const hero = blocks.find((block) => block.blockType === "Hero");
