@@ -250,11 +250,14 @@ Settings / Shipping, with the same level of admin control as Products or Recipes
 ### 9a. Current story-by-story sequence (confirmed 2026-10-01)
 
 Epics 01–06 and STORY-038 through STORY-046 (Epic 07) are shipped
-("Core landed"/"Done" in their own story docs). Two isolated gaps sit
-inside otherwise-finished epics and are not blocking anything —
-pick them up opportunistically: **STORY-023** (Downloads & Resources,
-Epic 04) and **STORY-071** (Customer Group & Pricing Context, Epic 06's
-numbering but pulled forward, see below).
+("Core landed"/"Done" in their own story docs). **STORY-023**
+(Downloads & Resources, Epic 04) and **STORY-071** (Customer Group &
+Pricing Context, Epic 06's numbering but pulled forward, see below) —
+both once listed here as isolated, not-yet-picked-up gaps — are now
+also both Done: STORY-023 shipped 2026-09-27 (this section simply
+hadn't been updated to reflect it until 2026-10-04, after the rest of
+Epic 07 closed and the story was rediscovered already-complete);
+STORY-071 shipped 2026-10-01, reused directly by STORY-059a.
 
 **Naming note:** a user-supplied spec titled itself "STORY-047 — Recipe
 Q&A — Lightweight," but the real backlog already has a numbered
@@ -292,7 +295,7 @@ Confirmed build order from here:
     - **059a — CRM Segmentation** (`STORY-059a-crm-segmentation.md`) — Done. The first customer-spend aggregation in this codebase (`customer-segment.repository.ts::getCustomerMetrics()`, excluding Cancelled orders to match the dashboard's own revenue inclusion rule); segmentation is a two-step aggregate-then-intersect, since Prisma can't filter `where` on a relation's SUM/COUNT; segments are live, not snapshotted; a real Marketing Console integration (`CampaignAudienceTarget.SavedSegment`, resolved the same way `LoyaltyMembers`/`ReferralMembers` already are) rather than a described-only one; CLV surfaces on the existing admin Customer detail page. See `docs/architecture-decisions.md`'s 2026-10-04 entry.
     - **059b — Analytics/BI Reports** (`STORY-059b-analytics-bi-reports.md`) — Done. One tabbed `/admin/analytics` hub (Sales/Customers/Products & Recipes/Funnel), each with a Recharts chart (first chart library in this codebase), a data table, and CSV/PDF export; date-bucketed time series use `prisma.$queryRaw` + `DATE_TRUNC`, the precedent STORY-012's search ranking already established; the conversion funnel reports only the two real numbers this codebase has data for (Carts with items, Confirmed orders), with Visits/Checkout started rendered as honest `available: false` placeholders — the same treatment System Health gave its own gaps in STORY-057; one shared `toCsv()` utility (now also used by STORY-057's audit-log export) and one shared PDF report template reused by all four reports. See `docs/architecture-decisions.md`'s 2026-10-04 entry.
     - **059c — Executive Dashboard + Scheduled Reports** (`STORY-059c-executive-dashboard-scheduled-reports.md`) — Done. **Closes Epic 07.** A distinct, strategic-level `/admin/executive-dashboard` — separate from STORY-039's operational dashboard — composing period-over-period KPI comparisons (revenue, returning-customer rate, AOV, loyalty engagement, export enquiry volume all real, reusing STORY-039/059b's existing reads; Core Web Vitals an honest `available: false`, same treatment as every other missing-data case this session); scheduled report emails repeat STORY-050d's already-validated no-cron-exists pattern exactly (`ScheduledReport` + a "Send due reports now" admin-triggered action, gated Approve) rather than re-litigating it, reusing 059b's own CSV exporters as the email body content. See `docs/architecture-decisions.md`'s 2026-10-04 entry.
-16. **STORY-023** (Downloads & Resources) — slot in opportunistically, does not block or depend on the admin sequence.
+16. **STORY-023 (Downloads & Resources) — Done, shipped 2026-09-27, before this epic sequence was even written.** This item only existed in this list because of a documentation gap, not outstanding work: the story's own doc was never flipped from Draft/all-unchecked despite the full feature (`/downloads` library, `DownloadResource`/`DownloadCategory`, atomic server-side `downloadCount`, a real recipe-card PDF export via `@react-pdf/renderer`, full test coverage) already being live — rediscovered and both docs synced 2026-10-04 while picking up the next item in this sequence. **One real, deliberate gap remains and is still open:** no admin console exists for managing `DownloadResource`/`DownloadCategory` rows (explicitly out-of-scope in the original story doc, deferred to "a future admin Media Library / content module, Epic 07") — Epic 07 closed without any of its stories picking this up, so it's now a loose end for Epic 08+ or another opportunistic pass, same category as the About/Sustainability 404 gap below.
 17. **Epic 08 (AI Platform, 060–064) → Epic 09 (Quality & Security, 065–068) → Epic 10 (Production Launch, 069–070)**, in file order.
 
 **Known deferred/leftover items to eventually close** (see
@@ -309,8 +312,12 @@ section's own IA (line 99-100) and both are linked live from
 `nav-config.ts`/`footer-config.ts`, but no story was ever written to
 build either page's actual content/route (STORY-004 wired the About
 nav link; STORY-068's SEO QA checklist assumes About exists; neither
-builds it) — needs a small story for two static content pages,
-slotted in opportunistically like STORY-023.
+builds it) — needs a small story for two static content pages, slotted
+in opportunistically; **no admin console for managing
+`DownloadResource`/`DownloadCategory` rows** (STORY-023 itself
+deferred this to "a future admin Media Library / content module,
+Epic 07"; Epic 07 closed as of STORY-059c without any story picking it
+up) — same opportunistic-gap category.
 
 ---
 
