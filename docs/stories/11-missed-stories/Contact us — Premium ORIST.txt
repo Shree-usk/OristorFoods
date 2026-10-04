@@ -1,0 +1,556 @@
+Implement STORY-069 — Premium ORISTOR Contact & Enquiry Experience.
+
+First inspect the existing Cinnamon architecture, current Contact Us implementation, Prisma schema, notification/email system, RBAC, admin-console patterns, SEO system and design system. Do not start coding until you understand how these existing systems should be reused.
+
+Build the Contact page as a premium ORISTOR experience inspired by the visual principles of the supplied Awwwards references — large editorial typography, generous whitespace, conversational form interaction and strong visual hierarchy — but do not copy their design, content or assets.
+
+The page must function as both a consumer contact page and a B2B/export lead-generation page. Implement the enquiry workflow, PostgreSQL persistence, admin enquiry console, notifications, validation, security, responsive UX, accessibility, SEO and tests described in STORY-069.
+
+Do not expand into a full CRM. Reuse existing authentication, RBAC, notification, validation, audit and design-system infrastructure. Do not modify unrelated modules.
+
+Before implementation, provide me with a short implementation plan, affected files/modules, database changes and any conflicts with existing architecture. Wait for approval before making code changes.
+
+One design decision I strongly recommend
+
+Don't make the page simply "Contact Us".
+
+For ORISTOR, I would make the emotional headline something like:
+
+Let's talk about good food.
+
+and underneath:
+
+From authentic Sri Lankan flavours to international partnerships, we'd love to hear from you.
+
+Then the practical "Send an enquiry" form follows.
+
+That gives you the Awwwards-quality visual experience while also turning the page into a useful sales/lead-generation tool for ORISTOR, especially for export buyers and distributors.
+
+
+STORY-069 — Premium Contact & Enquiry Experience
+
+Title: ORISTOR Contact Us — Premium Contact & Business Enquiry Page
+Priority: High
+Type: UX / Frontend / Lead Generation
+Target: /contact-us
+
+1. Objective
+
+Replace the current basic Contact Us experience with a premium, modern, highly visual ORISTOR contact page.
+
+The page should communicate:
+
+ORISTOR is a premium Sri Lankan food brand, manufacturer and international food partner.
+
+The page must make it easy for visitors to:
+
+Contact ORISTOR
+Ask a product question
+Make a general enquiry
+Request wholesale/distributor information
+Make an export enquiry
+Discuss business opportunities
+Contact customer support
+
+The design should be inspired by premium Awwwards contact-page patterns, but must be an original ORISTOR design and must not copy another website's layout, artwork or text. The reference style emphasizes large typography, conversational forms, whitespace and strong CTA hierarchy.
+
+2. Design Direction
+
+Create a premium editorial contact experience, consistent with the existing Cinnamon/ORISTOR design system.
+
+Visual personality
+Premium
+Authentic
+Sri Lankan
+Warm
+Modern
+Minimal
+Confident
+International/export-ready
+
+Do not create a generic corporate contact page.
+
+Avoid:
+
+Generic Bootstrap-style form
+Large boxed cards everywhere
+Excessive borders
+Excessive gradients
+Overuse of icons
+Crowded layout
+Stock-looking corporate imagery
+3. Hero Section
+
+Create a large editorial hero.
+
+Suggested heading
+
+Let's talk about good food.
+
+Alternative:
+
+Let's connect.
+
+Supporting copy:
+
+Whether you're looking for authentic Sri Lankan flavours, interested in becoming a retail partner, or simply want to talk to us, we'd love to hear from you.
+
+Use very large typography with strong visual impact.
+
+The hero should occupy approximately 60–75vh on desktop.
+
+Include subtle ORISTOR food imagery / product photography without overwhelming the typography.
+
+Use the existing ORISTOR brand colours and typography.
+
+4. Contact Information Section
+
+Create a clean contact information area.
+
+Display:
+
+Visit us
+
+ORISTOR FOOD PRODUCTS (PVT) LTD
+
+No. 8, 8A, Hekitta Lane
+Wattala, Sri Lanka
+
+Call us
+
+Use the verified company telephone numbers already defined in the project content.
+
+Email
+
+Use the official ORISTOR contact email configured in the project.
+
+Business hours
+
+Use the actual business hours already configured for ORISTOR.
+
+Important: Do not invent contact information.
+
+If information is not available in the current project data, mark it as a content/configuration requirement rather than inventing it.
+
+5. Main Enquiry Experience
+
+This is the most important section.
+
+Instead of a boring:
+
+Name
+Email
+Message
+Submit
+
+create a conversational enquiry form.
+
+Example:
+
+Hi, I'm [Name]
+
+I'm contacting ORISTOR about
+[Select enquiry type]
+
+My email is
+[Email]
+
+My phone number is
+[Phone]
+
+Tell us a little more
+[Message]
+
+[ SEND ENQUIRY → ]
+
+Use large, elegant fields with minimal visual clutter.
+
+6. Enquiry Type
+
+Provide a clear selection:
+
+General Enquiry
+Product Enquiry
+Customer Support
+Wholesale
+Distributor / Dealer
+Export / International Business
+Retail Partnership
+Food Service / Hospitality
+Media / Marketing
+Careers
+Other
+
+The selected enquiry type should be stored with the submission.
+
+7. Business / Export Enquiry
+
+When the visitor selects:
+
+Export / International Business
+
+show additional fields:
+
+Company name
+Country
+Business type
+Website
+Product interest
+Estimated requirement
+Message
+
+Business type options:
+
+Importer
+Distributor
+Supermarket
+Retailer
+Food Service
+Restaurant / Hotel
+Wholesaler
+Other
+
+This is important because ORISTOR is not only a consumer brand; the website also needs to generate international B2B opportunities.
+
+8. Wholesale / Distributor Enquiry
+
+When:
+
+Wholesale / Distributor
+
+is selected, dynamically display:
+
+Company name
+Country / region
+Business type
+Expected order volume
+Products interested in
+Phone
+Email
+Message
+
+Do not create a separate page for this yet.
+
+Keep it inside the Contact enquiry system.
+
+9. Form UX
+
+The form must have excellent UX.
+
+Include:
+
+Inline validation
+Required field indicators
+Email validation
+Phone validation
+Loading state
+Disabled submit during submission
+Success state
+Error state
+Clear error messages
+Keyboard accessibility
+Mobile-friendly controls
+
+After successful submission:
+
+Thank you for reaching out.
+
+Your enquiry has been received. Our team will get back to you shortly.
+
+Provide:
+
+Back to ORISTOR
+
+and optionally:
+
+Explore our products →
+
+10. Database / Backend
+
+Do not make this a frontend-only form.
+
+Create a proper enquiry system.
+
+Recommended model:
+
+ContactEnquiry
+
+Fields:
+
+id
+name
+email
+phone
+companyName
+country
+enquiryType
+businessType
+productInterest
+message
+status
+source
+createdAt
+updatedAt
+
+Status:
+
+NEW
+IN_PROGRESS
+RESPONDED
+CLOSED
+SPAM
+
+Use Prisma + PostgreSQL.
+
+Do not create unnecessary CRM functionality in this story.
+
+11. Admin Contact Enquiry Console
+
+Create:
+
+/admin/contact-enquiries
+
+Admin users should be able to:
+
+View enquiries
+Search
+Filter by enquiry type
+Filter by status
+View enquiry details
+Change status
+Add internal notes if the existing CRM architecture supports this
+Mark as responded
+Close enquiry
+
+Use existing RBAC architecture.
+
+Do not create a new permission system.
+
+Reuse existing admin authentication, RBAC and audit-log patterns.
+
+12. Email Notification
+
+When an enquiry is submitted:
+
+Customer
+
+Send confirmation:
+
+Thank you for contacting ORISTOR. We have received your enquiry.
+
+ORISTOR
+
+Send notification to the configured enquiry/contact email.
+
+The notification should include:
+
+Name
+Email
+Phone
+Enquiry type
+Company
+Country
+Message
+Submission date/time
+
+Use the existing notification/email architecture.
+
+Do not create a separate email system.
+
+13. Anti-Spam / Security
+
+The contact endpoint must not be left open to abuse.
+
+Implement using the project's existing security architecture:
+
+Server-side validation
+Zod validation
+Rate limiting
+Honeypot or equivalent lightweight anti-spam protection
+Input sanitization/validation
+No HTML injection
+Do not expose internal errors to the customer
+
+Never trust client-side validation alone.
+
+14. Map / Location
+
+Include an elegant location section.
+
+Example:
+
+Come and meet us.
+
+Show the ORISTOR location:
+
+Wattala, Sri Lanka
+
+Provide:
+
+Get Directions →
+
+Use an external map link rather than embedding a heavy map if performance would suffer.
+
+15. Social / Direct Contact
+
+Include a small section:
+
+Prefer social?
+
+with the official ORISTOR social channels configured in the project.
+
+Also provide:
+
+Email
+Phone
+WhatsApp, if the official business number is configured
+
+Do not invent social URLs.
+
+16. Mobile Experience
+
+Mobile is extremely important.
+
+On mobile:
+
+Hero
+↓
+Contact information
+↓
+Enquiry type
+↓
+Form
+↓
+Location
+↓
+Social / direct contact
+↓
+Footer
+
+The form must be comfortable to complete with a phone.
+
+Avoid desktop-style two-column forms that become cramped.
+
+17. Animation
+
+Use subtle premium motion.
+
+Examples:
+
+Hero text reveal
+Image fade/slide
+Form field transitions
+Section reveal on scroll
+Button hover
+Success animation
+
+Use the project's existing Framer Motion architecture where appropriate.
+
+Do not create excessive animations that negatively affect performance.
+
+Respect:
+
+prefers-reduced-motion
+18. SEO
+
+Implement:
+
+SEO title
+Meta description
+Canonical URL
+Open Graph metadata
+Proper H1
+Semantic headings
+Organization/LocalBusiness structured data where appropriate and supported by the project's SEO architecture
+
+Target page:
+
+/contact-us
+
+Do not create duplicate /contact and /contact-us pages unless the existing routing architecture requires it.
+
+19. Accessibility
+
+The page must meet the project's WCAG AA direction.
+
+Include:
+
+Proper labels
+Keyboard navigation
+Visible focus states
+Accessible error messages
+Accessible select controls
+Correct heading hierarchy
+Sufficient colour contrast
+Screen-reader-friendly form states
+aria-live for submission status where appropriate
+
+This will also prepare the page for STORY-067 Accessibility.
+
+20. Performance
+
+Do not make the Contact page unnecessarily heavy.
+
+Use:
+
+Optimized images
+Next.js image optimization
+Lazy loading where appropriate
+Minimal JavaScript
+No unnecessary third-party scripts
+Lightweight map/link implementation
+
+The page should be suitable for the STORY-066 Performance testing stage.
+
+21. Important Architecture Rules
+
+Before coding:
+
+Inspect the existing Cinnamon architecture.
+Inspect existing contact/enquiry functionality.
+Inspect existing notification/email system.
+Inspect existing Prisma models.
+Inspect existing RBAC.
+Inspect existing admin console patterns.
+Inspect existing SEO implementation.
+Inspect existing design system.
+Reuse existing components/services wherever possible.
+Do not duplicate business logic.
+Do not introduce another form-validation system.
+Do not introduce another notification system.
+Do not introduce another authentication/RBAC system.
+22. Acceptance Criteria
+
+The story is complete when:
+
+ Premium ORISTOR Contact page implemented.
+ /contact-us works on desktop/tablet/mobile.
+ Awwwards-inspired visual quality achieved without copying the reference.
+ General contact enquiry works.
+ Enquiry type selection works.
+ Export enquiry fields appear dynamically.
+ Wholesale/distributor fields appear dynamically.
+ Form validation works.
+ Submission stored in PostgreSQL.
+ Admin enquiry console implemented.
+ Admin can filter/search/update status.
+ Customer confirmation email works.
+ ORISTOR notification email works.
+ Anti-spam/rate limiting implemented.
+ RBAC enforced.
+ Audit logging follows existing architecture where applicable.
+ SEO implemented.
+ WCAG AA considerations implemented.
+ Responsive testing completed.
+ Performance optimized.
+ Unit tests added.
+ API/integration tests added.
+ E2E contact submission test added.
+ Production build passes.
+ Existing pages and navigation are not broken.
+
+
+
+
+
+

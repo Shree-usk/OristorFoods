@@ -2300,6 +2300,7 @@ enum AdminModule {
   UsersRolesAudit
   ExportPortal
   CRMAnalytics
+  ContactEnquiries
 }
 
 enum AdminAction {
@@ -3034,6 +3035,10 @@ model CompanySetting {
   taxId                  String?
   // {label, href}[] — small and unstructured enough not to need its own table.
   socialLinks            Json?
+  // STORY-072. Free text (e.g. "Mon-Fri, 9am-5pm") — no business-hours field
+  // existed anywhere before this; admin-filled via System Settings, omitted
+  // from the Contact page entirely if unset, never fabricated.
+  businessHours          String?
   updatedAt              DateTime @updatedAt
 }
 
@@ -3562,4 +3567,53 @@ model BusinessInsightSnapshot {
 
   @@index([metricType, generatedAt])
   @@unique([metricType, periodStart, periodEnd, sequence])
+}
+
+// STORY-072. Covers every Contact Us enquiry type EXCEPT Export/International
+// Business, which routes into the existing ExportEnquiry pipeline (STORY-058)
+// instead — see architecture-decisions.md's STORY-072 entry. Field naming
+// (contactName/contactEmail/contactPhone, message @db.VarChar(4000))
+// deliberately matches ExportEnquiry's own naming for the same concept. No
+// assignedTo-style field: unlike ExportEnquiry's pipeline, this story's ACs
+// never ask for admin assignment.
+enum ContactEnquiryType {
+  General
+  Product
+  CustomerSupport
+  Wholesale
+  Distributor
+  RetailPartnership
+  FoodService
+  Media
+  Careers
+  Other
+}
+
+enum ContactEnquiryStatus {
+  New
+  InProgress
+  Responded
+  Closed
+  Spam
+}
+
+model ContactEnquiry {
+  id              String               @id @default(cuid())
+  contactName     String
+  contactEmail    String
+  contactPhone    String?
+  companyName     String?
+  country         String?
+  enquiryType     ContactEnquiryType
+  businessType    String?
+  productInterest String?
+  message         String               @db.VarChar(4000)
+  status          ContactEnquiryStatus @default(New)
+  source          String               @default("contact-page")
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+
+  @@index([status])
+  @@index([enquiryType])
+  @@index([createdAt])
 }

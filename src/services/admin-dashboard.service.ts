@@ -1,4 +1,5 @@
 import * as blogRepository from "@/repositories/blog.repository";
+import * as contactEnquiryRepository from "@/repositories/contact-enquiry.repository";
 import * as exportEnquiryRepository from "@/repositories/export-enquiry.repository";
 import * as orderRepository from "@/repositories/order.repository";
 import * as paymentRepository from "@/repositories/payment.repository";
@@ -62,6 +63,8 @@ export interface DashboardSummary {
   };
   /** STORY-058. Real, ExportPortal-gated counts — no longer a placeholder (see `placeholders` below). */
   exportEnquiryStatus?: { newCount: number; inDiscussionCount: number; quotedCount: number; wonThisMonth: number; lostThisMonth: number };
+  /** STORY-072. Real, ContactEnquiries-gated counts. */
+  contactEnquiryStatus?: { newCount: number; inProgressCount: number; respondedCount: number };
   /**
    * Live Visitors/System Health have no backing data source at all (see
    * the module doc comment) — these flags are still gated on the
@@ -141,6 +144,18 @@ export async function getDashboardSummary(adminUserId: string): Promise<Dashboar
         quotedCount: byStatus.get("Quoted") ?? 0,
         wonThisMonth: wonThisMonth ?? 0,
         lostThisMonth: lostThisMonth ?? 0,
+      };
+    }
+  }
+
+  if (permissions.has(permissionKey("ContactEnquiries"))) {
+    const counts = await safe(() => contactEnquiryRepository.countsByStatus(), "contactEnquiryStatus.counts");
+    if (counts) {
+      const byStatus = new Map(counts.map((row) => [row.status, row.count]));
+      summary.contactEnquiryStatus = {
+        newCount: byStatus.get("New") ?? 0,
+        inProgressCount: byStatus.get("InProgress") ?? 0,
+        respondedCount: byStatus.get("Responded") ?? 0,
       };
     }
   }

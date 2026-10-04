@@ -3,6 +3,7 @@
 import { useQuery } from "@tanstack/react-query";
 
 import { ComingSoonCard } from "@/components/admin/dashboard/coming-soon-card";
+import { ContactEnquiriesCard } from "@/components/admin/dashboard/contact-enquiries-card";
 import { ErpSyncCard } from "@/components/admin/dashboard/erp-sync-card";
 import { ExportEnquiriesCard } from "@/components/admin/dashboard/export-enquiries-card";
 import { FailedPaymentsCard } from "@/components/admin/dashboard/failed-payments-card";
@@ -40,6 +41,7 @@ export function AdminDashboardView({ initialData }: { initialData: DashboardSumm
     summary.failedPayments ||
     summary.erpSyncStatus ||
     summary.exportEnquiryStatus ||
+    summary.contactEnquiryStatus ||
     summary.placeholders.liveVisitors ||
     summary.placeholders.systemHealth;
 
@@ -59,6 +61,7 @@ export function AdminDashboardView({ initialData }: { initialData: DashboardSumm
           {summary.failedPayments && <FailedPaymentsCard data={summary.failedPayments} />}
           {summary.erpSyncStatus && <ErpSyncCard data={summary.erpSyncStatus} />}
           {summary.exportEnquiryStatus && <ExportEnquiriesCard data={summary.exportEnquiryStatus} />}
+          {summary.contactEnquiryStatus && <ContactEnquiriesCard data={summary.contactEnquiryStatus} />}
           {summary.placeholders.liveVisitors && (
             <ComingSoonCard title="Live Visitors" note="storefront session tracking isn't built yet." />
           )}
