@@ -32,7 +32,7 @@ export default async function ContactUsPage() {
         }}
       />
 
-      <ContactHero />
+      <ContactHero eyebrow={companyInfo.contactHeroEyebrow} headline={companyInfo.contactHeroHeadline} subcopy={companyInfo.contactHeroSubcopy} />
 
       <Section>
         <ContactInfoSection companyName={companyInfo.companyName} address={companyInfo.address} phone={companyInfo.phone} email={companyInfo.email} businessHours={companyInfo.businessHours} />
@@ -45,7 +45,7 @@ export default async function ContactUsPage() {
       </Section>
 
       <Section>
-        <ContactLocationSection address={companyInfo.address} />
+        <ContactLocationSection address={companyInfo.address} heading={companyInfo.contactLocationHeading} />
       </Section>
 
       <Section spacing="sm">

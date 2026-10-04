@@ -1,8 +1,12 @@
 import { ScrollReveal } from "@/components/motion";
-import { oristorValues } from "@/lib/story-content";
+import type { OristorValue } from "@/types/story";
+
+interface ValueRevealProps {
+  values: OristorValue[];
+}
 
 /** STORY-073. Chapter 05 — the seven O-R-I-S-T-O-R values, progressively revealed, not a static seven-column block. */
-export function ValueReveal() {
+export function ValueReveal({ values }: ValueRevealProps) {
   return (
     <div>
       <ScrollReveal>
@@ -11,7 +15,7 @@ export function ValueReveal() {
       </ScrollReveal>
 
       <div className="mt-8 space-y-6">
-        {oristorValues.map((value, index) => (
+        {values.map((value, index) => (
           <ScrollReveal key={`${value.letter}-${value.word}`} delay={index * 0.06}>
             <div className="flex items-baseline gap-4 border-b border-border pb-4">
               <span className="text-hero font-heading text-gold">{value.letter}</span>

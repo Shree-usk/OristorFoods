@@ -13,6 +13,7 @@ import {
   getCompanySetting,
   getFreeShippingThreshold,
   getLowStockThreshold,
+  getResolvedCompanyInfo,
   isFeatureEnabled,
   listFeatureFlags,
   listPaymentMethods,
@@ -79,6 +80,24 @@ describe("system-settings.service — Company", () => {
     const viewer = await makeAdmin([{ module: "SystemSettings", action: "View" }]);
     await expect(getCompanySetting(viewer.id)).resolves.toBeNull();
     await expect(updateCompanySetting(viewer.id, { legalName: "x" })).rejects.toBeInstanceOf(PermissionDeniedError);
+  });
+
+  it("STORY-074: the 4 Contact page fields round-trip and fall back to the page's original literal copy when unset", async () => {
+    await expect(getResolvedCompanyInfo()).resolves.toMatchObject({
+      contactHeroEyebrow: "Contact Us",
+      contactHeroHeadline: "Let's talk about good food.",
+      contactLocationHeading: "Come and meet us.",
+    });
+
+    const admin = await makeFullAccessAdmin();
+    await updateCompanySetting(admin.id, { contactHeroEyebrow: "Say Hello", contactHeroHeadline: "Custom headline", contactHeroSubcopy: "Custom subcopy", contactLocationHeading: "Find us here" });
+
+    await expect(getResolvedCompanyInfo()).resolves.toMatchObject({
+      contactHeroEyebrow: "Say Hello",
+      contactHeroHeadline: "Custom headline",
+      contactHeroSubcopy: "Custom subcopy",
+      contactLocationHeading: "Find us here",
+    });
   });
 });
 

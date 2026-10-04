@@ -27,6 +27,10 @@ export interface CompanySettingInput {
   businessRegistrationId?: string | null;
   taxId?: string | null;
   socialLinks?: { label: string; href: string }[] | null;
+  contactHeroEyebrow?: string | null;
+  contactHeroHeadline?: string | null;
+  contactHeroSubcopy?: string | null;
+  contactLocationHeading?: string | null;
 }
 
 export async function getCompanySetting(adminUserId: string) {
@@ -69,6 +73,15 @@ export async function getResolvedCompanyInfo() {
     // admin hasn't set this yet," never a fabricated value.
     businessHours: setting?.businessHours ?? null,
     socialLinks: (setting?.socialLinks as { label: string; href: string }[] | null) ?? null,
+    // STORY-074. Contact page copy, admin-editable via /admin/story-pages.
+    // Falls back to the page's own original literal copy until an admin
+    // saves a value — same zero-downtime cutover as every field above.
+    contactHeroEyebrow: setting?.contactHeroEyebrow ?? "Contact Us",
+    contactHeroHeadline: setting?.contactHeroHeadline ?? "Let's talk about good food.",
+    contactHeroSubcopy:
+      setting?.contactHeroSubcopy ??
+      "From authentic Sri Lankan flavours to international partnerships, we'd love to hear from you.",
+    contactLocationHeading: setting?.contactLocationHeading ?? "Come and meet us.",
   };
 }
 

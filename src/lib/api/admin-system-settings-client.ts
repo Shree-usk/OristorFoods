@@ -18,6 +18,10 @@ export interface CompanySetting {
   businessRegistrationId: string | null;
   taxId: string | null;
   socialLinks: { label: string; href: string }[] | null;
+  contactHeroEyebrow: string | null;
+  contactHeroHeadline: string | null;
+  contactHeroSubcopy: string | null;
+  contactLocationHeading: string | null;
 }
 
 export type CompanySettingInput = Partial<Omit<CompanySetting, "id">>;

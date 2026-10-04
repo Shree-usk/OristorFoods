@@ -42,6 +42,7 @@ const ALL_MODULES: AdminModule[] = [
   "ExportPortal",
   "CRMAnalytics",
   "ContactEnquiries",
+  "StoryPages",
 ];
 
 const ALL_ACTIONS: AdminAction[] = ["View", "Edit", "Delete", "Approve", "Export", "Audit"];
@@ -65,7 +66,7 @@ const ROLE_SEEDS: RoleSeed[] = [
   { key: "warehouse_manager", name: "Warehouse Manager", homeModules: ["Orders", "DeliveryZones", "ERPIntegration"] },
   { key: "customer_support", name: "Customer Support", homeModules: ["Customers", "Orders", "Reviews", "QA", "ContactEnquiries"] },
   { key: "export_manager", name: "Export Manager", homeModules: ["ExportPortal", "Orders", "CRMAnalytics"] },
-  { key: "content_editor", name: "Content Editor", homeModules: ["Blog", "Recipes", "Navigation", "CMSWorkflow"] },
+  { key: "content_editor", name: "Content Editor", homeModules: ["Blog", "Recipes", "Navigation", "CMSWorkflow", "StoryPages"] },
   { key: "seo_specialist", name: "SEO Specialist", homeModules: ["SEO", "Navigation"] },
   { key: "viewer", name: "Viewer" },
 ];

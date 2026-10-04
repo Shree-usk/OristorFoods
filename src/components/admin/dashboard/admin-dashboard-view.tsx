@@ -12,6 +12,7 @@ import { PendingModerationCard } from "@/components/admin/dashboard/pending-mode
 import { PendingProductQaCard } from "@/components/admin/dashboard/pending-product-qa-card";
 import { RevenueOrdersCard } from "@/components/admin/dashboard/revenue-orders-card";
 import { RewardsReferralsCard } from "@/components/admin/dashboard/rewards-referrals-card";
+import { StoryPagesCard } from "@/components/admin/dashboard/story-pages-card";
 import { SupportTicketsCard } from "@/components/admin/dashboard/support-tickets-card";
 import { fetchDashboardSummary } from "@/lib/api/admin-dashboard-client";
 import type { DashboardSummary } from "@/services/admin-dashboard.service";
@@ -42,6 +43,7 @@ export function AdminDashboardView({ initialData }: { initialData: DashboardSumm
     summary.erpSyncStatus ||
     summary.exportEnquiryStatus ||
     summary.contactEnquiryStatus ||
+    summary.storyPagesEnabled ||
     summary.placeholders.liveVisitors ||
     summary.placeholders.systemHealth;
 
@@ -62,6 +64,7 @@ export function AdminDashboardView({ initialData }: { initialData: DashboardSumm
           {summary.erpSyncStatus && <ErpSyncCard data={summary.erpSyncStatus} />}
           {summary.exportEnquiryStatus && <ExportEnquiriesCard data={summary.exportEnquiryStatus} />}
           {summary.contactEnquiryStatus && <ContactEnquiriesCard data={summary.contactEnquiryStatus} />}
+          {summary.storyPagesEnabled && <StoryPagesCard />}
           {summary.placeholders.liveVisitors && (
             <ComingSoonCard title="Live Visitors" note="storefront session tracking isn't built yet." />
           )}
