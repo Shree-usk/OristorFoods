@@ -116,6 +116,45 @@ test.describe("Admin Media Library (STORY-041)", () => {
     await expect(page.getByText(fileName)).toHaveCount(0);
   });
 
+  test("drag an asset onto a folder to file it, and onto All folders to remove it", async ({ page }) => {
+    test.setTimeout(60_000);
+
+    const admin = await makeAdminUser([
+      { module: "MediaLibrary", action: "View" },
+      { module: "MediaLibrary", action: "Edit" },
+    ]);
+    await signIn(page, admin.email);
+
+    await page.goto("/admin/media");
+    sequence += 1;
+    const folderName = `E2E Media Test Folder ${sequence}`;
+    await page.getByPlaceholder("New folder").fill(folderName);
+    await page.getByRole("button", { name: "Add" }).click();
+    await expect(page.getByRole("button", { name: folderName })).toBeVisible();
+
+    // Upload while "All folders" is still selected, so the asset starts unfiled.
+    await page.getByRole("button", { name: "All folders" }).click();
+    const fileName = `e2e-drag-test-image-${sequence}.png`;
+    await page.getByRole("button", { name: "Upload" }).click();
+    await page.locator("#media-upload-input").setInputFiles({ name: fileName, mimeType: "image/png", buffer: Buffer.from(TINY_PNG_BASE64, "base64") });
+    await expect(page.getByText(fileName)).toBeVisible();
+
+    // --- Drag it onto the folder. "All folders" is unfiltered (shows every
+    // asset regardless of folder), so switch into the folder's own
+    // filtered view to prove the move actually landed. ---
+    await page.getByText(fileName).dragTo(page.getByRole("button", { name: folderName }));
+    await page.getByRole("button", { name: folderName }).click();
+    await expect(page.getByText(fileName)).toBeVisible();
+
+    // --- Drag it back onto "All folders" to remove it from the folder,
+    // while still viewing that folder's filtered list -- it should vanish
+    // from here, since it no longer belongs to this folder. ---
+    await page.getByText(fileName).dragTo(page.getByRole("button", { name: "All folders" }));
+    await expect(page.getByText(fileName)).toHaveCount(0);
+    await page.getByRole("button", { name: "All folders" }).click();
+    await expect(page.getByText(fileName)).toBeVisible(); // still exists, just unfiled again
+  });
+
   test("a Viewer-only admin can browse the library but the upload route denies server-side", async ({ page, request }) => {
     const viewer = await makeAdminUser([{ module: "MediaLibrary", action: "View" }]);
     await signIn(page, viewer.email);
