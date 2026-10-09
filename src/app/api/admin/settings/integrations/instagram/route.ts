@@ -2,9 +2,8 @@ import { NextResponse } from "next/server";
 
 import { adminAuth } from "@/lib/admin-auth";
 import { instagramErrorResponse } from "@/lib/api/instagram-responses";
-import { unauthorizedResponse, validationErrorResponse } from "@/lib/api/responses";
-import { connect, disconnect, getIntegrationStatus } from "@/services/instagram.service";
-import { connectInstagramSchema } from "@/validation/instagram-settings.schema";
+import { unauthorizedResponse } from "@/lib/api/responses";
+import { disconnect, getIntegrationStatus } from "@/services/instagram.service";
 
 export async function GET() {
   const session = await adminAuth();
@@ -14,21 +13,6 @@ export async function GET() {
     return NextResponse.json(await getIntegrationStatus(session.user.id));
   } catch (error) {
     return instagramErrorResponse(error, "GET /api/admin/settings/integrations/instagram");
-  }
-}
-
-export async function POST(request: Request) {
-  const session = await adminAuth();
-  if (!session?.user?.id) return unauthorizedResponse();
-
-  const body: unknown = await request.json().catch(() => ({}));
-  const parsed = connectInstagramSchema.safeParse(body);
-  if (!parsed.success) return validationErrorResponse(parsed.error);
-
-  try {
-    return NextResponse.json(await connect(session.user.id, parsed.data.accessToken));
-  } catch (error) {
-    return instagramErrorResponse(error, "POST /api/admin/settings/integrations/instagram");
   }
 }
 

@@ -4,15 +4,16 @@ import { afterEach, describe, expect, it } from "vitest";
 import type { AdminAction, AdminModule } from "@/generated/prisma/client";
 import { prisma } from "@/lib/db";
 import { InstagramConnectFailedError, InstagramNotConnectedError } from "@/services/instagram.errors";
-import { connect, disconnect, getIntegrationStatus, syncNow } from "@/services/instagram.service";
+import { disconnect, getAuthorizeUrl, getIntegrationStatus, handleOAuthCallback, syncNow } from "@/services/instagram.service";
 import { PermissionDeniedError } from "@/services/permission.errors";
 
 /**
  * Covers permission gating, masking, and the error paths that don't need a
- * live Meta app. The actual Graph API round trip (connect → resolve linked
- * account → fetch media → download images) can only be verified against a
- * real Instagram Business account + access token, which this suite has no
- * way to provide — that path is exercised manually once credentials exist.
+ * live Meta app. The actual OAuth round trip (authorize → exchange code →
+ * exchange for long-lived token → resolve identity → fetch media →
+ * download images) can only be verified against a real Instagram account,
+ * which this suite has no way to provide — that path is exercised manually
+ * once credentials exist.
  */
 
 const EMAIL_DOMAIN = "@instagram-svc-test.test";
@@ -49,10 +50,11 @@ describe("instagram.service — status and permissions", () => {
     expect(status).not.toHaveProperty("accessToken");
   });
 
-  it("a View-only admin can read status but not connect, sync, or disconnect", async () => {
+  it("a View-only admin can read status but not start OAuth, complete it, sync, or disconnect", async () => {
     const viewer = await makeAdmin([{ module: "SystemSettings", action: "View" }]);
     await expect(getIntegrationStatus(viewer.id)).resolves.toMatchObject({ connected: false });
-    await expect(connect(viewer.id, "some-token")).rejects.toBeInstanceOf(PermissionDeniedError);
+    await expect(getAuthorizeUrl(viewer.id, "state")).rejects.toBeInstanceOf(PermissionDeniedError);
+    await expect(handleOAuthCallback(viewer.id, "some-code")).rejects.toBeInstanceOf(PermissionDeniedError);
     await expect(syncNow(viewer.id)).rejects.toBeInstanceOf(PermissionDeniedError);
     await expect(disconnect(viewer.id)).rejects.toBeInstanceOf(PermissionDeniedError);
   });
@@ -70,13 +72,17 @@ describe("instagram.service — sync without a connection", () => {
   });
 });
 
-describe("instagram.service — connect without Meta app credentials configured", () => {
-  it("fails with a clear InstagramConnectFailedError instead of an unhandled exception", async () => {
+describe("instagram.service — OAuth without Instagram app credentials configured", () => {
+  it("getAuthorizeUrl fails with a clear InstagramConnectFailedError instead of building a broken URL", async () => {
     const admin = await makeFullAccessAdmin();
-    // This suite's env has no META_APP_ID/META_APP_SECRET set, which is
-    // exactly the case being asserted — connect() must fail cleanly rather
-    // than attempt a network call with undefined credentials.
-    await expect(connect(admin.id, "short-lived-token")).rejects.toBeInstanceOf(InstagramConnectFailedError);
+    // This suite's env has no INSTAGRAM_APP_ID/INSTAGRAM_APP_SECRET set,
+    // which is exactly the case being asserted.
+    await expect(getAuthorizeUrl(admin.id, "state")).rejects.toBeInstanceOf(InstagramConnectFailedError);
+  });
+
+  it("handleOAuthCallback fails with a clear InstagramConnectFailedError instead of an unhandled exception", async () => {
+    const admin = await makeFullAccessAdmin();
+    await expect(handleOAuthCallback(admin.id, "some-code")).rejects.toBeInstanceOf(InstagramConnectFailedError);
   });
 });
 
@@ -85,8 +91,8 @@ describe("instagram.service — disconnect", () => {
     const admin = await makeFullAccessAdmin();
     await prisma.instagramIntegrationSetting.upsert({
       where: { id: "global" },
-      create: { id: "global", businessAccountId: "123", accessToken: "fake-token" },
-      update: { businessAccountId: "123", accessToken: "fake-token" },
+      create: { id: "global", businessAccountId: "123", username: "theoristor", accessToken: "fake-token" },
+      update: { businessAccountId: "123", username: "theoristor", accessToken: "fake-token" },
     });
     expect((await getIntegrationStatus(admin.id)).connected).toBe(true);
 

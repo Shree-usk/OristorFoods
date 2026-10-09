@@ -8396,3 +8396,69 @@ prior migration folder still showing as pending (the restored snapshot's
 followed by `prisma db push` to actually materialize the tables the
 stale snapshot was missing, and a full reseed. CI/production are
 unaffected (real Postgres, no PGlite/Prisma-Postgres-local involved).
+
+## 2026-10-09 — Instagram integration pivoted from Facebook Login to Instagram Login
+
+The connect flow documented in the entry above (admin pastes a short-lived
+**Facebook** User token from Graph API Explorer; server exchanges it,
+discovers a Facebook Page via `/me/accounts`, uses that Page's linked
+Instagram Business account) shipped and was deployed, but connected the
+**wrong Instagram account** in practice: the business's real, actively-used
+account isn't linked to any Facebook Page the admin manages, so
+`/me/accounts` silently resolved an old, unrelated Page+account (5 posts,
+all from 2019–2020) instead. The site dutifully synced and displayed that
+wrong account's old photos — no error anywhere, since every step
+technically succeeded, just against the wrong identity. Root-caused by
+directly comparing the Graph API's resolved `business_discovery`/account
+identity against what the real account's own profile showed.
+
+**Fix — rebuilt the whole connect flow around Instagram API with Instagram
+Login (Business Login for Instagram) instead**, which authorizes directly
+against the Instagram account via Instagram's own OAuth dialog and never
+touches Facebook Pages at all:
+
+- `GET /api/admin/settings/integrations/instagram/oauth/start` — admin-
+  authenticated, sets a random CSRF `state` in an httpOnly cookie
+  (`src/lib/instagram-oauth-state.ts`), redirects to
+  `https://www.instagram.com/oauth/authorize` with `instagram_business_basic`
+  scope. The admin panel's "Connect with Instagram" button is a plain
+  `<a href>` (via Button's `render` prop, `nativeButton={false}`), not a
+  `<Link>` or fetch call — this has to be a real top-level browser
+  navigation for the OAuth redirect round trip and the `sameSite: lax`
+  admin session cookie to both survive it.
+- `GET /api/admin/settings/integrations/instagram/oauth/callback` —
+  validates `state` against the cookie, exchanges the authorization `code`
+  for a short-lived token (`api.instagram.com/oauth/access_token`), that
+  for a long-lived one (`graph.instagram.com/access_token`,
+  `grant_type=ig_exchange_token`), resolves the connected account's own
+  `username`/`user_id` (`graph.instagram.com/me`), stores it, and redirects
+  back to `/admin/settings?tab=integrations` with a result in the query
+  string. `AdminSettingsView`'s `Tabs` now reads an initial `?tab=` param
+  (wrapped the page in `<Suspense>` — `useSearchParams` requires it) so
+  that redirect actually lands on the right tab instead of Company.
+- **`InstagramIntegrationSetting.username` is new** — the admin panel shows
+  "Connected to @handle" plainly now. This is the single change most
+  directly aimed at the actual incident: the old panel only ever said
+  "Connected," with no way to tell *which* account without checking the
+  database directly, which is exactly how the wrong-account connection
+  went unnoticed until the stale photos were reported.
+- Token refresh: Instagram long-lived tokens are refreshed via
+  `graph.instagram.com/refresh_access_token` (`ig_refresh_token`) inside
+  `performSync` whenever the stored token is within 10 days of expiry —
+  simpler than the old flow's Page-token-never-really-expires assumption,
+  and this one actually has a documented refresh endpoint to use.
+- New env vars: `INSTAGRAM_APP_ID`/`INSTAGRAM_APP_SECRET` — a **different**
+  ID/secret pair than `META_APP_ID`/`META_APP_SECRET` (the Facebook app
+  credentials from the superseded flow, still set in both `.env`s,
+  harmless but unused by this feature now). Meta's console shows these on
+  the same app's "API setup with Instagram login" page, distinct from
+  "App settings > Basic." The Instagram Login product also needs the
+  callback URL above registered as a valid OAuth redirect URI in that
+  product's own settings — not something `migrate deploy`/env vars can
+  satisfy, has to be done by hand in the Meta console per environment
+  (staging vs. any future production domain).
+- Removed: the paste-a-token `POST /api/admin/settings/integrations/instagram`
+  route, `connectInstagramSchema`, and the Facebook-Page-discovery
+  functions in `instagram.service.ts`. Nothing about the sync/download/
+  cache logic from the original entry changed — only how the connection
+  itself is established.

@@ -9,11 +9,25 @@ import { requirePermission } from "@/services/permission.service";
  * this area — Instagram never got its own AdminModule enum value since it's
  * one settings panel, not a standalone admin section.
  *
- * Bump this when Meta deprecates the pinned version (they give ~2 years'
- * notice); nothing else here is version-specific.
+ * Uses the Instagram API **with Instagram Login** (Business Login for
+ * Instagram) — not the older Facebook-Login-based Page Access Token path
+ * this file originally shipped with. That first version silently resolved
+ * whichever Facebook Page the admin's Facebook account happened to manage,
+ * which turned out to be an old, unrelated Page/Instagram account — the
+ * real @oristorfoods-equivalent account here isn't linked to any Facebook
+ * Page the admin manages, only reachable by logging into Instagram
+ * directly. Business Login sidesteps Facebook Pages entirely: the admin
+ * authorizes directly as the Instagram account, via Instagram's own OAuth
+ * dialog, and every token from here on is scoped straight to that account.
  */
-const GRAPH_API_BASE = "https://graph.facebook.com/v21.0";
+const IG_OAUTH_AUTHORIZE_URL = "https://www.instagram.com/oauth/authorize";
+const IG_SHORT_LIVED_TOKEN_URL = "https://api.instagram.com/oauth/access_token";
+const IG_GRAPH_BASE = "https://graph.instagram.com";
+const IG_SCOPE = "instagram_business_basic";
 const POSTS_PER_SYNC = 12;
+// Refresh once within this window of expiry — ig_refresh_token requires the
+// token be at least 24h old, so this must stay well clear of that floor.
+const TOKEN_REFRESH_WINDOW_MS = 10 * 24 * 60 * 60 * 1000;
 
 interface RawMedia {
   id: string;
@@ -26,55 +40,103 @@ interface RawMedia {
 }
 
 interface GraphApiErrorBody {
-  error?: { message?: string };
+  error_message?: string;
+  error?: { message?: string } | string;
 }
 
-async function exchangeForLongLivedUserToken(shortLivedToken: string): Promise<{ accessToken: string; expiresInSeconds: number | null }> {
-  const appId = process.env.META_APP_ID;
-  const appSecret = process.env.META_APP_SECRET;
-  if (!appId || !appSecret) {
-    throw new InstagramConnectFailedError("META_APP_ID and META_APP_SECRET must be set in the environment before Instagram can be connected.");
-  }
+function errorMessageFrom(body: GraphApiErrorBody, fallback: string): string {
+  if (body.error_message) return body.error_message;
+  if (typeof body.error === "string") return body.error;
+  if (body.error?.message) return body.error.message;
+  return fallback;
+}
 
-  const url = new URL(`${GRAPH_API_BASE}/oauth/access_token`);
-  url.searchParams.set("grant_type", "fb_exchange_token");
+function requireAppCredentials(): { appId: string; appSecret: string } {
+  const appId = process.env.INSTAGRAM_APP_ID;
+  const appSecret = process.env.INSTAGRAM_APP_SECRET;
+  if (!appId || !appSecret) {
+    throw new InstagramConnectFailedError("INSTAGRAM_APP_ID and INSTAGRAM_APP_SECRET must be set in the environment before Instagram can be connected.");
+  }
+  return { appId, appSecret };
+}
+
+function redirectUri(): string {
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL;
+  if (!siteUrl) throw new InstagramConnectFailedError("NEXT_PUBLIC_SITE_URL must be set for the Instagram OAuth redirect.");
+  return `${siteUrl}/api/admin/settings/integrations/instagram/oauth/callback`;
+}
+
+/** The URL the admin's browser is sent to; Instagram redirects back to our own callback route with ?code=...&state=... */
+export function buildAuthorizeUrl(state: string): string {
+  const { appId } = requireAppCredentials();
+  const url = new URL(IG_OAUTH_AUTHORIZE_URL);
   url.searchParams.set("client_id", appId);
+  url.searchParams.set("redirect_uri", redirectUri());
+  url.searchParams.set("response_type", "code");
+  url.searchParams.set("scope", IG_SCOPE);
+  url.searchParams.set("state", state);
+  return url.toString();
+}
+
+async function exchangeCodeForShortLivedToken(code: string): Promise<string> {
+  const { appId, appSecret } = requireAppCredentials();
+  const form = new URLSearchParams({
+    client_id: appId,
+    client_secret: appSecret,
+    grant_type: "authorization_code",
+    redirect_uri: redirectUri(),
+    code,
+  });
+
+  const response = await fetch(IG_SHORT_LIVED_TOKEN_URL, { method: "POST", body: form });
+  const body = (await response.json().catch(() => ({}))) as GraphApiErrorBody & { access_token?: string };
+  if (!response.ok || !body.access_token) {
+    throw new InstagramConnectFailedError(errorMessageFrom(body, "Instagram rejected the authorization code."));
+  }
+  return body.access_token;
+}
+
+async function exchangeForLongLivedToken(shortLivedToken: string): Promise<{ accessToken: string; expiresInSeconds: number }> {
+  const { appSecret } = requireAppCredentials();
+  const url = new URL(`${IG_GRAPH_BASE}/access_token`);
+  url.searchParams.set("grant_type", "ig_exchange_token");
   url.searchParams.set("client_secret", appSecret);
-  url.searchParams.set("fb_exchange_token", shortLivedToken);
+  url.searchParams.set("access_token", shortLivedToken);
 
   const response = await fetch(url);
   const body = (await response.json().catch(() => ({}))) as GraphApiErrorBody & { access_token?: string; expires_in?: number };
   if (!response.ok || !body.access_token) {
-    throw new InstagramConnectFailedError(body.error?.message ?? "Meta rejected the access token exchange.");
+    throw new InstagramConnectFailedError(errorMessageFrom(body, "Could not exchange for a long-lived Instagram token."));
   }
-  return { accessToken: body.access_token, expiresInSeconds: typeof body.expires_in === "number" ? body.expires_in : null };
+  return { accessToken: body.access_token, expiresInSeconds: body.expires_in ?? 60 * 24 * 60 * 60 };
 }
 
-/** The admin pastes a User token; what we actually need to call the Media endpoint is the Page Access Token of whichever Facebook Page has the Instagram Business account linked. */
-async function resolveLinkedInstagramAccount(longLivedUserToken: string): Promise<{ pageName: string; businessAccountId: string; pageAccessToken: string }> {
-  const url = new URL(`${GRAPH_API_BASE}/me/accounts`);
-  url.searchParams.set("fields", "name,access_token,instagram_business_account");
-  url.searchParams.set("access_token", longLivedUserToken);
+async function refreshLongLivedToken(currentToken: string): Promise<{ accessToken: string; expiresInSeconds: number } | null> {
+  const url = new URL(`${IG_GRAPH_BASE}/refresh_access_token`);
+  url.searchParams.set("grant_type", "ig_refresh_token");
+  url.searchParams.set("access_token", currentToken);
 
   const response = await fetch(url);
-  const body = (await response.json().catch(() => ({}))) as GraphApiErrorBody & {
-    data?: { name: string; access_token: string; instagram_business_account?: { id: string } }[];
-  };
-  if (!response.ok) {
-    throw new InstagramConnectFailedError(body.error?.message ?? "Could not list Facebook Pages for this token.");
-  }
-
-  const linked = (body.data ?? []).find((page) => page.instagram_business_account?.id);
-  if (!linked?.instagram_business_account) {
-    throw new InstagramConnectFailedError(
-      "No Facebook Page reachable with this token has an Instagram Business account linked. Link the @oristorfoods Instagram account to the Oristor Facebook Page first.",
-    );
-  }
-  return { pageName: linked.name, businessAccountId: linked.instagram_business_account.id, pageAccessToken: linked.access_token };
+  const body = (await response.json().catch(() => ({}))) as GraphApiErrorBody & { access_token?: string; expires_in?: number };
+  if (!response.ok || !body.access_token) return null;
+  return { accessToken: body.access_token, expiresInSeconds: body.expires_in ?? 60 * 24 * 60 * 60 };
 }
 
-async function fetchRecentMedia(businessAccountId: string, accessToken: string): Promise<RawMedia[]> {
-  const url = new URL(`${GRAPH_API_BASE}/${businessAccountId}/media`);
+async function fetchAccountIdentity(accessToken: string): Promise<{ userId: string; username: string }> {
+  const url = new URL(`${IG_GRAPH_BASE}/me`);
+  url.searchParams.set("fields", "user_id,username");
+  url.searchParams.set("access_token", accessToken);
+
+  const response = await fetch(url);
+  const body = (await response.json().catch(() => ({}))) as GraphApiErrorBody & { user_id?: string; username?: string };
+  if (!response.ok || !body.user_id) {
+    throw new InstagramConnectFailedError(errorMessageFrom(body, "Could not read the connected Instagram account's identity."));
+  }
+  return { userId: body.user_id, username: body.username ?? body.user_id };
+}
+
+async function fetchRecentMedia(userId: string, accessToken: string): Promise<RawMedia[]> {
+  const url = new URL(`${IG_GRAPH_BASE}/${userId}/media`);
   url.searchParams.set("fields", "id,caption,media_type,media_url,thumbnail_url,permalink,timestamp");
   url.searchParams.set("limit", String(POSTS_PER_SYNC));
   url.searchParams.set("access_token", accessToken);
@@ -82,7 +144,7 @@ async function fetchRecentMedia(businessAccountId: string, accessToken: string):
   const response = await fetch(url);
   const body = (await response.json().catch(() => ({}))) as GraphApiErrorBody & { data?: RawMedia[] };
   if (!response.ok) {
-    throw new Error(body.error?.message ?? `Instagram API returned ${response.status}.`);
+    throw new Error(errorMessageFrom(body, `Instagram API returned ${response.status}.`));
   }
   return body.data ?? [];
 }
@@ -117,9 +179,24 @@ async function downloadMediaImage(media: RawMedia): Promise<instagramRepository.
 async function performSync(): Promise<void> {
   const setting = await instagramRepository.getIntegrationSetting();
   if (!setting?.accessToken || !setting.businessAccountId) throw new InstagramNotConnectedError();
+  const businessAccountId = setting.businessAccountId;
+  let accessToken = setting.accessToken;
 
   try {
-    const media = await fetchRecentMedia(setting.businessAccountId, setting.accessToken);
+    // Opportunistically refresh a token nearing expiry so the scheduled
+    // cron sync keeps working for months without a manual reconnect.
+    if (setting.tokenExpiresAt && setting.tokenExpiresAt.getTime() - Date.now() < TOKEN_REFRESH_WINDOW_MS) {
+      const refreshed = await refreshLongLivedToken(accessToken);
+      if (refreshed) {
+        accessToken = refreshed.accessToken;
+        await instagramRepository.upsertIntegrationSetting({
+          accessToken: refreshed.accessToken,
+          tokenExpiresAt: new Date(Date.now() + refreshed.expiresInSeconds * 1000),
+        });
+      }
+    }
+
+    const media = await fetchRecentMedia(businessAccountId, accessToken);
     const downloaded = await Promise.all(media.map(downloadMediaImage));
     const posts = downloaded.filter((post): post is instagramRepository.InstagramPostUpsertInput => post !== null);
     await instagramRepository.replaceAllPosts(posts);
@@ -133,7 +210,7 @@ async function performSync(): Promise<void> {
 
 export interface InstagramIntegrationStatus {
   connected: boolean;
-  businessAccountId: string | null;
+  username: string | null;
   tokenExpiresAt: Date | null;
   lastSyncedAt: Date | null;
   lastSyncError: string | null;
@@ -145,46 +222,52 @@ export async function getIntegrationStatus(adminUserId: string): Promise<Instagr
   const setting = await instagramRepository.getIntegrationSetting();
   return {
     connected: Boolean(setting?.accessToken && setting.businessAccountId),
-    businessAccountId: setting?.businessAccountId ?? null,
+    username: setting?.username ?? null,
     tokenExpiresAt: setting?.tokenExpiresAt ?? null,
     lastSyncedAt: setting?.lastSyncedAt ?? null,
     lastSyncError: setting?.lastSyncError ?? null,
   };
 }
 
+/** Called by the OAuth start route — requires an authenticated admin with Edit access before handing back a URL that will ultimately store a new connection. */
+export async function getAuthorizeUrl(adminUserId: string, state: string): Promise<string> {
+  await requirePermission(adminUserId, "SystemSettings", "Edit");
+  return buildAuthorizeUrl(state);
+}
+
 /**
- * Takes the short-lived User token the admin pastes from Graph API
- * Explorer, exchanges it for a long-lived one, resolves the linked
- * Instagram Business account's Page Access Token, stores that, and runs
- * an immediate sync so a broken connection fails loudly here rather than
+ * The OAuth callback: exchanges the authorization code for a short-lived
+ * token, then a long-lived one, resolves the connected account's own
+ * identity (so the admin panel can show *which* account connected — this
+ * is exactly the check that would have caught the wrong-account mixup
+ * immediately instead of showing stale photos), stores it, and runs an
+ * immediate sync so a broken connection fails loudly here rather than
  * silently on the homepage.
  */
-export async function connect(adminUserId: string, shortLivedAccessToken: string): Promise<{ connectedPageName: string }> {
+export async function handleOAuthCallback(adminUserId: string, code: string): Promise<{ username: string }> {
   await requirePermission(adminUserId, "SystemSettings", "Edit");
 
-  const { accessToken: longLivedUserToken, expiresInSeconds } = await exchangeForLongLivedUserToken(shortLivedAccessToken);
-  const { pageName, businessAccountId, pageAccessToken } = await resolveLinkedInstagramAccount(longLivedUserToken);
+  const shortLivedToken = await exchangeCodeForShortLivedToken(code);
+  const { accessToken, expiresInSeconds } = await exchangeForLongLivedToken(shortLivedToken);
+  const { userId, username } = await fetchAccountIdentity(accessToken);
 
   await instagramRepository.upsertIntegrationSetting({
-    businessAccountId,
-    accessToken: pageAccessToken,
-    // Informational only — Page tokens derived this way are long-lived in
-    // practice and Meta doesn't guarantee a hard expiry for them, unlike
-    // the short-lived token exchanged above. Treat this as "reconnect if
-    // sync starts failing," not a hard deadline.
-    tokenExpiresAt: expiresInSeconds ? new Date(Date.now() + expiresInSeconds * 1000) : null,
+    businessAccountId: userId,
+    username,
+    accessToken,
+    tokenExpiresAt: new Date(Date.now() + expiresInSeconds * 1000),
     lastSyncedAt: null,
     lastSyncError: null,
   });
   await writeAuditLog({ actorId: adminUserId, action: "instagram_connected", module: "SystemSettings", targetType: "InstagramIntegrationSetting", targetId: "global" });
 
   await performSync();
-  return { connectedPageName: pageName };
+  return { username };
 }
 
 export async function disconnect(adminUserId: string): Promise<void> {
   await requirePermission(adminUserId, "SystemSettings", "Edit");
-  await instagramRepository.upsertIntegrationSetting({ businessAccountId: null, accessToken: null, tokenExpiresAt: null, lastSyncedAt: null, lastSyncError: null });
+  await instagramRepository.upsertIntegrationSetting({ businessAccountId: null, username: null, accessToken: null, tokenExpiresAt: null, lastSyncedAt: null, lastSyncError: null });
   await writeAuditLog({ actorId: adminUserId, action: "instagram_disconnected", module: "SystemSettings", targetType: "InstagramIntegrationSetting", targetId: "global" });
 }
 

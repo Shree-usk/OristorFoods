@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
+import { Suspense } from "react";
 
 import { AdminSettingsView } from "@/components/admin/settings/admin-settings-view";
 import { RequirePermission } from "@/components/admin/require-permission";
@@ -16,7 +17,9 @@ export default async function AdminSettingsPage() {
 
   return (
     <RequirePermission adminUserId={session.user.id} module="SystemSettings" action="View">
-      <AdminSettingsView />
+      <Suspense>
+        <AdminSettingsView />
+      </Suspense>
     </RequirePermission>
   );
 }

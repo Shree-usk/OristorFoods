@@ -3180,18 +3180,24 @@ model InventorySetting {
 }
 
 // --- Instagram integration (Settings > Integrations) ---
-// Backs the storefront's "Follow @oristorfoods" homepage section. A Page
-// Access Token (resolved server-side from the admin's one-time short-lived
-// token paste — see instagram.service.ts) is long-lived but not eternal,
-// so tokenExpiresAt/lastSyncedAt/lastSyncError exist for the admin UI to
-// show real connection health rather than a feed that silently goes stale.
+// Backs the storefront's "Follow @oristorfoods" homepage section. Uses the
+// Instagram API with Instagram Login (Business Login for Instagram) — the
+// admin authorizes directly as the Instagram account via Instagram's own
+// OAuth dialog, no Facebook Page involved. tokenExpiresAt/lastSyncedAt/
+// lastSyncError exist for the admin UI to show real connection health
+// rather than a feed that silently goes stale.
 model InstagramIntegrationSetting {
   id                String    @id @default("global")
-  // Resolved from the Facebook Page linked to the connected Instagram
-  // Business account — never typed in by hand.
+  // Instagram's own numeric user id for the connected account — resolved
+  // from the token itself during connect, never typed in by hand.
   businessAccountId String?
-  // Page Access Token. Never returned to the client — every read path
-  // masks it (see instagram.service.ts::getIntegrationStatus).
+  // The connected account's @handle, shown in the admin panel so it's
+  // obvious at a glance which account is live — the exact check that would
+  // have caught an earlier mix-up (an old, unrelated account getting
+  // connected instead) immediately instead of silently serving its photos.
+  username          String?
+  // Long-lived Instagram User Access Token. Never returned to the client —
+  // every read path masks it (see instagram.service.ts::getIntegrationStatus).
   accessToken       String?
   tokenExpiresAt    DateTime?
   lastSyncedAt      DateTime?
