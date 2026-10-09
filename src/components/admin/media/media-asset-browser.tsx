@@ -8,15 +8,17 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { cn } from "@/lib/utils";
 import { AssetDetailPanel } from "@/components/admin/media/asset-detail-panel";
 import { AssetThumbnail } from "@/components/admin/media/asset-thumbnail";
-import { FolderTree } from "@/components/admin/media/folder-tree";
+import { ASSET_DRAG_MIME, FolderTree } from "@/components/admin/media/folder-tree";
 import {
   createMediaFolder,
   fetchMediaAssets,
   fetchMediaFolderTree,
   fetchMediaTags,
   selectMediaAsset,
+  updateMediaAsset,
   uploadMediaAssets,
   type MediaAsset,
 } from "@/lib/api/admin-media-client";
@@ -51,7 +53,9 @@ export function MediaAssetBrowser({ mode, onSelect }: MediaAssetBrowserProps) {
   const [detailAssetId, setDetailAssetId] = useState<string | null>(null);
   const [uploadErrors, setUploadErrors] = useState<{ originalName: string; reason: string }[]>([]);
   const [selectError, setSelectError] = useState<string | null>(null);
+  const [moveError, setMoveError] = useState<string | null>(null);
   const [newFolderName, setNewFolderName] = useState("");
+  const [isRootDragOver, setIsRootDragOver] = useState(false);
 
   const filters = { page, pageSize: PAGE_SIZE, folderId, search: search || undefined, type, tagId };
   const { data, isLoading } = useQuery({ queryKey: ["admin-media", filters], queryFn: () => fetchMediaAssets(filters) });
@@ -83,6 +87,16 @@ export function MediaAssetBrowser({ mode, onSelect }: MediaAssetBrowserProps) {
     queryClient.invalidateQueries({ queryKey: ["admin-media-folders"] });
   }
 
+  async function handleDropAsset(assetId: string, targetFolderId: string | null) {
+    setMoveError(null);
+    try {
+      await updateMediaAsset(assetId, { folderId: targetFolderId });
+      invalidate();
+    } catch {
+      setMoveError("Could not move that asset. Try again.");
+    }
+  }
+
   async function handleAssetClick(asset: MediaAsset) {
     if (mode === "manage") {
       setDetailAssetId(asset.id);
@@ -105,10 +119,45 @@ export function MediaAssetBrowser({ mode, onSelect }: MediaAssetBrowserProps) {
   return (
     <div className="flex gap-4">
       <aside className="w-56 shrink-0">
-        <Button type="button" variant={folderId === undefined ? "secondary" : "ghost"} size="sm" className="w-full justify-start" onClick={() => setFolderId(undefined)}>
+        <Button
+          type="button"
+          variant={folderId === undefined ? "secondary" : "ghost"}
+          size="sm"
+          className={cn("w-full justify-start", isRootDragOver && "ring-2 ring-ring")}
+          title={mode === "manage" ? "Drop an asset here to remove it from its folder" : undefined}
+          onClick={() => setFolderId(undefined)}
+          onDragOver={
+            mode === "manage"
+              ? (event) => {
+                  if (!event.dataTransfer.types.includes(ASSET_DRAG_MIME)) return;
+                  event.preventDefault();
+                  event.dataTransfer.dropEffect = "move";
+                  setIsRootDragOver(true);
+                }
+              : undefined
+          }
+          onDragLeave={mode === "manage" ? () => setIsRootDragOver(false) : undefined}
+          onDrop={
+            mode === "manage"
+              ? (event) => {
+                  event.preventDefault();
+                  setIsRootDragOver(false);
+                  const assetId = event.dataTransfer.getData(ASSET_DRAG_MIME);
+                  if (assetId) handleDropAsset(assetId, null);
+                }
+              : undefined
+          }
+        >
           All folders
         </Button>
-        {folderTree && <FolderTree nodes={folderTree} selectedFolderId={folderId} onSelect={setFolderId} />}
+        {folderTree && (
+          <FolderTree
+            nodes={folderTree}
+            selectedFolderId={folderId}
+            onSelect={setFolderId}
+            onDropAsset={mode === "manage" ? handleDropAsset : undefined}
+          />
+        )}
         {mode === "manage" && (
           <div className="mt-3 flex gap-1">
             <Input placeholder="New folder" value={newFolderName} onChange={(event) => setNewFolderName(event.target.value)} className="h-7 text-xs" />
@@ -188,6 +237,10 @@ export function MediaAssetBrowser({ mode, onSelect }: MediaAssetBrowserProps) {
           </ul>
         )}
         {selectError && <p className="mt-2 text-small text-destructive">{selectError}</p>}
+        {moveError && <p className="mt-2 text-small text-destructive">{moveError}</p>}
+        {mode === "manage" && items.length > 0 && (
+          <p className="mt-2 text-caption text-charcoal/60">Drag an image onto a folder in the sidebar to file it there.</p>
+        )}
 
         <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-6">
           {isLoading ? (
@@ -199,6 +252,15 @@ export function MediaAssetBrowser({ mode, onSelect }: MediaAssetBrowserProps) {
               <button
                 key={asset.id}
                 type="button"
+                draggable={mode === "manage"}
+                onDragStart={
+                  mode === "manage"
+                    ? (event) => {
+                        event.dataTransfer.setData(ASSET_DRAG_MIME, asset.id);
+                        event.dataTransfer.effectAllowed = "move";
+                      }
+                    : undefined
+                }
                 onClick={() => handleAssetClick(asset)}
                 className="flex flex-col gap-1 rounded-lg border border-input p-1.5 text-left hover:border-ring"
               >
