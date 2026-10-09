@@ -243,3 +243,33 @@ export async function previewNotificationTemplate(body: string, sampleVariables:
   const data = await response.json();
   return data.rendered;
 }
+
+export interface InstagramIntegrationStatus {
+  connected: boolean;
+  businessAccountId: string | null;
+  tokenExpiresAt: string | null;
+  lastSyncedAt: string | null;
+  lastSyncError: string | null;
+}
+
+export async function fetchInstagramIntegrationStatus(): Promise<InstagramIntegrationStatus> {
+  const response = await fetch("/api/admin/settings/integrations/instagram");
+  if (!response.ok) throw new Error(`Failed to load Instagram integration status (${response.status})`);
+  return response.json();
+}
+
+export async function connectInstagram(accessToken: string): Promise<{ connectedPageName: string }> {
+  const response = await fetch("/api/admin/settings/integrations/instagram", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ accessToken }) });
+  await assertOkWithServerMessage(response, "Failed to connect Instagram");
+  return response.json();
+}
+
+export async function disconnectInstagram(): Promise<void> {
+  const response = await fetch("/api/admin/settings/integrations/instagram", { method: "DELETE" });
+  await assertOkWithServerMessage(response, "Failed to disconnect Instagram");
+}
+
+export async function syncInstagramNow(): Promise<void> {
+  const response = await fetch("/api/admin/settings/integrations/instagram/sync", { method: "POST" });
+  await assertOkWithServerMessage(response, "Failed to sync Instagram");
+}

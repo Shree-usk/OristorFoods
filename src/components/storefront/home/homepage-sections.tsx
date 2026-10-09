@@ -10,6 +10,8 @@ import { InstagramGallery } from "@/components/storefront/home/instagram-gallery
 import { ProductCollections } from "@/components/storefront/home/product-collections";
 import { RewardsClubTeaser } from "@/components/storefront/home/rewards-club-teaser";
 import { WhyChooseOristor } from "@/components/storefront/home/why-choose-oristor";
+import { getRecentPostsForStorefront } from "@/services/instagram.service";
+import type { InstagramPostData } from "@/types/home";
 import {
   customerReviews,
   exportSolutions,
@@ -30,8 +32,22 @@ import {
  * override are admin-editable; see docs/architecture-decisions.md for the
  * full list of what's deferred).
  */
-export function HomepageSections({ layout }: { layout: HomepageLayoutDetail }) {
+export async function HomepageSections({ layout }: { layout: HomepageLayoutDetail }) {
   const visibleSections = layout.sections.filter((section) => section.visible);
+
+  const hasInstagramSection = visibleSections.some((section) => section.type === "InstagramGallery");
+  const syncedInstagramPosts = hasInstagramSection ? await getRecentPostsForStorefront(12) : [];
+  // Falls back to the fixture gallery until an admin connects a real
+  // Instagram account (Settings > Integrations) — never an empty section.
+  const resolvedInstagramPosts: InstagramPostData[] =
+    syncedInstagramPosts.length > 0
+      ? syncedInstagramPosts.map((post) => ({
+          id: post.id,
+          imageSrc: post.imageUrl,
+          imageAlt: post.caption ? post.caption.slice(0, 120) : "Oristor Instagram post",
+          href: post.permalink,
+        }))
+      : instagramPosts;
 
   return (
     <>
@@ -102,7 +118,7 @@ export function HomepageSections({ layout }: { layout: HomepageLayoutDetail }) {
               />
             );
           case "InstagramGallery":
-            return <InstagramGallery key={section.id} posts={instagramPosts} titleOverride={section.titleOverride} descriptionOverride={section.descriptionOverride} />;
+            return <InstagramGallery key={section.id} posts={resolvedInstagramPosts} titleOverride={section.titleOverride} descriptionOverride={section.descriptionOverride} />;
           default:
             return null;
         }
