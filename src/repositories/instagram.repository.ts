@@ -8,6 +8,7 @@ export function getIntegrationSetting() {
 
 export interface InstagramIntegrationSettingInput {
   businessAccountId?: string | null;
+  username?: string | null;
   accessToken?: string | null;
   tokenExpiresAt?: Date | null;
   lastSyncedAt?: Date | null;

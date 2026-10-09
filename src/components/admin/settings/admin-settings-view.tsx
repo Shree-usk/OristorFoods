@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -22,12 +23,18 @@ import { TaxSettingsPanel } from "./tax-settings-panel";
  * full editing surface at /admin/rewards-referrals; duplicating it
  * here would contradict this story's own AC wording.
  */
+const TAB_VALUES = ["company", "currencies", "languages", "taxes", "shipping", "payment-methods", "notifications", "rewards-referrals", "feature-flags", "policy-documents", "integrations"];
+
 export function AdminSettingsView() {
+  const searchParams = useSearchParams();
+  const requestedTab = searchParams.get("tab");
+  const initialTab = requestedTab && TAB_VALUES.includes(requestedTab) ? requestedTab : "company";
+
   return (
     <div>
       <h1 className="text-h2 font-heading text-charcoal">System Settings</h1>
 
-      <Tabs defaultValue="company" className="mt-6">
+      <Tabs defaultValue={initialTab} className="mt-6">
         <TabsList className="flex-wrap">
           <TabsTrigger value="company">Company</TabsTrigger>
           <TabsTrigger value="currencies">Currencies</TabsTrigger>
