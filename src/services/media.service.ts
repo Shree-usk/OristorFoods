@@ -22,7 +22,8 @@ import type { StorageProvider } from "@/services/storage/storage-provider.interf
  * made. "local" is the only valid `MEDIA_STORAGE_PROVIDER` value until
  * then, mirroring payment.service.ts::getActiveProvider() exactly.
  */
-function getActiveStorageProvider(): StorageProvider {
+/** Exported for instagram.service.ts, which stores downloaded media through the same configured provider rather than hardcoding LocalDiskStorageProvider a second time. */
+export function getActiveStorageProvider(): StorageProvider {
   const configured = process.env.MEDIA_STORAGE_PROVIDER ?? "local";
   if (configured === "local") return new LocalDiskStorageProvider();
   throw new Error(`Unsupported MEDIA_STORAGE_PROVIDER "${configured}" — only "local" exists until the storage decision (blueprint Section 10) is made.`);

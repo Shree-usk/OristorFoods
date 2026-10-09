@@ -3179,6 +3179,44 @@ model InventorySetting {
   updatedAt         DateTime @updatedAt
 }
 
+// --- Instagram integration (Settings > Integrations) ---
+// Backs the storefront's "Follow @oristorfoods" homepage section. A Page
+// Access Token (resolved server-side from the admin's one-time short-lived
+// token paste — see instagram.service.ts) is long-lived but not eternal,
+// so tokenExpiresAt/lastSyncedAt/lastSyncError exist for the admin UI to
+// show real connection health rather than a feed that silently goes stale.
+model InstagramIntegrationSetting {
+  id                String    @id @default("global")
+  // Resolved from the Facebook Page linked to the connected Instagram
+  // Business account — never typed in by hand.
+  businessAccountId String?
+  // Page Access Token. Never returned to the client — every read path
+  // masks it (see instagram.service.ts::getIntegrationStatus).
+  accessToken       String?
+  tokenExpiresAt    DateTime?
+  lastSyncedAt      DateTime?
+  lastSyncError     String?
+  updatedAt         DateTime  @updatedAt
+}
+
+// Cached copy of the connected account's recent media. Images are
+// downloaded into local media storage at sync time (LocalDiskStorageProvider,
+// same as MediaAsset) rather than linking Instagram's own CDN url directly —
+// that url is a temporary signed link that rotates/expires, which would
+// silently 404 on the homepage between syncs otherwise.
+model InstagramPost {
+  // Instagram's own media id — stable across re-syncs, so syncing upserts
+  // rather than duplicates.
+  id        String   @id
+  imageUrl  String
+  permalink String
+  caption   String?  @db.VarChar(2200)
+  postedAt  DateTime
+  syncedAt  DateTime @default(now())
+
+  @@index([postedAt])
+}
+
 // --- Export Portal (STORY-058) ---
 
 enum ExportEnquiryStatus {

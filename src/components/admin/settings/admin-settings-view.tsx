@@ -7,6 +7,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { CompanySettingsPanel } from "./company-settings-panel";
 import { CurrencySettingsPanel } from "./currency-settings-panel";
 import { FeatureFlagsPanel } from "./feature-flags-panel";
+import { IntegrationsSettingsPanel } from "./integrations-settings-panel";
 import { LocaleSettingsPanel } from "./locale-settings-panel";
 import { NotificationTemplatesPanel } from "./notification-templates-panel";
 import { PaymentMethodsPanel } from "./payment-methods-panel";
@@ -38,6 +39,7 @@ export function AdminSettingsView() {
           <TabsTrigger value="rewards-referrals">Rewards &amp; Referrals</TabsTrigger>
           <TabsTrigger value="feature-flags">Feature Flags</TabsTrigger>
           <TabsTrigger value="policy-documents">Policy Content</TabsTrigger>
+          <TabsTrigger value="integrations">Integrations</TabsTrigger>
         </TabsList>
 
         <TabsContent value="company" className="mt-4">
@@ -77,6 +79,9 @@ export function AdminSettingsView() {
         </TabsContent>
         <TabsContent value="policy-documents" className="mt-4">
           <PolicyDocumentsPanel />
+        </TabsContent>
+        <TabsContent value="integrations" className="mt-4">
+          <IntegrationsSettingsPanel />
         </TabsContent>
       </Tabs>
     </div>

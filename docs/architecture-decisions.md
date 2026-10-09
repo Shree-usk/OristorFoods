@@ -8310,3 +8310,89 @@ script workaround STORY-072 used for `ContactEnquiries` (write it, run
 it once, delete it) — `seedAdmin()` is still not idempotent against an
 already-seeded database, a pre-existing limitation unrelated to this
 story.
+
+## 2026-10-09 — Live Instagram homepage feed (ad hoc, no story number)
+
+The storefront's "Follow @oristorfoods" homepage section
+(`InstagramGallery`) was fully hardcoded — a fixture array of local
+product photos, not the real account — with no admin UI to change the
+images at all (only its title/subtitle were admin-editable via the
+Homepage Visual Builder). Replaced with a real Instagram Graph API
+integration, admin-connectable from Settings > Integrations, no
+developer involvement required after initial setup.
+
+**New models**: `InstagramIntegrationSetting` (singleton, `id: "global"`
+— same pattern as `CompanySetting` etc.) holds the connection; `InstagramPost`
+caches the synced media. Gated behind the existing `SystemSettings`
+module (View/Edit) rather than a new `AdminModule` enum value — this is
+one settings panel, not a standalone admin section.
+
+**Why images are downloaded, not linked**: Instagram Graph API's
+`media_url` is a temporary, signed CDN link that rotates/expires. Linking
+it directly would silently 404 between syncs. Each synced image is
+instead downloaded and stored through the same `StorageProvider`
+abstraction `MediaAsset` uses (`media.service.ts::getActiveStorageProvider`,
+now exported for this reason) — but as plain files, not `MediaAsset` rows,
+since these are system-synced cache entries an admin shouldn't see
+cluttering their actual Media Library grid/folders/tags.
+
+**Connect flow**: the admin pastes a short-lived **User** access token
+(from Graph API Explorer). The server exchanges it for a long-lived User
+token (`fb_exchange_token`, needs `META_APP_ID`/`META_APP_SECRET` env
+vars — the admin's own Meta app, never created on their behalf), resolves
+the Facebook Page with a linked Instagram Business account via
+`/me/accounts`, and stores that page's Page Access Token — which is what
+actually calls the Media endpoint. `tokenExpiresAt` on the stored token is
+informational only: Page Access Tokens derived this way are long-lived in
+practice with no documented hard expiry, unlike the short-lived token
+exchanged at the start of the flow.
+
+**Sync**: `instagram.service.ts::performSync` fetches the latest 12 media
+items, downloads each independently (one broken/expired image is skipped,
+not fatal — same tolerance `media.service.ts::uploadAssets` gives a batch
+upload), and replaces the full `InstagramPost` cache in one transaction.
+`instagramRepository.replaceAllPosts` deliberately no-ops on an empty
+result rather than pruning everything — a transient empty API response
+must never wipe an otherwise-healthy gallery. A manual "Sync now" and a
+`/api/cron/instagram-sync` route (bearer-secret-protected,
+`INSTAGRAM_SYNC_CRON_SECRET`, timing-safe compared) both call the same
+internal sync — the cron route exists for a systemd timer on the VPS
+(same pattern as the daily DB backup job; no in-app cron/job-runner
+exists), not yet wired up there as of this entry.
+
+**Homepage wiring**: `HomepageSections` is now an `async` Server
+Component — it awaits `instagram.service.ts::getRecentPostsForStorefront`
+only when a visible `InstagramGallery` section exists, and falls back to
+the original fixture array whenever nothing has synced yet (never an
+empty section, same zero-downtime-cutover pattern STORY-052/072 used for
+nav/footer and Contact page content).
+
+**New local-dev gotcha found while generating this story's migration
+file**: this repo's `npx prisma dev` (Prisma 7.8's "Prisma Postgres
+local", not classic PGlite-in-process) does **not** actually go empty
+after deleting `%LOCALAPPDATA%\prisma-dev-nodejs\Data` and restarting —
+on next boot it auto-restores a full schema snapshot (confirmed: 146
+tables, all existing enum types) from some other persisted location this
+session never located, while genuinely dropping all row data. This broke
+the documented "freshly restarted server" migration-generation recipe
+(`RESOLVED (2026-07-15)` entry above) in a new way: the restored snapshot
+reflected an *older* point in schema history than the current
+`schema.prisma` (missing this story's own new tables), so the first
+`migrate dev` call failed with `P3018`/`42710` ("type already exists")
+replaying an old migration against that stale-but-nonempty snapshot —
+not the previously-documented shadow-DB replay bug, a different failure
+mode of the same "PGlite-family tooling doesn't behave like real
+Postgres" class. **Workaround used**: abandon `migrate dev` entirely for
+this case; instead generate the delta SQL directly with
+`prisma migrate diff --from-migrations prisma/migrations --to-schema
+prisma/schema.prisma --script` (needs `datasource.shadowDatabaseUrl` set
+via a throwaway `prisma.config.ts` passed with `--config`, since the
+committed config doesn't set one), hand-write the resulting
+`migration.sql` into a new timestamped folder (dropping the same trgm
+`DROP INDEX` false positives the original catch-up migration omitted),
+then `prisma migrate resolve --applied <name>` for it *and* every
+prior migration folder still showing as pending (the restored snapshot's
+`_prisma_migrations` table was empty, even though its schema wasn't),
+followed by `prisma db push` to actually materialize the tables the
+stale snapshot was missing, and a full reseed. CI/production are
+unaffected (real Postgres, no PGlite/Prisma-Postgres-local involved).
