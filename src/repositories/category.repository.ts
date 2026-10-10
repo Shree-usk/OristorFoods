@@ -5,6 +5,16 @@ export function createCategory(data: Prisma.CategoryCreateInput) {
   return prisma.category.create({ data });
 }
 
+export function updateCategory(id: string, data: Prisma.CategoryUpdateInput) {
+  return prisma.category.update({ where: { id }, data });
+}
+
+/** Next free sortOrder among root categories (STORY-pattern matches system-settings.repository.ts::nextPaymentMethodSortOrder) — new categories land at the end of the admin's list by default. */
+export async function nextRootSortOrder(): Promise<number> {
+  const last = await prisma.category.findFirst({ where: { parentId: null }, orderBy: { sortOrder: "desc" } });
+  return (last?.sortOrder ?? -1) + 1;
+}
+
 export function findCategoryBySlug(slug: string) {
   return prisma.category.findUnique({ where: { slug } });
 }
@@ -29,6 +39,15 @@ export function listChildCategories(parentId: string) {
 
 export function listAllCategories() {
   return prisma.category.findMany({ orderBy: { sortOrder: "asc" } });
+}
+
+/** Homepage "Shop by Category" — only categories an admin has both activated and given an image, so an incomplete draft category never appears there. */
+export function listFeaturedCategories(limit: number) {
+  return prisma.category.findMany({
+    where: { parentId: null, status: "Active", image: { not: null } },
+    orderBy: { sortOrder: "asc" },
+    take: limit,
+  });
 }
 
 export interface CategoryTreeNode extends Category {

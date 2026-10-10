@@ -8507,3 +8507,58 @@ identical `.url()`-only shape, for a customer's own profile picture — not
 reported as broken and not investigated further here (different flow,
 different upload path), but worth checking if a similar report comes in
 for `/account`.
+
+## 2026-10-10 — New admin module: Categories, and the homepage "Shop by Category" cutover
+
+Same pattern this session already hit twice (Instagram gallery, Customer
+Reviews): the homepage's "Shop by Category" section rendered 6 entirely
+fabricated categories from `home-fixtures.ts`'s `featuredCategories` —
+names and images that don't correspond to anything real. The `Category`
+Prisma model already existed with everything needed (`name`, `slug`,
+`image`, `sortOrder`, `status`, `parentId`/`children` for a 2-level
+hierarchy, SEO fields) and was already consumed as read-only reference
+data by the Product admin form's category checkboxes — but **no admin UI
+existed to create, edit, or set an image for one**. The only category
+that existed (`Ready to Eat Pastes`) was created via a one-off script
+earlier in this engagement, same as how Recipe Categories/Dietary Tags
+and Product Brands have all been handled so far — all four have this
+identical gap.
+
+**Built**: a full admin module at `/admin/categories` (list as an
+indented 2-level table + a shared create/edit `Dialog`, name/slug/
+description/image via the existing `AssetPickerDialog`/parent/sortOrder/
+status/SEO fields) — `category.repository.ts` (extended, not replaced —
+`createCategory`/`findCategoryBySlug`/`listCategoryAndDescendantIds`
+already existed and are reused directly), `category.service.ts`
+(`createCategoryAdmin`/`updateCategoryAdmin`, gated on the existing
+`Products` module rather than a new `AdminModule` enum value — categories
+are product reference data, same reasoning Brands would get if it got the
+same treatment), `category.errors.ts`, and the API routes.
+
+**Reused, not duplicated**: the `mediaUrlSchema` built for the Product
+Media bug fix above was promoted out of `product-admin.schema.ts` into
+its own `src/validation/media-url.schema.ts` (plus a new
+`optionalMediaUrlSchema` variant for a nullable field like a category
+image) so Category's image/ogImage fields validate identically —
+Media-Library-sourced `/media-files/...` paths accepted, not just
+scheme-qualified URLs.
+
+**Parent-cycle guard**: `category.service.ts::assertValidParent` rejects
+setting a category's parent to itself or to one of its own descendants,
+using the tree-walk `listCategoryAndDescendantIds` already written for
+the storefront (same function, two call sites, no duplication).
+
+**Homepage cutover** follows the Instagram precedent exactly (fixture
+fallback, not an empty-section cutover like Reviews got) —
+`getFeaturedCategoriesForStorefront` returns only `Active` categories
+with a non-null `image`, and `HomepageSections`' `FeaturedCategories` case
+falls back to the fixture array until at least one real category
+qualifies. Deliberately *not* the Reviews-style "show nothing" treatment:
+a placeholder-but-real-looking category photo isn't a trust/fabrication
+issue the way an invented customer quote is.
+
+**Not built (separate, larger, pre-existing gap, out of scope here)**: no
+sidebar/navigation exists anywhere in this admin console at all — every
+admin page, this one included, is reached by a direct URL only. The root
+`(admin)/layout.tsx` explicitly defers this ("STORY-039's scope (Admin
+Dashboard), not this story's").
