@@ -7,8 +7,33 @@ const mediaRoleEnum = z.enum(["Gallery", "Lifestyle", "Video"]);
 const productStatusEnum = z.enum(["Draft", "Published", "Archived"]);
 const slugRegex = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
+/**
+ * Accepts either an absolute URL (typed in directly) or a root-relative
+ * same-origin path. The latter is required: every asset selected via the
+ * Media Library picker is one — LocalDiskStorageProvider returns
+ * `/media-files/<filename>`, never a scheme-qualified URL (see
+ * local-disk-storage.provider.ts). Plain `.url()` rejects that path, which
+ * silently failed every save of a Media-Library-sourced image/video until
+ * this fix — the form had no inline error for these fields either (see
+ * admin-product-form.tsx's error-banner addition, same commit), so a
+ * rejected save looked identical to a successful no-op one.
+ */
+const mediaUrlSchema = z
+  .string()
+  .trim()
+  .min(1, "URL is required.")
+  .refine((value) => {
+    if (value.startsWith("/")) return true;
+    try {
+      new URL(value);
+      return true;
+    } catch {
+      return false;
+    }
+  }, "Enter a valid URL, or pick one from the Media Library.");
+
 const imageSchema = z.object({
-  url: z.string().trim().min(1, "Image URL is required.").url("Enter a valid URL."),
+  url: mediaUrlSchema,
   altText: z.string().trim().max(200).optional(),
   isPrimary: z.boolean().optional(),
   sortOrder: z.number().int().min(0).optional(),
@@ -16,7 +41,7 @@ const imageSchema = z.object({
 });
 
 const videoSchema = z.object({
-  url: z.string().trim().min(1, "Video URL is required.").url("Enter a valid URL."),
+  url: mediaUrlSchema,
   altText: z.string().trim().max(200).optional(),
   isPrimary: z.boolean().optional(),
   sortOrder: z.number().int().min(0).optional(),

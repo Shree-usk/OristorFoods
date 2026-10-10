@@ -36,6 +36,47 @@ const NEXT_STATUSES: Record<string, string[]> = {
 
 const PRODUCT_TYPES = ["Standard", "Bundle", "GiftPack", "Seasonal", "LimitedEdition"] as const;
 
+const TAB_ORDER = ["general", "nutrition", "media", "rewards"] as const;
+const TAB_LABELS: Record<(typeof TAB_ORDER)[number], string> = {
+  general: "General",
+  nutrition: "Nutrition & Ingredients",
+  media: "Media",
+  rewards: "Rewards & Stock",
+};
+/**
+ * Every top-level productAdminSchema key that has a UI field, mapped to the
+ * tab it lives on. Without this, a validation failure on a field whose tab
+ * isn't the active one is completely invisible — handleSubmit's onValid
+ * callback is simply never called, with no error, no toast, nothing (the
+ * exact bug reported against the Media tab's image URLs: Save silently did
+ * nothing). Pricing and SEO aren't here because they're separate panels
+ * with their own save/validation, not part of this form's schema.
+ */
+const TAB_BY_FIELD: Record<string, (typeof TAB_ORDER)[number]> = {
+  name: "general",
+  slug: "general",
+  sku: "general",
+  barcode: "general",
+  shortDescription: "general",
+  story: "general",
+  productType: "general",
+  brandId: "general",
+  categoryIds: "general",
+  collectionIds: "general",
+  nutrition: "nutrition",
+  ingredients: "nutrition",
+  allergenIds: "nutrition",
+  certificationIds: "nutrition",
+  benefits: "nutrition",
+  servingSuggestions: "nutrition",
+  images: "media",
+  videos: "media",
+  rewardPoints: "rewards",
+  inStock: "rewards",
+  stockQuantity: "rewards",
+  weightGrams: "rewards",
+};
+
 const EMPTY_VALUES: ProductAdminFormInput = {
   name: "",
   slug: "",
@@ -185,20 +226,31 @@ export function AdminProductForm({ productId }: { productId?: string }) {
   const allergenIds = watch("allergenIds") ?? [];
   const certificationIds = watch("certificationIds") ?? [];
 
-  const submit = handleSubmit(async (values) => {
-    setServerError(null);
-    try {
-      if (productId) {
-        await updateAdminProduct(productId, values);
-      } else {
-        const created = await createAdminProduct(values);
-        router.push(`/admin/products/${created.id}`);
-        return;
+  const submit = handleSubmit(
+    async (values) => {
+      setServerError(null);
+      try {
+        if (productId) {
+          await updateAdminProduct(productId, values);
+        } else {
+          const created = await createAdminProduct(values);
+          router.push(`/admin/products/${created.id}`);
+          return;
+        }
+      } catch {
+        setServerError("Something went wrong. Please try again.");
       }
-    } catch {
-      setServerError("Something went wrong. Please try again.");
-    }
-  });
+    },
+    (invalidFields) => {
+      // Jumps to the first tab with a problem — a validation error on a tab
+      // the admin isn't currently looking at is otherwise never seen (see
+      // TAB_BY_FIELD's comment).
+      const firstErrorTab = TAB_ORDER.find((tab) => Object.keys(invalidFields).some((key) => TAB_BY_FIELD[key] === tab));
+      if (firstErrorTab) setActiveTab(firstErrorTab);
+    },
+  );
+
+  const errorTabs = Array.from(new Set(Object.keys(errors).map((key) => TAB_BY_FIELD[key]).filter(Boolean))) as (typeof TAB_ORDER)[number][];
 
   function toggleId(current: string[], id: string): string[] {
     return current.includes(id) ? current.filter((existing) => existing !== id) : [...current, id];
@@ -245,6 +297,11 @@ export function AdminProductForm({ productId }: { productId?: string }) {
         </div>
       </div>
       {serverError && <p className="mt-2 text-small text-destructive">{serverError}</p>}
+      {errorTabs.length > 0 && (
+        <p className="mt-2 text-small text-destructive">
+          Save was blocked by a validation error — check: {errorTabs.map((tab) => TAB_LABELS[tab]).join(", ")}.
+        </p>
+      )}
       {productId && <DuplicateProductDialog productId={productId} open={duplicateOpen} onOpenChange={setDuplicateOpen} />}
 
       <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as string)} className="mt-6">
@@ -358,11 +415,13 @@ export function AdminProductForm({ productId }: { productId?: string }) {
               <div>
                 <Label htmlFor="nutrition-serving-size">Serving size</Label>
                 <Input id="nutrition-serving-size" {...register("nutrition.servingSize")} />
+                {errors.nutrition?.servingSize && <p className="mt-1 text-caption text-destructive">{errors.nutrition.servingSize.message}</p>}
               </div>
               {(["calories", "protein", "fat", "saturatedFat", "carbohydrates", "sugar", "fibre", "sodium"] as const).map((field) => (
                 <div key={field}>
                   <Label htmlFor={`nutrition-${field}`}>{field}</Label>
                   <Input id={`nutrition-${field}`} type="number" step="0.01" {...register(`nutrition.${field}`, { valueAsNumber: true })} />
+                  {errors.nutrition?.[field] && <p className="mt-1 text-caption text-destructive">{errors.nutrition[field]?.message}</p>}
                 </div>
               ))}
             </div>
@@ -434,20 +493,23 @@ export function AdminProductForm({ productId }: { productId?: string }) {
             </div>
             <div className="mt-2 flex flex-col gap-2">
               {images.fields.map((field, index) => (
-                <div key={field.id} className="flex items-center gap-2">
-                  <Input {...register(`images.${index}.url`)} placeholder="Image URL" className="flex-1" />
-                  <Input {...register(`images.${index}.altText`)} placeholder="Alt text" className="flex-1" />
-                  <Controller
-                    control={control}
-                    name={`images.${index}.isPrimary`}
-                    render={({ field }) => <CheckboxOption label="Primary" checked={field.value ?? false} onCheckedChange={field.onChange} />}
-                  />
-                  <Button type="button" size="sm" variant="outline" onClick={() => setPickerTarget({ kind: "image", index })}>
-                    Browse Library
-                  </Button>
-                  <Button type="button" size="sm" variant="ghost" onClick={() => images.remove(index)}>
-                    Remove
-                  </Button>
+                <div key={field.id}>
+                  <div className="flex items-center gap-2">
+                    <Input {...register(`images.${index}.url`)} placeholder="Image URL" className="flex-1" />
+                    <Input {...register(`images.${index}.altText`)} placeholder="Alt text" className="flex-1" />
+                    <Controller
+                      control={control}
+                      name={`images.${index}.isPrimary`}
+                      render={({ field }) => <CheckboxOption label="Primary" checked={field.value ?? false} onCheckedChange={field.onChange} />}
+                    />
+                    <Button type="button" size="sm" variant="outline" onClick={() => setPickerTarget({ kind: "image", index })}>
+                      Browse Library
+                    </Button>
+                    <Button type="button" size="sm" variant="ghost" onClick={() => images.remove(index)}>
+                      Remove
+                    </Button>
+                  </div>
+                  {errors.images?.[index]?.url && <p className="mt-1 text-caption text-destructive">{errors.images[index]?.url?.message}</p>}
                 </div>
               ))}
             </div>
@@ -461,15 +523,18 @@ export function AdminProductForm({ productId }: { productId?: string }) {
             </div>
             <div className="mt-2 flex flex-col gap-2">
               {videos.fields.map((field, index) => (
-                <div key={field.id} className="flex items-center gap-2">
-                  <Input {...register(`videos.${index}.url`)} placeholder="Video URL" className="flex-1" />
-                  <Input {...register(`videos.${index}.altText`)} placeholder="Alt text" className="flex-1" />
-                  <Button type="button" size="sm" variant="outline" onClick={() => setPickerTarget({ kind: "video", index })}>
-                    Browse Library
-                  </Button>
-                  <Button type="button" size="sm" variant="ghost" onClick={() => videos.remove(index)}>
-                    Remove
-                  </Button>
+                <div key={field.id}>
+                  <div className="flex items-center gap-2">
+                    <Input {...register(`videos.${index}.url`)} placeholder="Video URL" className="flex-1" />
+                    <Input {...register(`videos.${index}.altText`)} placeholder="Alt text" className="flex-1" />
+                    <Button type="button" size="sm" variant="outline" onClick={() => setPickerTarget({ kind: "video", index })}>
+                      Browse Library
+                    </Button>
+                    <Button type="button" size="sm" variant="ghost" onClick={() => videos.remove(index)}>
+                      Remove
+                    </Button>
+                  </div>
+                  {errors.videos?.[index]?.url && <p className="mt-1 text-caption text-destructive">{errors.videos[index]?.url?.message}</p>}
                 </div>
               ))}
             </div>
