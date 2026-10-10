@@ -10,8 +10,9 @@ import { InstagramGallery } from "@/components/storefront/home/instagram-gallery
 import { ProductCollections } from "@/components/storefront/home/product-collections";
 import { RewardsClubTeaser } from "@/components/storefront/home/rewards-club-teaser";
 import { WhyChooseOristor } from "@/components/storefront/home/why-choose-oristor";
+import { getFeaturedCategoriesForStorefront } from "@/services/category.service";
 import { getRecentPostsForStorefront } from "@/services/instagram.service";
-import type { InstagramPostData } from "@/types/home";
+import type { CategoryCardData, InstagramPostData } from "@/types/home";
 import {
   customerReviews,
   exportSolutions,
@@ -49,6 +50,22 @@ export async function HomepageSections({ layout }: { layout: HomepageLayoutDetai
         }))
       : instagramPosts;
 
+  const hasCategoriesSection = visibleSections.some((section) => section.type === "FeaturedCategories");
+  const realCategories = hasCategoriesSection ? await getFeaturedCategoriesForStorefront(6) : [];
+  // Falls back to the fixture gallery until an admin has activated and
+  // given an image to at least one real Category (Admin > Categories) —
+  // never an empty section.
+  const resolvedCategories: CategoryCardData[] =
+    realCategories.length > 0
+      ? realCategories.map((category) => ({
+          id: category.id,
+          name: category.name,
+          href: `/products/category/${category.slug}`,
+          imageSrc: category.image!,
+          imageAlt: category.name,
+        }))
+      : featuredCategories;
+
   return (
     <>
       {visibleSections.map((section) => {
@@ -85,7 +102,7 @@ export async function HomepageSections({ layout }: { layout: HomepageLayoutDetai
             );
           }
           case "FeaturedCategories":
-            return <FeaturedCategories key={section.id} categories={featuredCategories} titleOverride={section.titleOverride} />;
+            return <FeaturedCategories key={section.id} categories={resolvedCategories} titleOverride={section.titleOverride} />;
           case "WhyChooseOristor":
             return <WhyChooseOristor key={section.id} features={whyChooseFeatures} titleOverride={section.titleOverride} />;
           case "BestSellingProducts":
