@@ -8508,6 +8508,65 @@ reported as broken and not investigated further here (different flow,
 different upload path), but worth checking if a similar report comes in
 for `/account`.
 
+## 2026-10-10 — Five recipe-form bugs/gaps, reported together while an admin had unsaved work open
+
+1. **Recipe Category dropdown was empty and blocked every save** (Category
+   is required). Not a code bug — `RecipeCategory` had zero rows, same for
+   `DietaryTag`. Unblocked immediately by creating a real, sensible
+   starting set of each (7 categories, 6 dietary tags — see commit) via a
+   one-off script using `recipe.repository.ts`'s existing
+   `createRecipeCategory`/`createDietaryTag`, same pattern as the earlier
+   ad-hoc Product category fix. **No admin UI exists to manage either one**
+   — same gap as Product categories/brands had before their own ad-hoc
+   fix. A real "Manage recipe categories/dietary tags" screen is still an
+   open follow-up, not built here (time-boxed to unblocking the in-progress
+   save).
+2. **The Category select showed the raw database id instead of the
+   category name** once one was picked. This is the exact pattern flagged
+   in an earlier session's memory note (`select-value-needs-label-render-
+   prop.md`): this codebase's `Select` is Base UI, not Radix — `<SelectValue
+   />` with no children silently renders the raw stored value. Fixed with
+   the `<SelectValue>{(selected) => options.find(...)?.name ?? fallback}
+   </SelectValue>` render-prop pattern already used correctly elsewhere
+   (e.g. `admin-analytics-view.tsx`). **Found and fixed the same bug in the
+   Product form's Brand select while in there** — identical shape, not
+   separately reported yet but certain to hit the same way.
+3. **Steps tab's "Browse Library" button did nothing.** Real bug, not
+   "wired correctly" as a first-pass code read concluded — the
+   `AssetPickerDialog` for step images was physically placed inside the
+   **Media** tab's `TabsContent`, not the **Steps** tab's. Base UI's Tabs
+   unmounts inactive panels by default (no `keepMounted`), so clicking
+   "Browse Library" on the Steps tab set `stepPickerIndex` state correctly
+   but the dialog consuming that state wasn't mounted — nothing visibly
+   happened. Fixed by moving it into the Steps tab's own `TabsContent`,
+   right after the steps list.
+4. **No save confirmation anywhere in the admin console.** A real toast
+   system already exists (`src/lib/toast.ts`'s `toastManager`, `<Toaster
+   />` mounted at the root layout) and is used by several storefront
+   account forms, but no admin form had ever adopted it. Added
+   `toastManager.add({ title: "... saved" })` to both the recipe and
+   product forms' successful save paths.
+5. **Ingredient quantity couldn't accept a fraction** ("1/2") — the input
+   was `type="number"`, which doesn't accept `/` at the browser level
+   regardless of any schema change. `RecipeIngredient.quantity` is a
+   `Decimal(8,2)` column used for serving-count scaling elsewhere (see its
+   own schema.prisma comment), so the fix keeps that storage shape:
+   `src/lib/parse-quantity-input.ts`'s `parseQuantityInput` accepts a plain
+   decimal, a simple fraction, or a mixed number ("1 1/2") and parses it
+   down to a decimal via React Hook Form's `setValueAs`, before the
+   existing `z.number()` validation ever sees it — no schema change
+   needed. The input itself switched to `type="text" inputMode="decimal"`
+   so `/` is actually typeable.
+
+**Data-safety note**: the user had unsaved text in the open "New recipe"
+form while all of this was diagnosed and fixed. Fix #1 (seeding real
+categories) was confirmed *not* to require a page reload — the reference-
+data query has no `refetchOnWindowFocus: false` guard (unlike the
+`existingRecipe` query, which deliberately does, for the same
+don't-clobber-an-in-progress-edit reason) — so switching back to the
+already-open tab picked up the new categories without losing anything
+typed.
+
 ## 2026-10-10 — New admin module: Categories, and the homepage "Shop by Category" cutover
 
 Same pattern this session already hit twice (Instagram gallery, Customer

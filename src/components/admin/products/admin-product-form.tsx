@@ -26,6 +26,7 @@ import { AssetPickerDialog } from "@/components/admin/media/asset-picker-dialog"
 import { DuplicateProductDialog } from "@/components/admin/products/duplicate-product-dialog";
 import { ProductPricingPanel } from "@/components/admin/products/product-pricing-panel";
 import { SeoFieldsPanel } from "@/components/admin/seo/seo-fields-panel";
+import { toastManager } from "@/lib/toast";
 import { productAdminSchema, type ProductAdminFormInput } from "@/validation/product-admin.schema";
 
 const NEXT_STATUSES: Record<string, string[]> = {
@@ -232,8 +233,10 @@ export function AdminProductForm({ productId }: { productId?: string }) {
       try {
         if (productId) {
           await updateAdminProduct(productId, values);
+          toastManager.add({ title: "Product saved" });
         } else {
           const created = await createAdminProduct(values);
+          toastManager.add({ title: "Product saved" });
           router.push(`/admin/products/${created.id}`);
           return;
         }
@@ -371,7 +374,7 @@ export function AdminProductForm({ productId }: { productId?: string }) {
               render={({ field }) => (
                 <Select value={field.value ?? undefined} onValueChange={field.onChange}>
                   <SelectTrigger id="product-brand" className="w-full">
-                    <SelectValue placeholder="No brand" />
+                    <SelectValue>{(selected: string | null) => (referenceData?.brands ?? []).find((brand) => brand.id === selected)?.name ?? "No brand"}</SelectValue>
                   </SelectTrigger>
                   <SelectContent>
                     {(referenceData?.brands ?? []).map((brand) => (
@@ -482,7 +485,9 @@ export function AdminProductForm({ productId }: { productId?: string }) {
 
         <TabsContent value="media" className="mt-4 space-y-6">
           <p className="text-small text-charcoal/70">
-            Type a URL directly, or browse the Media Library for an existing asset.
+            Type a URL directly, or browse the Media Library for an existing asset. Product photos are shown in a square frame
+            without cropping — a roughly square image (e.g. 1200×1200px) fills the frame best; other shapes are shown in full with
+            some padding either side.
           </p>
           <div>
             <div className="flex items-center justify-between">
