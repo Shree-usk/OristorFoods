@@ -16,8 +16,10 @@ import {
 import {
   changeReviewStatus,
   editOwnPendingReview,
+  getFeaturedReviewsForStorefront,
   getMyReview,
   listPublishedReviews,
+  setFeatured,
   submitReview,
   withdrawOwnPendingReview,
 } from "@/services/review.service";
@@ -224,5 +226,28 @@ describe("listPublishedReviews", () => {
     const draft = await makeProduct("Draft");
 
     await expect(listPublishedReviews(draft.slug, defaultQuery)).rejects.toBeInstanceOf(ProductNotFoundError);
+  });
+});
+
+describe("getFeaturedReviewsForStorefront", () => {
+  it("returns [] rather than fabricated placeholder content when nothing has been featured yet", async () => {
+    const product = await makeProduct();
+    const review = await submitReview((await makeUser()).id, product.slug, input);
+    await publish(review.id);
+    // Published but never featured — still excluded.
+
+    expect(await getFeaturedReviewsForStorefront(6)).toEqual([]);
+  });
+
+  it("returns a real featured review in the homepage's public shape", async () => {
+    const product = await makeProduct();
+    const author = await makeUser("Kasun Perera");
+    const review = await submitReview(author.id, product.slug, input);
+    await publish(review.id);
+    await setFeatured(review.id, true);
+
+    const featured = await getFeaturedReviewsForStorefront(6);
+    expect(featured).toHaveLength(1);
+    expect(featured[0]).toMatchObject({ authorName: "Kasun Perera", rating: input.rating, body: input.body });
   });
 });
