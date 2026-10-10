@@ -127,7 +127,8 @@ export function useCart() {
   return {
     cart: query.data,
     isPending: query.isPending,
-    addItem: (productId: string, quantity = 1) => addItemMutation.mutate({ productId, quantity }),
+    addItem: (productId: string, quantity = 1, options?: { onSuccess?: () => void }) =>
+      addItemMutation.mutate({ productId, quantity }, options),
     updateQuantity: (itemId: string, quantity: number) => updateQuantityMutation.mutate({ itemId, quantity }),
     removeItem: (itemId: string) => removeItemMutation.mutate(itemId),
     isAddingItem: addItemMutation.isPending,

@@ -5,6 +5,9 @@ interface UiState {
   openMobileNav: () => void;
   closeMobileNav: () => void;
   toggleMobileNav: () => void;
+  isCartDrawerOpen: boolean;
+  openCartDrawer: () => void;
+  closeCartDrawer: () => void;
 }
 
 export const useUiStore = create<UiState>((set) => ({
@@ -12,4 +15,7 @@ export const useUiStore = create<UiState>((set) => ({
   openMobileNav: () => set({ isMobileNavOpen: true }),
   closeMobileNav: () => set({ isMobileNavOpen: false }),
   toggleMobileNav: () => set((state) => ({ isMobileNavOpen: !state.isMobileNavOpen })),
+  isCartDrawerOpen: false,
+  openCartDrawer: () => set({ isCartDrawerOpen: true }),
+  closeCartDrawer: () => set({ isCartDrawerOpen: false }),
 }));

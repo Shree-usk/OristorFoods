@@ -8674,3 +8674,49 @@ use. New `FeaturedProductsRail` is a plain Server Component (no
 reason. `duplicateProduct()` deliberately never copies `isFeatured` —
 same reasoning the function already applies to pricing: a duplicate
 shouldn't silently end up featured without a deliberate choice.
+
+## 2026-10-10 — PDP quick wins from a competitor comparison
+
+Benchmarked the PDP against a competitor product page and picked three
+"quick win" items — small additions reusing data/components that already
+exist, no schema changes, no new admin UI.
+
+**Star rating next to the title.** `product.reviewSummary` was already
+computed by `getProductDetail()` (used for `ProductJsonLd`'s
+`averageRating`/`reviewCount`) but never rendered near the title — only
+inside the full `ReviewsSection` further down the page. Reused the
+existing `StarRating`/`formatRating` components as-is; the rating link
+(`#reviews-heading`) jumps straight to `ReviewsSection`'s heading id,
+which already existed, so no new anchor was needed. Hidden entirely when
+`reviewCount` is 0 rather than showing an empty/zero state.
+
+**Quick facts strip.** A second, compact presentation of `product
+.benefits` (first 4 items, as chips) placed above the Add to Cart button
+— the existing full "Benefits" bullet list further down is unchanged.
+Deliberately not a new field: the competitor's page has a similar
+scannable strip, but Oristor already collects this via `benefits:
+String[]` on the admin Product form, so no schema/admin change was
+needed, just a second render of the same data for above-the-fold
+scanning.
+
+**Add-to-cart confirmation drawer.** `CartDrawer`
+(`src/components/storefront/cart/cart-drawer.tsx`) turned out to already
+exist, fully built (line items, `CartCrossSell`, `CouponInput`,
+`EmptyCart`) — but nothing in the app rendered it; the header cart icon
+linked straight to `/cart` instead. Rather than build a new confirmation
+modal, wired up the existing one:
+- `useUiStore` gained `isCartDrawerOpen`/`openCartDrawer`/
+  `closeCartDrawer`, mirroring its existing `isMobileNavOpen` shape.
+- `CartDrawerController` (new, client) reads that state and renders
+  `<CartDrawer>`; mounted once in `(storefront)/layout.tsx` so it's
+  available on every storefront page rather than per-PDP.
+- `useCart()`'s `addItem` now forwards an optional `{ onSuccess }` to
+  the underlying `useMutation().mutate()` call (TanStack Query supports
+  a per-call callback alongside the hook-level one) — `useAddToCart`
+  passes `openCartDrawer` as that callback, so the drawer opens only on
+  a *successful* add, not on every click, and failed adds keep surfacing
+  their error inline on the PDP as before.
+- Left the header cart badge linking to `/cart` as-is — wiring it to
+  open the same drawer on click is a reasonable follow-up but is out of
+  scope for this change and would need its own review (e.g. whether
+  that link is ever opened in a new tab/used for SEO).

@@ -14,9 +14,11 @@ import { ProductActions } from "@/components/storefront/product/product-actions"
 import { ProductGallery } from "@/components/storefront/product/product-gallery";
 import { JsonLdScript } from "@/components/storefront/product/json-ld-script";
 import { ProductJsonLd } from "@/components/storefront/product/product-json-ld";
+import { QuickFacts } from "@/components/storefront/product/quick-facts";
 import { RecentlyViewed, TrackRecentlyViewed } from "@/components/storefront/product/recently-viewed";
 import { RecommendationRail } from "@/components/storefront/recommendations/recommendation-rail";
 import { QuestionsSection } from "@/components/storefront/product/questions/questions-section";
+import { formatRating, StarRating } from "@/components/storefront/product/reviews/star-rating";
 import { ReviewsSection } from "@/components/storefront/product/reviews/reviews-section";
 import { ShareButtons } from "@/components/storefront/product/share-buttons";
 import { auth } from "@/lib/auth";
@@ -114,6 +116,15 @@ export default async function ProductDetailPage({ params }: ProductDetailPagePro
 
         <div>
           <h1 className="text-h1 font-heading text-charcoal">{product.name}</h1>
+          {product.reviewSummary && product.reviewSummary.reviewCount > 0 && (
+            <a href="#reviews-heading" className="mt-2 flex items-center gap-2 text-small text-charcoal/70 hover:text-charcoal">
+              <StarRating rating={product.reviewSummary.averageRating} />
+              <span>
+                {formatRating(product.reviewSummary.averageRating)} ({product.reviewSummary.reviewCount}{" "}
+                {product.reviewSummary.reviewCount === 1 ? "review" : "reviews"})
+              </span>
+            </a>
+          )}
           <div className="mt-2 flex items-center gap-2 font-number text-h3 text-charcoal">
             <span>
               {product.currency} {product.price.toLocaleString()}
@@ -130,6 +141,8 @@ export default async function ProductDetailPage({ params }: ProductDetailPagePro
           <p className="mt-1 text-small text-charcoal/70">
             {product.inStock ? "In stock" : "Currently out of stock"}
           </p>
+
+          <QuickFacts benefits={product.benefits} />
 
           <div className="mt-6">
             <ProductActions productId={product.id} inStock={product.inStock} />
