@@ -512,6 +512,10 @@ export function AdminRecipeForm({ recipeId }: { recipeId?: string }) {
                 Browse Library
               </Button>
             </div>
+            <p className="mt-1 text-caption text-charcoal/60">
+              Use a landscape photo of the finished dish, at least 1600×900px (16:9) — it fills a wide banner that crops to 4:3 on
+              mobile and 16:9 on desktop, so keep the main subject centered. A tall product-packaging photo will look cropped here.
+            </p>
           </div>
           <div>
             <Label htmlFor="recipe-hero-alt">Hero image alt text</Label>

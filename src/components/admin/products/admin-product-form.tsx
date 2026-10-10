@@ -485,7 +485,9 @@ export function AdminProductForm({ productId }: { productId?: string }) {
 
         <TabsContent value="media" className="mt-4 space-y-6">
           <p className="text-small text-charcoal/70">
-            Type a URL directly, or browse the Media Library for an existing asset.
+            Type a URL directly, or browse the Media Library for an existing asset. Product photos are shown in a square frame
+            without cropping — a roughly square image (e.g. 1200×1200px) fills the frame best; other shapes are shown in full with
+            some padding either side.
           </p>
           <div>
             <div className="flex items-center justify-between">
