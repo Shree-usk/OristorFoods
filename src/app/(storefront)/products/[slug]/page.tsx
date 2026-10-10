@@ -6,6 +6,8 @@ import { cache } from "react";
 import { Breadcrumbs } from "@/components/storefront/layout/breadcrumbs";
 import { Section } from "@/components/storefront/layout/section";
 import { BulletList } from "@/components/storefront/product/bullet-list";
+import { CertificationBadges } from "@/components/storefront/product/certification-badges";
+import { FeaturedProductsRail } from "@/components/storefront/product/featured-products-rail";
 import { IngredientsList } from "@/components/storefront/product/ingredients-list";
 import { NutritionTable } from "@/components/storefront/product/nutrition-table";
 import { ProductActions } from "@/components/storefront/product/product-actions";
@@ -21,7 +23,7 @@ import { auth } from "@/lib/auth";
 import { SITE_URL } from "@/lib/site-url";
 import { resolveCustomerGroupForUser } from "@/services/pricing.service";
 import { getProductDetail } from "@/services/product.service";
-import { getFrequentlyBoughtTogether, getSimilarProducts } from "@/services/recommendation.service";
+import { getFeaturedProducts, getFrequentlyBoughtTogether, getSimilarProducts } from "@/services/recommendation.service";
 
 // getProductDetail() runs the full PDP aggregation (price resolution, 3
 // extension-point summary calls, an ancestor-path walk, a best-effort
@@ -61,9 +63,10 @@ export default async function ProductDetailPage({ params }: ProductDetailPagePro
   if (!product) notFound();
 
   const pageUrl = `${SITE_URL}/products/${product.slug}`;
-  const [similarProducts, frequentlyBoughtTogether] = await Promise.all([
+  const [similarProducts, frequentlyBoughtTogether, featuredProducts] = await Promise.all([
     getSimilarProducts({ productId: product.id, categoryIds: product.categoryIds, customerGroup }),
     getFrequentlyBoughtTogether({ productId: product.id, customerGroup }),
+    getFeaturedProducts({ excludeProductId: product.id, customerGroup }),
   ]);
 
   return (
@@ -172,6 +175,8 @@ export default async function ProductDetailPage({ params }: ProductDetailPagePro
             </div>
           )}
 
+          <CertificationBadges allergens={product.allergens} certifications={product.certifications} />
+
           <div className="mt-6">
             <ShareButtons url={pageUrl} title={product.name} />
           </div>
@@ -209,6 +214,11 @@ export default async function ProductDetailPage({ params }: ProductDetailPagePro
       <div className="mt-12">
         <RecommendationRail title="You May Also Like" products={similarProducts} placement="Pdp" />
       </div>
+      {featuredProducts.length > 0 && (
+        <div className="mt-12">
+          <FeaturedProductsRail title="Featured Products" products={featuredProducts} />
+        </div>
+      )}
       <div className="mt-12">
         <RecentlyViewed excludeProductId={product.id} />
       </div>

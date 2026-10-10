@@ -143,6 +143,22 @@ export async function getFrequentlyBoughtTogether(params: { productId: string; c
   return resolveProductCards(associations.map((a) => a.targetProductId), params.customerGroup, new Set([params.productId]), limit);
 }
 
+/**
+ * Admin-curated, not algorithmic — the one function in this file that
+ * isn't driven by ProductAssociation/interaction data. Lives here anyway
+ * to reuse resolveProductCards' pricing/in-stock resolution rather than
+ * duplicating it in product.service.ts, which would otherwise create a
+ * circular import (this file already imports toProductListItem from
+ * product.service.ts). Never call trackInteraction for this placement —
+ * it isn't a recommendation, so it has no RecommendationPlacement value
+ * and shouldn't pollute the AI system's own analytics.
+ */
+export async function getFeaturedProducts(params: { excludeProductId: string; customerGroup?: CustomerGroup; limit?: number }): Promise<ProductListItem[]> {
+  const limit = params.limit ?? 8;
+  const ids = await productRepository.findFeaturedProductIds(params.excludeProductId, limit);
+  return resolveProductCards(ids, params.customerGroup, new Set([params.excludeProductId]), limit);
+}
+
 /** Cart cross-sell — Similar/FrequentlyBoughtTogether associations of everything already in the cart, excluding items already in the cart. */
 export async function getCartCrossSell(params: { productIds: string[]; customerGroup?: CustomerGroup; limit?: number }): Promise<ProductListItem[]> {
   const limit = params.limit ?? 6;

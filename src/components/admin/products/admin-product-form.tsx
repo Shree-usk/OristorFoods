@@ -61,6 +61,7 @@ const TAB_BY_FIELD: Record<string, (typeof TAB_ORDER)[number]> = {
   shortDescription: "general",
   story: "general",
   productType: "general",
+  isFeatured: "general",
   brandId: "general",
   categoryIds: "general",
   collectionIds: "general",
@@ -86,6 +87,7 @@ const EMPTY_VALUES: ProductAdminFormInput = {
   shortDescription: "",
   story: "",
   productType: "Standard",
+  isFeatured: false,
   brandId: undefined,
   categoryIds: [],
   collectionIds: [],
@@ -178,6 +180,7 @@ export function AdminProductForm({ productId }: { productId?: string }) {
       shortDescription: existingProduct.shortDescription ?? "",
       story: existingProduct.story ?? "",
       productType: existingProduct.productType,
+      isFeatured: existingProduct.isFeatured,
       brandId: existingProduct.brand?.id,
       categoryIds: existingProduct.categories.map((c: { id: string }) => c.id),
       collectionIds: existingProduct.collections.map((c: { id: string }) => c.id),
@@ -365,6 +368,20 @@ export function AdminProductForm({ productId }: { productId?: string }) {
                 </Select>
               )}
             />
+          </div>
+          <div className="pt-6">
+            <Controller
+              control={control}
+              name="isFeatured"
+              render={({ field }) => (
+                <CheckboxOption
+                  label="Featured product"
+                  checked={field.value ?? false}
+                  onCheckedChange={field.onChange}
+                />
+              )}
+            />
+            <p className="mt-1 text-caption text-charcoal/60">Shown in the &quot;Featured Products&quot; rail on other products&apos; pages.</p>
           </div>
           <div>
             <Label htmlFor="product-brand">Brand</Label>

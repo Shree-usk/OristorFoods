@@ -8621,3 +8621,56 @@ sidebar/navigation exists anywhere in this admin console at all — every
 admin page, this one included, is reached by a direct URL only. The root
 `(admin)/layout.tsx` explicitly defers this ("STORY-039's scope (Admin
 Dashboard), not this story's").
+
+## 2026-10-10 — Product page review: Certifications/Allergens admin + badges, Featured Products
+
+Three findings from one review pass of the storefront product page.
+
+**"Recipes Using This Product" — not a gap.** Fully wired end-to-end
+already: `RecipeIngredient.productId` → `recipe.service.ts::
+getRecipesByProductId` → registered as the `GetRecipeSummary` extension
+point in `instrumentation.ts` → `product.service.ts::getProductDetail`
+→ the PDP. The "coming soon" text is only the correct empty-state
+fallback when zero `RecipeIngredient` rows point at that product — an
+admin links one via the existing `RecipeIngredientProductPicker` in the
+recipe form's Ingredients tab. No code change.
+
+**Certifications/Allergens — same "zero rows, no admin UI" gap as
+Category/Brand/RecipeCategory/DietaryTag.** `Certification`/`Allergen`
+are simple flat reference tables (`createAllergen`/`createCertification`
+already existed in `product.repository.ts`, unused outside seed/tests) —
+picked via checkboxes on the Product form's Nutrition & Ingredients tab,
+which is why they looked "not functioning": nothing existed to check.
+Also confirmed: even with real data, **nothing on the PDP displayed
+them** — `getProductDetail()` only ever mapped `allergenNames`/
+`certificationNames` as plain `string[]` (still used as-is by
+`compare-view.tsx`'s text comparison table), with no icon/image.
+
+- New `/admin/certifications` (Allergens + Certifications, two flat
+  inline-editable tables — no `Dialog`, unlike Category, since neither
+  model has a hierarchy or enough fields to warrant one), gated on the
+  existing `Products` module.
+- `ProductDetail` gained **new** `allergens`/`certifications` fields
+  (`{name, icon}[]`/`{name, certificateImage}[]`) alongside the existing
+  name-only arrays, rather than reshaping those — `compare-view.tsx`
+  would've broken otherwise. `CertificationBadges` renders them on the
+  PDP (badge chips with the certificate image; allergen pills with an
+  icon), right after the Ingredients section.
+
+**New: admin-curated "Featured Products."** `Product.isFeatured`
+(migration `20261010160000_add_product_is_featured`) + a checkbox on the
+Product form's General tab. Deliberately **not** built into
+`RecommendationRail`/`recommendation.service.ts`'s tracking path —
+`RecommendationPlacement` (`Homepage`/`Pdp`/`Cart`) is specifically for
+the AI recommendation system's own impression/click analytics, and this
+isn't algorithmic output, so it has no placement value and must never
+log against one. `getFeaturedProducts()` *does* live inside
+`recommendation.service.ts` anyway, reusing its private
+`resolveProductCards` pricing/in-stock resolver — the alternative
+(`product.service.ts`) would create a circular import, since that file
+already exports `toProductListItem` for `recommendation.service.ts` to
+use. New `FeaturedProductsRail` is a plain Server Component (no
+`useEffect`/`IntersectionObserver` impression tracking) for the same
+reason. `duplicateProduct()` deliberately never copies `isFeatured` —
+same reasoning the function already applies to pricing: a duplicate
+shouldn't silently end up featured without a deliberate choice.

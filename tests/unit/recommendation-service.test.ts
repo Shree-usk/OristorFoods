@@ -8,6 +8,7 @@ import { createStandardPrice } from "@/repositories/pricing.repository";
 import { PermissionDeniedError } from "@/services/permission.errors";
 import {
   getCartCrossSell,
+  getFeaturedProducts,
   getFrequentlyBoughtTogether,
   getHomepageRecommendations,
   getSimilarProducts,
@@ -223,5 +224,35 @@ describe("recommendation.service — recomputeProductAssociations", () => {
   it("requires Products:Edit", async () => {
     const viewOnlyAdmin = await makeAdmin([{ module: "Products", action: "View" }]);
     await expect(recomputeProductAssociations(viewOnlyAdmin.id)).rejects.toBeInstanceOf(PermissionDeniedError);
+  });
+});
+
+describe("recommendation.service — getFeaturedProducts (admin-curated, not algorithmic)", () => {
+  it("only returns Published products with isFeatured set, excluding the given product", async () => {
+    const featured = await makeProduct();
+    await prisma.product.update({ where: { id: featured.id }, data: { isFeatured: true } });
+    const notFeatured = await makeProduct();
+    const current = await makeProduct();
+    await prisma.product.update({ where: { id: current.id }, data: { isFeatured: true } });
+
+    const result = await getFeaturedProducts({ excludeProductId: current.id });
+    const ids = result.map((item) => item.id);
+    expect(ids).toContain(featured.id);
+    expect(ids).not.toContain(notFeatured.id);
+    expect(ids).not.toContain(current.id);
+  });
+
+  it("excludes a Draft product even if isFeatured is set", async () => {
+    const draft = await createProduct({ sku: `${SKU_PREFIX}draft-${++sequence}`, slug: `reco-svc-draft-${sequence}`, name: "Draft Featured", status: "Draft" });
+    await prisma.product.update({ where: { id: draft.id }, data: { isFeatured: true } });
+
+    const result = await getFeaturedProducts({ excludeProductId: "nonexistent" });
+    expect(result.map((item) => item.id)).not.toContain(draft.id);
+  });
+
+  it("a non-featured product never appears in the result", async () => {
+    const notFeatured = await makeProduct();
+    const result = await getFeaturedProducts({ excludeProductId: "nonexistent" });
+    expect(result.map((item) => item.id)).not.toContain(notFeatured.id);
   });
 });

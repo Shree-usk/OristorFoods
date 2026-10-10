@@ -250,6 +250,11 @@ model Product {
   story              String?
   status             ProductStatus @default(Draft)
   productType        ProductType   @default(Standard)
+  // Admin-curated "Featured Products" rail on other products' PDPs —
+  // distinct from the algorithmic recommendation system (Similar/
+  // Frequently Bought Together), which lives entirely in
+  // recommendation.service.ts and never touches this flag.
+  isFeatured         Boolean       @default(false)
   publishedAt        DateTime?
   rewardPoints       Int           @default(0)
   inStock            Boolean       @default(true)

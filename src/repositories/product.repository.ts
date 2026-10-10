@@ -128,6 +128,14 @@ export function createAllergen(data: Prisma.AllergenCreateInput) {
   return prisma.allergen.create({ data });
 }
 
+export function updateAllergen(id: string, data: Prisma.AllergenUpdateInput) {
+  return prisma.allergen.update({ where: { id }, data });
+}
+
+export function findAllergenById(id: string) {
+  return prisma.allergen.findUnique({ where: { id } });
+}
+
 export function findAllergenByName(name: string) {
   return prisma.allergen.findUnique({ where: { name } });
 }
@@ -147,6 +155,14 @@ export function listProductAllergens(productId: string) {
 
 export function createCertification(data: Prisma.CertificationCreateInput) {
   return prisma.certification.create({ data });
+}
+
+export function updateCertification(id: string, data: Prisma.CertificationUpdateInput) {
+  return prisma.certification.update({ where: { id }, data });
+}
+
+export function findCertificationById(id: string) {
+  return prisma.certification.findUnique({ where: { id } });
 }
 
 export function attachCertification(productId: string, certificationId: string) {
@@ -241,6 +257,18 @@ export function findProductsByIdsWithFilters(
       images: { where: { isPrimary: true }, take: 1 },
     },
   });
+}
+
+/** Admin-curated "Featured Products" rail — see Product.isFeatured's schema comment. */
+export function findFeaturedProductIds(excludeProductId: string, limit: number) {
+  return prisma.product
+    .findMany({
+      where: { status: "Published", isFeatured: true, id: { not: excludeProductId } },
+      select: { id: true },
+      orderBy: { updatedAt: "desc" },
+      take: limit,
+    })
+    .then((rows) => rows.map((row) => row.id));
 }
 
 export function findProductsForCompareByIds(ids: string[]) {

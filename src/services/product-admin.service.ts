@@ -65,6 +65,7 @@ export interface ProductAdminInput {
   shortDescription?: string | null;
   story?: string | null;
   productType?: ProductType;
+  isFeatured?: boolean;
   brandId?: string | null;
   categoryIds: string[];
   collectionIds?: string[];
@@ -150,6 +151,7 @@ function scalarFields(input: ProductAdminInput) {
     shortDescription: input.shortDescription ?? null,
     story: input.story ?? null,
     productType: input.productType ?? "Standard",
+    isFeatured: input.isFeatured ?? false,
     benefits: input.benefits ?? [],
     servingSuggestions: input.servingSuggestions ?? [],
     rewardPoints: input.rewardPoints ?? 0,
@@ -272,6 +274,10 @@ export async function duplicateProduct(adminUserId: string, id: string, newSlug:
     shortDescription: source.shortDescription,
     story: source.story,
     productType: source.productType,
+    // Never copied, same reasoning as pricing below: an admin duplicating a
+    // product to create a variant shouldn't silently end up with two
+    // featured products without a deliberate choice to feature the copy.
+    isFeatured: false,
     benefits: source.benefits,
     servingSuggestions: source.servingSuggestions,
     rewardPoints: source.rewardPoints,
