@@ -8462,3 +8462,48 @@ touches Facebook Pages at all:
   functions in `instagram.service.ts`. Nothing about the sync/download/
   cache logic from the original entry changed — only how the connection
   itself is established.
+
+## 2026-10-10 — Product Media tab silently rejected every Media-Library image
+
+Reported as "added images, nothing happens after saving." Confirmed
+directly: the `ProductImage` table had zero rows for the product in
+question even after a save. Root cause, found by testing the exact
+reported URL against the schema: `product-admin.schema.ts`'s
+`imageSchema.url`/`videoSchema.url` required a scheme-qualified `.url()`,
+but `LocalDiskStorageProvider` (what every Media Library upload and the
+"Browse Library" picker both use — `AssetPickerDialog`'s `onSelect` calls
+`setValue(..., asset.url)` directly) always returns a root-relative
+`/media-files/<filename>` path. That path fails `.url()` outright, so
+**every** product image/video sourced from the Media Library — the
+documented, intended way to attach one — silently failed validation.
+
+Compounding it: `admin-product-form.tsx` only ever rendered
+`formState.errors` for 4 fields (`name`/`slug`/`sku`/`categoryIds`).
+React Hook Form's `handleSubmit(onValid)` simply never calls `onValid`
+when validation fails — no exception, no network request, nothing — so
+a rejected save and the admin's own `serverError` state (which only
+catches a thrown exception from the save API call) looked identical:
+the Save button just did nothing, with zero indication why. This was
+long-lived and high-impact — the previously-known `nutrition.servingSize`
+silent-failure gap (STORY-040 era) was one instance of this same
+class of bug, never generalized.
+
+**Fix**: `mediaUrlSchema` now accepts either an absolute URL or a
+root-relative (`/`-prefixed) path — the full set of shapes the form's own
+"type a URL directly, or browse the Media Library" help text promises.
+Separately, and more importantly for ruling out a *recurrence* of this
+bug class on some other field: `admin-product-form.tsx` now has a
+`TAB_BY_FIELD` map from every top-level schema key to the tab it lives
+on, a visible banner ("Save was blocked by a validation error — check:
+...") whenever `errors` is non-empty, and `handleSubmit`'s `onInvalid`
+callback auto-switches to the first tab with a problem. Inline error text
+was also added for Images/Videos/Nutrition specifically (the fields this
+incident actually touched) — the generic banner is the systemic
+safety net for every other field, not a replacement for pinpointing the
+exact row.
+
+**Checked but not changed**: `profile.schema.ts`'s `image` field has the
+identical `.url()`-only shape, for a customer's own profile picture — not
+reported as broken and not investigated further here (different flow,
+different upload path), but worth checking if a similar report comes in
+for `/account`.
