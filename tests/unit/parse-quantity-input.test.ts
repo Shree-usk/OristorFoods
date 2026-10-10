@@ -31,4 +31,17 @@ describe("parseQuantityInput", () => {
   it("falls through to Number() for anything else, including garbage input", () => {
     expect(parseQuantityInput("abc")).toBeNaN();
   });
+
+  it("passes through a number as-is instead of crashing on .trim()", () => {
+    // react-hook-form also runs setValueAs against the field's default
+    // value, not just typed input — admin-recipe-form.tsx seeds the
+    // ingredient quantity default as `Number(ingredient.quantity)`.
+    expect(parseQuantityInput(500)).toBe(500);
+    expect(parseQuantityInput(0.5)).toBe(0.5);
+  });
+
+  it("returns undefined for a NaN or undefined default value", () => {
+    expect(parseQuantityInput(NaN)).toBeUndefined();
+    expect(parseQuantityInput(undefined)).toBeUndefined();
+  });
 });
