@@ -50,6 +50,7 @@ export const productAdminSchema = z.object({
   shortDescription: z.string().trim().max(500).optional().nullable(),
   story: z.string().trim().max(5000).optional().nullable(),
   productType: productTypeEnum.optional(),
+  isFeatured: z.boolean().optional(),
   brandId: z.string().trim().min(1).optional().nullable(),
   categoryIds: z.array(z.string().min(1)).min(1, "Select at least one category."),
   collectionIds: z.array(z.string().min(1)).optional(),
