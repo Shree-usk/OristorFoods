@@ -206,6 +206,12 @@ export async function listPublishedReviews(productSlug: string, query: ReviewLis
 // PDP integration (STORY-011 extension point)
 // ---------------------------------------------------------------------------
 
+/** No permission gate — public storefront data, same as listPublishedReviews. Homepage's "What Our Customers Say" section; returns [] until an admin has featured at least one real review (never fabricated placeholder content). */
+export async function getFeaturedReviewsForStorefront(limit: number): Promise<PublicReview[]> {
+  const items = await reviewRepository.listFeaturedReviews(limit);
+  return items.map(toPublicReview);
+}
+
 export async function getReviewSummaryForProduct(productId: string): Promise<ReviewSummary | null> {
   const summary = await getRatingSummary(productId);
   if (!summary) return null;
