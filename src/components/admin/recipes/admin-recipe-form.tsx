@@ -33,6 +33,8 @@ import {
   submitRecipeForReview,
   updateAdminRecipe,
 } from "@/lib/api/admin-recipe-client";
+import { parseQuantityInput } from "@/lib/parse-quantity-input";
+import { toastManager } from "@/lib/toast";
 import { recipeAdminSchema, type RecipeAdminFormInput } from "@/validation/recipe-admin.schema";
 
 const DIFFICULTIES = ["Easy", "Medium", "Hard"] as const;
@@ -47,6 +49,7 @@ const VIDEO_PROVIDERS = ["Youtube", "Vimeo", "SelfHosted"] as const;
  * message on the wrong tab. setValueAs coerces blank to undefined instead.
  */
 const optionalNumber = { setValueAs: (value: string) => (value === "" ? undefined : Number(value)) };
+const optionalQuantity = { setValueAs: parseQuantityInput };
 
 const NEXT_ACTIONS: Record<string, { label: string; action: "submit" | "approve" | "reject" | "publish" | "archive" | "restore" }[]> = {
   Draft: [{ label: "Submit for Review", action: "submit" }],
@@ -186,8 +189,10 @@ export function AdminRecipeForm({ recipeId }: { recipeId?: string }) {
       if (recipeId) {
         await updateAdminRecipe(recipeId, values);
         queryClient.invalidateQueries({ queryKey: ["admin-recipe", recipeId] });
+        toastManager.add({ title: "Recipe saved" });
       } else {
         const created = await createAdminRecipe(values);
+        toastManager.add({ title: "Recipe saved" });
         router.push(`/admin/recipes/${created.id}`);
       }
     } catch (error) {
@@ -323,7 +328,7 @@ export function AdminRecipeForm({ recipeId }: { recipeId?: string }) {
               render={({ field }) => (
                 <Select value={field.value} onValueChange={field.onChange}>
                   <SelectTrigger id="recipe-category" className="w-full">
-                    <SelectValue placeholder="Select a category" />
+                    <SelectValue>{(selected: string | null) => (referenceData?.categories ?? []).find((category) => category.id === selected)?.name ?? "Select a category"}</SelectValue>
                   </SelectTrigger>
                   <SelectContent>
                     {(referenceData?.categories ?? []).map((category) => (
@@ -410,18 +415,23 @@ export function AdminRecipeForm({ recipeId }: { recipeId?: string }) {
           {errors.ingredients && <p className="mt-1 text-small text-destructive">{errors.ingredients.message as string}</p>}
           <div className="mt-2 flex flex-col gap-2">
             {ingredients.fields.map((field, index) => (
-              <div key={field.id} className="flex items-center gap-2">
-                <Input {...register(`ingredients.${index}.quantity`, optionalNumber)} placeholder="Qty" className="w-20" type="number" step="any" />
-                <Input {...register(`ingredients.${index}.unit`)} placeholder="Unit" className="w-24" />
-                <Input {...register(`ingredients.${index}.displayText`)} placeholder="Ingredient (e.g. red onion, finely chopped)" className="flex-1" />
-                <Controller
-                  control={control}
-                  name={`ingredients.${index}.productId`}
-                  render={({ field }) => <RecipeIngredientProductPicker value={field.value ?? null} onChange={field.onChange} />}
-                />
-                <Button type="button" size="sm" variant="ghost" onClick={() => ingredients.remove(index)}>
-                  Remove
-                </Button>
+              <div key={field.id}>
+                <div className="flex items-center gap-2">
+                  <Input {...register(`ingredients.${index}.quantity`, optionalQuantity)} placeholder="Qty (e.g. 1/2)" className="w-24" type="text" inputMode="decimal" />
+                  <Input {...register(`ingredients.${index}.unit`)} placeholder="Unit" className="w-24" />
+                  <Input {...register(`ingredients.${index}.displayText`)} placeholder="Ingredient (e.g. red onion, finely chopped)" className="flex-1" />
+                  <Controller
+                    control={control}
+                    name={`ingredients.${index}.productId`}
+                    render={({ field }) => <RecipeIngredientProductPicker value={field.value ?? null} onChange={field.onChange} />}
+                  />
+                  <Button type="button" size="sm" variant="ghost" onClick={() => ingredients.remove(index)}>
+                    Remove
+                  </Button>
+                </div>
+                {errors.ingredients?.[index]?.quantity && (
+                  <p className="mt-1 text-caption text-destructive">Enter a plain number (2), a fraction (1/2), or a mixed number (1 1/2).</p>
+                )}
               </div>
             ))}
           </div>
@@ -454,6 +464,16 @@ export function AdminRecipeForm({ recipeId }: { recipeId?: string }) {
               </div>
             ))}
           </div>
+
+          <AssetPickerDialog
+            open={stepPickerIndex !== null}
+            onOpenChange={(open) => !open && setStepPickerIndex(null)}
+            onSelect={(asset) => {
+              if (stepPickerIndex === null) return;
+              setValue(`steps.${stepPickerIndex}.imageUrl`, asset.url);
+              setStepPickerIndex(null);
+            }}
+          />
         </TabsContent>
 
         <TabsContent value="nutrition" className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-3">
@@ -492,6 +512,10 @@ export function AdminRecipeForm({ recipeId }: { recipeId?: string }) {
                 Browse Library
               </Button>
             </div>
+            <p className="mt-1 text-caption text-charcoal/60">
+              Use a landscape photo of the finished dish, at least 1600×900px (16:9) — it fills a wide banner that crops to 4:3 on
+              mobile and 16:9 on desktop, so keep the main subject centered. A tall product-packaging photo will look cropped here.
+            </p>
           </div>
           <div>
             <Label htmlFor="recipe-hero-alt">Hero image alt text</Label>
@@ -532,15 +556,6 @@ export function AdminRecipeForm({ recipeId }: { recipeId?: string }) {
               setValue("heroImage", asset.url);
               setValue("heroImageAlt", asset.altText ?? "");
               setHeroPickerOpen(false);
-            }}
-          />
-          <AssetPickerDialog
-            open={stepPickerIndex !== null}
-            onOpenChange={(open) => !open && setStepPickerIndex(null)}
-            onSelect={(asset) => {
-              if (stepPickerIndex === null) return;
-              setValue(`steps.${stepPickerIndex}.imageUrl`, asset.url);
-              setStepPickerIndex(null);
             }}
           />
         </TabsContent>

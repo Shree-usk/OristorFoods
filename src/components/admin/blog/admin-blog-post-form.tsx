@@ -290,6 +290,10 @@ export function AdminBlogPostForm({ postId }: { postId?: string }) {
                 Browse Library
               </Button>
             </div>
+            <p className="mt-1 text-caption text-charcoal/60">
+              Use a landscape photo, at least 1600×900px (16:9) — it fills a wide banner and will be cropped to fit, so keep the
+              main subject centered.
+            </p>
           </div>
           <AssetPickerDialog
             open={heroPickerOpen}
