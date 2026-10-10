@@ -1,4 +1,5 @@
 import { PageTransition } from "@/components/motion";
+import { CartDrawerController } from "@/components/storefront/cart/cart-drawer-controller";
 import { Footer } from "@/components/storefront/layout/footer";
 import { Header } from "@/components/storefront/layout/header";
 import { MobileNav } from "@/components/storefront/layout/mobile-nav";
@@ -44,6 +45,7 @@ export default async function StorefrontLayout({ children }: { children: React.R
       <div className="print:hidden">
         <SupportAssistantLauncher />
       </div>
+      <CartDrawerController />
     </div>
   );
 }

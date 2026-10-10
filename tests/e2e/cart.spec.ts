@@ -71,6 +71,20 @@ test.describe("Shopping cart", () => {
     await expect(page.getByText(/only 1 left in stock/i)).toBeVisible();
   });
 
+  test("clicking Add to Cart on the PDP opens the cart drawer as confirmation", async ({ page }) => {
+    const product = await seedProduct(5, "E2E Cart Drawer Item", 10);
+
+    await page.goto(`/products/${product.slug}`);
+    await page.getByRole("button", { name: "Add to Cart" }).click();
+
+    const drawer = page.getByRole("dialog", { name: "Shopping cart" });
+    await expect(drawer).toBeVisible();
+    await expect(drawer.getByText("E2E Cart Drawer Item")).toBeVisible();
+
+    await drawer.getByRole("button", { name: "Close cart" }).click();
+    await expect(drawer).not.toBeVisible();
+  });
+
   test("the cart page has no detectable accessibility violations", async ({ page }) => {
     const product = await seedProduct(3, "E2E Cart A11y Item", 10);
     await page.request.post("/api/cart/items", { data: { productId: product.id, quantity: 1 } });

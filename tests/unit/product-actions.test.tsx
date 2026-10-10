@@ -9,6 +9,7 @@ vi.mock("next-auth/react", () => ({
 const { ProductActions } = await import("@/components/storefront/product/product-actions");
 const { useWishlistStore } = await import("@/lib/stores/wishlist-store");
 const { useCompareStore } = await import("@/lib/stores/compare-store");
+const { useUiStore } = await import("@/lib/stores/use-ui-store");
 
 function renderWithProviders(ui: React.ReactElement) {
   return render(<QueryClientProvider client={new QueryClient()}>{ui}</QueryClientProvider>);
@@ -18,6 +19,7 @@ beforeEach(() => {
   localStorage.clear();
   useWishlistStore.setState({ items: [] });
   useCompareStore.setState({ items: [] });
+  useUiStore.setState({ isCartDrawerOpen: false });
 });
 
 describe("ProductActions", () => {
@@ -72,5 +74,28 @@ describe("ProductActions", () => {
     screen.getByRole("button", { name: "Add to compare" }).click();
 
     expect(useCompareStore.getState().items).toEqual(["p1"]);
+  });
+
+  it("opens the cart drawer as the add-to-cart confirmation on a successful add", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(null, { status: 200 })));
+    renderWithProviders(<ProductActions productId="p1" inStock={true} />);
+
+    expect(useUiStore.getState().isCartDrawerOpen).toBe(false);
+    screen.getByRole("button", { name: "Add to Cart" }).click();
+
+    await waitFor(() => expect(useUiStore.getState().isCartDrawerOpen).toBe(true));
+  });
+
+  it("does not open the cart drawer when adding to cart fails", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(JSON.stringify({ error: "Only 2 left in stock" }), { status: 409, headers: { "Content-Type": "application/json" } })),
+    );
+    renderWithProviders(<ProductActions productId="p1" inStock={true} />);
+
+    screen.getByRole("button", { name: "Add to Cart" }).click();
+
+    await waitFor(() => expect(screen.getByText("Only 2 left in stock")).toBeInTheDocument());
+    expect(useUiStore.getState().isCartDrawerOpen).toBe(false);
   });
 });

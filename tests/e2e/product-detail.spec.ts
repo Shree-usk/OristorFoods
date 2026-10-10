@@ -32,6 +32,23 @@ test("shows a disabled Add to Cart control until the Shopping Cart story ships",
   await expect(page.getByRole("button", { name: "Add to Cart" })).toBeDisabled();
 });
 
+test("shows a quick facts strip condensed from the product's benefits", async ({ page }) => {
+  await page.goto("/products/roasted-curry-powder-100g");
+
+  await expect(page.getByRole("list", { name: "Quick facts" })).toBeVisible();
+  await expect(page.getByText("Rich in antioxidants")).toBeVisible();
+});
+
+test("the star rating link next to the title jumps to Customer Reviews", async ({ page }) => {
+  await page.goto("/products/chilli-powder-100g");
+
+  const ratingLink = page.getByRole("link", { name: /4.5 \(2 reviews\)/ });
+  await expect(ratingLink).toBeVisible();
+  await ratingLink.click();
+
+  await expect(page.getByRole("heading", { name: "Customer Reviews" })).toBeInViewport();
+});
+
 test("product detail page has no automatically detectable accessibility violations", async ({ page }) => {
   await page.goto("/products/roasted-curry-powder-100g");
 
