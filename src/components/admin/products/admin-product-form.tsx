@@ -26,6 +26,7 @@ import { AssetPickerDialog } from "@/components/admin/media/asset-picker-dialog"
 import { DuplicateProductDialog } from "@/components/admin/products/duplicate-product-dialog";
 import { ProductPricingPanel } from "@/components/admin/products/product-pricing-panel";
 import { SeoFieldsPanel } from "@/components/admin/seo/seo-fields-panel";
+import { toastManager } from "@/lib/toast";
 import { productAdminSchema, type ProductAdminFormInput } from "@/validation/product-admin.schema";
 
 const NEXT_STATUSES: Record<string, string[]> = {
@@ -232,8 +233,10 @@ export function AdminProductForm({ productId }: { productId?: string }) {
       try {
         if (productId) {
           await updateAdminProduct(productId, values);
+          toastManager.add({ title: "Product saved" });
         } else {
           const created = await createAdminProduct(values);
+          toastManager.add({ title: "Product saved" });
           router.push(`/admin/products/${created.id}`);
           return;
         }
@@ -371,7 +374,7 @@ export function AdminProductForm({ productId }: { productId?: string }) {
               render={({ field }) => (
                 <Select value={field.value ?? undefined} onValueChange={field.onChange}>
                   <SelectTrigger id="product-brand" className="w-full">
-                    <SelectValue placeholder="No brand" />
+                    <SelectValue>{(selected: string | null) => (referenceData?.brands ?? []).find((brand) => brand.id === selected)?.name ?? "No brand"}</SelectValue>
                   </SelectTrigger>
                   <SelectContent>
                     {(referenceData?.brands ?? []).map((brand) => (
