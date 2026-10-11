@@ -75,4 +75,24 @@ describe("ProductStoryScroll", () => {
     const images = screen.getAllByRole("img");
     expect(images.length).toBeGreaterThanOrEqual(categories.length);
   });
+
+  /**
+   * Regression guard for the full-screen-crop fix: the pinned desktop
+   * variant renders each category's image twice per category — a blurred
+   * `aria-hidden` backdrop (object-cover, fills the frame) plus the real
+   * image (object-contain, never cropped) — not a single object-cover
+   * image, which is what caused product photos to render zoomed/cropped
+   * on desktop (h-screen × w-screen is a far more extreme aspect ratio
+   * than typical product photography).
+   */
+  it("renders each category's image twice in the pinned variant (blurred backdrop + uncropped real image)", () => {
+    mockMatchMedia({ reducedMotion: false, desktop: true });
+    const { container } = render(<ProductStoryScroll categories={categories} />);
+
+    const images = container.querySelectorAll("img");
+    expect(images.length).toBe(categories.length * 2);
+
+    const contained = container.querySelectorAll("img.object-contain");
+    expect(contained.length).toBe(categories.length);
+  });
 });

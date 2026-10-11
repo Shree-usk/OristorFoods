@@ -337,7 +337,7 @@ function AboutPageEditor() {
 
       <RepeatingSection
         title="Product Categories"
-        description="The scrolling product sequence. On desktop this becomes a full-screen, pinned scrolling background as the visitor scrolls — not just a card — so these images need to be larger/higher-resolution than the ones above."
+        description="The scrolling product sequence. On desktop this becomes a full-screen, pinned background as the visitor scrolls, with the image shown in full (never cropped) over a softly blurred version of itself — any existing product photo works, square or portrait included."
         fields={categories.fields}
         onAdd={() => categories.append({ blockKey: `category-${crypto.randomUUID()}`, blockType: "ProductCategoryItem", sortOrder: categories.fields.length, eyebrow: null, title: "", body: "", imageUrl: "", imageAlt: "", ctaLabel: null, ctaHref: null, secondaryCtaLabel: null, secondaryCtaHref: null, align: null, letter: null })}
         onRemove={categories.remove}
@@ -356,7 +356,7 @@ function AboutPageEditor() {
               urlRegister={register(`categories.${index}.imageUrl`)}
               altRegister={register(`categories.${index}.imageAlt`)}
               onBrowse={() => setPickerTarget({ group: "categories", index })}
-              hint="Important: on desktop this fills the ENTIRE screen (full width × full height) as a pinned scrolling background, not a contained card — use a large, high-resolution landscape photo (at least 2400×1600px) with the subject centered, or it will crop in tight and look overly zoomed, like a close-up instead of a full product shot. On mobile it shows as a smaller, contained 4:3 card instead, same as the Chapters above."
+              hint="On desktop the full photo is shown (not cropped) against a blurred version of itself filling the screen behind it — any product photo you already have works, no special size or orientation needed. On mobile it shows as a smaller, contained 4:3 card instead, same as the Chapters above."
             />
           </>
         )}

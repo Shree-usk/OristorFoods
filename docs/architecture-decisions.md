@@ -9002,3 +9002,51 @@ circle (Ingredients), **full-screen pinned background on desktop**
 (Milestones). The Chapters/Categories-mobile 4:3 card crop the user
 specifically said they liked was already correct — confirmed to them
 directly rather than changed.
+
+## 2026-10-11 — Product Categories pinned scroll: real fix, not just bigger images
+
+The "2400×1600px" hint from the entry above was the wrong fix. User
+pushed back correctly: images were still cropping hard even at that
+size, and sourcing purpose-shot wide landscape product photography at
+that resolution is impractical for this business anyway. The hint
+conflated two different things — **resolution** only affects sharpness
+when the browser scales an image up; it does nothing to reduce how much
+gets *cropped off*. Cropping severity is purely a function of **aspect
+ratio** mismatch between the source image and the container, and no
+resolution fixes that.
+
+The real problem: `ProductStoryScroll`'s pinned desktop variant
+(`product-story-scroll.tsx`) rendered the image with a plain
+`object-cover` inside an `h-screen w-screen` box — on a typical
+widescreen monitor that's roughly a 16:9–2:1 aspect ratio, but this
+project's actual product photography is mostly **portrait**
+bag/bottle/jar shots (the same images already used fine elsewhere on
+this page, e.g. Ingredients/Chapters). A portrait photo forced to cover
+a landscape full-screen box via `object-cover` requires massive
+upscaling to satisfy the width, which then crops the bulk of the height
+off — exactly the "predominantly zooming" the user kept seeing,
+regardless of how large the source file was.
+
+**Fix**: replaced the single `object-cover` image with a two-layer
+treatment — the same image rendered twice. Layer 1: a blurred, scaled-up
+`object-cover` copy (`aria-hidden`) fills the frame edge-to-edge as an
+atmospheric backdrop, so there's never a plain letterbox bar. Layer 2:
+the real image on top with `object-contain`, which by definition never
+crops — the whole product shot is always fully visible, whatever its
+aspect ratio. This is the standard "blurred backdrop + contained
+foreground" pattern (seen on Spotify/YouTube-style media tiles) chosen
+specifically because it works with **any** existing product photo —
+square, portrait, or landscape — with zero new photography and zero
+minimum-size requirement. Updated both the admin hint and the
+`RepeatingSection` description for Product Categories to match (removed
+the now-wrong "2400×1600px landscape" claim entirely).
+
+Added a regression test (`product-story-scroll.test.tsx`) asserting the
+pinned variant renders exactly 2 `<img>`s per category (not 1) and that
+each category has one `object-contain` image — a guard against
+silently reverting to the single-crop version this fix replaces.
+
+Verified visually against the local dev server: scrolled through the
+pinned sequence and confirmed a portrait jar photo (Pickled Vegetables)
+now renders in full — label, text, and all — against its own blurred
+backdrop, instead of a tight, cropped-in close-up.
