@@ -8748,3 +8748,87 @@ Fix: `parseQuantityInput` (`src/lib/parse-quantity-input.ts`) now accepts
 cases instead of assuming the admin form's own typed-input contract —
 the safer fix here is making the shared parser defensive, not
 restructuring how the form seeds its defaults.
+
+## 2026-10-11 — Homepage "Product Collections": admin module + fixed dead links
+
+User flagged the homepage's "Product Collections" section (Festive Gift
+Collection / Export Signature Range / Home Cook Essentials) as both
+hardcoded and, on inspection, worse than that: its fixture `href`s
+(`/products?collection=festive-gifts`) pointed at a query param the
+product listing page (`src/lib/product-listing-params.ts`'s
+`productListingParsers`) silently ignores — clicking any of the three
+cards just showed the full unfiltered catalog. The slugs weren't real
+either; the only seeded `Collection` row is `avurudu-2026`.
+
+A real `Collection` Prisma model already existed for exactly this
+(curated cross-category bundles, optional seasonal `startDate`/`endDate`
+window), with a working storefront detail route
+(`/products/collections/[collection]/page.tsx`) and real filtering
+already in `product.service.ts`'s `collectionSlug` param — it just had no
+`image` field, no admin UI, and nothing wiring the homepage to it.
+Brought to parity with the Category module (2026-10-10 entry above),
+same pattern:
+
+- **Schema**: added `Collection.image String?` (migration
+  `20261011040000_add_collection_image`).
+- **Repository** (`collection.repository.ts`): added `updateCollection`,
+  `listAllCollectionsForAdmin`, and `listFeaturedCollections(limit)` —
+  mirrors `listFeaturedCategories` (`status: "Active"`, `image: { not:
+  null }`) but also applies the same active-window `OR` clause
+  `listActiveCollections` already used, so an expired or not-yet-started
+  seasonal collection never appears on the homepage even with an image
+  set.
+- **Service/errors/validation/API routes/admin client**: `collection
+  .service.ts` gained `listCollectionsForAdmin` / `createCollectionAdmin`
+  / `updateCollectionAdmin` (new `collection.errors.ts`,
+  `collection-admin.schema.ts`, `/api/admin/collections[/[id]]`,
+  `admin-collection-client.ts`) — all a direct copy of Category's shape,
+  gated on the same `Products` AdminModule (no dedicated `Collections`
+  enum value — Collection is product reference data, same as
+  Category/Brand).
+- **Admin UI**: new `/admin/collections` (`admin-collections-view.tsx`)
+  — flat table + Dialog, no tree (Collection has no parent/child, unlike
+  Category). Deliberately left `Collection.rules` (Json?) out of the
+  form: nothing in the codebase reads it, so exposing a field that does
+  nothing would be a half-finished implementation; revisit only if
+  rule-based auto-collections become a real requirement. Start/end dates
+  use a plain `<Input type="date">` (same pattern as
+  `admin-coupons-panel.tsx`), validated as plain strings rather than
+  `z.coerce.date()` — a cleared date input sends `""`, which
+  `z.coerce.date()` rejects as an Invalid Date; parsed via a `dateOrNull`
+  helper in the service layer instead, the same blank-to-null treatment
+  `nullIfBlank` already gives other optional text fields.
+- **Image field warns about crop**, something Category's never has:
+  `product-collections.tsx` renders at `aspect-4/3` with `object-cover`
+  across a 3-column desktop grid, so a tall or product-packaging photo
+  gets cropped hard — the field's helper text says so explicitly.
+- **`admin-product-form.tsx`'s `collectionIds` field was dead UI-wise.**
+  It already threaded `collectionIds` through form state/payload and the
+  Zod schema already had the field — `product-admin.service.ts
+  ::getProductFormReferenceData` was already fetching
+  `collectionRepository.listActiveCollections()` into
+  `referenceData.collections` for exactly this. Nothing rendered it. Added
+  the checkbox block (mirrors the existing Categories block) — no new
+  endpoint needed, the data was already there.
+- **Homepage wiring** (`homepage-sections.tsx`): same cutover shape as
+  `FeaturedCategories` — `getFeaturedCollectionsForStorefront(3)` when the
+  section is visible, mapped to `href: /products/collections/<slug>`,
+  falling back to the fixture only when zero real collections qualify.
+  `CollectionCardData.description` is non-nullable but
+  `Collection.description` is nullable (Category has no description field
+  on its card, so this didn't come up there) — `?? ""` bridges it.
+- **Fixed the same dead-link bug in `featuredCategories`' own fixture**
+  while in `home-fixtures.ts`: it had the identical `/products?category=`
+  (and one `/products?collection=`, on a category entry) pattern. Real
+  Category data already links correctly
+  (`/products/category/<slug>`, confirmed in the 2026-10-10 entry) — only
+  the finally-unused-in-practice fixture fallback was wrong. Fixed to
+  match, cheap correctness improvement with the same blast radius as the
+  Collection fixture fix.
+
+Verified end-to-end against the local dev DB (not just unit tests):
+created a real Collection via `collection.service.ts` directly, confirmed
+`getFeaturedCollectionsForStorefront` picked it up, confirmed the
+homepage swapped from the fixture to the real card with a working
+`/products/collections/<slug>` link, then deleted it and confirmed the
+homepage fell back to the fixture again.

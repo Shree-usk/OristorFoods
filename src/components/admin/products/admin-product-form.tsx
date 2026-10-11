@@ -227,6 +227,7 @@ export function AdminProductForm({ productId }: { productId?: string }) {
   const ingredients = useFieldArray({ control, name: "ingredients" });
 
   const categoryIds = watch("categoryIds") ?? [];
+  const collectionIds = watch("collectionIds") ?? [];
   const allergenIds = watch("allergenIds") ?? [];
   const certificationIds = watch("certificationIds") ?? [];
 
@@ -416,6 +417,25 @@ export function AdminProductForm({ productId }: { productId?: string }) {
                   onCheckedChange={() => setValue("categoryIds", toggleId(categoryIds, category.id), { shouldValidate: true })}
                 />
               ))}
+            </div>
+          </div>
+          <div className="sm:col-span-2">
+            <Label>Collections (optional)</Label>
+            <div className="mt-1 grid grid-cols-2 gap-1 rounded-lg border border-input p-2 sm:grid-cols-3">
+              {(referenceData?.collections ?? []).length === 0 ? (
+                <p className="col-span-full text-small text-charcoal/70">
+                  No active collections yet — add one in Admin &gt; Collections.
+                </p>
+              ) : (
+                (referenceData?.collections ?? []).map((collection) => (
+                  <CheckboxOption
+                    key={collection.id}
+                    label={collection.name}
+                    checked={collectionIds.includes(collection.id)}
+                    onCheckedChange={() => setValue("collectionIds", toggleId(collectionIds, collection.id), { shouldValidate: true })}
+                  />
+                ))
+              )}
             </div>
           </div>
         </TabsContent>
