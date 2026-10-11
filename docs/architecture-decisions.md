@@ -8902,3 +8902,19 @@ specifically (the latter being the one link with the non-standard
 permission action) and both landed on the real, working page; the
 existing KPI dashboard below rendered exactly as before, confirming the
 addition didn't disturb it.
+
+## 2026-10-11 — About Us banner field: missing size guidance (found while fixing the content gap above)
+
+While investigating the `/about` 500 above, noticed the admin Story
+Pages editor's Hero "Image" field had no size/crop guidance at all —
+unlike the Recipe hero and Collection image fields, which both already
+warn about their own crop behavior. `StoryHero` (`story-hero.tsx`)
+renders it full-bleed (`min-h-[65vh]`, `w-full`, `object-cover`,
+`sizes="100vw"`), so unlike those two fixed-aspect-ratio cases there's
+no single crop ratio to quote — the effective crop varies by viewport
+width/height, so the guidance instead tells the admin to keep the
+subject centered rather than naming one aspect ratio. Added an optional
+`hint` prop to `ImageField` (`admin-story-pages-view.tsx`) and relabeled
+this one field "Banner image" (was just "Image") for clarity — the
+Chapters/Ingredients/Categories image fields are left as-is, since this
+was specifically about the one field the user flagged.
