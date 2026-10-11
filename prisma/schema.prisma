@@ -208,6 +208,7 @@ model Collection {
   name        String
   slug        String        @unique
   description String?
+  image       String?
   status      ContentStatus @default(Active)
   rules       Json?
   startDate   DateTime?

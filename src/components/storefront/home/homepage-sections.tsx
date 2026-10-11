@@ -11,8 +11,9 @@ import { ProductCollections } from "@/components/storefront/home/product-collect
 import { RewardsClubTeaser } from "@/components/storefront/home/rewards-club-teaser";
 import { WhyChooseOristor } from "@/components/storefront/home/why-choose-oristor";
 import { getFeaturedCategoriesForStorefront } from "@/services/category.service";
+import { getFeaturedCollectionsForStorefront } from "@/services/collection.service";
 import { getRecentPostsForStorefront } from "@/services/instagram.service";
-import type { CategoryCardData, InstagramPostData } from "@/types/home";
+import type { CategoryCardData, CollectionCardData, InstagramPostData } from "@/types/home";
 import {
   customerReviews,
   exportSolutions,
@@ -66,6 +67,23 @@ export async function HomepageSections({ layout }: { layout: HomepageLayoutDetai
         }))
       : featuredCategories;
 
+  const hasCollectionsSection = visibleSections.some((section) => section.type === "ProductCollections");
+  const realCollections = hasCollectionsSection ? await getFeaturedCollectionsForStorefront(3) : [];
+  // Falls back to the fixture gallery until an admin has activated and
+  // given an image to at least one real Collection (Admin > Collections) —
+  // never an empty section. Same cutover pattern as FeaturedCategories above.
+  const resolvedCollections: CollectionCardData[] =
+    realCollections.length > 0
+      ? realCollections.map((collection) => ({
+          id: collection.id,
+          name: collection.name,
+          href: `/products/collections/${collection.slug}`,
+          imageSrc: collection.image!,
+          imageAlt: collection.name,
+          description: collection.description ?? "",
+        }))
+      : productCollections;
+
   return (
     <>
       {visibleSections.map((section) => {
@@ -110,7 +128,7 @@ export async function HomepageSections({ layout }: { layout: HomepageLayoutDetai
           case "FeaturedRecipes":
             return <FeaturedRecipes key={section.id} titleOverride={section.titleOverride} />;
           case "ProductCollections":
-            return <ProductCollections key={section.id} collections={productCollections} titleOverride={section.titleOverride} />;
+            return <ProductCollections key={section.id} collections={resolvedCollections} titleOverride={section.titleOverride} />;
           case "FoodAcademy":
             return (
               <FoodAcademyTeaser
