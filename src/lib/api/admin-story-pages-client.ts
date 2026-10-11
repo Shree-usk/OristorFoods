@@ -6,7 +6,7 @@ async function assertOkWithServerMessage(response: Response, fallback: string): 
   throw new Error(body.error ?? fallback);
 }
 
-export type StoryBlockTypeValue = "Hero" | "Chapter" | "IngredientItem" | "ProductCategoryItem" | "ValueItem" | "GlobalJourney" | "Cta";
+export type StoryBlockTypeValue = "Hero" | "Chapter" | "IngredientItem" | "ProductCategoryItem" | "ValueItem" | "GlobalJourney" | "Cta" | "Milestone" | "MarketItem";
 export type ContentAlignmentValue = "Left" | "Center" | "Right";
 
 export interface StoryPageBlock {
