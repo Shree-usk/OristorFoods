@@ -231,7 +231,13 @@ function AboutPageEditor() {
               <Label htmlFor={`chapter-${index}-body`}>Body</Label>
               <Textarea id={`chapter-${index}-body`} {...register(`chapters.${index}.body`)} />
             </div>
-            <ImageField label="Image" urlRegister={register(`chapters.${index}.imageUrl`)} altRegister={register(`chapters.${index}.imageAlt`)} onBrowse={() => setPickerTarget({ group: "chapters", index })} />
+            <ImageField
+              label="Image"
+              urlRegister={register(`chapters.${index}.imageUrl`)}
+              altRegister={register(`chapters.${index}.imageAlt`)}
+              onBrowse={() => setPickerTarget({ group: "chapters", index })}
+              hint="Use a landscape photo, at least 1200×900px (4:3) — it's cropped to a 4:3 card next to the text, so keep the main subject centered. This is the card style used throughout the Chapters/Product Categories sections."
+            />
             <div>
               <Label htmlFor={`chapter-${index}-align`}>Image alignment</Label>
               <Controller
@@ -296,6 +302,7 @@ function AboutPageEditor() {
               urlRegister={register(`milestones.${index}.imageUrl`)}
               altRegister={register(`milestones.${index}.imageAlt`)}
               onBrowse={() => setPickerTarget({ group: "milestones", index })}
+              hint="Use a landscape photo, at least 1280×720px (16:9) — shown under the milestone text at a moderate width, not full-screen."
             />
           </>
         )}
@@ -317,14 +324,20 @@ function AboutPageEditor() {
               <Label htmlFor={`ingredient-${index}-tagline`}>Tagline</Label>
               <Input id={`ingredient-${index}-tagline`} {...register(`ingredients.${index}.body`)} />
             </div>
-            <ImageField label="Image" urlRegister={register(`ingredients.${index}.imageUrl`)} altRegister={register(`ingredients.${index}.imageAlt`)} onBrowse={() => setPickerTarget({ group: "ingredients", index })} />
+            <ImageField
+              label="Image"
+              urlRegister={register(`ingredients.${index}.imageUrl`)}
+              altRegister={register(`ingredients.${index}.imageAlt`)}
+              onBrowse={() => setPickerTarget({ group: "ingredients", index })}
+              hint="Shown as a small circular icon (~128px) — use a tightly-cropped, centered close-up of just the ingredient itself, not a full product-bag photo with space around it, or it will look over-zoomed/cropped oddly."
+            />
           </>
         )}
       />
 
       <RepeatingSection
         title="Product Categories"
-        description="The scrolling product sequence."
+        description="The scrolling product sequence. On desktop this becomes a full-screen, pinned scrolling background as the visitor scrolls — not just a card — so these images need to be larger/higher-resolution than the ones above."
         fields={categories.fields}
         onAdd={() => categories.append({ blockKey: `category-${crypto.randomUUID()}`, blockType: "ProductCategoryItem", sortOrder: categories.fields.length, eyebrow: null, title: "", body: "", imageUrl: "", imageAlt: "", ctaLabel: null, ctaHref: null, secondaryCtaLabel: null, secondaryCtaHref: null, align: null, letter: null })}
         onRemove={categories.remove}
@@ -338,7 +351,13 @@ function AboutPageEditor() {
               <Label htmlFor={`category-${index}-tagline`}>Tagline</Label>
               <Input id={`category-${index}-tagline`} {...register(`categories.${index}.body`)} />
             </div>
-            <ImageField label="Image" urlRegister={register(`categories.${index}.imageUrl`)} altRegister={register(`categories.${index}.imageAlt`)} onBrowse={() => setPickerTarget({ group: "categories", index })} />
+            <ImageField
+              label="Image"
+              urlRegister={register(`categories.${index}.imageUrl`)}
+              altRegister={register(`categories.${index}.imageAlt`)}
+              onBrowse={() => setPickerTarget({ group: "categories", index })}
+              hint="Important: on desktop this fills the ENTIRE screen (full width × full height) as a pinned scrolling background, not a contained card — use a large, high-resolution landscape photo (at least 2400×1600px) with the subject centered, or it will crop in tight and look overly zoomed, like a close-up instead of a full product shot. On mobile it shows as a smaller, contained 4:3 card instead, same as the Chapters above."
+            />
           </>
         )}
       />
@@ -491,11 +510,13 @@ function ImageField({
   urlRegister,
   altRegister,
   onBrowse,
+  hint,
 }: {
   label: string;
   urlRegister: ReturnType<ReturnType<typeof useForm<AboutForm>>["register"]>;
   altRegister: ReturnType<ReturnType<typeof useForm<AboutForm>>["register"]>;
   onBrowse: () => void;
+  hint?: string;
 }) {
   return (
     <div className="space-y-2">
@@ -507,6 +528,7 @@ function ImageField({
         </Button>
       </div>
       <Input placeholder="Alt text" {...altRegister} />
+      {hint && <p className="text-caption text-charcoal/60">{hint}</p>}
     </div>
   );
 }

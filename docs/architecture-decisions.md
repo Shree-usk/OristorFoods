@@ -8982,3 +8982,23 @@ storefront page renders the Heritage Timeline and the "Growing Every
 Day" market card inline inside Global Journey, exactly as designed; the
 Instagram section on `/about` and the homepage's own section both now
 render a single row of 6 (not 12 across two rows).
+
+**Follow-up same day**: user reported an uploaded image looking
+"magnified and distorting" on `/about` — traced to `ProductStoryScroll`
+(`product-story-scroll.tsx`), not the small Ingredients circle it first
+looked like. On desktop its pinned variant renders the Product Category
+image as a **full-screen** background (`h-screen w-screen object-cover`)
+— a far more aggressive crop than any other image slot on this page
+(Chapters/mobile-fallback Categories are a contained `aspect-4/3` card;
+Ingredients a small 128px circle). A normal product photo not shot for
+that exact crop will zoom in hard. None of the Chapters/Ingredients/
+Categories/Milestones admin image fields had any size guidance at all
+(only the Hero banner did, from an earlier fix this session) — added a
+`hint` prop to `ImageField` (mirroring that same earlier fix,
+independently, since this branch predates it) and a hint to all four,
+each describing its *actual* render shape: 4:3 card (Chapters), small
+circle (Ingredients), **full-screen pinned background on desktop**
+(Categories — the one that actually caused the reported issue), 16:9
+(Milestones). The Chapters/Categories-mobile 4:3 card crop the user
+specifically said they liked was already correct — confirmed to them
+directly rather than changed.
