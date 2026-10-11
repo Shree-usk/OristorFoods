@@ -60,12 +60,24 @@ export function ProductStoryScroll({ categories }: ProductStoryScrollProps) {
 
   return (
     <div ref={containerRef} style={{ height: `${categories.length * 100}vh` }}>
-      <div className="sticky top-0 h-screen overflow-hidden">
+      <div className="sticky top-0 h-screen overflow-hidden bg-charcoal">
         <motion.div style={{ x }} className="flex h-full">
           {categories.map((category) => (
-            <div key={category.id} className="relative h-full w-screen shrink-0">
-              <Image src={category.image.src} alt={category.image.alt} fill sizes="100vw" className="object-cover" />
-              <div className="absolute inset-0 bg-charcoal/30" />
+            <div key={category.id} className="relative h-full w-screen shrink-0 overflow-hidden">
+              {/*
+                Two-layer treatment, not a single object-cover fill: a real
+                h-screen × w-screen box is a far more extreme aspect ratio
+                than typical product photography (especially the portrait
+                bag/bottle shots this project mostly has), so object-cover
+                alone crops in hard — object-contain instead never crops
+                the product, and the same image blurred+scaled behind it
+                fills the frame edge-to-edge so there's no plain letterbox
+                bar. Admins can use whatever product photo already exists
+                elsewhere on the site; no special wide/high-res shoot needed.
+              */}
+              <Image src={category.image.src} alt="" fill aria-hidden="true" sizes="100vw" className="scale-110 object-cover opacity-40 blur-2xl" />
+              <Image src={category.image.src} alt={category.image.alt} fill sizes="100vw" className="object-contain p-8 md:p-16" />
+              <div className="absolute inset-0 bg-charcoal/20" />
               <div className="absolute inset-x-0 bottom-16 text-center text-ivory">
                 <h3 className="text-h2 font-heading">{category.name}</h3>
                 <p className="mt-2 text-body text-ivory/90">{category.tagline}</p>
