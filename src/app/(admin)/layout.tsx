@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { adminAuth } from "@/lib/admin-auth";
@@ -25,7 +26,9 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   return (
     <div className="min-h-screen bg-cream">
       <header className="flex items-center justify-between border-b border-input bg-background px-6 py-3">
-        <span className="font-heading text-h4 text-charcoal">Oristor Admin</span>
+        <Link href="/admin" className="font-heading text-h4 text-charcoal">
+          Oristor Admin
+        </Link>
         <div className="flex items-center gap-3 text-small text-charcoal/70">
           <span>
             {adminUser.name} · {adminUser.role.name}
