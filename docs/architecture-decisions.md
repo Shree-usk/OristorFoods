@@ -9003,6 +9003,34 @@ circle (Ingredients), **full-screen pinned background on desktop**
 specifically said they liked was already correct — confirmed to them
 directly rather than changed.
 
+## 2026-10-11 — Homepage "Shop by Category": ragged last row, not centered
+
+User flagged an unbalanced gap on the right of the homepage's "Shop by
+Category" section. Root cause: `featured-categories.tsx` used a fixed
+`grid-cols-2 sm:grid-cols-3 lg:grid-cols-6` — fine when the category
+count happens to be a clean multiple of the column count, but the
+category list is admin-managed (`Admin > Categories`) and currently has
+5 real rows, not 6, so the grid left a full empty column's worth of
+space on the right at the desktop breakpoint instead of centering the
+partial row. Not a data bug, a layout one: CSS Grid doesn't center a
+trailing incomplete row on its own.
+
+Fix: switched to `flex flex-wrap justify-center gap-4` with explicit
+`w-[calc(...)]` widths per breakpoint (50%/33.333%/16.667% minus the
+gap contribution) replicating the same 2/3/6-per-row sizing the grid
+had — flexbox's `justify-content: center` naturally centers a wrapped
+partial row, which Grid has no built-in equivalent for. Verified
+locally by temporarily hiding one of 6 real local categories via a
+scratch DOM tweak (not a data change) to reproduce the exact 5-item
+case live, confirming the row now centers instead of leaving a ragged
+gap, then reloaded to discard it.
+
+**Not fixed here, flagged for awareness**: `best-selling-products.tsx`
+has the identical fixed-grid pattern (`lg:grid-cols-5`) and would show
+the same raggedness whenever its product count isn't a multiple of 5 —
+out of scope since the user only reported Categories, but the same fix
+would apply if it's ever reported too.
+
 ## 2026-10-11 — Product Categories pinned scroll: real fix, not just bigger images
 
 The "2400×1600px" hint from the entry above was the wrong fix. User
