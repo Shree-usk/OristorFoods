@@ -8832,3 +8832,73 @@ created a real Collection via `collection.service.ts` directly, confirmed
 homepage swapped from the fixture to the real card with a working
 `/products/collections/<slug>` link, then deleted it and confirmed the
 homepage fell back to the fixture again.
+
+## 2026-10-11 — Real "Quick Links" nav on the admin dashboard
+
+User prototyped a static HTML page (a Claude artifact) acting as a
+personal launcher — a filterable, grouped set of shortcuts into every
+`/admin/*` route, because the real console has no way to discover or
+jump between modules. Asked to build the real version inside the app.
+
+**The premise was half-true.** `/admin` already has a real dashboard
+(STORY-039 — permission-gated KPI widgets, auto-refreshing) — it's not a
+stub. But it has zero navigation links to the modules its own numbers
+are about, and `(admin)/layout.tsx` (STORY-038) is a deliberately
+minimal top bar whose own comment says "that's STORY-039's scope" —
+except STORY-039 only ever built the stats, never a launcher. So the
+real gap is exactly what the artifact demonstrated, just not a
+greenfield "no dashboard" situation.
+
+**Scope decision: extend the existing `/admin` dashboard page, not a
+persistent sidebar.** A sidebar would touch the shared layout wrapping
+every one of the ~45 real admin routes (new width/responsive handling
+everywhere) for something the artifact itself treated as a single page,
+not permanent chrome. `/admin` is already the first thing every admin
+sees after login — the natural home for a launcher. A persistent sidebar
+remains a reasonable future follow-up, not this change.
+
+- **`src/lib/admin-nav-registry.ts`** (new) — a static, typed route
+  registry (`ADMIN_QUICK_ADD_LINKS`, `ADMIN_NAV_GROUPS`) and a pure
+  `filterAdminNavByPermissions(permissions, quickAdd, groups)` function.
+  Every link's `{module, action}` pair was read directly from its own
+  page's Service source (`grep`ing every `requirePermission(adminUserId,
+  module, action)` call site across `src/services/`), not guessed from
+  URL naming — the artifact itself got this wrong in one spot (a
+  `/admin/cms` top-level link that 404s; only `cms/my-queue` is real).
+  **Audit Logs is the one link whose action differs from its
+  module-mates**: its list route checks `UsersRolesAudit:Audit`, not
+  `:View` like Users/Roles/System health — confirmed in
+  `audit-log-admin.service.ts` and covered by its own test case, since
+  it's the one place a naive "assume View everywhere" approach would
+  have silently over- or under-granted visibility.
+- **Filtering happens server-side**, reusing
+  `getPermissionsForAdminUser` (`permission.service.ts`) — the same
+  single-DB-read primitive `admin-dashboard.service.ts` already calls
+  for the KPI widgets — so an ungranted link is a true server-side
+  omission, never a client-side hide of something still in the DOM.
+- **`AdminQuickLinks`** (`src/components/admin/dashboard/admin-quick
+  -links.tsx`, new client component) — receives the already-filtered
+  `{quickAdd, groups}` as props; only does client-side *text* filtering
+  on top of that already-authorized set, same split the artifact had
+  between its build-time HTML and its vanilla-JS filter box. Styled with
+  Oristor's real brand tokens (`bg-chilli`/`text-ivory` for the quick-add
+  cards) rather than the artifact's own invented orange palette, and
+  reuses this app's existing `Input` component — built to look native to
+  this console, not like a ported prototype. Real in-app `<Link>`s, no
+  `target="_blank"` (the artifact needed that only because it lived
+  outside the app, pointing at a separate staging tab).
+- Rendered above the existing `<AdminDashboardView>` in
+  `(admin)/admin/page.tsx` — the KPI dashboard itself is untouched,
+  this is a pure addition.
+- One small, low-risk touch in `(admin)/layout.tsx`: the "Oristor Admin"
+  wordmark is now a `<Link href="/admin">` instead of plain text —
+  standard "click the logo to go home," and `/admin` was already home.
+
+Verified against the local dev server via an authenticated browser
+session (not just unit tests): every group rendered with real,
+non-404ing links; the filter box narrowed results live and collapsed
+groups with zero matches; clicked through Products and Audit Logs
+specifically (the latter being the one link with the non-standard
+permission action) and both landed on the real, working page; the
+existing KPI dashboard below rendered exactly as before, confirming the
+addition didn't disturb it.
