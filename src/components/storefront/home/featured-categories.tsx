@@ -9,9 +9,16 @@ export function FeaturedCategories({ categories, titleOverride }: { categories: 
   return (
     <Section>
       <h2 className="text-h2 font-heading text-charcoal">{titleOverride || "Shop by Category"}</h2>
-      <div className="mt-8 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
+      {/*
+        flex-wrap + basis, not a fixed grid-cols-6 — the category count is
+        admin-managed and varies (e.g. 5), so a fixed 6-column grid leaves a
+        ragged, off-center gap whenever the count isn't a clean multiple of
+        the column count at a given breakpoint. justify-center keeps a
+        trailing partial row centered instead.
+      */}
+      <div className="mt-8 flex flex-wrap justify-center gap-4">
         {categories.map((category, index) => (
-          <ScrollReveal key={category.id} delay={index * 0.05}>
+          <ScrollReveal key={category.id} delay={index * 0.05} className="w-[calc(50%-0.5rem)] sm:w-[calc(33.333%-0.667rem)] lg:w-[calc(16.667%-0.834rem)]">
             <Link href={category.href} className="group block">
               <div className="relative aspect-square overflow-hidden rounded-lg bg-beige">
                 <Image
