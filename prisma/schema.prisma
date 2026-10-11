@@ -3079,6 +3079,8 @@ enum StoryBlockType {
   ValueItem
   GlobalJourney
   Cta
+  Milestone
+  MarketItem
 }
 
 model StoryPageBlock {

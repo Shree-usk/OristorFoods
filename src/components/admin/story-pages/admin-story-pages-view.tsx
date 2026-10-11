@@ -121,6 +121,8 @@ interface AboutForm {
   ingredients: StoryPageBlockInput[];
   categories: StoryPageBlockInput[];
   values: StoryPageBlockInput[];
+  milestones: StoryPageBlockInput[];
+  markets: StoryPageBlockInput[];
   globalJourney: StoryPageBlockInput;
   cta: StoryPageBlockInput;
 }
@@ -138,12 +140,14 @@ function blocksToForm(blocks: StoryPageBlock[]): AboutForm {
     ingredients: byType("IngredientItem"),
     categories: byType("ProductCategoryItem"),
     values: byType("ValueItem"),
+    milestones: byType("Milestone"),
+    markets: byType("MarketItem"),
     globalJourney: byType("GlobalJourney")[0] ?? { blockKey: "global-journey", blockType: "GlobalJourney", sortOrder: 0, eyebrow: null, title: "", body: "", imageUrl: null, imageAlt: null, ctaLabel: "", ctaHref: "", secondaryCtaLabel: null, secondaryCtaHref: null, align: null, letter: null },
     cta: byType("Cta")[0] ?? { blockKey: "cta", blockType: "Cta", sortOrder: 0, eyebrow: null, title: "", body: "", imageUrl: null, imageAlt: null, ctaLabel: "", ctaHref: "", secondaryCtaLabel: "", secondaryCtaHref: "", align: null, letter: null },
   };
 }
 
-type PickerTarget = { group: "hero" } | { group: "chapters" | "ingredients" | "categories"; index: number };
+type PickerTarget = { group: "hero" } | { group: "chapters" | "ingredients" | "categories" | "milestones"; index: number };
 
 function AboutPageEditor() {
   const queryClient = useQueryClient();
@@ -160,6 +164,8 @@ function AboutPageEditor() {
   const ingredients = useFieldArray({ control, name: "ingredients" });
   const categories = useFieldArray({ control, name: "categories" });
   const values = useFieldArray({ control, name: "values" });
+  const milestones = useFieldArray({ control, name: "milestones" });
+  const markets = useFieldArray({ control, name: "markets" });
 
   const mutation = useMutation({
     mutationFn: (form: AboutForm) => {
@@ -169,6 +175,8 @@ function AboutPageEditor() {
         ...form.ingredients.map((item, index) => ({ ...item, sortOrder: index })),
         ...form.categories.map((item, index) => ({ ...item, sortOrder: index })),
         ...form.values.map((item, index) => ({ ...item, sortOrder: index })),
+        ...form.milestones.map((item, index) => ({ ...item, sortOrder: index })),
+        ...form.markets.map((item, index) => ({ ...item, sortOrder: index })),
         form.globalJourney,
         form.cta,
       ];
@@ -247,6 +255,53 @@ function AboutPageEditor() {
       </section>
 
       <RepeatingSection
+        title="History Milestones"
+        description="Shown right after the Chapters, as a chronological timeline. Add one entry per real milestone (e.g. founding, a generational handoff, going digital) — leave empty and the section simply won't render."
+        fields={milestones.fields}
+        onAdd={() =>
+          milestones.append({
+            blockKey: `milestone-${crypto.randomUUID()}`,
+            blockType: "Milestone",
+            sortOrder: milestones.fields.length,
+            eyebrow: "",
+            title: "",
+            body: "",
+            imageUrl: "",
+            imageAlt: "",
+            ctaLabel: null,
+            ctaHref: null,
+            secondaryCtaLabel: null,
+            secondaryCtaHref: null,
+            align: null,
+            letter: null,
+          })
+        }
+        onRemove={milestones.remove}
+        renderFields={(index) => (
+          <>
+            <div className="w-32">
+              <Label htmlFor={`milestone-${index}-year`}>Year (optional)</Label>
+              <Input id={`milestone-${index}-year`} placeholder="e.g. 1998" {...register(`milestones.${index}.eyebrow`)} />
+            </div>
+            <div>
+              <Label htmlFor={`milestone-${index}-title`}>Title</Label>
+              <Input id={`milestone-${index}-title`} {...register(`milestones.${index}.title`)} />
+            </div>
+            <div>
+              <Label htmlFor={`milestone-${index}-body`}>Body</Label>
+              <Textarea id={`milestone-${index}-body`} {...register(`milestones.${index}.body`)} />
+            </div>
+            <ImageField
+              label="Image (optional)"
+              urlRegister={register(`milestones.${index}.imageUrl`)}
+              altRegister={register(`milestones.${index}.imageAlt`)}
+              onBrowse={() => setPickerTarget({ group: "milestones", index })}
+            />
+          </>
+        )}
+      />
+
+      <RepeatingSection
         title="Ingredients"
         description="Shown in the “Flavours We Grew Up With” chapter."
         fields={ingredients.fields}
@@ -307,6 +362,43 @@ function AboutPageEditor() {
             <div>
               <Label htmlFor={`value-${index}-description`}>Description</Label>
               <Input id={`value-${index}-description`} {...register(`values.${index}.body`)} />
+            </div>
+          </>
+        )}
+      />
+
+      <RepeatingSection
+        title="Export Markets"
+        description="Shown as a small list inside the Global Journey section below. Add one entry per real region/market you actively serve — leave empty and the list simply won't render."
+        fields={markets.fields}
+        onAdd={() =>
+          markets.append({
+            blockKey: `market-${crypto.randomUUID()}`,
+            blockType: "MarketItem",
+            sortOrder: markets.fields.length,
+            eyebrow: null,
+            title: "",
+            body: "",
+            imageUrl: null,
+            imageAlt: null,
+            ctaLabel: null,
+            ctaHref: null,
+            secondaryCtaLabel: null,
+            secondaryCtaHref: null,
+            align: null,
+            letter: null,
+          })
+        }
+        onRemove={markets.remove}
+        renderFields={(index) => (
+          <>
+            <div>
+              <Label htmlFor={`market-${index}-name`}>Region/market name</Label>
+              <Input id={`market-${index}-name`} {...register(`markets.${index}.title`)} />
+            </div>
+            <div>
+              <Label htmlFor={`market-${index}-body`}>Short description</Label>
+              <Input id={`market-${index}-body`} {...register(`markets.${index}.body`)} />
             </div>
           </>
         )}

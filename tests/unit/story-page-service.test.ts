@@ -68,4 +68,20 @@ describe("story-page.service", () => {
     const blocks = await getPublishedStoryBlocks("AboutUs");
     expect(blocks.some((block) => block.blockKey === TEST_BLOCK_KEY && block.title === "Published read test")).toBe(true);
   });
+
+  it("round-trips the Milestone and MarketItem block types", async () => {
+    const admin = await makeFullAccessAdmin();
+    await saveStoryPageBlocks(admin.id, "AboutUs", [
+      { blockKey: "story-page-svc-test-milestone", blockType: "Milestone", sortOrder: 0, eyebrow: "1998", title: "Founded", body: "Test milestone." },
+      { blockKey: "story-page-svc-test-market", blockType: "MarketItem", sortOrder: 0, title: "Middle East", body: "Test market." },
+    ]);
+
+    const blocks = await getPublishedStoryBlocks("AboutUs");
+    const milestone = blocks.find((block) => block.blockKey === "story-page-svc-test-milestone");
+    const market = blocks.find((block) => block.blockKey === "story-page-svc-test-market");
+    expect(milestone).toMatchObject({ blockType: "Milestone", eyebrow: "1998", title: "Founded" });
+    expect(market).toMatchObject({ blockType: "MarketItem", title: "Middle East" });
+
+    await prisma.storyPageBlock.deleteMany({ where: { blockKey: { in: ["story-page-svc-test-milestone", "story-page-svc-test-market"] } } });
+  });
 });

@@ -51,6 +51,20 @@ export interface GlobalJourneyContent {
   ctaHref: string;
 }
 
+export interface MilestoneContent {
+  id: string;
+  year: string;
+  title: string;
+  body: string;
+  image: StoryImage | null;
+}
+
+export interface MarketItemContent {
+  id: string;
+  name: string;
+  body: string;
+}
+
 export interface StoryCtaContent {
   headline: string;
   subcopy: string;

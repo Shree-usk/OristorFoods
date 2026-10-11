@@ -200,6 +200,18 @@ const ABOUT_BLOCKS: StoryPageBlockUpsertInput[] = [
     title: "Respect",
     body: "Valuing customers, suppliers and ethical business practices.",
   },
+  // Honest placeholder, not invented fact — same "Do not invent company
+  // history, dates or achievements that are not documented" rule the
+  // original brief for this page set. Replace via Admin > Page Content
+  // once the real founding story/milestones exist; this block type is
+  // repeatable, so any number of real rows can replace this one.
+  {
+    blockKey: "milestone-our-journey-begins",
+    blockType: "Milestone",
+    sortOrder: 0,
+    title: "Our Journey Begins",
+    body: "The full story of how Oristor started is coming soon — check back soon.",
+  },
   {
     blockKey: "global-journey",
     blockType: "GlobalJourney",
@@ -208,6 +220,17 @@ const ABOUT_BLOCKS: StoryPageBlockUpsertInput[] = [
     body: "Our ambition is to share the distinctive flavours of Sri Lanka with kitchens around the world — from the Sri Lankan diaspora to importers, supermarkets, distributors, restaurants and hotels across international markets.",
     ctaLabel: "Explore Our Export Range →",
     ctaHref: "/export",
+  },
+  // Same honest-placeholder treatment as the milestone above — no
+  // public-safe "which countries we export to" data source exists yet
+  // (ExportEnquiry/DistributorAccount are confidential CRM records, not
+  // validated public claims).
+  {
+    blockKey: "market-growing-every-day",
+    blockType: "MarketItem",
+    sortOrder: 0,
+    title: "Growing Every Day",
+    body: "We're building our export and distributor network — details coming soon.",
   },
   {
     blockKey: "cta",
