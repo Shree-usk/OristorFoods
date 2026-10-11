@@ -8903,6 +8903,30 @@ permission action) and both landed on the real, working page; the
 existing KPI dashboard below rendered exactly as before, confirming the
 addition didn't disturb it.
 
+## 2026-10-11 — About Us banner field: missing size guidance (found while fixing the content gap above)
+
+While investigating the `/about` 500 above, noticed the admin Story
+Pages editor's Hero "Image" field had no size/crop guidance at all —
+unlike the Recipe hero and Collection image fields, which both already
+warn about their own crop behavior. `StoryHero` (`story-hero.tsx`)
+renders it full-bleed (`min-h-[65vh]`, `w-full`, `object-cover`,
+`sizes="100vw"`), so unlike those two fixed-aspect-ratio cases there's
+no single crop ratio to quote — the effective crop varies by viewport
+width/height, so the guidance instead tells the admin to keep the
+subject centered rather than naming one aspect ratio. Added an optional
+`hint` prop to `ImageField` (`admin-story-pages-view.tsx`) and relabeled
+this one field "Banner image" (was just "Image") for clarity — the
+Chapters/Ingredients/Categories image fields are left as-is, since this
+was specifically about the one field the user flagged.
+
+**Merge note**: this `hint` prop was independently re-added to
+`ImageField` by a separate same-day branch (the heritage/markets entry
+below, and its own later image-hints follow-up) that was built off a
+pre-this-PR `master` — both additions are functionally identical, this
+is just two branches discovering the same gap in parallel. No behavior
+difference after merging; `ImageField` ends up with one `hint` prop,
+not two.
+
 ## 2026-10-11 — About Us: heritage timeline + export markets (honest placeholders) + Instagram, one line not two
 
 User compared `/about` against The Spice House's About page and said it

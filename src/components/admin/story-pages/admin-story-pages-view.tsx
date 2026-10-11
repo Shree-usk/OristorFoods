@@ -211,7 +211,13 @@ function AboutPageEditor() {
           <Label htmlFor="hero-subcopy">Subcopy</Label>
           <Textarea id="hero-subcopy" {...register("hero.body")} />
         </div>
-        <ImageField label="Image" urlRegister={register("hero.imageUrl")} altRegister={register("hero.imageAlt")} onBrowse={() => setPickerTarget({ group: "hero" })} />
+        <ImageField
+          label="Banner image"
+          urlRegister={register("hero.imageUrl")}
+          altRegister={register("hero.imageAlt")}
+          onBrowse={() => setPickerTarget({ group: "hero" })}
+          hint="Use a wide landscape photo, at least 1920×1080px — it fills a full-width, viewport-height band behind the headline (darkened for legibility) and crops differently on narrow vs. wide screens, so keep the main subject centered. A tall or close-up shot will lose its edges here."
+        />
       </section>
 
       <section className="space-y-4">
