@@ -4,8 +4,17 @@
  * decimal. RecipeIngredient.quantity is a Decimal(8,2) column used for
  * serving-count scaling elsewhere (see schema.prisma), so only what's
  * *typeable* in the admin form changes — not what's stored.
+ *
+ * Registered as this field's `setValueAs`, which react-hook-form also runs
+ * against the field's *default* value (admin-recipe-form.tsx seeds it with
+ * `Number(ingredient.quantity)`, not a string) the first time the
+ * Ingredients tab mounts — not just against typed input — so `raw` can
+ * arrive as a number or undefined, not only a string.
  */
-export function parseQuantityInput(raw: string): number | undefined {
+export function parseQuantityInput(raw: string | number | undefined): number | undefined {
+  if (raw === undefined) return undefined;
+  if (typeof raw === "number") return Number.isNaN(raw) ? undefined : raw;
+
   const value = raw.trim();
   if (value === "") return undefined;
 

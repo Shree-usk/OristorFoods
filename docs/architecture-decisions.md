@@ -8720,3 +8720,31 @@ modal, wired up the existing one:
   open the same drawer on click is a reasonable follow-up but is out of
   scope for this change and would need its own review (e.g. whether
   that link is ever opened in a new tab/used for SEO).
+
+## 2026-10-10 — Fix: admin recipe edit page crashed on the Ingredients tab
+
+User-reported "this link doesn't work" on an `/admin/recipes/[id]` edit
+page. `curl` was useless here (admin routes require an authenticated
+session, so an unauthenticated request just 307s to `/admin/login` — not
+the actual bug); reproducing it needed a real logged-in browser session.
+Doing that surfaced a genuine client-side crash, not a routing problem:
+clicking the **Ingredients** tab threw `TypeError: e.trim is not a
+function` and froze the page.
+
+Root cause: `admin-recipe-form.tsx` seeds each ingredient row's quantity
+*default value* as a number — `quantity: i.quantity ? Number(i.quantity)
+: undefined` — but the field is registered with `setValueAs:
+parseQuantityInput`, and `parseQuantityInput` unconditionally called
+`raw.trim()` assuming `raw` is always a string. React Hook Form doesn't
+only run `setValueAs` against typed input; it also runs it against a
+field's default value the first time that field registers — which, for
+tabbed content built on `TabsContent` (unmounted while hidden), is the
+moment its tab is first opened. Every recipe with at least one quantified
+ingredient hit this; recipes with zero ingredients or only
+no-quantity ones ("salt to taste") wouldn't have.
+
+Fix: `parseQuantityInput` (`src/lib/parse-quantity-input.ts`) now accepts
+`string | number | undefined` and short-circuits for the non-string
+cases instead of assuming the admin form's own typed-input contract —
+the safer fix here is making the shared parser defensive, not
+restructuring how the form seeds its defaults.
