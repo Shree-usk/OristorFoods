@@ -6,7 +6,7 @@ export const storyPageParamSchema = z.enum(["AboutUs"]);
 
 export const storyPageBlockInputSchema = z.object({
   blockKey: z.string().trim().min(1),
-  blockType: z.enum(["Hero", "Chapter", "IngredientItem", "ProductCategoryItem", "ValueItem", "GlobalJourney", "Cta"]),
+  blockType: z.enum(["Hero", "Chapter", "IngredientItem", "ProductCategoryItem", "ValueItem", "GlobalJourney", "Cta", "Milestone", "MarketItem"]),
   sortOrder: z.number().int().min(0),
   eyebrow: z.preprocess(emptyToNull, z.string().trim().min(1).nullable().optional()),
   title: z.preprocess(emptyToNull, z.string().trim().min(1).nullable().optional()),

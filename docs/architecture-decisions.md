@@ -8902,3 +8902,103 @@ specifically (the latter being the one link with the non-standard
 permission action) and both landed on the real, working page; the
 existing KPI dashboard below rendered exactly as before, confirming the
 addition didn't disturb it.
+
+## 2026-10-11 — About Us: heritage timeline + export markets (honest placeholders) + Instagram, one line not two
+
+User compared `/about` against The Spice House's About page and said it
+wasn't up to expectation. Read this page's own original brief
+(`docs/stories/11-missed-stories/PROJECT OristorFoods — OUR STORY
+PAGE.txt`) first — it explicitly asked for the interactive
+visual-storytelling format already live, and explicitly said **"Do not
+invent company history, dates or achievements that are not
+documented."** Spice House's page is the opposite: plain text, no
+imagery, but a named, chronological founder history and a "Visit Us"
+store-locator section. Asked the user directly: keep the interactive
+style (don't abandon the brief), add real heritage/markets content —
+seeded as honest "coming soon" placeholders for now rather than invented
+facts, to be replaced via the admin editor once real content exists.
+Investigated a public "export markets" equivalent to Spice House's
+store list first: no real public-safe data source exists —
+`DeliveryZone` is Sri Lanka-only domestic shipping, and
+`ExportEnquiry.country`/`DistributorAccount.region` are confidential CRM
+records, not validated public claims — so this got the same
+honest-placeholder treatment, for the same reason.
+
+- **Schema**: added `Milestone`/`MarketItem` to `StoryBlockType`
+  (migration `20261011180000_add_story_milestone_market_blocks`) — no
+  new columns, both reuse the existing generic fields exactly like
+  `ValueItem` already does (`eyebrow` as year, `title`, `body`,
+  optional image). Both repeatable with add/remove in the admin editor
+  (like Ingredients/Categories/Values), not fixed-count like Chapters —
+  real milestone/market counts will vary once real content goes in.
+  **Two separate hardcoded `blockType` unions also needed the same two
+  values** (`story-page.schema.ts`'s Zod enum and
+  `admin-story-pages-client.ts`'s `StoryBlockTypeValue`) — found by
+  typecheck/testing, not obvious from the Prisma schema alone; a save of
+  either new type would otherwise have 400'd at the API boundary even
+  though the database and admin form both accepted it.
+- **Seed** (`seed-story-pages.ts`): exactly one `Milestone` and one
+  `MarketItem` row, worded as not-yet-written ("The full story of how
+  Oristor started is coming soon") rather than fabricated — same tone
+  this project already uses for genuinely-absent content elsewhere
+  (e.g. "Recipes for this product are coming soon"). Neither is in the
+  About page's hard-required-blocks check — they stay optional so an
+  empty section just doesn't render, never breaks the page (that
+  required-but-missing mismatch is exactly what caused the 500 fixed
+  earlier this session).
+- **New `HistoryTimeline`** component — chronological list, placed
+  right after Chapter 3 ("From Our Kitchen to Yours," the brief's own
+  "introduce the company" moment), `ScrollReveal`'d per entry like
+  every other section on this page.
+- **Export markets render inside the existing `GlobalJourney`**
+  section (new optional `markets` prop), not as a separate standalone
+  section — a second back-to-back "we're global" block right next to
+  it would read as repetitive.
+- **Admin UI**: two new `RepeatingSection` blocks in `AboutPageEditor`,
+  copying the exact Ingredients/Categories/Values pattern
+  (`useFieldArray`, add/remove, `ImageField` with the Media Library
+  picker for Milestones; Markets has no image field, matching its
+  compact inline-list rendering). Note: `replaceBlocksForPage` only
+  upserts, it never deletes — removing a row in any repeatable section
+  (not just the two new ones) and saving does not actually delete it
+  from the database; a pre-existing limitation inherited as-is, not
+  something introduced or fixed here.
+- **Instagram gallery added to `/about`**, reusing the homepage's
+  exact `InstagramGallery` component and real-data-with-fixture-fallback
+  pattern — no new component or service function needed, just a second
+  call site. Placed right before the closing `StoryCTA`, mirroring its
+  typical position on the homepage.
+- **Fixed the "two lines" bug at its source**: `InstagramGallery` is
+  `grid-cols-3` → `lg:grid-cols-6`; both the homepage and the new About
+  instance were calling `getRecentPostsForStorefront(12)` — 12 ÷ 6 = 2
+  rows on desktop. The fixture fallback (`instagramPosts`) already has
+  exactly 6 entries, confirming 6 was always the intended one-row
+  count. Changed both call sites to `(6)`.
+
+Verified against the local dev server via an authenticated admin
+session: both new admin sections render in the right position with the
+seeded placeholder row, "Add" creates a correctly-wired blank row; the
+storefront page renders the Heritage Timeline and the "Growing Every
+Day" market card inline inside Global Journey, exactly as designed; the
+Instagram section on `/about` and the homepage's own section both now
+render a single row of 6 (not 12 across two rows).
+
+**Follow-up same day**: user reported an uploaded image looking
+"magnified and distorting" on `/about` — traced to `ProductStoryScroll`
+(`product-story-scroll.tsx`), not the small Ingredients circle it first
+looked like. On desktop its pinned variant renders the Product Category
+image as a **full-screen** background (`h-screen w-screen object-cover`)
+— a far more aggressive crop than any other image slot on this page
+(Chapters/mobile-fallback Categories are a contained `aspect-4/3` card;
+Ingredients a small 128px circle). A normal product photo not shot for
+that exact crop will zoom in hard. None of the Chapters/Ingredients/
+Categories/Milestones admin image fields had any size guidance at all
+(only the Hero banner did, from an earlier fix this session) — added a
+`hint` prop to `ImageField` (mirroring that same earlier fix,
+independently, since this branch predates it) and a hint to all four,
+each describing its *actual* render shape: 4:3 card (Chapters), small
+circle (Ingredients), **full-screen pinned background on desktop**
+(Categories — the one that actually caused the reported issue), 16:9
+(Milestones). The Chapters/Categories-mobile 4:3 card crop the user
+specifically said they liked was already correct — confirmed to them
+directly rather than changed.

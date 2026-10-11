@@ -1,17 +1,22 @@
 import type { Metadata } from "next";
 import { connection } from "next/server";
 
+import { InstagramGallery } from "@/components/storefront/home/instagram-gallery";
 import { JsonLdScript } from "@/components/storefront/product/json-ld-script";
 import { Section } from "@/components/storefront/layout/section";
 import { GlobalJourney } from "@/components/storefront/story/global-journey";
+import { HistoryTimeline } from "@/components/storefront/story/history-timeline";
 import { IngredientReveal } from "@/components/storefront/story/ingredient-reveal";
 import { ProductStoryScroll } from "@/components/storefront/story/product-story-scroll";
 import { StoryChapter } from "@/components/storefront/story/story-chapter";
 import { StoryCTA } from "@/components/storefront/story/story-cta";
 import { StoryHero } from "@/components/storefront/story/story-hero";
 import { ValueReveal } from "@/components/storefront/story/value-reveal";
+import { instagramPosts } from "@/lib/fixtures/home-fixtures";
+import { getRecentPostsForStorefront } from "@/services/instagram.service";
 import { getPublishedStoryBlocks } from "@/services/story-page.service";
 import { getResolvedCompanyInfo } from "@/services/system-settings.service";
+import type { InstagramPostData } from "@/types/home";
 import type { StoryChapterContent } from "@/types/story";
 
 export const metadata: Metadata = {
@@ -41,7 +46,22 @@ export default async function AboutPage() {
   // serving its build-time snapshot until the next redeploy.
   await connection();
 
-  const [companyInfo, blocks] = await Promise.all([getResolvedCompanyInfo(), getPublishedStoryBlocks("AboutUs")]);
+  const [companyInfo, blocks, syncedInstagramPosts] = await Promise.all([
+    getResolvedCompanyInfo(),
+    getPublishedStoryBlocks("AboutUs"),
+    getRecentPostsForStorefront(6),
+  ]);
+  // Same real-data-with-fixture-fallback pattern as the homepage's own
+  // Instagram section (homepage-sections.tsx) — never an empty section.
+  const resolvedInstagramPosts: InstagramPostData[] =
+    syncedInstagramPosts.length > 0
+      ? syncedInstagramPosts.map((post) => ({
+          id: post.id,
+          imageSrc: post.imageUrl,
+          imageAlt: post.caption ? post.caption.slice(0, 120) : "Oristor Instagram post",
+          href: post.permalink,
+        }))
+      : instagramPosts;
 
   const hero = blocks.find((block) => block.blockType === "Hero");
   const chapters = blocks.filter((block) => block.blockType === "Chapter").map(toChapter);
@@ -58,6 +78,18 @@ export default async function AboutPage() {
   const values = blocks
     .filter((block) => block.blockType === "ValueItem")
     .map((block) => ({ letter: block.letter ?? "", word: block.title ?? "", description: block.body ?? "" }));
+  const milestones = blocks
+    .filter((block) => block.blockType === "Milestone")
+    .map((block) => ({
+      id: block.blockKey,
+      year: block.eyebrow ?? "",
+      title: block.title ?? "",
+      body: block.body ?? "",
+      image: block.imageUrl ? { src: block.imageUrl, alt: block.imageAlt ?? "" } : null,
+    }));
+  const markets = blocks
+    .filter((block) => block.blockType === "MarketItem")
+    .map((block) => ({ id: block.blockKey, name: block.title ?? "", body: block.body ?? "" }));
   const globalJourney = blocks.find((block) => block.blockType === "GlobalJourney");
   const cta = blocks.find((block) => block.blockType === "Cta");
 
@@ -97,6 +129,12 @@ export default async function AboutPage() {
         <StoryChapter {...companyChapter} />
       </Section>
 
+      {milestones.length > 0 && (
+        <Section>
+          <HistoryTimeline milestones={milestones} />
+        </Section>
+      )}
+
       <Section containerSize={false} spacing="sm">
         <ProductStoryScroll categories={categories} />
       </Section>
@@ -112,7 +150,17 @@ export default async function AboutPage() {
       </Section>
 
       <Section>
-        <GlobalJourney title={globalJourney.title ?? ""} body={globalJourney.body ?? ""} ctaLabel={globalJourney.ctaLabel ?? ""} ctaHref={globalJourney.ctaHref ?? ""} />
+        <GlobalJourney
+          title={globalJourney.title ?? ""}
+          body={globalJourney.body ?? ""}
+          ctaLabel={globalJourney.ctaLabel ?? ""}
+          ctaHref={globalJourney.ctaHref ?? ""}
+          markets={markets}
+        />
+      </Section>
+
+      <Section>
+        <InstagramGallery posts={resolvedInstagramPosts} />
       </Section>
 
       <Section className="bg-cream">

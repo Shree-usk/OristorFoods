@@ -38,7 +38,11 @@ export async function HomepageSections({ layout }: { layout: HomepageLayoutDetai
   const visibleSections = layout.sections.filter((section) => section.visible);
 
   const hasInstagramSection = visibleSections.some((section) => section.type === "InstagramGallery");
-  const syncedInstagramPosts = hasInstagramSection ? await getRecentPostsForStorefront(12) : [];
+  // 6, not 12 — InstagramGallery is grid-cols-3 → lg:grid-cols-6, so 6
+  // posts is exactly one row on desktop. 12 rendered two rows; the
+  // fixture fallback below already has exactly 6 entries, confirming 6
+  // was always the intended count.
+  const syncedInstagramPosts = hasInstagramSection ? await getRecentPostsForStorefront(6) : [];
   // Falls back to the fixture gallery until an admin connects a real
   // Instagram account (Settings > Integrations) — never an empty section.
   const resolvedInstagramPosts: InstagramPostData[] =

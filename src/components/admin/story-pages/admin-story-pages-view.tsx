@@ -121,6 +121,8 @@ interface AboutForm {
   ingredients: StoryPageBlockInput[];
   categories: StoryPageBlockInput[];
   values: StoryPageBlockInput[];
+  milestones: StoryPageBlockInput[];
+  markets: StoryPageBlockInput[];
   globalJourney: StoryPageBlockInput;
   cta: StoryPageBlockInput;
 }
@@ -138,12 +140,14 @@ function blocksToForm(blocks: StoryPageBlock[]): AboutForm {
     ingredients: byType("IngredientItem"),
     categories: byType("ProductCategoryItem"),
     values: byType("ValueItem"),
+    milestones: byType("Milestone"),
+    markets: byType("MarketItem"),
     globalJourney: byType("GlobalJourney")[0] ?? { blockKey: "global-journey", blockType: "GlobalJourney", sortOrder: 0, eyebrow: null, title: "", body: "", imageUrl: null, imageAlt: null, ctaLabel: "", ctaHref: "", secondaryCtaLabel: null, secondaryCtaHref: null, align: null, letter: null },
     cta: byType("Cta")[0] ?? { blockKey: "cta", blockType: "Cta", sortOrder: 0, eyebrow: null, title: "", body: "", imageUrl: null, imageAlt: null, ctaLabel: "", ctaHref: "", secondaryCtaLabel: "", secondaryCtaHref: "", align: null, letter: null },
   };
 }
 
-type PickerTarget = { group: "hero" } | { group: "chapters" | "ingredients" | "categories"; index: number };
+type PickerTarget = { group: "hero" } | { group: "chapters" | "ingredients" | "categories" | "milestones"; index: number };
 
 function AboutPageEditor() {
   const queryClient = useQueryClient();
@@ -160,6 +164,8 @@ function AboutPageEditor() {
   const ingredients = useFieldArray({ control, name: "ingredients" });
   const categories = useFieldArray({ control, name: "categories" });
   const values = useFieldArray({ control, name: "values" });
+  const milestones = useFieldArray({ control, name: "milestones" });
+  const markets = useFieldArray({ control, name: "markets" });
 
   const mutation = useMutation({
     mutationFn: (form: AboutForm) => {
@@ -169,6 +175,8 @@ function AboutPageEditor() {
         ...form.ingredients.map((item, index) => ({ ...item, sortOrder: index })),
         ...form.categories.map((item, index) => ({ ...item, sortOrder: index })),
         ...form.values.map((item, index) => ({ ...item, sortOrder: index })),
+        ...form.milestones.map((item, index) => ({ ...item, sortOrder: index })),
+        ...form.markets.map((item, index) => ({ ...item, sortOrder: index })),
         form.globalJourney,
         form.cta,
       ];
@@ -223,7 +231,13 @@ function AboutPageEditor() {
               <Label htmlFor={`chapter-${index}-body`}>Body</Label>
               <Textarea id={`chapter-${index}-body`} {...register(`chapters.${index}.body`)} />
             </div>
-            <ImageField label="Image" urlRegister={register(`chapters.${index}.imageUrl`)} altRegister={register(`chapters.${index}.imageAlt`)} onBrowse={() => setPickerTarget({ group: "chapters", index })} />
+            <ImageField
+              label="Image"
+              urlRegister={register(`chapters.${index}.imageUrl`)}
+              altRegister={register(`chapters.${index}.imageAlt`)}
+              onBrowse={() => setPickerTarget({ group: "chapters", index })}
+              hint="Use a landscape photo, at least 1200×900px (4:3) — it's cropped to a 4:3 card next to the text, so keep the main subject centered. This is the card style used throughout the Chapters/Product Categories sections."
+            />
             <div>
               <Label htmlFor={`chapter-${index}-align`}>Image alignment</Label>
               <Controller
@@ -247,6 +261,54 @@ function AboutPageEditor() {
       </section>
 
       <RepeatingSection
+        title="History Milestones"
+        description="Shown right after the Chapters, as a chronological timeline. Add one entry per real milestone (e.g. founding, a generational handoff, going digital) — leave empty and the section simply won't render."
+        fields={milestones.fields}
+        onAdd={() =>
+          milestones.append({
+            blockKey: `milestone-${crypto.randomUUID()}`,
+            blockType: "Milestone",
+            sortOrder: milestones.fields.length,
+            eyebrow: "",
+            title: "",
+            body: "",
+            imageUrl: "",
+            imageAlt: "",
+            ctaLabel: null,
+            ctaHref: null,
+            secondaryCtaLabel: null,
+            secondaryCtaHref: null,
+            align: null,
+            letter: null,
+          })
+        }
+        onRemove={milestones.remove}
+        renderFields={(index) => (
+          <>
+            <div className="w-32">
+              <Label htmlFor={`milestone-${index}-year`}>Year (optional)</Label>
+              <Input id={`milestone-${index}-year`} placeholder="e.g. 1998" {...register(`milestones.${index}.eyebrow`)} />
+            </div>
+            <div>
+              <Label htmlFor={`milestone-${index}-title`}>Title</Label>
+              <Input id={`milestone-${index}-title`} {...register(`milestones.${index}.title`)} />
+            </div>
+            <div>
+              <Label htmlFor={`milestone-${index}-body`}>Body</Label>
+              <Textarea id={`milestone-${index}-body`} {...register(`milestones.${index}.body`)} />
+            </div>
+            <ImageField
+              label="Image (optional)"
+              urlRegister={register(`milestones.${index}.imageUrl`)}
+              altRegister={register(`milestones.${index}.imageAlt`)}
+              onBrowse={() => setPickerTarget({ group: "milestones", index })}
+              hint="Use a landscape photo, at least 1280×720px (16:9) — shown under the milestone text at a moderate width, not full-screen."
+            />
+          </>
+        )}
+      />
+
+      <RepeatingSection
         title="Ingredients"
         description="Shown in the “Flavours We Grew Up With” chapter."
         fields={ingredients.fields}
@@ -262,14 +324,20 @@ function AboutPageEditor() {
               <Label htmlFor={`ingredient-${index}-tagline`}>Tagline</Label>
               <Input id={`ingredient-${index}-tagline`} {...register(`ingredients.${index}.body`)} />
             </div>
-            <ImageField label="Image" urlRegister={register(`ingredients.${index}.imageUrl`)} altRegister={register(`ingredients.${index}.imageAlt`)} onBrowse={() => setPickerTarget({ group: "ingredients", index })} />
+            <ImageField
+              label="Image"
+              urlRegister={register(`ingredients.${index}.imageUrl`)}
+              altRegister={register(`ingredients.${index}.imageAlt`)}
+              onBrowse={() => setPickerTarget({ group: "ingredients", index })}
+              hint="Shown as a small circular icon (~128px) — use a tightly-cropped, centered close-up of just the ingredient itself, not a full product-bag photo with space around it, or it will look over-zoomed/cropped oddly."
+            />
           </>
         )}
       />
 
       <RepeatingSection
         title="Product Categories"
-        description="The scrolling product sequence."
+        description="The scrolling product sequence. On desktop this becomes a full-screen, pinned scrolling background as the visitor scrolls — not just a card — so these images need to be larger/higher-resolution than the ones above."
         fields={categories.fields}
         onAdd={() => categories.append({ blockKey: `category-${crypto.randomUUID()}`, blockType: "ProductCategoryItem", sortOrder: categories.fields.length, eyebrow: null, title: "", body: "", imageUrl: "", imageAlt: "", ctaLabel: null, ctaHref: null, secondaryCtaLabel: null, secondaryCtaHref: null, align: null, letter: null })}
         onRemove={categories.remove}
@@ -283,7 +351,13 @@ function AboutPageEditor() {
               <Label htmlFor={`category-${index}-tagline`}>Tagline</Label>
               <Input id={`category-${index}-tagline`} {...register(`categories.${index}.body`)} />
             </div>
-            <ImageField label="Image" urlRegister={register(`categories.${index}.imageUrl`)} altRegister={register(`categories.${index}.imageAlt`)} onBrowse={() => setPickerTarget({ group: "categories", index })} />
+            <ImageField
+              label="Image"
+              urlRegister={register(`categories.${index}.imageUrl`)}
+              altRegister={register(`categories.${index}.imageAlt`)}
+              onBrowse={() => setPickerTarget({ group: "categories", index })}
+              hint="Important: on desktop this fills the ENTIRE screen (full width × full height) as a pinned scrolling background, not a contained card — use a large, high-resolution landscape photo (at least 2400×1600px) with the subject centered, or it will crop in tight and look overly zoomed, like a close-up instead of a full product shot. On mobile it shows as a smaller, contained 4:3 card instead, same as the Chapters above."
+            />
           </>
         )}
       />
@@ -307,6 +381,43 @@ function AboutPageEditor() {
             <div>
               <Label htmlFor={`value-${index}-description`}>Description</Label>
               <Input id={`value-${index}-description`} {...register(`values.${index}.body`)} />
+            </div>
+          </>
+        )}
+      />
+
+      <RepeatingSection
+        title="Export Markets"
+        description="Shown as a small list inside the Global Journey section below. Add one entry per real region/market you actively serve — leave empty and the list simply won't render."
+        fields={markets.fields}
+        onAdd={() =>
+          markets.append({
+            blockKey: `market-${crypto.randomUUID()}`,
+            blockType: "MarketItem",
+            sortOrder: markets.fields.length,
+            eyebrow: null,
+            title: "",
+            body: "",
+            imageUrl: null,
+            imageAlt: null,
+            ctaLabel: null,
+            ctaHref: null,
+            secondaryCtaLabel: null,
+            secondaryCtaHref: null,
+            align: null,
+            letter: null,
+          })
+        }
+        onRemove={markets.remove}
+        renderFields={(index) => (
+          <>
+            <div>
+              <Label htmlFor={`market-${index}-name`}>Region/market name</Label>
+              <Input id={`market-${index}-name`} {...register(`markets.${index}.title`)} />
+            </div>
+            <div>
+              <Label htmlFor={`market-${index}-body`}>Short description</Label>
+              <Input id={`market-${index}-body`} {...register(`markets.${index}.body`)} />
             </div>
           </>
         )}
@@ -399,11 +510,13 @@ function ImageField({
   urlRegister,
   altRegister,
   onBrowse,
+  hint,
 }: {
   label: string;
   urlRegister: ReturnType<ReturnType<typeof useForm<AboutForm>>["register"]>;
   altRegister: ReturnType<ReturnType<typeof useForm<AboutForm>>["register"]>;
   onBrowse: () => void;
+  hint?: string;
 }) {
   return (
     <div className="space-y-2">
@@ -415,6 +528,7 @@ function ImageField({
         </Button>
       </div>
       <Input placeholder="Alt text" {...altRegister} />
+      {hint && <p className="text-caption text-charcoal/60">{hint}</p>}
     </div>
   );
 }
