@@ -379,6 +379,9 @@ model ProductVariant {
 
   cartItems  CartItem[]
   orderItems OrderItem[]
+  // Story 2 (Bundles). Reverse side of BundleItem.componentVariantId — a
+  // variant pinned as an eligible bundle component.
+  bundleComponentOf BundleItem[]
 
   @@index([productId])
   @@index([productId, isActive])
@@ -499,24 +502,117 @@ model Certification {
   products         Product[]
 }
 
-model ProductBundle {
-  id            String       @id @default(cuid())
-  productId     String       @unique
-  product       Product      @relation(fields: [productId], references: [id], onDelete: Cascade)
-  priceOverride Decimal?     @db.Decimal(10, 2)
-  items         BundleItem[]
+enum BundleType {
+  Fixed
+  Selectable
+  MixAndMatch
 }
 
+enum BundleDiscountType {
+  FixedPrice
+  PercentageOff
+  FixedAmountOff
+}
+
+enum BundleStockMode {
+  // Bundle availability is computed live from its components' own stock —
+  // no bundle-level counter is persisted or decremented.
+  Derived
+  // An admin-tracked counter on ProductBundle itself, decremented IN
+  // ADDITION TO (never instead of) every component's own stock — see
+  // order.repository.ts::createOrderWithStockDecrement.
+  OwnStock
+}
+
+// Story 2 (Bundles). Was a single inert priceOverride/items pair with zero
+// production callers (STORY-009 scaffolding only) — now the real bundle
+// definition an admin configures via the product editor's Bundle tab and
+// a customer buys via bundle.service.ts. `fixedPrice` is a rename of the
+// old `priceOverride` column (RENAME COLUMN in the migration, not drop+add
+// — safe since nothing read or wrote it before this story).
+model ProductBundle {
+  id        String     @id @default(cuid())
+  productId String     @unique
+  product   Product    @relation(fields: [productId], references: [id], onDelete: Cascade)
+  bundleType BundleType @default(Fixed)
+  name        String
+  description String?
+  status      ContentStatus @default(Active)
+  // Admin-visible "Scheduled" is DERIVED (status === Active && startDate in
+  // the future), never a stored third status — same precedent as
+  // Collection's "Always on" vs seasonal-window display.
+  startDate DateTime?
+  endDate   DateTime?
+
+  // 3-way XOR (see bundleAdminSchema's .refine) — exactly one of these is
+  // set when discountType is set; discountType null means "no discount,
+  // priced as the sum of its components" (still a valid Fixed/Selectable
+  // bundle, just not a deal).
+  discountType BundleDiscountType?
+  fixedPrice   Decimal? @db.Decimal(10, 2)
+  percentOff   Decimal? @db.Decimal(5, 2)
+  amountOff    Decimal? @db.Decimal(10, 2)
+
+  // Total units the customer must/may pick across every eligible
+  // BundleItem — null for Fixed (locked set, nothing to pick).
+  minQuantity Int?
+  maxQuantity Int?
+
+  stockMode     BundleStockMode @default(Derived)
+  stockQuantity Int?
+  inStock       Boolean         @default(true)
+
+  images BundleImage[]
+  items  BundleItem[]
+
+  cartItems  CartItem[]
+  orderItems OrderItem[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// Own table, mirrors ProductVariantImage — most bundles have none and fall
+// back to the parent Product's own images.
+model BundleImage {
+  id        String        @id @default(cuid())
+  bundleId  String
+  bundle    ProductBundle @relation(fields: [bundleId], references: [id], onDelete: Cascade)
+  url       String
+  altText   String?
+  isPrimary Boolean       @default(false)
+  sortOrder Int           @default(0)
+  createdAt DateTime      @default(now())
+
+  @@index([bundleId])
+}
+
+// A locked (Fixed) or eligible-to-pick (Selectable/MixAndMatch) component
+// of a bundle. `componentVariantId` optionally pins a specific
+// ProductVariant rather than the whole product — see Story 2's "flat
+// rows, not a nested picker" design decision: "any size of Product X"
+// eligible means one row per eligible (product, variant) pair.
 model BundleItem {
-  id                 String        @id @default(cuid())
+  id                 String          @id @default(cuid())
   bundleId           String
-  bundle             ProductBundle @relation(fields: [bundleId], references: [id], onDelete: Cascade)
+  bundle             ProductBundle   @relation(fields: [bundleId], references: [id], onDelete: Cascade)
   componentProductId String
-  componentProduct   Product       @relation(fields: [componentProductId], references: [id])
-  quantity           Int           @default(1)
+  componentProduct   Product         @relation(fields: [componentProductId], references: [id])
+  componentVariantId String?
+  componentVariant   ProductVariant? @relation(fields: [componentVariantId], references: [id])
+
+  quantity Int @default(1)
+  // Fixed: always true, quantity is locked, no customer choice. Selectable/
+  // MixAndMatch: false — this row is an eligible option the customer may
+  // or may not pick, within its own min/max and the bundle's own min/max.
+  isRequired  Boolean @default(true)
+  minQuantity Int     @default(0)
+  maxQuantity Int?
+  sortOrder   Int     @default(0)
 
   @@index([bundleId])
   @@index([componentProductId])
+  @@index([componentVariantId])
 }
 
 enum CustomerGroup {
@@ -1334,12 +1430,22 @@ model CartItem {
   // as multiple independent cart lines, one per selected size.
   variantId         String?
   variant           ProductVariant? @relation(fields: [variantId], references: [id], onDelete: Cascade)
+  // Story 2 (Bundles). Null for a plain line. Set together: bundleId
+  // identifies which bundle definition this row belongs to;
+  // bundleInstanceId is an opaque tag (not an FK) shared by every row
+  // exploded from one "add bundle to cart" action — see
+  // bundle.service.ts::addBundleToCart. Needed in the unique index below
+  // so two different bundle instances that happen to share a component
+  // product/variant never merge into each other's quantity.
+  bundleId         String?
+  bundle           ProductBundle? @relation(fields: [bundleId], references: [id], onDelete: Cascade)
+  bundleInstanceId String?
   quantity          Int
   unitPriceSnapshot Decimal         @db.Decimal(10, 2)
   createdAt         DateTime        @default(now())
   updatedAt         DateTime        @updatedAt
 
-  @@unique([cartId, productId, variantId])
+  @@unique([cartId, productId, variantId, bundleInstanceId])
 }
 
 // --- Coupons & Promotions (STORY-029) ---
@@ -1914,6 +2020,15 @@ model OrderItem {
   productSku         String
   variantName        String?
   variantSku         String?
+  // Story 2 (Bundles). Flat snapshots, same convention as
+  // productName/variantName above — an order's bundle grouping must
+  // survive independently of whether the bundle definition is later
+  // edited or deleted (SetNull, matching productId/variantId's own
+  // pattern).
+  bundleId         String?
+  bundle           ProductBundle? @relation(fields: [bundleId], references: [id], onDelete: SetNull)
+  bundleInstanceId String?
+  bundleName       String?
   unitPrice          Decimal         @db.Decimal(10, 2)
   quantity           Int
   lineTotal          Decimal         @db.Decimal(10, 2)

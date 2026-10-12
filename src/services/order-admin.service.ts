@@ -100,6 +100,7 @@ export async function getOrderAdminDetail(adminUserId: string, orderId: string):
     productName: item.productName,
     productSku: item.productSku,
     variantName: item.variantName,
+    bundleName: item.bundleName,
     unitPrice: item.unitPrice.toNumber(),
     quantity: item.quantity,
     lineTotal: item.lineTotal.toNumber(),

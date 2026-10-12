@@ -4,8 +4,11 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { prisma } from "@/lib/db";
 import { verifyCartCookieValue } from "@/lib/cart-token";
+import { createBundle, createBundleItem } from "@/repositories/bundle.repository";
 import { createProduct } from "@/repositories/product.repository";
+import { addBundleToCart, removeBundleFromCart } from "@/services/bundle.service";
 import {
+  BundleLineLockedError,
   CartItemForbiddenError,
   CartItemNotFoundError,
   ProductUnavailableError,
@@ -63,12 +66,30 @@ async function makeVariant(productId: string, overrides: Record<string, unknown>
 afterEach(async () => {
   await prisma.cartItem.deleteMany();
   await prisma.cart.deleteMany();
+  await prisma.bundleItem.deleteMany();
+  await prisma.productBundle.deleteMany();
   await prisma.standardPrice.deleteMany();
   await prisma.productImage.deleteMany();
   await prisma.productVariant.deleteMany({ where: { sku: { startsWith: "CART-SVC-VARIANT-SKU-" } } });
   await prisma.product.deleteMany({ where: { sku: { startsWith: "CART-SVC-SKU-" } } });
   await prisma.user.deleteMany({ where: { email: { contains: "cart-svc-" } } });
 });
+
+async function makeFixedBundle(components: { product: { id: string }; quantity: number }[], overrides: Record<string, unknown> = {}) {
+  sequence += 1;
+  const bundleProduct = await createProduct({
+    sku: `CART-SVC-SKU-BUNDLE-${sequence}`,
+    slug: `cart-svc-bundle-${sequence}`,
+    name: `Cart Svc Bundle ${sequence}`,
+    status: "Published",
+    productType: "Bundle",
+  });
+  const bundle = await createBundle({ product: { connect: { id: bundleProduct.id } }, bundleType: "Fixed", name: "Fixed Bundle", ...overrides });
+  for (const component of components) {
+    await createBundleItem({ bundle: { connect: { id: bundle.id } }, componentProduct: { connect: { id: component.product.id } }, quantity: component.quantity });
+  }
+  return bundle;
+}
 
 describe("resolveCartIdentity", () => {
   it("creates a new guest cart and returns a cookie value when the caller has no session and no cookie", async () => {
@@ -411,5 +432,72 @@ describe("mergeGuestCartIntoUser", () => {
     const summary = await getCart(user.id, null);
     expect(summary.items).toHaveLength(1);
     expect(summary.items[0]?.quantity).toBe(2);
+  });
+});
+
+describe("Bundles (Story 2)", () => {
+  it("adding a Fixed bundle explodes into one cart row per component, sharing one bundleInstanceId", async () => {
+    const jar = await makeProduct();
+    await prisma.standardPrice.update({ where: { id: (await prisma.standardPrice.findFirstOrThrow({ where: { productId: jar.id } })).id }, data: { price: "200.00" } });
+    const sachet = await makeProduct();
+    const bundle = await makeFixedBundle([{ product: jar, quantity: 1 }, { product: sachet, quantity: 2 }]);
+
+    await addBundleToCart(null, undefined, bundle.id, null);
+
+    const rows = await prisma.cartItem.findMany({ where: { bundleId: bundle.id } });
+    expect(rows).toHaveLength(2);
+    expect(new Set(rows.map((r) => r.bundleInstanceId)).size).toBe(1);
+    expect(rows.find((r) => r.productId === sachet.id)?.quantity).toBe(2);
+  });
+
+  it("two different bundle instances sharing a component product do NOT merge quantities", async () => {
+    const shared = await makeProduct();
+    const onlyInA = await makeProduct();
+    const bundleA = await makeFixedBundle([{ product: shared, quantity: 1 }, { product: onlyInA, quantity: 1 }]);
+    const bundleB = await makeFixedBundle([{ product: shared, quantity: 1 }]);
+
+    const { newCookieValue } = await addBundleToCart(null, undefined, bundleA.id, null);
+    await addBundleToCart(null, newCookieValue ?? undefined, bundleB.id, null);
+
+    const sharedRows = await prisma.cartItem.findMany({ where: { productId: shared.id } });
+    expect(sharedRows).toHaveLength(2);
+    expect(sharedRows[0].quantity).toBe(1);
+    expect(sharedRows[1].quantity).toBe(1);
+    expect(sharedRows[0].bundleInstanceId).not.toBe(sharedRows[1].bundleInstanceId);
+  });
+
+  it("removeBundleFromCart deletes every row of the instance in one call", async () => {
+    const jar = await makeProduct();
+    const sachet = await makeProduct();
+    const bundle = await makeFixedBundle([{ product: jar, quantity: 1 }, { product: sachet, quantity: 1 }]);
+
+    const { newCookieValue } = await addBundleToCart(null, undefined, bundle.id, null);
+    const rows = await prisma.cartItem.findMany({ where: { bundleId: bundle.id } });
+    const bundleInstanceId = rows[0].bundleInstanceId!;
+
+    await removeBundleFromCart(null, newCookieValue ?? undefined, bundleInstanceId);
+
+    expect(await prisma.cartItem.findMany({ where: { bundleInstanceId } })).toHaveLength(0);
+  });
+
+  it("a bundle component row's quantity/remove can't be changed individually — cart.service rejects it", async () => {
+    const jar = await makeProduct();
+    const bundle = await makeFixedBundle([{ product: jar, quantity: 1 }]);
+    const { newCookieValue } = await addBundleToCart(null, undefined, bundle.id, null);
+    const row = await prisma.cartItem.findFirstOrThrow({ where: { bundleId: bundle.id } });
+
+    await expect(updateItemQuantity(null, newCookieValue ?? undefined, row.id, 5)).rejects.toBeInstanceOf(BundleLineLockedError);
+    await expect(removeItem(null, newCookieValue ?? undefined, row.id)).rejects.toBeInstanceOf(BundleLineLockedError);
+  });
+
+  it("a cart read flags a bundle's rows unavailable once the bundle is deactivated, without throwing", async () => {
+    const jar = await makeProduct();
+    const bundle = await makeFixedBundle([{ product: jar, quantity: 1 }]);
+    const { newCookieValue } = await addBundleToCart(null, undefined, bundle.id, null);
+
+    await prisma.productBundle.update({ where: { id: bundle.id }, data: { status: "Inactive" } });
+
+    const summary = await getCart(null, newCookieValue);
+    expect(summary.items.every((item) => item.unavailable)).toBe(true);
   });
 });

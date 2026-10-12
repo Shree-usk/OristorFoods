@@ -155,6 +155,7 @@ export function AdminOrderDetailView({ orderId }: { orderId: string }) {
                   <TableCell>
                     {item.productName}
                     {item.variantName && <span className="text-charcoal/70"> — {item.variantName}</span>}
+                    {item.bundleName && <span className="ml-1 text-caption text-charcoal/60">(part of {item.bundleName})</span>}
                   </TableCell>
                   <TableCell>{item.productSku}</TableCell>
                   <TableCell>{item.quantity}</TableCell>

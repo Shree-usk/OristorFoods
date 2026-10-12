@@ -75,6 +75,17 @@ export function useCart() {
     onSuccess: invalidate,
   });
 
+  // Story 2 (Bundles). Removes every exploded row of one bundle instance
+  // in a single call — individual component rows can't be removed on
+  // their own (cart.service.ts::removeItem rejects them).
+  const removeBundleMutation = useMutation({
+    mutationFn: async (bundleInstanceId: string) => {
+      const response = await fetch(`/api/cart/bundle/${bundleInstanceId}`, { method: "DELETE", credentials: "include" });
+      if (!response.ok) await throwWithServerMessage(response, "Failed to remove bundle");
+    },
+    onSuccess: invalidate,
+  });
+
   // STORY-029. Applying/removing a coupon changes the total, so — like
   // every other cart mutation here — it invalidates ["cart"] rather than
   // trying to locally patch the cached summary; any component reading
@@ -137,6 +148,9 @@ export function useCart() {
     updateQuantityError: updateQuantityMutation.isError ? { itemId: updateQuantityMutation.variables?.itemId, message: updateQuantityMutation.error.message } : null,
     isRemovingItemId: removeItemMutation.isPending ? removeItemMutation.variables : undefined,
     removeItemError: removeItemMutation.isError ? { itemId: removeItemMutation.variables, message: removeItemMutation.error.message } : null,
+    removeBundle: (bundleInstanceId: string) => removeBundleMutation.mutate(bundleInstanceId),
+    isRemovingBundleInstanceId: removeBundleMutation.isPending ? removeBundleMutation.variables : undefined,
+    removeBundleError: removeBundleMutation.isError ? { bundleInstanceId: removeBundleMutation.variables, message: removeBundleMutation.error.message } : null,
     applyCoupon: (code: string) => applyCouponMutation.mutateAsync(code),
     removeCoupon: () => removeCouponMutation.mutateAsync(),
     isApplyingCoupon: applyCouponMutation.isPending,

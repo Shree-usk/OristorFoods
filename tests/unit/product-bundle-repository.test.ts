@@ -2,12 +2,8 @@
 import { afterEach, describe, expect, it } from "vitest";
 
 import { prisma } from "@/lib/db";
-import {
-  addBundleItem,
-  createBundle,
-  createProduct,
-  getBundleWithItems,
-} from "@/repositories/product.repository";
+import { createBundleItem, createBundle, findBundleByProductId } from "@/repositories/bundle.repository";
+import { createProduct } from "@/repositories/product.repository";
 
 afterEach(async () => {
   await prisma.bundleItem.deleteMany();
@@ -36,22 +32,25 @@ describe("product bundles", () => {
 
     const bundle = await createBundle({
       product: { connect: { id: giftSet.id } },
-      priceOverride: "1200.00",
+      bundleType: "Fixed",
+      name: "Curry Powder Gift Set",
+      discountType: "FixedPrice",
+      fixedPrice: "1200.00",
     });
-    await addBundleItem({
+    await createBundleItem({
       bundle: { connect: { id: bundle.id } },
       componentProduct: { connect: { id: curryPowder.id } },
       quantity: 2,
     });
-    await addBundleItem({
+    await createBundleItem({
       bundle: { connect: { id: bundle.id } },
       componentProduct: { connect: { id: chilliPowder.id } },
       quantity: 1,
     });
 
-    const found = await getBundleWithItems(giftSet.id);
+    const found = await findBundleByProductId(giftSet.id);
 
-    expect(found?.priceOverride?.toFixed(2)).toBe("1200.00");
+    expect(found?.fixedPrice?.toFixed(2)).toBe("1200.00");
     expect(found?.items).toHaveLength(2);
     expect(found?.items.map((i) => i.quantity).sort()).toEqual([1, 2]);
   });

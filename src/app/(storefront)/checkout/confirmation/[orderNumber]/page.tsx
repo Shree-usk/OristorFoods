@@ -78,11 +78,12 @@ export default async function OrderConfirmationPage({ params }: { params: Promis
             Order summary
           </h2>
           <ul className="mt-3 divide-y divide-input">
-            {order.items.map((item) => (
-              <li key={`${item.productSku}`} className="flex items-center justify-between gap-4 py-2 text-body text-charcoal">
+            {order.items.map((item, index) => (
+              <li key={`${item.productSku}-${index}`} className="flex items-center justify-between gap-4 py-2 text-body text-charcoal">
                 <span>
                   {item.productName}
                   {item.variantName && <span className="text-charcoal/70"> — {item.variantName}</span>} <span className="text-charcoal/70">× {item.quantity}</span>
+                  {item.bundleName && <span className="ml-1 text-caption text-charcoal/60">(part of {item.bundleName})</span>}
                 </span>
                 <span className="font-number">
                   {order.currency} {item.lineTotal.toFixed(2)}

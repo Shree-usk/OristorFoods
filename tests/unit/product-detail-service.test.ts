@@ -4,13 +4,12 @@ import { afterEach, describe, expect, it } from "vitest";
 import { prisma } from "@/lib/db";
 import { createCategory } from "@/repositories/category.repository";
 import { createBrand } from "@/repositories/brand.repository";
+import { createBundleItem, createBundle } from "@/repositories/bundle.repository";
 import {
   addProductIngredient,
-  createBundle,
   createProduct,
   setProductNutrition,
 } from "@/repositories/product.repository";
-import { addBundleItem } from "@/repositories/product.repository";
 import { createSalePrice, createStandardPrice } from "@/repositories/pricing.repository";
 import { getProductDetail, getProductsForCompare, listRelatedProducts } from "@/services/product.service";
 import {
@@ -156,8 +155,8 @@ describe("getProductDetail", () => {
       status: "Published",
     });
     await createStandardPrice({ product: { connect: { id: bundleProduct.id } }, price: "90.00" });
-    const bundle = await createBundle({ product: { connect: { id: bundleProduct.id } } });
-    await addBundleItem({
+    const bundle = await createBundle({ product: { connect: { id: bundleProduct.id } }, bundleType: "Fixed", name: "Bundle" });
+    await createBundleItem({
       bundle: { connect: { id: bundle.id } },
       componentProduct: { connect: { id: component.id } },
       quantity: 2,
@@ -166,8 +165,23 @@ describe("getProductDetail", () => {
     const detail = await getProductDetail("pd-bundle");
 
     expect(detail?.bundleItems).toEqual([
-      { productId: component.id, name: "Component", slug: "pd-component", quantity: 2, imageSrc: "", imageAlt: "Component" },
+      {
+        bundleItemId: expect.any(String),
+        productId: component.id,
+        variantId: null,
+        name: "Component",
+        slug: "pd-component",
+        quantity: 2,
+        imageSrc: "",
+        imageAlt: "Component",
+        price: 50,
+        inStock: true,
+        isRequired: true,
+        minQuantity: 0,
+        maxQuantity: null,
+      },
     ]);
+    expect(detail?.bundle).toMatchObject({ bundleType: "Fixed", name: "Bundle", standaloneTotal: 100, discountedTotal: 100 });
   });
 });
 

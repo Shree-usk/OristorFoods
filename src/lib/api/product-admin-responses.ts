@@ -14,6 +14,9 @@ const statusByCode: Record<ProductAdminErrorCode, number> = {
   variant_sku_conflict: 409,
   variant_barcode_conflict: 409,
   variant_has_orders: 409,
+  bundle_not_found: 404,
+  bundle_already_exists: 409,
+  bundle_item_not_found: 404,
 };
 
 /** Every /api/admin/products/* route handler's catch block goes through this. */

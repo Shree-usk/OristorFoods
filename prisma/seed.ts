@@ -1,5 +1,6 @@
 import { prisma } from "../src/lib/db";
 import * as brandRepository from "../src/repositories/brand.repository";
+import * as bundleRepository from "../src/repositories/bundle.repository";
 import * as categoryRepository from "../src/repositories/category.repository";
 import * as collectionRepository from "../src/repositories/collection.repository";
 import * as productRepository from "../src/repositories/product.repository";
@@ -171,16 +172,19 @@ async function main() {
     brand: { connect: { id: brand.id } },
     categories: { connect: [{ id: giftSets.id }] },
   });
-  const bundle = await productRepository.createBundle({
+  const bundle = await bundleRepository.createBundle({
     product: { connect: { id: giftSet.id } },
-    priceOverride: "1200.00",
+    bundleType: "Fixed",
+    name: "Curry Lover's Gift Set",
+    discountType: "FixedPrice",
+    fixedPrice: "1200.00",
   });
-  await productRepository.addBundleItem({
+  await bundleRepository.createBundleItem({
     bundle: { connect: { id: bundle.id } },
     componentProduct: { connect: { id: curryPowder.id } },
     quantity: 2,
   });
-  await productRepository.addBundleItem({
+  await bundleRepository.createBundleItem({
     bundle: { connect: { id: bundle.id } },
     componentProduct: { connect: { id: chilliPowder.id } },
     quantity: 1,

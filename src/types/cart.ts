@@ -12,6 +12,9 @@ export interface CartLineItem {
   /** Null for an unvarianted product — every line that existed before Product Variants shipped stays null. */
   variantId: string | null;
   variantName: string | null;
+  /** Shared by every row exploded from one "add bundle to cart" action — null for a plain line. See bundle.service.ts. */
+  bundleInstanceId: string | null;
+  bundleName: string | null;
   imageSrc: string;
   imageAlt: string;
   quantity: number;

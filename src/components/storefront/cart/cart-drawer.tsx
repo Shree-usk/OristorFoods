@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 
 import { Button, buttonVariants } from "@/components/ui/button";
+import { BundleGroupHeader, groupCartItems } from "@/components/storefront/cart/cart-bundle-group";
 import { CartCrossSell } from "@/components/storefront/cart/cart-cross-sell";
 import { CartLineItemRow } from "@/components/storefront/cart/cart-line-item";
 import { CouponInput } from "@/components/storefront/cart/coupon-input";
@@ -16,7 +17,7 @@ interface CartDrawerProps {
 }
 
 export function CartDrawer({ open, onClose }: CartDrawerProps) {
-  const { cart, updateQuantity, removeItem, isUpdatingItemId, updateQuantityError, isRemovingItemId, removeItemError } = useCart();
+  const { cart, updateQuantity, removeItem, isUpdatingItemId, updateQuantityError, isRemovingItemId, removeItemError, removeBundle, isRemovingBundleInstanceId } = useCart();
   const [announcement, setAnnouncement] = useState("");
 
   function handleRemove(itemId: string, productName: string) {
@@ -43,19 +44,31 @@ export function CartDrawer({ open, onClose }: CartDrawerProps) {
           {!cart || cart.items.length === 0 ? (
             <EmptyCart />
           ) : (
-            cart.items.map((item) => (
-              <CartLineItemRow
-                key={item.id}
-                item={item}
-                onQuantityChange={(quantity) => updateQuantity(item.id, quantity)}
-                onRemove={() => handleRemove(item.id, item.productName)}
-                isMutating={isUpdatingItemId === item.id || isRemovingItemId === item.id}
-                error={
-                  (updateQuantityError?.itemId === item.id && updateQuantityError.message) ||
-                  (removeItemError?.itemId === item.id && removeItemError.message) ||
-                  null
-                }
-              />
+            groupCartItems(cart.items).map((group) => (
+              <div key={group.bundleInstanceId ?? group.items[0].id}>
+                {group.bundleInstanceId && (
+                  <BundleGroupHeader
+                    name={group.bundleName}
+                    onRemove={() => removeBundle(group.bundleInstanceId!)}
+                    isRemoving={isRemovingBundleInstanceId === group.bundleInstanceId}
+                  />
+                )}
+                {group.items.map((item) => (
+                  <CartLineItemRow
+                    key={item.id}
+                    item={item}
+                    locked={!!item.bundleInstanceId}
+                    onQuantityChange={(quantity) => updateQuantity(item.id, quantity)}
+                    onRemove={() => handleRemove(item.id, item.productName)}
+                    isMutating={isUpdatingItemId === item.id || isRemovingItemId === item.id}
+                    error={
+                      (updateQuantityError?.itemId === item.id && updateQuantityError.message) ||
+                      (removeItemError?.itemId === item.id && removeItemError.message) ||
+                      null
+                    }
+                  />
+                ))}
+              </div>
             ))
           )}
           {cart && cart.items.length > 0 && (

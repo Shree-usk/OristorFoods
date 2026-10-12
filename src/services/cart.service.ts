@@ -1,79 +1,51 @@
 import type { Prisma } from "@/generated/prisma/client";
-import { signCartToken, verifyCartCookieValue } from "@/lib/cart-token";
-import { getOrCreateSessionId } from "@/lib/recommendation-session";
+import { verifyCartCookieValue } from "@/lib/cart-token";
 import { findProductById } from "@/repositories/product.repository";
 import * as cartRepository from "@/repositories/cart.repository";
 import type { CartItemWithProduct } from "@/repositories/cart.repository";
 import * as productVariantRepository from "@/repositories/product-variant.repository";
 import * as rewardsRepository from "@/repositories/rewards.repository";
+import { resolveBundleInstancePrices } from "@/services/bundle.service";
 import {
+  CART_COOKIE_NAME,
+  recordAddToCartInteraction,
+  requireAvailableProduct,
+  resolveCartIdentity,
+  type CartIdentityResult,
+} from "@/services/cart-identity.service";
+import {
+  BundleLineLockedError,
   CartItemForbiddenError,
   CartItemNotFoundError,
-  ProductUnavailableError,
-  StockExceededError,
 } from "@/services/cart.errors";
 import { resolveDiscountForCart } from "@/services/discount.service";
 import type { DiscountableLine } from "@/services/discount.service";
 import { resolveCustomerGroupForUser, resolvePrice } from "@/services/pricing.service";
 import { requireAvailableVariant, resolveVariantPrice } from "@/services/product-variant.service";
-import { trackInteraction } from "@/services/recommendation.service";
 import { resolveActiveMultiplier } from "@/services/reward-campaign.service";
 import { calculatePointsRedemption } from "@/services/rewards-calc";
 import type { CartLineItem, CartSummary } from "@/types/cart";
 
-export const CART_COOKIE_NAME = "oristor-cart-token";
+export { CART_COOKIE_NAME, recordAddToCartInteraction, requireAvailableProduct, resolveCartIdentity };
+export type { CartIdentityResult };
 
-interface CartIdentityResult {
-  cart: Prisma.CartGetPayload<object>;
-  /** Set only when a brand-new guest cart was just created — the caller (a route handler) must Set-Cookie this. */
-  newCookieValue: string | null;
-}
-
-/**
- * Resolves which Cart a request's identity maps to, creating one if
- * needed. An authenticated userId always wins over a guest cookie (a
- * logged-in visitor's cart is their account cart, never a lingering guest
- * one — the guest cart, if any, is handled by the merge flow, Task 6).
- * A cookie that fails signature verification is treated exactly like no
- * cookie at all: a fresh guest cart is created, never an error.
- */
-export async function resolveCartIdentity(
-  userId: string | null,
-  guestCookieValue: string | undefined,
-): Promise<CartIdentityResult> {
-  if (userId) {
-    const existing = await cartRepository.findCartByUserId(userId);
-    if (existing) return { cart: existing, newCookieValue: null };
-    const created = await cartRepository.createUserCart(userId);
-    return { cart: created, newCookieValue: null };
-  }
-
-  const verifiedToken = verifyCartCookieValue(guestCookieValue);
-  if (verifiedToken) {
-    const existing = await cartRepository.findCartByGuestToken(verifiedToken);
-    if (existing) return { cart: existing, newCookieValue: null };
-    // Verified token with no matching row (e.g. the row was deleted by a
-    // merge) — fall through to creating a fresh guest cart below.
-  }
-
-  const { token, cookieValue } = signCartToken();
-  const created = await cartRepository.createGuestCart(token);
-  return { cart: created, newCookieValue: cookieValue };
-}
-
-async function requireAvailableProduct(productId: string, requestedQuantity: number) {
-  const product = await findProductById(productId);
-  if (!product || product.status !== "Published" || !product.inStock) throw new ProductUnavailableError();
-  if (requestedQuantity > product.stockQuantity) throw new StockExceededError(product.stockQuantity);
-  return product;
-}
-
-function toLineItem(item: CartItemWithProduct, resolvedUnitPrice: number, currency: string, priceChanged: boolean, campaignMultiplier: number): CartLineItem {
+function toLineItem(
+  item: CartItemWithProduct,
+  resolvedUnitPrice: number,
+  currency: string,
+  priceChanged: boolean,
+  campaignMultiplier: number,
+  bundleInvalid: boolean = false,
+): CartLineItem {
   const primaryImage = item.product.images[0];
   // A variant line's availability/stock comes entirely from its own
   // ProductVariant row, never the parent Product — see Product Variants
   // story's design decision (parent stock/status is inert once variants exist).
-  const unavailable = item.variant ? !item.variant.isActive || !item.variant.inStock : item.product.status !== "Published" || !item.product.inStock;
+  // bundleInvalid (Story 2) catches a case neither branch below can see on
+  // its own: every component can be perfectly in-stock while the BUNDLE
+  // DEFINITION itself was deactivated, scheduled out of window, or edited
+  // to drop this component — see bundle.service.ts::resolveBundleInstancePrices.
+  const unavailable = bundleInvalid || (item.variant ? !item.variant.isActive || !item.variant.inStock : item.product.status !== "Published" || !item.product.inStock);
   const availableQuantity = item.variant ? item.variant.stockQuantity : item.product.stockQuantity;
   const quantityCapped = item.quantity > availableQuantity;
   return {
@@ -83,6 +55,8 @@ function toLineItem(item: CartItemWithProduct, resolvedUnitPrice: number, curren
     productSlug: item.product.slug,
     variantId: item.variantId,
     variantName: item.variant?.name ?? null,
+    bundleInstanceId: item.bundleInstanceId,
+    bundleName: item.bundle?.name ?? null,
     imageSrc: primaryImage?.url ?? "",
     imageAlt: primaryImage?.altText ?? item.product.name,
     quantity: item.quantity,
@@ -123,17 +97,37 @@ function toLineItem(item: CartItemWithProduct, resolvedUnitPrice: number, curren
  */
 async function buildSummary(cart: Prisma.CartGetPayload<object>, items: CartItemWithProduct[], userId: string | null): Promise<CartSummary> {
   const customerGroup = await resolveCustomerGroupForUser(userId);
-  const [campaignMultiplier, setting] = await Promise.all([resolveActiveMultiplier(customerGroup), rewardsRepository.getSetting()]);
+  const [campaignMultiplier, setting, bundleResolution] = await Promise.all([
+    resolveActiveMultiplier(customerGroup),
+    rewardsRepository.getSetting(),
+    resolveBundleInstancePrices(items, customerGroup),
+  ]);
   const lineItems: CartLineItem[] = [];
   const discountableLines: DiscountableLine[] = [];
   for (const item of items) {
-    // A variant line's price is the variant's own promoPrice-or-price —
-    // it never consults the campaign/sale/customerGroup/volumeDiscount
-    // tiers, which are scoped to Product only (see Product Variants
-    // story's design decision).
     let liveUnitPrice: number;
     let currency: string;
-    if (item.variant) {
+    let bundleInvalid = false;
+    if (item.bundleInstanceId) {
+      // Story 2 (Bundles). Baked-in bundle discount, re-derived fresh on
+      // every read exactly like a plain line's price — never trusted from
+      // the stored snapshot. Checked FIRST, ahead of the
+      // variant/product branches below (which stay untouched), since a
+      // bundle row still has its own variant/product relation populated
+      // but must never be priced by the ordinary tiers.
+      if (bundleResolution.invalidInstanceIds.has(item.bundleInstanceId)) {
+        bundleInvalid = true;
+        liveUnitPrice = item.unitPriceSnapshot.toNumber();
+        currency = item.variant?.currency ?? "LKR";
+      } else {
+        liveUnitPrice = bundleResolution.priceByItemId.get(item.id) ?? item.unitPriceSnapshot.toNumber();
+        currency = item.variant?.currency ?? "LKR";
+      }
+    } else if (item.variant) {
+      // A variant line's price is the variant's own promoPrice-or-price —
+      // it never consults the campaign/sale/customerGroup/volumeDiscount
+      // tiers, which are scoped to Product only (see Product Variants
+      // story's design decision).
       const resolved = resolveVariantPrice(item.variant);
       liveUnitPrice = resolved.price;
       currency = resolved.currency;
@@ -142,11 +136,11 @@ async function buildSummary(cart: Prisma.CartGetPayload<object>, items: CartItem
       liveUnitPrice = resolved?.price.toNumber() ?? item.unitPriceSnapshot.toNumber();
       currency = resolved?.currency ?? "LKR";
     }
-    const priceChanged = liveUnitPrice !== item.unitPriceSnapshot.toNumber();
+    const priceChanged = !bundleInvalid && liveUnitPrice !== item.unitPriceSnapshot.toNumber();
     if (priceChanged) {
       await cartRepository.updateCartItemSnapshot(item.id, liveUnitPrice.toFixed(2));
     }
-    const line = toLineItem(item, liveUnitPrice, currency, priceChanged, campaignMultiplier);
+    const line = toLineItem(item, liveUnitPrice, currency, priceChanged, campaignMultiplier, bundleInvalid);
     lineItems.push(line);
     discountableLines.push({ productId: item.productId, categoryIds: item.product.categories.map((category) => category.id), lineTotal: line.lineTotal });
   }
@@ -265,11 +259,6 @@ export async function addItem(
   return identity;
 }
 
-async function recordAddToCartInteraction(userId: string | null, productId: string): Promise<void> {
-  const sessionId = userId ? null : await getOrCreateSessionId();
-  await trackInteraction({ customerId: userId, sessionId, productId, eventType: "AddToCart" });
-}
-
 async function requireOwnCartItem(userId: string | null, guestCookieValue: string | null | undefined, itemId: string) {
   const { cart } = await resolveCartIdentity(userId, guestCookieValue ?? undefined);
   const item = await cartRepository.findCartItemById(itemId);
@@ -285,6 +274,11 @@ export async function updateItemQuantity(
   quantity: number,
 ): Promise<void> {
   const item = await requireOwnCartItem(userId, guestCookieValue, itemId);
+  // Story 2 (Bundles). A bundle's exploded rows can only be resized as a
+  // whole group (bundle.service.ts::removeBundleFromCart) — resizing one
+  // component independently would silently break the bundle's own
+  // min/max and re-priced discount.
+  if (item.bundleInstanceId) throw new BundleLineLockedError();
 
   if (item.variantId) {
     const variant = await requireAvailableVariant(item.variantId, quantity);
@@ -300,7 +294,12 @@ export async function updateItemQuantity(
 }
 
 export async function removeItem(userId: string | null, guestCookieValue: string | null | undefined, itemId: string): Promise<void> {
-  await requireOwnCartItem(userId, guestCookieValue, itemId);
+  const item = await requireOwnCartItem(userId, guestCookieValue, itemId);
+  // Story 2 (Bundles). Removing one component of a bundle independently
+  // would leave the rest of the bundle's rows orphaned with no definition
+  // reference left to re-validate against — use
+  // bundle.service.ts::removeBundleFromCart to remove the whole instance.
+  if (item.bundleInstanceId) throw new BundleLineLockedError();
   await cartRepository.deleteCartItem(itemId);
 }
 

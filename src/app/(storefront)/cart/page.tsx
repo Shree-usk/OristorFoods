@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 
 import { Section } from "@/components/storefront/layout/section";
+import { BundleGroupHeader, groupCartItems } from "@/components/storefront/cart/cart-bundle-group";
 import { CartCrossSell } from "@/components/storefront/cart/cart-cross-sell";
 import { CartLineItemRow } from "@/components/storefront/cart/cart-line-item";
 import { CouponInput } from "@/components/storefront/cart/coupon-input";
@@ -12,7 +13,7 @@ import { buttonVariants } from "@/components/ui/button";
 import { useCart } from "@/hooks/use-cart";
 
 export default function CartPage() {
-  const { cart, isPending, updateQuantity, removeItem, isUpdatingItemId, updateQuantityError, isRemovingItemId, removeItemError } = useCart();
+  const { cart, isPending, updateQuantity, removeItem, isUpdatingItemId, updateQuantityError, isRemovingItemId, removeItemError, removeBundle, isRemovingBundleInstanceId } = useCart();
   const [announcement, setAnnouncement] = useState("");
 
   function handleRemove(itemId: string, productName: string) {
@@ -34,19 +35,31 @@ export default function CartPage() {
       ) : (
         <div className="mt-8 grid grid-cols-1 gap-10 lg:grid-cols-3">
           <div className="lg:col-span-2">
-            {cart.items.map((item) => (
-              <CartLineItemRow
-                key={item.id}
-                item={item}
-                onQuantityChange={(quantity) => updateQuantity(item.id, quantity)}
-                onRemove={() => handleRemove(item.id, item.productName)}
-                isMutating={isUpdatingItemId === item.id || isRemovingItemId === item.id}
-                error={
-                  (updateQuantityError?.itemId === item.id && updateQuantityError.message) ||
-                  (removeItemError?.itemId === item.id && removeItemError.message) ||
-                  null
-                }
-              />
+            {groupCartItems(cart.items).map((group) => (
+              <div key={group.bundleInstanceId ?? group.items[0].id}>
+                {group.bundleInstanceId && (
+                  <BundleGroupHeader
+                    name={group.bundleName}
+                    onRemove={() => removeBundle(group.bundleInstanceId!)}
+                    isRemoving={isRemovingBundleInstanceId === group.bundleInstanceId}
+                  />
+                )}
+                {group.items.map((item) => (
+                  <CartLineItemRow
+                    key={item.id}
+                    item={item}
+                    locked={!!item.bundleInstanceId}
+                    onQuantityChange={(quantity) => updateQuantity(item.id, quantity)}
+                    onRemove={() => handleRemove(item.id, item.productName)}
+                    isMutating={isUpdatingItemId === item.id || isRemovingItemId === item.id}
+                    error={
+                      (updateQuantityError?.itemId === item.id && updateQuantityError.message) ||
+                      (removeItemError?.itemId === item.id && removeItemError.message) ||
+                      null
+                    }
+                  />
+                ))}
+              </div>
             ))}
           </div>
           <div className="rounded-lg border border-input p-6">

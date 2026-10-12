@@ -6,6 +6,7 @@ import { cache } from "react";
 import { Breadcrumbs } from "@/components/storefront/layout/breadcrumbs";
 import { Section } from "@/components/storefront/layout/section";
 import { BulletList } from "@/components/storefront/product/bullet-list";
+import { BundleDisplay } from "@/components/storefront/product/bundle-display";
 import { CertificationBadges } from "@/components/storefront/product/certification-badges";
 import { FeaturedProductsRail } from "@/components/storefront/product/featured-products-rail";
 import { IngredientsList } from "@/components/storefront/product/ingredients-list";
@@ -141,18 +142,7 @@ export default async function ProductDetailPage({ params }: ProductDetailPagePro
 
           {product.story && <p className="mt-6 text-body text-charcoal">{product.story}</p>}
 
-          {product.bundleItems.length > 0 && (
-            <div className="mt-6">
-              <h2 className="text-h4 font-heading text-charcoal">This bundle includes</h2>
-              <ul className="mt-2 space-y-1 text-small text-charcoal">
-                {product.bundleItems.map((item) => (
-                  <li key={item.productId}>
-                    {item.quantity} x {item.name}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
+          {product.bundle && <BundleDisplay bundle={product.bundle} items={product.bundleItems} />}
 
           <div className="mt-6">
             <BulletList heading="Benefits" items={product.benefits} headingLevel="h2" />

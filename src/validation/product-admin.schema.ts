@@ -175,3 +175,67 @@ export const setVariantImagesSchema = z.object({
     }),
   ),
 });
+
+// --- Bundles (Story 2) ---
+
+const bundleTypeEnum = z.enum(["Fixed", "Selectable", "MixAndMatch"]);
+const bundleDiscountTypeEnum = z.enum(["FixedPrice", "PercentageOff", "FixedAmountOff"]);
+const bundleStockModeEnum = z.enum(["Derived", "OwnStock"]);
+const bundleStatusEnum = z.enum(["Active", "Inactive"]);
+
+/** Create and update share one shape, matching productVariantSchema's own convention. */
+export const bundleAdminSchema = z
+  .object({
+    bundleType: bundleTypeEnum,
+    name: z.string().trim().min(1, "Name is required.").max(200),
+    description: z.string().trim().max(2000).optional().nullable(),
+    status: bundleStatusEnum.optional(),
+    startDate: z.coerce.date().optional().nullable(),
+    endDate: z.coerce.date().optional().nullable(),
+    discountType: bundleDiscountTypeEnum.optional().nullable(),
+    fixedPrice: z.number().nonnegative().optional().nullable(),
+    percentOff: z.number().min(0).max(100).optional().nullable(),
+    amountOff: z.number().nonnegative().optional().nullable(),
+    minQuantity: z.number().int().positive().optional().nullable(),
+    maxQuantity: z.number().int().positive().optional().nullable(),
+    stockMode: bundleStockModeEnum.optional(),
+    stockQuantity: z.number().int().min(0).optional().nullable(),
+    inStock: z.boolean().optional(),
+  })
+  .refine((data) => !data.discountType || [data.fixedPrice, data.percentOff, data.amountOff].filter((value) => value !== null && value !== undefined).length === 1, {
+    message: "Exactly one of fixedPrice, percentOff, or amountOff is required when a discount type is set.",
+    path: ["discountType"],
+  })
+  .refine((data) => !data.startDate || !data.endDate || data.endDate > data.startDate, {
+    message: "endDate must be after startDate",
+    path: ["endDate"],
+  })
+  .refine((data) => !data.minQuantity || !data.maxQuantity || data.maxQuantity >= data.minQuantity, {
+    message: "maxQuantity must be at least minQuantity",
+    path: ["maxQuantity"],
+  });
+
+export type BundleAdminFormInput = z.infer<typeof bundleAdminSchema>;
+
+export const bundleItemSchema = z.object({
+  componentProductId: z.string().min(1, "Select a product."),
+  componentVariantId: z.string().min(1).optional().nullable(),
+  quantity: z.number().int().positive(),
+  isRequired: z.boolean().optional(),
+  minQuantity: z.number().int().min(0).optional(),
+  maxQuantity: z.number().int().positive().optional().nullable(),
+  sortOrder: z.number().int().min(0).optional(),
+});
+
+export type BundleItemFormInput = z.infer<typeof bundleItemSchema>;
+
+export const setBundleImagesSchema = z.object({
+  images: z.array(
+    z.object({
+      url: mediaUrlSchema,
+      altText: z.string().trim().max(200).optional().nullable(),
+      isPrimary: z.boolean().optional(),
+      sortOrder: z.number().int().min(0).optional(),
+    }),
+  ),
+});
