@@ -154,7 +154,11 @@ describe("getProductDetail", () => {
       productType: "Bundle",
       status: "Published",
     });
-    await createStandardPrice({ product: { connect: { id: bundleProduct.id } }, price: "90.00" });
+    // Deliberately no StandardPrice on the bundle product itself — a real
+    // bundle's price comes entirely from the bundle definition below, same
+    // as a variant-driven product never needs one. Reproduces a real bug
+    // caught live on staging: getProductDetail's "has no configured price"
+    // gate didn't know about bundles and 404'd a correctly-configured one.
     const bundle = await createBundle({ product: { connect: { id: bundleProduct.id } }, bundleType: "Fixed", name: "Bundle" });
     await createBundleItem({
       bundle: { connect: { id: bundle.id } },
@@ -182,6 +186,10 @@ describe("getProductDetail", () => {
       },
     ]);
     expect(detail?.bundle).toMatchObject({ bundleType: "Fixed", name: "Bundle", standaloneTotal: 100, discountedTotal: 100 });
+    // The page-level price/currency must also come from the bundle, not
+    // 404 or fall through to an unresolved base-product price.
+    expect(detail?.price).toBe(100);
+    expect(detail?.currency).toBe("LKR");
   });
 });
 
