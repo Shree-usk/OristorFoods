@@ -8,6 +8,10 @@ export const deliveryZoneInputSchema = z.object({
   isActive: z.boolean().default(true),
 });
 
+export const bulkImportDeliveryZonesSchema = z.object({
+  csv: z.string().trim().min(1, "The CSV file is empty."),
+});
+
 export const deliveryRateInputSchema = z
   .object({
     rateType: z.enum(["Flat", "WeightBased", "ValueBased"]),

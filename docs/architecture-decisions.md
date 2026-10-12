@@ -9102,3 +9102,57 @@ Verified visually against the local dev server: scrolled through the
 pinned sequence and confirmed a portrait jar photo (Pickled Vegetables)
 now renders in full — label, text, and all — against its own blurred
 backdrop, instead of a tight, cropped-in close-up.
+
+---
+
+## 2026-10-12 — Delivery Zones: CSV bulk import
+
+Entering zones one-by-one through the admin form was slow, so the admin
+asked for a bulk-upload option. Chose **CSV over `.xlsx`** — this
+codebase has no Excel-parsing library (`xlsx`/`exceljs`/`papaparse`
+aren't in `package.json`), only the hand-rolled `parseSimpleCsv`/`toCsv`
+pair in `src/lib/csv.ts`, already used for the one existing bulk-import
+feature (SEO Redirects, `redirect.service.ts::bulkImportRedirects`).
+Adding a binary-Excel dependency for one admin convenience feature
+wasn't worth it when Excel exports to CSV directly with zero loss.
+
+**Conflict detection reuses `createZone()`, not a new in-memory
+tracker.** `assertNoCityConflict` inside `delivery-zone.service.ts`
+re-queries the DB fresh on every call, so calling the existing
+`createZone()`/`upsertZoneRate()` sequentially per CSV row naturally
+catches a row's cities conflicting with a zone created earlier in the
+same batch — each row commits before the next starts. This is simpler
+than the Redirects precedent, which manually tracks an in-memory
+`accepted` list because its own conflict check isn't DB-driven.
+
+**CSV cell encoding uses `;`, not `,`, for multi-value fields.**
+`parseSimpleCsv` has no quoted-field support (naive split on `,` and
+newlines), so a cities list or a rate's tiers can't use commas in-cell.
+Columns: `name,cities,isActive,rateType,flatAmount,tiers,
+estimatedDaysMin,estimatedDaysMax` — `cities` is `;`-separated,
+`tiers` is `upTo:amount` pairs joined by `;` (e.g.
+`500:300;1000:450`), matching `DeliveryRate.tiers`' real shape. Rate
+columns are all optional; a blank `rateType` creates a zone with no
+rate. `DeliveryRateOverride` (campaign-linked promotional pricing) is
+out of scope — it doesn't fit a flat per-row import.
+
+Each row is validated through the **existing** Zod schemas
+(`deliveryZoneInputSchema`, `deliveryRateInputSchema`) after being
+parsed out of its CSV representation, so every existing rule (ascending
+tiers, Flat-requires-flatAmount, zone name required, etc.) applies with
+no new validation logic. New: `bulkImportDeliveryZones()` in
+`delivery-zone.service.ts`, `POST /api/admin/delivery-zones/bulk-import`,
+and an "Import CSV" button + "Download CSV template" link in
+`admin-delivery-zones-list-view.tsx` — all mirroring the Redirects
+bulk-import feature's shape. A per-row result (succeeded/failed), not
+an all-or-nothing transaction.
+
+Verified end-to-end over HTTP against the local dev server (admin
+login via `/api/admin/auth`, then a direct `POST` to the new route):
+a 3-row CSV with a header, a Flat-rate zone, a WeightBased-tiered zone,
+and a third row deliberately reusing an earlier row's city — the first
+two succeeded with their rates persisted correctly, the third failed
+with a clean per-row city-conflict message, matching the design intent
+exactly. Unit tests added to `tests/unit/delivery-zone-service.test.ts`
+cover the same three cases (multi-row import, malformed tiers, in-batch
+city conflict) against the real local Postgres.
