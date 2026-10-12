@@ -462,18 +462,25 @@ export async function getProductDetail(
   // A variant-driven product's price comes entirely from its variants
   // (see the Product Variants story's design decision) — the parent's
   // own StandardPrice/etc. rows are never consulted, and an admin isn't
-  // required to set one once variants exist.
+  // required to set one once variants exist. Story 2 (Bundles): the same
+  // rule applies to a bundle-driven product — its price comes from the
+  // bundle definition, not the base Product's own StandardPrice, which
+  // a real bundle configuration correctly leaves unset. Found live on
+  // staging: without this, a genuinely well-configured bundle product
+  // 404'd (the base-price gate below rejected it before bundle data was
+  // ever consulted).
   const hasVariants = product.variants.length > 0;
+  const hasBundle = product.bundle !== null;
 
   const [resolvedPrice, reviewSummary, qaSummary, recipeSummary, seoMeta] = await Promise.all([
-    hasVariants ? null : pricingService.resolvePrice({ productId: product.id, customerGroup: customerGroup ?? "Retail" }),
+    hasVariants || hasBundle ? null : pricingService.resolvePrice({ productId: product.id, customerGroup: customerGroup ?? "Retail" }),
     getReviewSummary(product.id),
     getQaSummary(product.id),
     getRecipeSummary(product.id),
     seoRepository.findSeoMeta("Product", product.id),
   ]);
 
-  if (!hasVariants && !resolvedPrice) {
+  if (!hasVariants && !hasBundle && !resolvedPrice) {
     // Renders identically to a genuinely-missing product (notFound()) from
     // the outside, so this is the only signal an admin/dev gets that the
     // product exists and is Published but has no resolvable price.
@@ -500,6 +507,7 @@ export async function getProductDetail(
     : [];
 
   const bundleDetail = await resolveBundleDetail(product.bundle, customerGroup ?? "Retail");
+  const bundleOriginalPrice = bundleDetail.bundle && bundleDetail.bundle.discountedTotal < bundleDetail.bundle.standaloneTotal ? bundleDetail.bundle.standaloneTotal : null;
 
   const detail: ProductDetail = {
     id: product.id,
@@ -554,9 +562,9 @@ export async function getProductDetail(
       stockQuantity: variant.stockQuantity,
       images: variant.images.map((image) => ({ url: image.url, altText: image.altText })),
     })),
-    price: hasVariants ? (variantPrice ?? 0) : resolvedPrice!.price.toNumber(),
-    originalPrice: hasVariants ? variantOriginalPrice : originalPrice,
-    currency: hasVariants ? (defaultVariant?.currency ?? "LKR") : resolvedPrice!.currency,
+    price: hasVariants ? (variantPrice ?? 0) : hasBundle ? (bundleDetail.bundle?.discountedTotal ?? 0) : resolvedPrice!.price.toNumber(),
+    originalPrice: hasVariants ? variantOriginalPrice : hasBundle ? bundleOriginalPrice : originalPrice,
+    currency: hasVariants ? (defaultVariant?.currency ?? "LKR") : hasBundle ? (bundleDetail.bundle?.currency ?? "LKR") : resolvedPrice!.currency,
     categoryPath,
     categoryIds,
     reviewSummary,
