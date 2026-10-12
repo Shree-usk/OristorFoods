@@ -178,6 +178,14 @@ export const setVariantImagesSchema = z.object({
 
 // --- Bundles (Story 2) ---
 
+// The admin date <input type="date"> sends "" (never omitted/null) when
+// left blank — z.coerce.date() on "" produces an Invalid Date, which Zod
+// v4 reports as a confusing "expected date, received Date" rather than
+// a validation failure. Normalize "" to undefined before coercion, same
+// "blank string must become a real empty value" fix already applied to
+// barcode fields elsewhere in this schema file.
+const optionalCoercedDate = z.preprocess((value) => (value === "" ? undefined : value), z.coerce.date().optional().nullable());
+
 const bundleTypeEnum = z.enum(["Fixed", "Selectable", "MixAndMatch"]);
 const bundleDiscountTypeEnum = z.enum(["FixedPrice", "PercentageOff", "FixedAmountOff"]);
 const bundleStockModeEnum = z.enum(["Derived", "OwnStock"]);
@@ -190,8 +198,8 @@ export const bundleAdminSchema = z
     name: z.string().trim().min(1, "Name is required.").max(200),
     description: z.string().trim().max(2000).optional().nullable(),
     status: bundleStatusEnum.optional(),
-    startDate: z.coerce.date().optional().nullable(),
-    endDate: z.coerce.date().optional().nullable(),
+    startDate: optionalCoercedDate,
+    endDate: optionalCoercedDate,
     discountType: bundleDiscountTypeEnum.optional().nullable(),
     fixedPrice: z.number().nonnegative().optional().nullable(),
     percentOff: z.number().min(0).max(100).optional().nullable(),

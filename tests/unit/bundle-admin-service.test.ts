@@ -130,4 +130,16 @@ describe("bundleAdminSchema — discount XOR validation", () => {
   it("rejects two discount fields set at once", () => {
     expect(bundleAdminSchema.safeParse({ bundleType: "Fixed", name: "X", discountType: "FixedPrice", fixedPrice: 100, percentOff: 10 }).success).toBe(false);
   });
+
+  it("accepts a blank string for startDate/endDate — the admin date input sends '', never omitted or null", () => {
+    // Reproduces a real bug caught live on staging: z.coerce.date() on ""
+    // produces an Invalid Date, which Zod reports as a confusing
+    // "expected date, received Date" instead of a clean validation pass.
+    const result = bundleAdminSchema.safeParse({ bundleType: "Fixed", name: "X", startDate: "", endDate: "" });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.startDate).toBeUndefined();
+      expect(result.data.endDate).toBeUndefined();
+    }
+  });
 });
