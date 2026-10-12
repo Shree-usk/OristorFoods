@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { CartServiceError, type CartErrorCode } from "@/services/cart.errors";
-import { StockExceededError } from "@/services/cart.errors";
+import { BundleStockExceededError, StockExceededError } from "@/services/cart.errors";
 import { CouponMinOrderValueNotMetError, CouponServiceError, type CouponErrorCode } from "@/services/coupon.errors";
 import { RewardsInsufficientBalanceError, RewardsExceedsPerOrderCapError, RewardsServiceError, type RewardsErrorCode } from "@/services/rewards.errors";
 
@@ -10,6 +10,10 @@ const statusByCode: Record<CartErrorCode, number> = {
   forbidden: 403,
   stock_exceeded: 409,
   unavailable: 409,
+  bundle_unavailable: 409,
+  bundle_stock_exceeded: 409,
+  bundle_selection_invalid: 400,
+  bundle_line_locked: 409,
 };
 
 const couponStatusByCode: Record<CouponErrorCode, number> = {
@@ -36,7 +40,7 @@ const rewardsStatusByCode: Record<RewardsErrorCode, number> = {
 };
 
 export function cartErrorResponse(error: unknown) {
-  if (error instanceof StockExceededError) {
+  if (error instanceof StockExceededError || error instanceof BundleStockExceededError) {
     return NextResponse.json({ error: error.message, availableQuantity: error.availableQuantity }, { status: 409 });
   }
   if (error instanceof CouponMinOrderValueNotMetError) {

@@ -99,12 +99,20 @@ function isUniqueConstraintViolation(error: unknown): error is Prisma.PrismaClie
  * `meta.driverAdapterError.cause.constraint.fields` (verified against this
  * project's actual adapter — NOT the classic `meta.target` shape Prisma's
  * own docs describe for the built-in query engine), so both are checked.
+ *
+ * The adapter's `fields[0]` is the raw Postgres constraint-detail text,
+ * which keeps the column name double-quoted whenever Postgres itself
+ * needed to quote it (any column with an uppercase letter, e.g.
+ * `"productId"` — confirmed while building the Bundles story; every field
+ * checked here today, slug/sku/barcode, happens to be all-lowercase and
+ * was never affected) — strip surrounding quotes so both cases compare
+ * equal to a plain field name.
  */
 function conflictField(error: Prisma.PrismaClientKnownRequestError): string | undefined {
   const meta = error.meta as { target?: unknown; driverAdapterError?: { cause?: { constraint?: { fields?: unknown } } } } | undefined;
 
   const adapterFields = meta?.driverAdapterError?.cause?.constraint?.fields;
-  if (Array.isArray(adapterFields) && typeof adapterFields[0] === "string") return adapterFields[0];
+  if (Array.isArray(adapterFields) && typeof adapterFields[0] === "string") return adapterFields[0].replace(/^"|"$/g, "");
 
   const target = meta?.target;
   if (Array.isArray(target)) return target[0] as string;
@@ -330,8 +338,35 @@ export async function duplicateProduct(adminUserId: string, id: string, newSlug:
     bundle: source.bundle
       ? {
           create: {
-            priceOverride: source.bundle.priceOverride,
-            items: { create: source.bundle.items.map((item) => ({ componentProductId: item.componentProductId, quantity: item.quantity })) },
+            bundleType: source.bundle.bundleType,
+            name: source.bundle.name,
+            description: source.bundle.description,
+            // A duplicated bundle starts Inactive — same "never silently
+            // publish a copy" reasoning the base product's own duplicate
+            // (Draft status) already follows.
+            status: "Inactive",
+            startDate: source.bundle.startDate,
+            endDate: source.bundle.endDate,
+            discountType: source.bundle.discountType,
+            fixedPrice: source.bundle.fixedPrice,
+            percentOff: source.bundle.percentOff,
+            amountOff: source.bundle.amountOff,
+            minQuantity: source.bundle.minQuantity,
+            maxQuantity: source.bundle.maxQuantity,
+            stockMode: source.bundle.stockMode,
+            stockQuantity: source.bundle.stockQuantity,
+            inStock: source.bundle.inStock,
+            items: {
+              create: source.bundle.items.map((item) => ({
+                componentProductId: item.componentProductId,
+                componentVariantId: item.componentVariantId,
+                quantity: item.quantity,
+                isRequired: item.isRequired,
+                minQuantity: item.minQuantity,
+                maxQuantity: item.maxQuantity,
+                sortOrder: item.sortOrder,
+              })),
+            },
           },
         }
       : undefined,

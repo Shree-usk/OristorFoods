@@ -1,7 +1,9 @@
-import type { CustomerGroup, ProductType } from "@/generated/prisma/client";
+import { Prisma, type CustomerGroup, type ProductType } from "@/generated/prisma/client";
 import * as categoryRepository from "@/repositories/category.repository";
 import * as collectionService from "@/services/collection.service";
+import { computeBundleDiscountedTotal } from "@/services/bundle-pricing.service";
 import * as pricingService from "@/services/pricing.service";
+import { resolveVariantPrice } from "@/services/product-variant.service";
 import * as productRepository from "@/repositories/product.repository";
 import * as seoRepository from "@/repositories/seo.repository";
 import {
@@ -266,12 +268,34 @@ export interface ProductDetailIngredient {
   isAllergen: boolean;
 }
 export interface ProductDetailBundleItem {
+  bundleItemId: string;
   productId: string;
+  variantId: string | null;
   name: string;
   slug: string;
   quantity: number;
   imageSrc: string;
   imageAlt: string;
+  /** Live, resolved price for ONE unit of this component — see getProductDetail. */
+  price: number;
+  inStock: boolean;
+  isRequired: boolean;
+  minQuantity: number;
+  maxQuantity: number | null;
+}
+
+/** Story 2 (Bundles). Bundle-level metadata — null for a product with no bundle configured. */
+export interface ProductDetailBundle {
+  id: string;
+  bundleType: "Fixed" | "Selectable" | "MixAndMatch";
+  name: string;
+  description: string | null;
+  minQuantity: number | null;
+  maxQuantity: number | null;
+  standaloneTotal: number;
+  discountedTotal: number;
+  currency: string;
+  inStock: boolean;
 }
 export interface ProductDetailVariant {
   id: string;
@@ -308,6 +332,7 @@ export interface ProductDetail {
   allergens: { name: string; icon: string | null }[];
   certifications: { name: string; certificateImage: string | null }[];
   bundleItems: ProductDetailBundleItem[];
+  bundle: ProductDetailBundle | null;
   /** Non-empty only for a variant-driven product — see getProductDetail for how price/currency below are then derived from the default-selected variant instead of the 5-tier pricing system. */
   variants: ProductDetailVariant[];
   price: number;
@@ -358,6 +383,73 @@ export interface CompareItem {
  * Keeping it here would create a circular import (recommendation.service.ts
  * already imports listRelatedProducts from this file as ITS OWN fallback).
  */
+type ProductDetailBundleRow = NonNullable<Awaited<ReturnType<typeof productRepository.findProductDetailBySlug>>>["bundle"];
+
+/**
+ * Resolves a bundle's component rows + headline standalone/discounted
+ * total for the PDP. The headline total only ever reflects the bundle's
+ * REQUIRED items (every item, for a Fixed bundle) — Selectable/
+ * MixAndMatch bundles have nothing to total until the customer picks,
+ * which bundle-display.tsx drives live via the public preview endpoint
+ * instead of this static field.
+ */
+async function resolveBundleDetail(
+  bundle: ProductDetailBundleRow,
+  customerGroup: CustomerGroup,
+): Promise<{ items: ProductDetailBundleItem[]; bundle: ProductDetailBundle | null }> {
+  if (!bundle) return { items: [], bundle: null };
+
+  const items: ProductDetailBundleItem[] = [];
+  for (const item of bundle.items) {
+    let price: number;
+    let inStock: boolean;
+    if (item.componentVariant) {
+      const resolved = resolveVariantPrice(item.componentVariant);
+      price = resolved.price;
+      inStock = item.componentVariant.isActive && item.componentVariant.inStock;
+    } else {
+      const resolved = await pricingService.resolvePrice({ productId: item.componentProductId, customerGroup });
+      price = resolved?.price.toNumber() ?? 0;
+      inStock = item.componentProduct.inStock;
+    }
+    items.push({
+      bundleItemId: item.id,
+      productId: item.componentProductId,
+      variantId: item.componentVariantId,
+      name: item.componentVariant ? `${item.componentProduct.name} — ${item.componentVariant.name}` : item.componentProduct.name,
+      slug: item.componentProduct.slug,
+      quantity: item.quantity,
+      imageSrc: item.componentProduct.images[0]?.url ?? "",
+      imageAlt: item.componentProduct.images[0]?.altText ?? item.componentProduct.name,
+      price,
+      inStock,
+      isRequired: item.isRequired,
+      minQuantity: item.minQuantity,
+      maxQuantity: item.maxQuantity,
+    });
+  }
+
+  const requiredItems = items.filter((item) => item.isRequired);
+  const standaloneTotal = requiredItems.reduce((sum, item) => sum.plus(new Prisma.Decimal(item.price).times(item.quantity)), new Prisma.Decimal(0));
+  const discountedTotal = computeBundleDiscountedTotal(standaloneTotal, bundle);
+
+  return {
+    items,
+    bundle: {
+      id: bundle.id,
+      bundleType: bundle.bundleType,
+      name: bundle.name,
+      description: bundle.description,
+      minQuantity: bundle.minQuantity,
+      maxQuantity: bundle.maxQuantity,
+      standaloneTotal: standaloneTotal.toNumber(),
+      discountedTotal: discountedTotal.toNumber(),
+      currency: "LKR",
+      inStock: bundle.stockMode === "OwnStock" ? bundle.inStock && (bundle.stockQuantity ?? 0) > 0 : requiredItems.every((item) => item.inStock),
+    },
+  };
+}
+
 export async function getProductDetail(
   slug: string,
   customerGroup?: CustomerGroup,
@@ -407,6 +499,8 @@ export async function getProductDetail(
     ? await categoryRepository.getCategoryAncestorPath(product.categories[0].id)
     : [];
 
+  const bundleDetail = await resolveBundleDetail(product.bundle, customerGroup ?? "Retail");
+
   const detail: ProductDetail = {
     id: product.id,
     sku: product.sku,
@@ -446,14 +540,8 @@ export async function getProductDetail(
     certificationNames: product.certifications.map((certification) => certification.name),
     allergens: product.allergens.map((allergen) => ({ name: allergen.name, icon: allergen.icon })),
     certifications: product.certifications.map((certification) => ({ name: certification.name, certificateImage: certification.certificateImage })),
-    bundleItems: (product.bundle?.items ?? []).map((item) => ({
-      productId: item.componentProductId,
-      name: item.componentProduct.name,
-      slug: item.componentProduct.slug,
-      quantity: item.quantity,
-      imageSrc: item.componentProduct.images[0]?.url ?? "",
-      imageAlt: item.componentProduct.images[0]?.altText ?? item.componentProduct.name,
-    })),
+    bundleItems: bundleDetail.items,
+    bundle: bundleDetail.bundle,
     variants: product.variants.map((variant) => ({
       id: variant.id,
       sku: variant.sku,

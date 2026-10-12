@@ -9472,3 +9472,171 @@ was the first useful signal here (the former succeeded, meaning the
 400/500 split pointed at validation/response-mapping, not the service
 logic — though in the end the real fix was in the service logic after
 all, just a field `mapWriteError` wasn't checking).
+
+## 2026-10-12 — Story 2 of 5: Product Bundles
+
+Second story of the Variants/Bundles/Custom Packaging epic (see the
+Story 1 entry above). The existing `ProductBundle`/`BundleItem` schema
+(STORY-009 scaffolding) was inert — `priceOverride` was never read by
+any pricing/cart/checkout code, and the only read path rendered a
+static "N x Name" list on the PDP with no price, no variant-awareness,
+and no add-to-cart. This story builds the real thing.
+
+**Scope, confirmed with the user before implementation:** Fixed,
+Selectable, and MixAndMatch bundle types only (Promotional and
+Frequently-bought-together deferred — Promotional overlaps with the
+existing Coupon/Promotion engine, FBT is more a recommendation widget
+than a true bundle); bundle components may optionally pin a specific
+`ProductVariant`, not just a whole `Product`; a bundle lives in the
+cart as **exploded `CartItem` rows** sharing a new `bundleId`/
+`bundleInstanceId` pair, not a single grouped line — this reuses
+`toLineItem`/`buildSummary`'s per-line loop,
+`requireAvailableProduct`/`requireAvailableVariant`, and
+`createOrderWithStockDecrement`'s per-line conditional-atomic-decrement
+transaction almost unmodified, all of which Story 1 just shipped.
+
+**Key design decision not in the original ask, decided during
+implementation:** a bundle *instance* in the cart always represents
+exactly ONE unit of the bundle — there is no separate "bundle quantity"
+layered on top of each exploded row's own quantity. A customer who
+wants two of the same bundle adds it twice, getting two independent
+`bundleInstanceId`s. This was chosen because a real "resize this
+bundle's quantity" feature would need to persist which `BundleItem`
+each row came from (to re-derive the Selectable/MixAndMatch selection
+on resize) and would make `resolveBundleInstancePrices`' live re-
+pricing ambiguous for a `FixedPrice` discount (defined per-unit, not
+per-instance) without tracking a bundle-level quantity nowhere in the
+current `CartItem` shape has room for. One-instance-equals-one-unit
+sidesteps all of that cleanly; "remove the whole bundle" is still a
+single action via `bundle.service.ts::removeBundleFromCart`.
+
+**Deferred, flagged explicitly rather than half-built:** the brief's
+"preview as a customer would see it" admin feature. The house pattern
+(`menu-preview-pane.tsx`) renders the real storefront component against
+unsaved draft state — doing that properly for bundles means designing a
+shared preview-pane convention Custom Packaging will also need, better
+done once than twice. Story 2 ships a numeric "original price / bundle
+price / savings" preview in the admin panel instead
+(`bundle-admin.service.ts::previewBundlePricing`), satisfying the
+pricing-transparency requirement without the full visual preview. The
+visual `BundlePreviewPane` is explicitly left for the Story 5
+integration pass.
+
+**Pricing**: `src/services/bundle-pricing.service.ts` — pure, DB-free,
+independently tested (`tests/unit/bundle-pricing.test.ts`).
+`computeBundleDiscountedTotal` mirrors `pricing.service.ts`'s private
+`computeVolumeDiscountPrice`'s fixed-price-or-percentage duality.
+`distributeBundleTotal` spreads a bundle's discounted total across its
+exploded component rows **proportional to each component's own
+standalone line value** (not an even split), using a largest-remainder
+apportionment method in integer cents.
+
+A real rounding bug was caught and fixed while writing the test for
+this: the first draft always treated the LAST array element as the
+"absorb the drift" component, but computed the drift against the
+*nominal* (pre-division) cent shares of every prior component rather
+than their *realized* (already-rounded-per-unit) contribution — so a
+component earlier in the array with `quantity > 1` could silently lose
+a cent that was never swept into the total. Fixed by (a) tracking each
+component's actual realized cents as it's processed, and (b)
+deliberately choosing whichever component has `quantity === 1` (not
+just whichever happens to be last in the array) to be processed last,
+since a quantity-of-1 component's own per-unit division never loses a
+cent — this makes the "exact total" guarantee hold regardless of input
+ordering, for any bundle where at least one component has quantity 1
+(the common case).
+
+**Two real Prisma/adapter gotchas found and fixed, not just this
+story's problem** (`bundle-admin.service.ts`'s `conflictField`/
+`createBundle`, and the identical latent bug pre-emptively fixed in
+`product-admin.service.ts`'s own copy):
+1. `@prisma/adapter-pg`'s P2002 `constraint.fields[0]` is the raw
+   Postgres constraint-detail text, which keeps a column name double-
+   quoted whenever Postgres itself needed to quote it — i.e. any column
+   with an uppercase letter (`"productId"`), never an all-lowercase one
+   (`slug`/`sku`/`barcode` — every field this adapter-shape check had
+   ever been tested against before this story). `conflictField` now
+   strips surrounding quotes so both cases compare equal to a plain
+   field name.
+2. Creating a `ProductBundle` by `connect`-ing a `Product` that already
+   has one (the 1:1 relation, `Product.bundle`/`ProductBundle.productId
+   @unique`) does **not** surface as a P2002 at all — Prisma's query
+   engine validates the relation's cardinality itself first and throws
+   **P2014** ("would violate the required relation") before the DB-level
+   unique constraint ever gets a chance to fire. A plain scalar
+   `@unique` field (`slug`, `sku`, `productId`-as-plain-column elsewhere)
+   goes through the P2002 path; a `@unique` FK that's also a 1:1
+   relation's connect target does not. `createBundle` now catches both.
+
+**Cart/checkout/order wiring** (all additive, per Story 1's own
+discipline): `CartItem`/`OrderItem` gained nullable `bundleId`/
+`bundleInstanceId` (+`bundleName` snapshot on `OrderItem`);
+`CartItem`'s unique index widened to
+`(cartId, productId, variantId, bundleInstanceId)`.
+`cart.service.ts::buildSummary` gained one new branch (checked first,
+ahead of the untouched variant/product branches) that re-derives a
+bundle row's live price via the new
+`bundle.service.ts::resolveBundleInstancePrices` — batched once per
+cart read, never per-row, mirroring `pricing.service.ts`'s
+`resolvePricesForProducts` discipline — and flags the row `unavailable`
+if the bundle was deactivated/edited since, without throwing.
+`updateItemQuantity`/`removeItem` gained a guard rejecting a bundle's
+individual component rows (`BundleLineLockedError`) — a bundle can only
+be resized/removed as a whole group via
+`bundle.service.ts::removeBundleFromCart`.
+`order.repository.ts::createOrderWithStockDecrement` gained one new
+guarded loop before the existing per-line decrement, only for
+`stockMode: "OwnStock"` bundles — an ADDITIONAL cap on top of every
+component's own real stock decrement, never a substitute for it, so a
+bundle can never oversell a component it shares with non-bundle sales.
+`cancelOrderWithStockRelease` grew the direct inverse (restock) step.
+
+**Avoided a circular import**: `bundle.service.ts` needs
+`requireAvailableProduct`/`recordAddToCartInteraction`/
+`resolveCartIdentity` (previously private/local to `cart.service.ts`),
+and `cart.service.ts` needs to call `bundle.service.ts`'s
+`resolveBundleInstancePrices` from `buildSummary` — two files importing
+each other. Extracted the shared primitives into a new, lower-level
+`src/services/cart-identity.service.ts` (no dependency on either
+`cart.service.ts` or `bundle.service.ts`), with `cart.service.ts` re-
+exporting them so every existing external import site (route handlers,
+`cart-cookie.ts`, etc.) is unaffected. Same reasoning
+`rewards.service.ts`'s own header comment already documents for why it
+reads `rewards.repository.ts` directly instead of `cart.service.ts`.
+
+**Admin UI**: `product-bundle-panel.tsx` mirrors
+`product-variants-panel.tsx`'s shape, plus a new
+`bundle-component-picker.tsx` (product-then-optional-variant picker —
+confirmed nothing like it existed anywhere in the codebase before this
+story). One React-Compiler-driven refactor worth noting: the panel's
+edit form can't be synced from the fetched bundle via a
+`useEffect`+`setState` (flagged by the `react-hooks/set-state-in-effect`
+lint rule, now a real build error in this project) — fixed by splitting
+out an `ExistingBundlePanel` sub-component that only mounts once the
+bundle exists, lazily initializing its form state directly from the
+query result instead of syncing it in an effect. The same category of
+fix applies to `bundle-display.tsx`'s live price preview (derive
+"nothing selected" from render state instead of clearing it via a
+synchronous `setState` inside the debounce effect).
+
+**Deliberately not built this story** (component-level variant
+selection in Selectable/MixAndMatch bundles is flat, not nested): "any
+size of Product X" eligible in a pick-your-own bundle means the admin
+adds one `BundleItem` row per eligible `(product, variant)` pair, each
+independently selectable — not a richer "pick product, then pick its
+size" UX. Avoids inventing a new "selection group" schema concept
+nothing in the brief or codebase asks for; the cost falls on admin data
+entry, not customer UX quality.
+
+Migration: `20261012210000_add_product_bundles` — hand-edited from the
+raw `prisma migrate diff` output to `RENAME COLUMN "priceOverride" TO
+"fixedPrice"` instead of drop+add (no data loss), and to backfill the
+new `NOT NULL name` column from the parent `Product`'s own name before
+adding the constraint (the seed's one pre-existing demo bundle had no
+name yet). Generated by diffing the git-HEAD schema snapshot against
+the working tree directly (`migrate diff --from-schema=<git-show-HEAD-
+copy> --to-schema=prisma/schema.prisma --script`) rather than
+`--from-config-datasource`, since the local dev DB had already been
+`db push`-ed to the new schema by the time the diff was generated this
+story (confirmed: diffing from the live DB only works when the DB still
+reflects the PRE-change state).

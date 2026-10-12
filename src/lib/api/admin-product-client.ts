@@ -278,3 +278,111 @@ export async function setVariantImages(productId: string, variantId: string, ima
   assertOk(response, "Failed to save variant images");
   return response.json();
 }
+
+// --- Bundles (Story 2) ---
+
+export interface BundleFormInput {
+  bundleType: "Fixed" | "Selectable" | "MixAndMatch";
+  name: string;
+  description?: string | null;
+  status?: "Active" | "Inactive";
+  startDate?: string | null;
+  endDate?: string | null;
+  discountType?: "FixedPrice" | "PercentageOff" | "FixedAmountOff" | null;
+  fixedPrice?: number | null;
+  percentOff?: number | null;
+  amountOff?: number | null;
+  minQuantity?: number | null;
+  maxQuantity?: number | null;
+  stockMode?: "Derived" | "OwnStock";
+  stockQuantity?: number | null;
+  inStock?: boolean;
+}
+
+export interface BundleItemFormInput {
+  componentProductId: string;
+  componentVariantId?: string | null;
+  quantity: number;
+  isRequired?: boolean;
+  minQuantity?: number;
+  maxQuantity?: number | null;
+  sortOrder?: number;
+}
+
+async function readErrorOr(response: Response, fallbackMessage: string): Promise<never> {
+  const body = await response.json().catch(() => ({ error: fallbackMessage }));
+  throw new Error(body.error ?? fallbackMessage);
+}
+
+export async function fetchAdminBundle(productId: string) {
+  const response = await fetch(`/api/admin/products/${productId}/bundle`);
+  if (response.status === 404) return null;
+  assertOk(response, "Failed to load bundle");
+  return response.json();
+}
+
+export async function createAdminBundle(productId: string, input: BundleFormInput) {
+  const response = await fetch(`/api/admin/products/${productId}/bundle`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  if (!response.ok) return readErrorOr(response, "Failed to create bundle");
+  return response.json();
+}
+
+export async function updateAdminBundle(productId: string, input: BundleFormInput) {
+  const response = await fetch(`/api/admin/products/${productId}/bundle`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  if (!response.ok) return readErrorOr(response, "Failed to save bundle");
+  return response.json();
+}
+
+export async function deleteAdminBundle(productId: string) {
+  const response = await fetch(`/api/admin/products/${productId}/bundle`, { method: "DELETE" });
+  assertOk(response, "Failed to delete bundle");
+}
+
+export async function addBundleItem(productId: string, input: BundleItemFormInput) {
+  const response = await fetch(`/api/admin/products/${productId}/bundle/items`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  if (!response.ok) return readErrorOr(response, "Failed to add bundle item");
+  return response.json();
+}
+
+export async function updateBundleItem(productId: string, itemId: string, input: BundleItemFormInput) {
+  const response = await fetch(`/api/admin/products/${productId}/bundle/items/${itemId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  if (!response.ok) return readErrorOr(response, "Failed to save bundle item");
+  return response.json();
+}
+
+export async function deleteBundleItem(productId: string, itemId: string) {
+  const response = await fetch(`/api/admin/products/${productId}/bundle/items/${itemId}`, { method: "DELETE" });
+  assertOk(response, "Failed to remove bundle item");
+}
+
+export async function setBundleImages(productId: string, images: { url: string; altText?: string | null; isPrimary?: boolean; sortOrder?: number }[]) {
+  const response = await fetch(`/api/admin/products/${productId}/bundle/images`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ images }),
+  });
+  assertOk(response, "Failed to save bundle images");
+  return response.json();
+}
+
+export async function fetchBundlePreview(productId: string): Promise<{ standaloneTotal: string; discountedTotal: string; savings: string }> {
+  const response = await fetch(`/api/admin/products/${productId}/bundle/preview`);
+  assertOk(response, "Failed to load bundle price preview");
+  return response.json();
+}

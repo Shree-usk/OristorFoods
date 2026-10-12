@@ -60,12 +60,15 @@ export function findProductDetailBySlug(slug: string) {
       certifications: true,
       bundle: {
         include: {
+          images: { orderBy: [{ isPrimary: "desc" }, { sortOrder: "asc" }] },
           items: {
             include: {
               componentProduct: {
                 include: { images: { where: { isPrimary: true }, take: 1 } },
               },
+              componentVariant: true,
             },
+            orderBy: { sortOrder: "asc" },
           },
         },
       },
@@ -180,21 +183,6 @@ export function attachCertification(productId: string, certificationId: string) 
 export function listProductCertifications(productId: string) {
   return prisma.certification.findMany({
     where: { products: { some: { id: productId } } },
-  });
-}
-
-export function createBundle(data: Prisma.ProductBundleCreateInput) {
-  return prisma.productBundle.create({ data });
-}
-
-export function addBundleItem(data: Prisma.BundleItemCreateInput) {
-  return prisma.bundleItem.create({ data });
-}
-
-export function getBundleWithItems(productId: string) {
-  return prisma.productBundle.findUnique({
-    where: { productId },
-    include: { items: { include: { componentProduct: true } } },
   });
 }
 
@@ -316,7 +304,7 @@ const adminDetailInclude = {
   ingredients: { orderBy: { sortOrder: "asc" } },
   allergens: true,
   certifications: true,
-  bundle: { include: { items: true } },
+  bundle: { include: { items: { include: { componentProduct: true, componentVariant: true }, orderBy: { sortOrder: "asc" } }, images: { orderBy: [{ isPrimary: "desc" }, { sortOrder: "asc" }] } } },
   standardPrices: { orderBy: { createdAt: "desc" }, take: 1 },
   salePrices: { orderBy: { createdAt: "desc" } },
   campaignPrices: { orderBy: { createdAt: "desc" } },

@@ -15,9 +15,11 @@ interface CartLineItemRowProps {
   isMutating?: boolean;
   /** The message from this row's most recent failed mutation, if any. */
   error?: string | null;
+  /** Story 2 (Bundles). True for a bundle's exploded component row — quantity/remove are whole-bundle actions (see BundleGroupHeader), not per-row. */
+  locked?: boolean;
 }
 
-export function CartLineItemRow({ item, onQuantityChange, onRemove, isMutating = false, error = null }: CartLineItemRowProps) {
+export function CartLineItemRow({ item, onQuantityChange, onRemove, isMutating = false, error = null, locked = false }: CartLineItemRowProps) {
   const noticeId = `cart-item-notice-${item.id}`;
   const hasNotice = item.priceChanged || item.unavailable || item.quantityCapped || !!error;
 
@@ -41,7 +43,7 @@ export function CartLineItemRow({ item, onQuantityChange, onRemove, isMutating =
             variant="outline"
             size="icon-sm"
             aria-label={`Decrease quantity of ${item.productName}`}
-            disabled={item.quantity <= 1 || isMutating}
+            disabled={item.quantity <= 1 || isMutating || locked}
             onClick={() =>
               // When over-capped by more than one unit, a plain -1 step
               // would still exceed availableQuantity and the server would
@@ -61,14 +63,16 @@ export function CartLineItemRow({ item, onQuantityChange, onRemove, isMutating =
             variant="outline"
             size="icon-sm"
             aria-label={`Increase quantity of ${item.productName}`}
-            disabled={item.quantity >= item.availableQuantity || isMutating}
+            disabled={item.quantity >= item.availableQuantity || isMutating || locked}
             onClick={() => onQuantityChange(item.quantity + 1)}
           >
             <Plus />
           </Button>
-          <Button type="button" variant="ghost" size="icon-sm" aria-label={`Remove ${item.productName} from cart`} disabled={isMutating} onClick={onRemove}>
-            <X />
-          </Button>
+          {!locked && (
+            <Button type="button" variant="ghost" size="icon-sm" aria-label={`Remove ${item.productName} from cart`} disabled={isMutating} onClick={onRemove}>
+              <X />
+            </Button>
+          )}
         </div>
 
         {hasNotice && (

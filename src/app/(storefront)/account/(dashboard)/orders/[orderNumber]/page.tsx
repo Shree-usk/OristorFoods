@@ -105,6 +105,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ or
                   <p className="font-medium text-charcoal">
                     {item.productName}
                     {item.variantName && <span className="font-normal text-charcoal/70"> — {item.variantName}</span>}
+                    {item.bundleName && <span className="ml-1 text-caption text-charcoal/60">(part of {item.bundleName})</span>}
                   </p>
                   <p className="text-small text-charcoal/70">
                     Qty {item.quantity} × {formatCurrency(item.unitPrice, order.currency)}

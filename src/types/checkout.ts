@@ -82,6 +82,9 @@ export interface OrderConfirmationSummary {
     productName: string;
     productSku: string;
     variantName: string | null;
+    /** Story 2 (Bundles). Shared by every row of one bundle instance — null for a plain line. */
+    bundleInstanceId: string | null;
+    bundleName: string | null;
     unitPrice: number;
     quantity: number;
     lineTotal: number;

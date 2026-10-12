@@ -20,6 +20,18 @@ export interface OrderLineInput {
   quantity: number;
   lineTotal: string;
   rewardPointsEarned: number;
+  /** Story 2 (Bundles). Flat snapshots, same convention as variantId/variantName — null for a plain line. */
+  bundleId?: string | null;
+  bundleInstanceId?: string | null;
+  bundleName?: string | null;
+}
+
+/** Story 2 (Bundles). One entry per distinct bundle instance in the order — only OwnStock ones trigger the bundle-level decrement/restock step below. */
+export interface OrderBundleInstanceInput {
+  bundleId: string;
+  bundleInstanceId: string;
+  quantity: number;
+  stockMode: "Derived" | "OwnStock";
 }
 
 export interface CreateOrderInput {
@@ -56,6 +68,8 @@ export interface CreateOrderInput {
   shipDistrict: string | null;
   shipPostalCode: string | null;
   items: OrderLineInput[];
+  /** Story 2 (Bundles). Optional/defaults to empty — every pre-bundles caller omits it. */
+  bundleInstances?: OrderBundleInstanceInput[];
   cartId: string;
   /** Present only when a coupon (not just a promotion) contributed to the discount — promotions aren't redemption-tracked, only coupons are. */
   couponRedemption: { couponId: string; discountAmount: string } | null;
@@ -75,6 +89,20 @@ export interface CreateOrderInput {
  */
 export function createOrderWithStockDecrement(input: CreateOrderInput) {
   return prisma.$transaction(async (tx) => {
+    // Story 2 (Bundles). An ADDITIONAL cap layered on top of every
+    // component's own stock decrement below — never a substitute for it,
+    // so a bundle can never oversell a component it shares with
+    // non-bundle sales. Derived bundles (the default) have no counter to
+    // touch here at all.
+    for (const instance of input.bundleInstances ?? []) {
+      if (instance.stockMode !== "OwnStock") continue;
+      const decremented = await tx.productBundle.updateMany({
+        where: { id: instance.bundleId, stockQuantity: { gte: instance.quantity } },
+        data: { stockQuantity: { decrement: instance.quantity } },
+      });
+      if (decremented.count === 0) throw new InsufficientStockError("This bundle");
+    }
+
     for (const line of input.items) {
       // A variant line decrements its own stock row, never the parent
       // Product's — the parent's stockQuantity is inert once variants
@@ -129,6 +157,9 @@ export function createOrderWithStockDecrement(input: CreateOrderInput) {
             variantId: line.variantId,
             variantName: line.variantName,
             variantSku: line.variantSku,
+            bundleId: line.bundleId,
+            bundleInstanceId: line.bundleInstanceId,
+            bundleName: line.bundleName,
             unitPrice: line.unitPrice,
             quantity: line.quantity,
             lineTotal: line.lineTotal,
@@ -296,6 +327,19 @@ export async function cancelOrderWithStockRelease(orderId: string, expectedCurre
         await tx.productVariant.update({ where: { id: line.variantId }, data: { stockQuantity: { increment: line.quantity } } });
       } else if (line.productId) {
         await tx.product.update({ where: { id: line.productId }, data: { stockQuantity: { increment: line.quantity } } });
+      }
+    }
+
+    // Story 2 (Bundles). Direct inverse of createOrderWithStockDecrement's
+    // OwnStock decrement step, applied once per distinct bundle instance
+    // (always +1 — an instance is always exactly one bundle unit, see
+    // bundle.service.ts) — a deleted bundle (SetNull on
+    // OrderItem.bundleId) has nothing left to restock.
+    const bundleInstances = new Map(items.filter((line) => line.bundleId && line.bundleInstanceId).map((line) => [line.bundleInstanceId as string, line.bundleId as string]));
+    for (const bundleId of bundleInstances.values()) {
+      const bundle = await tx.productBundle.findUnique({ where: { id: bundleId }, select: { stockMode: true } });
+      if (bundle?.stockMode === "OwnStock") {
+        await tx.productBundle.update({ where: { id: bundleId }, data: { stockQuantity: { increment: 1 } } });
       }
     }
 

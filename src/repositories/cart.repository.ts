@@ -16,6 +16,11 @@ const withProduct = {
     },
   },
   variant: true,
+  // Story 2 (Bundles). Just the bundle's own display name — full
+  // definition re-validation reads bundle.repository.ts's own richer
+  // include separately (bundle.service.ts::resolveBundleInstancePrices),
+  // never this one.
+  bundle: { select: { name: true } },
 } satisfies Prisma.CartItemInclude;
 
 export type CartItemWithProduct = Prisma.CartItemGetPayload<{ include: typeof withProduct }>;
@@ -47,14 +52,21 @@ export function findCartItemById(id: string) {
 /**
  * Adding a product (and, if given, a specific variant of it) already in
  * the cart increments its quantity (matching the
- * `@@unique([cartId, productId, variantId])` de-dup guard) rather than
- * creating a second row. A null `variantId` only matches another row
- * that's also variant-less — two different sizes of the same product are
- * independent rows, never merged. `unitPriceSnapshot` is always
- * overwritten to the caller's current resolved price — on a first add
- * that's simply the price being recorded; on an increment, cart.service.ts
- * has already re-resolved the live price before calling this, so the
- * snapshot never goes stale here.
+ * `@@unique([cartId, productId, variantId, bundleInstanceId])` de-dup
+ * guard) rather than creating a second row. A null `variantId` only
+ * matches another row that's also variant-less — two different sizes of
+ * the same product are independent rows, never merged. `unitPriceSnapshot`
+ * is always overwritten to the caller's current resolved price — on a
+ * first add that's simply the price being recorded; on an increment,
+ * cart.service.ts has already re-resolved the live price before calling
+ * this, so the snapshot never goes stale here.
+ *
+ * `bundle` (Story 2) tags every row exploded from one "add bundle to
+ * cart" action with the same bundleInstanceId, which is part of the
+ * lookup below — this is what stops two different bundle instances that
+ * happen to share a component product/variant from merging into each
+ * other's quantity. Omitted (both null) for a plain line, matching every
+ * row that existed before bundles shipped.
  */
 export async function upsertCartItem(
   cartId: string,
@@ -62,13 +74,14 @@ export async function upsertCartItem(
   variantId: string | null,
   quantityDelta: number,
   unitPriceSnapshot: string,
+  bundle: { bundleId: string; bundleInstanceId: string } | null = null,
 ) {
   // findFirst, not findUnique: Prisma's generated compound-unique input
-  // for `cartId_productId_variantId` types variantId as non-nullable
-  // even though the column is nullable (a known Prisma typing gotcha),
+  // for a compound key with nullable members types them as non-nullable
+  // even though the columns are nullable (a known Prisma typing gotcha),
   // so a plain `where` filter is used instead — still a single-row
   // lookup backed by the same unique index at the DB level.
-  const existing = await prisma.cartItem.findFirst({ where: { cartId, productId, variantId } });
+  const existing = await prisma.cartItem.findFirst({ where: { cartId, productId, variantId, bundleInstanceId: bundle?.bundleInstanceId ?? null } });
   if (existing) {
     return prisma.cartItem.update({
       where: { id: existing.id },
@@ -76,8 +89,25 @@ export async function upsertCartItem(
     });
   }
   return prisma.cartItem.create({
-    data: { cartId, productId, variantId, quantity: quantityDelta, unitPriceSnapshot },
+    data: {
+      cartId,
+      productId,
+      variantId,
+      quantity: quantityDelta,
+      unitPriceSnapshot,
+      bundleId: bundle?.bundleId ?? null,
+      bundleInstanceId: bundle?.bundleInstanceId ?? null,
+    },
   });
+}
+
+/** All exploded rows of one bundle instance — used to remove/validate ownership of a whole bundle group at once. */
+export function listBundleInstanceItems(cartId: string, bundleInstanceId: string) {
+  return prisma.cartItem.findMany({ where: { cartId, bundleInstanceId } });
+}
+
+export async function deleteBundleInstance(cartId: string, bundleInstanceId: string): Promise<void> {
+  await prisma.cartItem.deleteMany({ where: { cartId, bundleInstanceId } });
 }
 
 export function updateCartItemQuantity(id: string, quantity: number) {

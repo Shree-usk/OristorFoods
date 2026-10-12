@@ -1,4 +1,5 @@
 import { verifyCartCookieValue } from "@/lib/cart-token";
+import * as bundleRepository from "@/repositories/bundle.repository";
 import * as couponRepository from "@/repositories/coupon.repository";
 import { findOrderByIdempotencyKey } from "@/repositories/order.repository";
 import { AddressLimitExceededError } from "@/services/address.errors";
@@ -57,6 +58,10 @@ interface CheckoutCartState {
     quantity: number;
     lineTotal: number;
     rewardPointsEarned: number;
+    /** Story 2 (Bundles). Null for a plain line — see bundle.service.ts. */
+    bundleId: string | null;
+    bundleInstanceId: string | null;
+    bundleName: string | null;
   }>;
 }
 
@@ -106,8 +111,27 @@ export async function requireCheckoutableCart(userId: string | null, guestCookie
       quantity: line.quantity,
       lineTotal: line.lineTotal,
       rewardPointsEarned: line.rewardPointsEarned,
+      bundleId: itemById.get(line.id)?.bundleId ?? null,
+      bundleInstanceId: line.bundleInstanceId,
+      bundleName: line.bundleName,
     })),
   };
+}
+
+/** Story 2 (Bundles). One entry per distinct bundle instance, with its current stockMode — see createOrderWithStockDecrement's OwnStock decrement step. */
+async function resolveBundleInstancesForOrder(lines: CheckoutCartState["lines"]): Promise<Array<{ bundleId: string; bundleInstanceId: string; quantity: number; stockMode: "Derived" | "OwnStock" }>> {
+  const bundleIds = [...new Set(lines.filter((line) => line.bundleId && line.bundleInstanceId).map((line) => line.bundleId as string))];
+  if (bundleIds.length === 0) return [];
+  const bundles = await bundleRepository.findBundlesByIds(bundleIds);
+  const stockModeByBundleId = new Map(bundles.map((bundle) => [bundle.id, bundle.stockMode]));
+  const instanceIds = new Set<string>();
+  const result: Array<{ bundleId: string; bundleInstanceId: string; quantity: number; stockMode: "Derived" | "OwnStock" }> = [];
+  for (const line of lines) {
+    if (!line.bundleId || !line.bundleInstanceId || instanceIds.has(line.bundleInstanceId)) continue;
+    instanceIds.add(line.bundleInstanceId);
+    result.push({ bundleId: line.bundleId, bundleInstanceId: line.bundleInstanceId, quantity: 1, stockMode: stockModeByBundleId.get(line.bundleId) ?? "Derived" });
+  }
+  return result;
 }
 
 function toDiscountableLines(cart: CheckoutCartState): DiscountableLine[] {
@@ -269,7 +293,17 @@ export async function placeOrder(
       quantity: line.quantity,
       lineTotal: line.lineTotal.toFixed(2),
       rewardPointsEarned: line.rewardPointsEarned,
+      bundleId: line.bundleId,
+      bundleInstanceId: line.bundleInstanceId,
+      bundleName: line.bundleName,
     })),
+    // Story 2 (Bundles). Grouped from this same checkout-time cart.lines
+    // snapshot — one entry per distinct bundle instance in the cart
+    // (always quantity 1, see bundle.service.ts's "one instance = one
+    // unit" design decision), carrying the bundle's CURRENT stockMode so
+    // order.repository.ts's transaction only decrements the bundle-level
+    // counter for OwnStock bundles, never Derived ones.
+    bundleInstances: await resolveBundleInstancesForOrder(cart.lines),
     cartId: cart.cartId,
     couponRedemption,
   });
@@ -365,6 +399,8 @@ function toConfirmationSummary(order: Awaited<ReturnType<typeof getOrderForConfi
       productName: item.productName,
       productSku: item.productSku,
       variantName: item.variantName,
+      bundleInstanceId: item.bundleInstanceId,
+      bundleName: item.bundleName,
       unitPrice: item.unitPrice.toNumber(),
       quantity: item.quantity,
       lineTotal: item.lineTotal.toNumber(),

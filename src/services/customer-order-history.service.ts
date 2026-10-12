@@ -75,6 +75,8 @@ export interface OrderDetailLineItem {
   productName: string;
   productSku: string;
   variantName?: string | null;
+  /** Story 2 (Bundles). Shared by every row of one bundle instance — null for a plain line. */
+  bundleName?: string | null;
   unitPrice: number;
   quantity: number;
   lineTotal: number;
@@ -154,6 +156,7 @@ export async function getOrderDetail(orderNumber: string, userId: string): Promi
       productName: item.productName,
       productSku: item.productSku,
       variantName: item.variantName,
+      bundleName: item.bundleName,
       unitPrice: item.unitPrice.toNumber(),
       quantity: item.quantity,
       lineTotal: item.lineTotal.toNumber(),
