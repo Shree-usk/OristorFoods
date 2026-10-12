@@ -17,9 +17,10 @@ export interface AdminCollection {
   metaDescription: string | null;
   canonicalUrl: string | null;
   ogImage: string | null;
+  products: { id: string; name: string }[];
 }
 
-export type CollectionAdminInput = Partial<Omit<AdminCollection, "id">>;
+export type CollectionAdminInput = Partial<Omit<AdminCollection, "id" | "products">> & { productIds?: string[] };
 
 export async function fetchAdminCollections(): Promise<AdminCollection[]> {
   const response = await fetch("/api/admin/collections");

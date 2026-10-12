@@ -24,6 +24,8 @@ export function ProductCollections({ collections, titleOverride }: { collections
                   sizes="(min-width: 640px) 33vw, 90vw"
                   className="object-cover opacity-60 transition-transform duration-300 group-hover:scale-105"
                 />
+                {/* Scrim behind the text specifically — opacity-60 above keeps the card readable as an image but isn't enough contrast for text over a bright/busy photo. */}
+                <div className="absolute inset-0 bg-gradient-to-t from-charcoal/90 via-charcoal/30 to-transparent" />
               </div>
               <div className="absolute inset-x-0 bottom-0 p-5">
                 <p className="text-h4 font-heading">{collection.name}</p>

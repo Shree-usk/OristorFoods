@@ -9156,3 +9156,63 @@ with a clean per-row city-conflict message, matching the design intent
 exactly. Unit tests added to `tests/unit/delivery-zone-service.test.ts`
 cover the same three cases (multi-row import, malformed tiers, in-batch
 city conflict) against the real local Postgres.
+
+---
+
+## 2026-10-12 — Collections: curate multiple products from the Collection screen
+
+The homepage's "Product Collections" section cards link to
+`/products/collections/<slug>`, which already rendered a full product
+grid for the collection — but the admin Collection editor had no field
+to attach any products to a collection at all. The only way a product
+joined a collection was the Product form's own reverse multi-select, so
+in practice a "gift collection" ended up with exactly one product
+tagged, making the landing page feel like a pointless detour: one card
+click, then a product-grid page with a single item, then a second click
+to actually reach the product. The user confirmed they want the curated
+multi-product model (several real products shown together, like
+Diaspora Co's `/collections/gifts`), not a single bundled SKU.
+
+**No schema change.** `Collection.products` was already a genuine
+many-to-many relation (`Collection.products Product[]` /
+`Product.collections Collection[]`) and `/products/collections/[slug]`
+already rendered every linked product — the gap was purely the missing
+admin affordance.
+
+**Reused the existing generic product picker instead of writing a
+third one.** `src/components/admin/marketing/coupon-scope-product-
+picker.tsx` (`CouponScopeProductPicker`) already does exactly this —
+search-as-you-type over the admin products endpoint, removable chips
+for the current selection, `{ value: string[]; onChange }` props — with
+no coupon-specific logic despite its name/location. Imported it
+directly into `admin-collections-view.tsx` rather than duplicating it a
+third time (a single-select sibling, `recipe-ingredient-product-
+picker.tsx`, already exists for a different flow).
+
+**Wiring**: `collectionAdminSchema` gained an optional `productIds:
+string[]`. `createCollectionAdmin` passes `products: { connect: ... }`;
+`updateCollectionAdmin` only touches `products` when `productIds` is
+present in the input (`set: []` intentionally clears it, `undefined`
+leaves it untouched — same conditional-spread convention already used
+for every other optional field in that function). `listAllCollectionsForAdmin`
+now includes `products: { select: { id, name } }` so the admin
+table/edit dialog can see and edit the current set. No repository
+signature changes needed — `createCollection`/`updateCollection` already
+accept a raw `Prisma.Collection(Create|Update)Input`.
+
+Also fixed the card's text legibility while in this component: the
+title/description sat directly on a plain `opacity-60` photo with no
+scrim behind the text, so a bright or busy photo could swallow the
+white text (the specific bug the user flagged with a screenshot). Added
+a dedicated bottom `bg-gradient-to-t` scrim behind the text block,
+layered on top of the existing image opacity rather than replacing it,
+so the photo stays vibrant higher up and only darkens toward the text.
+
+Verified end-to-end over HTTP against the local dev server: created a
+test collection via `POST /api/admin/collections` with two real seeded
+products in `productIds`, confirmed both appear via the admin list API
+and both product names render on `/products/collections/<slug>`'s real
+grid; `PATCH` with a different `productIds` correctly replaced (not
+merged) the set. Unit tests added to
+`tests/unit/collection-admin-service.test.ts` cover connect-on-create,
+replace-on-update, omitted-leaves-untouched, and clear-with-empty-array.

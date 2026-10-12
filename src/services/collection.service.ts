@@ -57,6 +57,7 @@ export async function createCollectionAdmin(adminUserId: string, input: Collecti
     metaDescription: nullIfBlank(input.metaDescription) ?? null,
     canonicalUrl: nullIfBlank(input.canonicalUrl) ?? null,
     ogImage: nullIfBlank(input.ogImage) ?? null,
+    products: { connect: (input.productIds ?? []).map((id) => ({ id })) },
   });
   await writeAuditLog({ actorId: adminUserId, action: "collection_created", module: "Products", targetType: "Collection", targetId: collection.id });
   return collection;
@@ -80,6 +81,7 @@ export async function updateCollectionAdmin(adminUserId: string, id: string, inp
     ...(input.metaDescription !== undefined && { metaDescription: nullIfBlank(input.metaDescription) }),
     ...(input.canonicalUrl !== undefined && { canonicalUrl: nullIfBlank(input.canonicalUrl) }),
     ...(input.ogImage !== undefined && { ogImage: nullIfBlank(input.ogImage) }),
+    ...(input.productIds !== undefined && { products: { set: input.productIds.map((id) => ({ id })) } }),
   });
   await writeAuditLog({ actorId: adminUserId, action: "collection_updated", module: "Products", targetType: "Collection", targetId: id });
   return collection;
