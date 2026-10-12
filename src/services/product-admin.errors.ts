@@ -2,6 +2,7 @@ export type ProductAdminErrorCode =
   | "not_found"
   | "slug_conflict"
   | "sku_conflict"
+  | "barcode_conflict"
   | "illegal_transition"
   | "variant_not_found"
   | "variant_sku_conflict"
@@ -33,6 +34,12 @@ export class ProductAdminSlugConflictError extends ProductAdminError {
 export class ProductAdminSkuConflictError extends ProductAdminError {
   constructor(public readonly sku: string) {
     super("sku_conflict", `A product with SKU "${sku}" already exists.`);
+  }
+}
+
+export class ProductAdminBarcodeConflictError extends ProductAdminError {
+  constructor(public readonly barcode: string) {
+    super("barcode_conflict", `A product with barcode "${barcode}" already exists.`);
   }
 }
 

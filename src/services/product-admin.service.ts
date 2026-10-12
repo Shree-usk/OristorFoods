@@ -11,6 +11,7 @@ import { refreshProductEmbeddingBestEffort } from "@/services/embedding.service"
 import { requirePermission } from "@/services/permission.service";
 import { getLowStockThreshold } from "@/services/system-settings.service";
 import {
+  ProductAdminBarcodeConflictError,
   ProductAdminIllegalTransitionError,
   ProductAdminNotFoundError,
   ProductAdminSkuConflictError,
@@ -111,11 +112,12 @@ function conflictField(error: Prisma.PrismaClientKnownRequestError): string | un
   return undefined;
 }
 
-function mapWriteError(error: unknown, input: Pick<ProductAdminInput, "slug" | "sku">): never {
+function mapWriteError(error: unknown, input: Pick<ProductAdminInput, "slug" | "sku" | "barcode">): never {
   if (isUniqueConstraintViolation(error)) {
     const field = conflictField(error);
     if (field === "slug") throw new ProductAdminSlugConflictError(input.slug);
     if (field === "sku") throw new ProductAdminSkuConflictError(input.sku);
+    if (field === "barcode" && input.barcode) throw new ProductAdminBarcodeConflictError(input.barcode);
   }
   throw error;
 }
@@ -153,7 +155,13 @@ function scalarFields(input: ProductAdminInput) {
     name: input.name,
     slug: input.slug,
     sku: input.sku,
-    barcode: input.barcode ?? null,
+    // A blank string, not just undefined/null, must become a real SQL
+    // NULL — barcode is @unique, and "" would collide with every other
+    // product whose barcode was also left blank (same class of bug
+    // already found and fixed for ProductVariant.barcode; this is the
+    // pre-existing Product-level sibling, surfaced live in production
+    // once a second blank-barcode product was created).
+    barcode: input.barcode?.trim() ? input.barcode.trim() : null,
     shortDescription: input.shortDescription ?? null,
     story: input.story ?? null,
     productType: input.productType ?? "Standard",

@@ -5,6 +5,7 @@ import { prisma } from "@/lib/db";
 import type { AdminAction, AdminModule } from "@/generated/prisma/client";
 import { PermissionDeniedError } from "@/services/permission.errors";
 import {
+  ProductAdminBarcodeConflictError,
   ProductAdminIllegalTransitionError,
   ProductAdminNotFoundError,
   ProductAdminSkuConflictError,
@@ -112,6 +113,27 @@ describe("product-admin.service", () => {
 
     await expect(createProduct(admin.id, baseInput({ slug: first.slug }))).rejects.toBeInstanceOf(ProductAdminSlugConflictError);
     await expect(createProduct(admin.id, baseInput({ sku: first.sku }))).rejects.toBeInstanceOf(ProductAdminSkuConflictError);
+  });
+
+  it("allows two products with a blank barcode — an empty string must become NULL, not collide on the unique index", async () => {
+    // Reproduces a real production bug: the admin form's Barcode field is
+    // "" when left blank (never omitted), and barcode is @unique — a
+    // second blank-barcode product 500'd with a raw Prisma P2002 instead
+    // of a friendly error, since mapWriteError never recognized this field.
+    const admin = await makeFullAccessAdmin();
+
+    const first = await createProduct(admin.id, baseInput({ barcode: "" }));
+    const second = await createProduct(admin.id, baseInput({ barcode: "" }));
+
+    expect(first.barcode).toBeNull();
+    expect(second.barcode).toBeNull();
+  });
+
+  it("rejects a genuine duplicate barcode with a friendly error, not a raw 500", async () => {
+    const admin = await makeFullAccessAdmin();
+    const first = await createProduct(admin.id, baseInput({ barcode: "1234567890123" }));
+
+    await expect(createProduct(admin.id, baseInput({ barcode: first.barcode! }))).rejects.toBeInstanceOf(ProductAdminBarcodeConflictError);
   });
 
   it("updateProduct wholesale-replaces images/videos/ingredients", async () => {
