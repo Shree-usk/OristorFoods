@@ -9,7 +9,7 @@ import { BulletList } from "@/components/storefront/product/bullet-list";
 import { CertificationBadges } from "@/components/storefront/product/certification-badges";
 import { FeaturedProductsRail } from "@/components/storefront/product/featured-products-rail";
 import { IngredientsList } from "@/components/storefront/product/ingredients-list";
-import { NutritionTable } from "@/components/storefront/product/nutrition-table";
+import { NutritionDisclosure } from "@/components/storefront/product/nutrition-disclosure";
 import { ProductActions } from "@/components/storefront/product/product-actions";
 import { ProductGallery } from "@/components/storefront/product/product-gallery";
 import { JsonLdScript } from "@/components/storefront/product/json-ld-script";
@@ -172,10 +172,7 @@ export default async function ProductDetailPage({ params }: ProductDetailPagePro
 
           {product.nutrition && (
             <div className="mt-6">
-              <h2 className="text-h4 font-heading text-charcoal">Nutrition Facts</h2>
-              <div className="mt-2">
-                <NutritionTable nutrition={product.nutrition} />
-              </div>
+              <NutritionDisclosure nutrition={product.nutrition} />
             </div>
           )}
 
