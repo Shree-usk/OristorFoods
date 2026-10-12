@@ -144,3 +144,20 @@ export async function fetchCampaignOptions(): Promise<CampaignOption[]> {
   if (!response.ok) throw new Error(`Failed to load campaigns (${response.status})`);
   return response.json();
 }
+
+export interface BulkImportRowResult {
+  line: number;
+  name: string;
+  error?: string;
+}
+
+export interface BulkImportResult {
+  succeeded: BulkImportRowResult[];
+  failed: BulkImportRowResult[];
+}
+
+export async function bulkImportDeliveryZonesAdmin(csv: string): Promise<BulkImportResult> {
+  const response = await fetch("/api/admin/delivery-zones/bulk-import", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ csv }) });
+  await assertOkWithServerMessage(response, "Failed to import the CSV file");
+  return response.json();
+}

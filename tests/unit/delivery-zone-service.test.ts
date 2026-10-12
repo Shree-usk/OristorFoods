@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import type { AdminAction, AdminModule } from "@/generated/prisma/client";
 import { prisma } from "@/lib/db";
 import {
+  bulkImportDeliveryZones,
   createZone,
   deleteZone,
   getCoverageGaps,
@@ -121,5 +122,55 @@ describe("delivery-zone.service", () => {
 
     await prisma.address.deleteMany({ where: { userId: customer.id } });
     await prisma.user.delete({ where: { id: customer.id } });
+  });
+
+  describe("bulkImportDeliveryZones", () => {
+    it("imports a header row plus zones with and without a rate, skipping the header", async () => {
+      const admin = await makeFullAccessAdmin();
+      const csv = [
+        "name,cities,isActive,rateType,flatAmount,tiers,estimatedDaysMin,estimatedDaysMax",
+        `${ZONE_NAME_PREFIX}Csv Flat,CsvCityOne;CsvCityTwo,true,Flat,350,,1,2`,
+        `${ZONE_NAME_PREFIX}Csv Tiered,CsvCityThree,true,WeightBased,,500:300;1000:450,2,4`,
+        `${ZONE_NAME_PREFIX}Csv NoRate,CsvCityFour,true,,,,,`,
+      ].join("\n");
+
+      const result = await bulkImportDeliveryZones(admin.id, csv);
+      expect(result.succeeded).toHaveLength(3);
+      expect(result.failed).toHaveLength(0);
+
+      const zones = await listZonesForAdmin(admin.id);
+      const flat = zones.find((z) => z.name === `${ZONE_NAME_PREFIX}Csv Flat`);
+      expect(flat?.rate).toMatchObject({ rateType: "Flat" });
+      const tiered = zones.find((z) => z.name === `${ZONE_NAME_PREFIX}Csv Tiered`);
+      expect(tiered?.rate).toMatchObject({ rateType: "WeightBased" });
+      const noRate = zones.find((z) => z.name === `${ZONE_NAME_PREFIX}Csv NoRate`);
+      expect(noRate?.rate).toBeNull();
+    });
+
+    it("reports a per-row failure for malformed tiers without aborting the rest of the batch", async () => {
+      const admin = await makeFullAccessAdmin();
+      const csv = [
+        `${ZONE_NAME_PREFIX}Csv BadTiers,CsvCityFive,true,WeightBased,,not-a-tier,,`,
+        `${ZONE_NAME_PREFIX}Csv AfterBad,CsvCitySix,true,,,,,`,
+      ].join("\n");
+
+      const result = await bulkImportDeliveryZones(admin.id, csv);
+      expect(result.failed).toHaveLength(1);
+      expect(result.failed[0]).toMatchObject({ line: 1, name: `${ZONE_NAME_PREFIX}Csv BadTiers` });
+      expect(result.succeeded).toEqual([{ line: 2, name: `${ZONE_NAME_PREFIX}Csv AfterBad` }]);
+    });
+
+    it("reports a per-row failure when a later row's city conflicts with an earlier row in the same batch", async () => {
+      const admin = await makeFullAccessAdmin();
+      const csv = [
+        `${ZONE_NAME_PREFIX}Csv First,CsvCitySeven,true,,,,,`,
+        `${ZONE_NAME_PREFIX}Csv Second,CsvCitySeven,true,,,,,`,
+      ].join("\n");
+
+      const result = await bulkImportDeliveryZones(admin.id, csv);
+      expect(result.succeeded).toEqual([{ line: 1, name: `${ZONE_NAME_PREFIX}Csv First` }]);
+      expect(result.failed).toHaveLength(1);
+      expect(result.failed[0].error).toContain("CsvCitySeven");
+    });
   });
 });
