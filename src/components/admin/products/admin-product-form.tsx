@@ -623,15 +623,20 @@ export function AdminProductForm({ productId }: { productId?: string }) {
         <TabsContent value="rewards" className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
             <Label htmlFor="product-reward-points">Reward points</Label>
-            <Input id="product-reward-points" type="number" {...register("rewardPoints", { valueAsNumber: true })} />
+            {/* setValueAs, not valueAsNumber: an emptied number input's native
+                valueAsNumber is NaN, not 0 — z.number() rejects NaN even
+                though this field is schema-optional, blocking Save with a
+                vague "check: Rewards & Stock" and no visible inline reason.
+                A blank field means "no points", i.e. 0, not invalid. */}
+            <Input id="product-reward-points" type="number" {...register("rewardPoints", { setValueAs: (value) => (value === "" ? 0 : Number(value)) })} />
           </div>
           <div>
             <Label htmlFor="product-stock-quantity">Stock quantity</Label>
-            <Input id="product-stock-quantity" type="number" {...register("stockQuantity", { valueAsNumber: true })} />
+            <Input id="product-stock-quantity" type="number" {...register("stockQuantity", { setValueAs: (value) => (value === "" ? 0 : Number(value)) })} />
           </div>
           <div>
             <Label htmlFor="product-weight">Weight (grams)</Label>
-            <Input id="product-weight" type="number" {...register("weightGrams", { valueAsNumber: true })} />
+            <Input id="product-weight" type="number" {...register("weightGrams", { setValueAs: (value) => (value === "" ? undefined : Number(value)) })} />
           </div>
           <div className="pt-6">
             <Controller

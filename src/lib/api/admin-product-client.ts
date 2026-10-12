@@ -250,7 +250,7 @@ export async function createVariant(productId: string, input: VariantFormInput) 
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input),
   });
-  assertOk(response, "Failed to create variant");
+  if (!response.ok) return readErrorOr(response, "Failed to create variant");
   return response.json();
 }
 
@@ -260,7 +260,7 @@ export async function updateVariant(productId: string, variantId: string, input:
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input),
   });
-  assertOk(response, "Failed to save variant");
+  if (!response.ok) return readErrorOr(response, "Failed to save variant");
   return response.json();
 }
 

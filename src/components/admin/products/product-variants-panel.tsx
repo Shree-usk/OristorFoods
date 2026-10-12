@@ -79,8 +79,14 @@ export function ProductVariantsPanel({ productId }: { productId: string }) {
       barcode: variant.barcode ?? "",
       name: variant.name,
       netWeightGrams: variant.netWeightGrams,
-      price: variant.price,
-      promoPrice: variant.promoPrice ?? null,
+      // Prisma Decimal fields serialize to JSON as strings (not numbers) —
+      // NextResponse.json() calls Decimal's own toJSON(). Without this
+      // conversion, saving a variant without ever touching the Price input
+      // sends that string straight through and the server's z.number()
+      // check rejects it with a 400 ("Failed to save variant") — a real
+      // bug reproduced live against staging data.
+      price: Number(variant.price),
+      promoPrice: variant.promoPrice !== null && variant.promoPrice !== undefined ? Number(variant.promoPrice) : null,
       currency: variant.currency,
       inStock: variant.inStock,
       stockQuantity: variant.stockQuantity,
