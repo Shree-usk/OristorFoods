@@ -8,6 +8,7 @@ const statusByCode: Record<ProductAdminErrorCode, number> = {
   not_found: 404,
   slug_conflict: 409,
   sku_conflict: 409,
+  barcode_conflict: 409,
   illegal_transition: 409,
   variant_not_found: 404,
   variant_sku_conflict: 409,

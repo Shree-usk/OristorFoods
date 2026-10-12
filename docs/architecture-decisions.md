@@ -9420,3 +9420,55 @@ multi-variant-in-one-order checkout path (brief scenario 2) is covered
 by the automated `checkout-service.test.ts` integration test above
 rather than re-walked manually in the browser, since that test already
 exercises the exact cart→checkout→order handoff end to end.
+
+---
+
+## 2026-10-12 — Hotfix: Product.barcode blank-collision (pre-existing, found live on staging)
+
+User reported "Something went wrong" creating a second new product on
+`staging.oristor.com` right after the Product Variants deploy. Initially
+investigated as a possible Variants regression — ruled that out quickly
+(product creation never touches `ProductVariant`, and calling
+`createProduct()` directly via a one-off script on the VPS with
+equivalent data succeeded every time, while the same request through
+the live HTTP route 500'd reliably).
+
+Got the real stack trace from the user running `sudo journalctl -u
+oristor-web.service` (no `sudo` access on this VPS — see §12 of
+`docs/ORISTOR_VPS_DEPLOYMENT_HANDOVER.md`): `Unique constraint failed
+on the fields: ('barcode')`. This is the exact same bug class just
+fixed for `ProductVariant.barcode` earlier today (see the Product
+Variants entry above), except on `Product.barcode` itself — **pre-
+existing**, not introduced by the Variants PR. `scalarFields()` in
+`product-admin.service.ts` had the same `input.barcode ?? null` gap:
+the admin form's Barcode input is `""` when left blank, never omitted,
+and `Product.barcode` is `@unique`, so a second blank-barcode product
+collided. It only surfaced now because staging had exactly one real
+product (with a barcode left blank) until this story's testing session
+created a second one.
+
+A second, related gap: `mapWriteError()` only recognized `slug`/`sku`
+conflict fields — a barcode P2002 fell through to the generic
+`serverErrorResponse` 500, instead of the friendly `409 "A product with
+barcode ... already exists"` that slug/SKU conflicts already get. Added
+`ProductAdminBarcodeConflictError` (and the `barcode_conflict` code/
+status mapping) to close this gap properly, not just silence the crash.
+
+Fixed both: `scalarFields()` now normalizes a blank string to `null`
+(`input.barcode?.trim() ? input.barcode.trim() : null`), and
+`mapWriteError()` now throws `ProductAdminBarcodeConflictError` for a
+genuine barcode collision. Two regression tests added to
+`product-admin-service.test.ts`: two blank-barcode products both
+succeed with `barcode: null`, and two products sharing a real barcode
+value get the friendly error, not a 500.
+
+Diagnosis note for future reference: reproducing a live-server-only bug
+without journal/sudo access is possible by writing a throwaway script
+that imports and calls the actual service function directly (`npx tsx
+--env-file=.env <script>.ts`, run via SSH, deleted after) — this
+isolates "does the function itself fail" from "does something only
+reproduce through the HTTP route in the long-running process," which
+was the first useful signal here (the former succeeded, meaning the
+400/500 split pointed at validation/response-mapping, not the service
+logic — though in the end the real fix was in the service logic after
+all, just a field `mapWriteError` wasn't checking).
