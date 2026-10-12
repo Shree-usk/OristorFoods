@@ -22,6 +22,7 @@ export const collectionAdminSchema = z.object({
   metaDescription: z.string().trim().max(500).optional().nullable(),
   canonicalUrl: z.string().trim().url("Enter a valid URL.").optional().nullable().or(z.literal("")),
   ogImage: optionalMediaUrlSchema,
+  productIds: z.array(z.string()).optional(),
 });
 
 export type CollectionAdminFormInput = z.infer<typeof collectionAdminSchema>;

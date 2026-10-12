@@ -15,6 +15,7 @@ import {
 const EMAIL_DOMAIN = "@collection-svc-test.test";
 const ROLE_KEY_PREFIX = "collection-svc-test-role-";
 const SLUG_PREFIX = "collection-svc-test-";
+const PRODUCT_SKU_PREFIX = "collection-svc-test-product-";
 let sequence = 0;
 
 async function makeAdmin(grants: { module: AdminModule; action: AdminAction }[]) {
@@ -22,6 +23,13 @@ async function makeAdmin(grants: { module: AdminModule; action: AdminAction }[])
   const role = await prisma.role.create({ data: { key: `${ROLE_KEY_PREFIX}${sequence}`, name: `Collection Svc Test Role ${sequence}` } });
   if (grants.length > 0) await prisma.rolePermission.createMany({ data: grants.map((grant) => ({ roleId: role.id, ...grant })) });
   return prisma.adminUser.create({ data: { email: `admin-${sequence}${EMAIL_DOMAIN}`, name: "Test Admin", passwordHash: "unused", roleId: role.id } });
+}
+
+async function makeProduct() {
+  sequence += 1;
+  return prisma.product.create({
+    data: { sku: `${PRODUCT_SKU_PREFIX}${sequence}`, slug: `${PRODUCT_SKU_PREFIX}${sequence}`, name: `Collection Svc Test Product ${sequence}`, status: "Published" },
+  });
 }
 
 function makeFullAccessAdmin() {
@@ -39,6 +47,7 @@ function slug(name: string) {
 afterEach(async () => {
   await prisma.auditLog.deleteMany({ where: { actor: { email: { endsWith: EMAIL_DOMAIN } } } });
   await prisma.collection.deleteMany({ where: { slug: { startsWith: SLUG_PREFIX } } });
+  await prisma.product.deleteMany({ where: { sku: { startsWith: PRODUCT_SKU_PREFIX } } });
   await prisma.adminUser.deleteMany({ where: { email: { endsWith: EMAIL_DOMAIN } } });
   await prisma.rolePermission.deleteMany({ where: { role: { key: { startsWith: ROLE_KEY_PREFIX } } } });
   await prisma.role.deleteMany({ where: { key: { startsWith: ROLE_KEY_PREFIX } } });
@@ -103,6 +112,53 @@ describe("collection.service — create/update", () => {
 
     const cleared = await updateCollectionAdmin(admin.id, collection.id, { startDate: "" });
     expect(cleared.startDate).toBeNull();
+  });
+});
+
+describe("collection.service — product curation", () => {
+  it("connects the given products on create", async () => {
+    const admin = await makeFullAccessAdmin();
+    const productA = await makeProduct();
+    const productB = await makeProduct();
+
+    const collection = await createCollectionAdmin(admin.id, { name: "Gift Set", slug: slug("gift-set"), productIds: [productA.id, productB.id] });
+
+    const [listed] = (await listCollectionsForAdmin(admin.id)).filter((c) => c.id === collection.id);
+    expect(listed.products.map((p) => p.id).sort()).toEqual([productA.id, productB.id].sort());
+  });
+
+  it("replaces (not merges) the product set on update", async () => {
+    const admin = await makeFullAccessAdmin();
+    const productA = await makeProduct();
+    const productB = await makeProduct();
+    const collection = await createCollectionAdmin(admin.id, { name: "Gift Set", slug: slug("gift-set"), productIds: [productA.id] });
+
+    await updateCollectionAdmin(admin.id, collection.id, { productIds: [productB.id] });
+
+    const [listed] = (await listCollectionsForAdmin(admin.id)).filter((c) => c.id === collection.id);
+    expect(listed.products.map((p) => p.id)).toEqual([productB.id]);
+  });
+
+  it("leaves existing products untouched when productIds is omitted from the update", async () => {
+    const admin = await makeFullAccessAdmin();
+    const productA = await makeProduct();
+    const collection = await createCollectionAdmin(admin.id, { name: "Gift Set", slug: slug("gift-set"), productIds: [productA.id] });
+
+    await updateCollectionAdmin(admin.id, collection.id, { name: "Gift Set Renamed" });
+
+    const [listed] = (await listCollectionsForAdmin(admin.id)).filter((c) => c.id === collection.id);
+    expect(listed.products.map((p) => p.id)).toEqual([productA.id]);
+  });
+
+  it("clears all products when productIds is an empty array", async () => {
+    const admin = await makeFullAccessAdmin();
+    const productA = await makeProduct();
+    const collection = await createCollectionAdmin(admin.id, { name: "Gift Set", slug: slug("gift-set"), productIds: [productA.id] });
+
+    await updateCollectionAdmin(admin.id, collection.id, { productIds: [] });
+
+    const [listed] = (await listCollectionsForAdmin(admin.id)).filter((c) => c.id === collection.id);
+    expect(listed.products).toEqual([]);
   });
 });
 

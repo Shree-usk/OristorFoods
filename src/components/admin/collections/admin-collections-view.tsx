@@ -11,6 +11,10 @@ import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
 import { AssetPickerDialog } from "@/components/admin/media/asset-picker-dialog";
+// Generic multi-select product picker (search-as-you-type + removable
+// chips) — built for coupon scoping but has no coupon-specific logic,
+// reused here instead of a third near-duplicate implementation.
+import { CouponScopeProductPicker } from "@/components/admin/marketing/coupon-scope-product-picker";
 import {
   createAdminCollection,
   fetchAdminCollections,
@@ -32,6 +36,7 @@ const EMPTY_FORM: CollectionAdminInput = {
   metaDescription: "",
   canonicalUrl: "",
   ogImage: "",
+  productIds: [],
 };
 
 function toDateInputValue(iso: string | null): string {
@@ -71,6 +76,7 @@ export function AdminCollectionsView() {
       metaDescription: collection.metaDescription ?? "",
       canonicalUrl: collection.canonicalUrl ?? "",
       ogImage: collection.ogImage ?? "",
+      productIds: collection.products.map((product) => product.id),
     });
     setEditing(collection);
     setCreating(false);
@@ -201,6 +207,17 @@ export function AdminCollectionsView() {
                 Use a landscape photo, at least 1200×900px (4:3) — it&apos;s cropped to a 4:3 tile across 3 columns on
                 desktop (1 column on mobile), so keep the main subject centered. A tall or product-packaging-style
                 photo will look cropped here.
+              </p>
+            </div>
+            <div>
+              <Label>Products in this collection</Label>
+              <CouponScopeProductPicker
+                value={form.productIds ?? []}
+                onChange={(productIds) => setForm((prev) => ({ ...prev, productIds }))}
+              />
+              <p className="mt-1 text-caption text-charcoal/60">
+                The products a customer sees when they click through from this collection&apos;s card — e.g. every
+                item in a gift set, not just one.
               </p>
             </div>
             <div className="grid grid-cols-2 gap-3">

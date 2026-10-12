@@ -18,7 +18,10 @@ export function findCollectionById(id: string) {
 }
 
 export function listAllCollectionsForAdmin() {
-  return prisma.collection.findMany({ orderBy: { name: "asc" } });
+  return prisma.collection.findMany({
+    include: { products: { select: { id: true, name: true } } },
+    orderBy: { name: "asc" },
+  });
 }
 
 /**
