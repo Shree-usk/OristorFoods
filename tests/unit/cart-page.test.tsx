@@ -13,6 +13,8 @@ const cartWithItem: CartSummary = {
       productId: "p1",
       productName: "Roasted Curry Powder 100g",
       productSlug: "roasted-curry-powder-100g",
+      variantId: null,
+      variantName: null,
       imageSrc: "/images/products/export/curry-powder.webp",
       imageAlt: "Roasted Curry Powder",
       quantity: 1,

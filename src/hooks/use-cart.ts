@@ -35,12 +35,12 @@ export function useCart() {
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ["cart"] });
 
   const addItemMutation = useMutation({
-    mutationFn: async ({ productId, quantity }: { productId: string; quantity: number }) => {
+    mutationFn: async ({ productId, quantity, variantId }: { productId: string; quantity: number; variantId?: string | null }) => {
       const response = await fetch("/api/cart/items", {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ productId, quantity }),
+        body: JSON.stringify({ productId, quantity, variantId: variantId ?? undefined }),
       });
       if (!response.ok) await throwWithServerMessage(response, "Failed to add to cart");
     },
@@ -127,8 +127,8 @@ export function useCart() {
   return {
     cart: query.data,
     isPending: query.isPending,
-    addItem: (productId: string, quantity = 1, options?: { onSuccess?: () => void }) =>
-      addItemMutation.mutate({ productId, quantity }, options),
+    addItem: (productId: string, quantity = 1, options?: { onSuccess?: () => void }, variantId?: string | null) =>
+      addItemMutation.mutate({ productId, quantity, variantId }, options),
     updateQuantity: (itemId: string, quantity: number) => updateQuantityMutation.mutate({ itemId, quantity }),
     removeItem: (itemId: string) => removeItemMutation.mutate(itemId),
     isAddingItem: addItemMutation.isPending,

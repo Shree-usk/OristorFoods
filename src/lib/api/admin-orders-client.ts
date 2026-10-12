@@ -47,6 +47,7 @@ export interface OrderAdminDetailLineItem {
   productId: string | null;
   productName: string;
   productSku: string;
+  variantName?: string | null;
   unitPrice: number;
   quantity: number;
   lineTotal: number;

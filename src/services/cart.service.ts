@@ -4,6 +4,7 @@ import { getOrCreateSessionId } from "@/lib/recommendation-session";
 import { findProductById } from "@/repositories/product.repository";
 import * as cartRepository from "@/repositories/cart.repository";
 import type { CartItemWithProduct } from "@/repositories/cart.repository";
+import * as productVariantRepository from "@/repositories/product-variant.repository";
 import * as rewardsRepository from "@/repositories/rewards.repository";
 import {
   CartItemForbiddenError,
@@ -14,6 +15,7 @@ import {
 import { resolveDiscountForCart } from "@/services/discount.service";
 import type { DiscountableLine } from "@/services/discount.service";
 import { resolveCustomerGroupForUser, resolvePrice } from "@/services/pricing.service";
+import { requireAvailableVariant, resolveVariantPrice } from "@/services/product-variant.service";
 import { trackInteraction } from "@/services/recommendation.service";
 import { resolveActiveMultiplier } from "@/services/reward-campaign.service";
 import { calculatePointsRedemption } from "@/services/rewards-calc";
@@ -68,12 +70,19 @@ async function requireAvailableProduct(productId: string, requestedQuantity: num
 
 function toLineItem(item: CartItemWithProduct, resolvedUnitPrice: number, currency: string, priceChanged: boolean, campaignMultiplier: number): CartLineItem {
   const primaryImage = item.product.images[0];
-  const quantityCapped = item.quantity > item.product.stockQuantity;
+  // A variant line's availability/stock comes entirely from its own
+  // ProductVariant row, never the parent Product — see Product Variants
+  // story's design decision (parent stock/status is inert once variants exist).
+  const unavailable = item.variant ? !item.variant.isActive || !item.variant.inStock : item.product.status !== "Published" || !item.product.inStock;
+  const availableQuantity = item.variant ? item.variant.stockQuantity : item.product.stockQuantity;
+  const quantityCapped = item.quantity > availableQuantity;
   return {
     id: item.id,
     productId: item.product.id,
     productName: item.product.name,
     productSlug: item.product.slug,
+    variantId: item.variantId,
+    variantName: item.variant?.name ?? null,
     imageSrc: primaryImage?.url ?? "",
     imageAlt: primaryImage?.altText ?? item.product.name,
     quantity: item.quantity,
@@ -83,9 +92,9 @@ function toLineItem(item: CartItemWithProduct, resolvedUnitPrice: number, curren
     // STORY-049: campaignMultiplier is 1 with no active RewardCampaign — a no-op, same shape as every other resolved-once-per-cart-read factor here (price, discount).
     rewardPointsEarned: Math.round(item.product.rewardPoints * item.quantity * campaignMultiplier),
     priceChanged,
-    unavailable: item.product.status !== "Published" || !item.product.inStock,
+    unavailable,
     quantityCapped,
-    availableQuantity: item.product.stockQuantity,
+    availableQuantity,
   };
 }
 
@@ -118,9 +127,21 @@ async function buildSummary(cart: Prisma.CartGetPayload<object>, items: CartItem
   const lineItems: CartLineItem[] = [];
   const discountableLines: DiscountableLine[] = [];
   for (const item of items) {
-    const resolved = await resolvePrice({ productId: item.productId, customerGroup, quantity: item.quantity });
-    const liveUnitPrice = resolved?.price.toNumber() ?? item.unitPriceSnapshot.toNumber();
-    const currency = resolved?.currency ?? "LKR";
+    // A variant line's price is the variant's own promoPrice-or-price —
+    // it never consults the campaign/sale/customerGroup/volumeDiscount
+    // tiers, which are scoped to Product only (see Product Variants
+    // story's design decision).
+    let liveUnitPrice: number;
+    let currency: string;
+    if (item.variant) {
+      const resolved = resolveVariantPrice(item.variant);
+      liveUnitPrice = resolved.price;
+      currency = resolved.currency;
+    } else {
+      const resolved = await resolvePrice({ productId: item.productId, customerGroup, quantity: item.quantity });
+      liveUnitPrice = resolved?.price.toNumber() ?? item.unitPriceSnapshot.toNumber();
+      currency = resolved?.currency ?? "LKR";
+    }
     const priceChanged = liveUnitPrice !== item.unitPriceSnapshot.toNumber();
     if (priceChanged) {
       await cartRepository.updateCartItemSnapshot(item.id, liveUnitPrice.toFixed(2));
@@ -208,17 +229,28 @@ export async function addItem(
   guestCookieValue: string | null | undefined,
   productId: string,
   quantity: number,
+  variantId: string | null = null,
 ): Promise<CartIdentityResult> {
   const identity = await resolveCartIdentity(userId, guestCookieValue ?? undefined);
-  const existingItem = await cartRepository.listCartItemsWithProduct(identity.cart.id).then((items) => items.find((i) => i.productId === productId));
+  // Must also match variantId — two different sizes of the same product
+  // are independent cart lines, never merged into one another's quantity.
+  const existingItem = await cartRepository
+    .listCartItemsWithProduct(identity.cart.id)
+    .then((items) => items.find((i) => i.productId === productId && i.variantId === variantId));
   const totalRequested = (existingItem?.quantity ?? 0) + quantity;
 
-  const product = await requireAvailableProduct(productId, totalRequested);
-  const customerGroup = await resolveCustomerGroupForUser(userId);
-  const resolved = await resolvePrice({ productId, customerGroup, quantity: totalRequested });
-  const unitPrice = resolved?.price.toFixed(2) ?? "0.00";
+  let unitPrice: string;
+  if (variantId) {
+    const variant = await requireAvailableVariant(variantId, totalRequested);
+    unitPrice = resolveVariantPrice(variant).price.toFixed(2);
+  } else {
+    await requireAvailableProduct(productId, totalRequested);
+    const customerGroup = await resolveCustomerGroupForUser(userId);
+    const resolved = await resolvePrice({ productId, customerGroup, quantity: totalRequested });
+    unitPrice = resolved?.price.toFixed(2) ?? "0.00";
+  }
 
-  await cartRepository.upsertCartItem(identity.cart.id, product.id, quantity, unitPrice);
+  await cartRepository.upsertCartItem(identity.cart.id, productId, variantId, quantity, unitPrice);
 
   // Best-effort — never block the cart mutation on a tracking write. The
   // whole block (not just trackInteraction's own promise) is guarded:
@@ -226,7 +258,7 @@ export async function addItem(
   // request scope — a real unit-test regression this caught), and an
   // unguarded await would otherwise fail the mutation above it already
   // committed.
-  recordAddToCartInteraction(userId, product.id).catch((error) => {
+  recordAddToCartInteraction(userId, productId).catch((error) => {
     console.error("[cart] failed to record AddToCart interaction", error);
   });
 
@@ -253,6 +285,13 @@ export async function updateItemQuantity(
   quantity: number,
 ): Promise<void> {
   const item = await requireOwnCartItem(userId, guestCookieValue, itemId);
+
+  if (item.variantId) {
+    const variant = await requireAvailableVariant(item.variantId, quantity);
+    await cartRepository.updateCartItemQuantity(itemId, quantity);
+    await cartRepository.updateCartItemSnapshot(itemId, resolveVariantPrice(variant).price.toFixed(2));
+    return;
+  }
   await requireAvailableProduct(item.productId, quantity);
   const customerGroup = await resolveCustomerGroupForUser(userId);
   const resolved = await resolvePrice({ productId: item.productId, customerGroup, quantity });
@@ -307,25 +346,38 @@ export async function mergeGuestCartIntoUser(userId: string, guestCookieValue: s
 
   const { cart: userCart } = await resolveCartIdentity(userId, undefined);
   const userItems = await cartRepository.listCartItemsWithProduct(userCart.id);
-  const userItemByProductId = new Map(userItems.map((item) => [item.productId, item]));
+  // Keyed by productId+variantId — two different sizes of the same
+  // product must merge independently, never combine into one row.
+  const lineKey = (productId: string, variantId: string | null) => `${productId}:${variantId ?? ""}`;
+  const userItemByKey = new Map(userItems.map((item) => [lineKey(item.productId, item.variantId), item]));
   const customerGroup = await resolveCustomerGroupForUser(userId);
 
   for (const guestItem of guestItems) {
-    const existing = userItemByProductId.get(guestItem.productId);
+    const existing = userItemByKey.get(lineKey(guestItem.productId, guestItem.variantId));
     const combinedQuantity = (existing?.quantity ?? 0) + guestItem.quantity;
-    const product = await findProductById(guestItem.productId);
-    if (!product || product.status !== "Published" || !product.inStock) continue; // dropped, same convention addItem's requireAvailableProduct enforces
-    const cappedQuantity = Math.min(combinedQuantity, product.stockQuantity);
-    if (cappedQuantity <= 0) continue;
 
-    const resolved = await resolvePrice({ productId: guestItem.productId, customerGroup, quantity: cappedQuantity });
-    const unitPrice = resolved?.price.toFixed(2) ?? guestItem.unitPriceSnapshot.toFixed(2);
+    let cappedQuantity: number;
+    let unitPrice: string;
+    if (guestItem.variantId) {
+      const variant = await productVariantRepository.findVariantById(guestItem.variantId);
+      if (!variant || !variant.isActive || !variant.inStock) continue; // dropped, same convention requireAvailableVariant enforces
+      cappedQuantity = Math.min(combinedQuantity, variant.stockQuantity);
+      if (cappedQuantity <= 0) continue;
+      unitPrice = resolveVariantPrice(variant).price.toFixed(2);
+    } else {
+      const product = await findProductById(guestItem.productId);
+      if (!product || product.status !== "Published" || !product.inStock) continue; // dropped, same convention addItem's requireAvailableProduct enforces
+      cappedQuantity = Math.min(combinedQuantity, product.stockQuantity);
+      if (cappedQuantity <= 0) continue;
+      const resolved = await resolvePrice({ productId: guestItem.productId, customerGroup, quantity: cappedQuantity });
+      unitPrice = resolved?.price.toFixed(2) ?? guestItem.unitPriceSnapshot.toFixed(2);
+    }
 
     if (existing) {
       await cartRepository.updateCartItemQuantity(existing.id, cappedQuantity);
       await cartRepository.updateCartItemSnapshot(existing.id, unitPrice);
     } else {
-      await cartRepository.upsertCartItem(userCart.id, guestItem.productId, cappedQuantity, unitPrice);
+      await cartRepository.upsertCartItem(userCart.id, guestItem.productId, guestItem.variantId, cappedQuantity, unitPrice);
     }
   }
 }

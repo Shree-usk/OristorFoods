@@ -5,6 +5,7 @@ import * as collectionRepository from "@/repositories/collection.repository";
 import * as pricingRepository from "@/repositories/pricing.repository";
 import * as productRepository from "@/repositories/product.repository";
 import type { AdminProductListFilters, ProductAdminDetail } from "@/repositories/product.repository";
+import * as productVariantRepository from "@/repositories/product-variant.repository";
 import { writeAuditLog } from "@/services/audit-log.service";
 import { refreshProductEmbeddingBestEffort } from "@/services/embedding.service";
 import { requirePermission } from "@/services/permission.service";
@@ -14,7 +15,12 @@ import {
   ProductAdminNotFoundError,
   ProductAdminSkuConflictError,
   ProductAdminSlugConflictError,
+  ProductVariantBarcodeConflictError,
+  ProductVariantHasOrdersError,
+  ProductVariantNotFoundError,
+  ProductVariantSkuConflictError,
 } from "@/services/product-admin.errors";
+import type { ProductVariantFormInput } from "@/validation/product-admin.schema";
 
 /**
  * The admin write path for the `Product` model STORY-009 built for the
@@ -528,4 +534,94 @@ export async function removeVolumeDiscountTier(adminUserId: string, productId: s
   await requirePermission(adminUserId, "Products", "Edit");
   await pricingRepository.deleteVolumeDiscountTier(id);
   await writeAuditLog({ actorId: adminUserId, action: "product_price_removed", module: "Products", targetType: "Product", targetId: productId, metadata: { tier: "volumeDiscount" } });
+}
+
+// --- Variants ---
+// Own CRUD lifecycle (own permission checks, own stock/price fields), kept
+// here rather than in a separate admin service to match the pricing
+// functions above — both are "a collection of independently-CRUD'd child
+// rows under a product," edited one row at a time from their own tab panel.
+
+function mapVariantWriteError(error: unknown, input: Pick<ProductVariantFormInput, "sku" | "barcode">): never {
+  if (isUniqueConstraintViolation(error)) {
+    const field = conflictField(error);
+    if (field === "sku") throw new ProductVariantSkuConflictError(input.sku);
+    if (field === "barcode" && input.barcode) throw new ProductVariantBarcodeConflictError(input.barcode);
+  }
+  throw error;
+}
+
+function toVariantData(input: ProductVariantFormInput) {
+  return {
+    sku: input.sku,
+    // A blank string, not just undefined/null, must become a real SQL
+    // NULL — barcode is @unique, and "" would collide with every other
+    // variant whose barcode was also left blank (confirmed as a real
+    // P2002 against this exact field while testing this feature).
+    barcode: input.barcode?.trim() ? input.barcode.trim() : null,
+    name: input.name,
+    netWeightGrams: input.netWeightGrams,
+    price: input.price,
+    promoPrice: input.promoPrice ?? null,
+    currency: input.currency,
+    inStock: input.inStock ?? true,
+    stockQuantity: input.stockQuantity ?? 0,
+    isActive: input.isActive ?? true,
+    sortOrder: input.sortOrder ?? 0,
+    shippingWeightGrams: input.shippingWeightGrams ?? null,
+    lengthMm: input.lengthMm ?? null,
+    widthMm: input.widthMm ?? null,
+    heightMm: input.heightMm ?? null,
+    fulfilmentRestriction: input.fulfilmentRestriction ?? "None",
+  };
+}
+
+export async function createVariant(adminUserId: string, productId: string, input: ProductVariantFormInput) {
+  await requirePermission(adminUserId, "Products", "Edit");
+  try {
+    const variant = await productVariantRepository.createVariant({ ...toVariantData(input), product: { connect: { id: productId } } });
+    await writeAuditLog({ actorId: adminUserId, action: "product_variant_created", module: "Products", targetType: "Product", targetId: productId, metadata: { variantId: variant.id, sku: variant.sku } });
+    return variant;
+  } catch (error) {
+    mapVariantWriteError(error, input);
+  }
+}
+
+export async function updateVariant(adminUserId: string, productId: string, variantId: string, input: ProductVariantFormInput) {
+  await requirePermission(adminUserId, "Products", "Edit");
+  const existing = await productVariantRepository.findVariantById(variantId);
+  if (!existing || existing.productId !== productId) throw new ProductVariantNotFoundError();
+
+  try {
+    const variant = await productVariantRepository.updateVariant(variantId, toVariantData(input));
+    await writeAuditLog({ actorId: adminUserId, action: "product_variant_updated", module: "Products", targetType: "Product", targetId: productId, metadata: { variantId } });
+    return variant;
+  } catch (error) {
+    mapVariantWriteError(error, input);
+  }
+}
+
+export async function deleteVariant(adminUserId: string, productId: string, variantId: string) {
+  await requirePermission(adminUserId, "Products", "Delete");
+  const existing = await productVariantRepository.findVariantById(variantId);
+  if (!existing || existing.productId !== productId) throw new ProductVariantNotFoundError();
+
+  // Ordered variants are history — deactivate instead of deleting, same
+  // "never corrupt a historical order" principle OrderItem's own
+  // onDelete: SetNull snapshot convention already protects.
+  const orderCount = await productVariantRepository.countOrderItemsForVariant(variantId);
+  if (orderCount > 0) throw new ProductVariantHasOrdersError();
+
+  await productVariantRepository.deleteVariant(variantId);
+  await writeAuditLog({ actorId: adminUserId, action: "product_variant_deleted", module: "Products", targetType: "Product", targetId: productId, metadata: { variantId } });
+}
+
+export async function setVariantImages(adminUserId: string, productId: string, variantId: string, images: { url: string; altText?: string | null; isPrimary?: boolean; sortOrder?: number }[]) {
+  await requirePermission(adminUserId, "Products", "Edit");
+  const existing = await productVariantRepository.findVariantById(variantId);
+  if (!existing || existing.productId !== productId) throw new ProductVariantNotFoundError();
+
+  await productVariantRepository.setVariantImages(variantId, images);
+  await writeAuditLog({ actorId: adminUserId, action: "product_variant_updated", module: "Products", targetType: "Product", targetId: productId, metadata: { variantId, imagesUpdated: true } });
+  return productVariantRepository.findVariantById(variantId);
 }

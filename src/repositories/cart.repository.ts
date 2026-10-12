@@ -15,6 +15,7 @@ const withProduct = {
       categories: { select: { id: true } },
     },
   },
+  variant: true,
 } satisfies Prisma.CartItemInclude;
 
 export type CartItemWithProduct = Prisma.CartItemGetPayload<{ include: typeof withProduct }>;
@@ -44,20 +45,30 @@ export function findCartItemById(id: string) {
 }
 
 /**
- * Adding a product already in the cart increments its quantity (matching
- * the `@@unique([cartId, productId])` de-dup guard) rather than creating a
- * second row. `unitPriceSnapshot` is always overwritten to the caller's
- * current resolved price — on a first add that's simply the price being
- * recorded; on an increment, cart.service.ts has already re-resolved the
- * live price before calling this, so the snapshot never goes stale here.
+ * Adding a product (and, if given, a specific variant of it) already in
+ * the cart increments its quantity (matching the
+ * `@@unique([cartId, productId, variantId])` de-dup guard) rather than
+ * creating a second row. A null `variantId` only matches another row
+ * that's also variant-less — two different sizes of the same product are
+ * independent rows, never merged. `unitPriceSnapshot` is always
+ * overwritten to the caller's current resolved price — on a first add
+ * that's simply the price being recorded; on an increment, cart.service.ts
+ * has already re-resolved the live price before calling this, so the
+ * snapshot never goes stale here.
  */
 export async function upsertCartItem(
   cartId: string,
   productId: string,
+  variantId: string | null,
   quantityDelta: number,
   unitPriceSnapshot: string,
 ) {
-  const existing = await prisma.cartItem.findUnique({ where: { cartId_productId: { cartId, productId } } });
+  // findFirst, not findUnique: Prisma's generated compound-unique input
+  // for `cartId_productId_variantId` types variantId as non-nullable
+  // even though the column is nullable (a known Prisma typing gotcha),
+  // so a plain `where` filter is used instead — still a single-row
+  // lookup backed by the same unique index at the DB level.
+  const existing = await prisma.cartItem.findFirst({ where: { cartId, productId, variantId } });
   if (existing) {
     return prisma.cartItem.update({
       where: { id: existing.id },
@@ -65,7 +76,7 @@ export async function upsertCartItem(
     });
   }
   return prisma.cartItem.create({
-    data: { cartId, productId, quantity: quantityDelta, unitPriceSnapshot },
+    data: { cartId, productId, variantId, quantity: quantityDelta, unitPriceSnapshot },
   });
 }
 

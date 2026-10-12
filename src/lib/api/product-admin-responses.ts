@@ -9,6 +9,10 @@ const statusByCode: Record<ProductAdminErrorCode, number> = {
   slug_conflict: 409,
   sku_conflict: 409,
   illegal_transition: 409,
+  variant_not_found: 404,
+  variant_sku_conflict: 409,
+  variant_barcode_conflict: 409,
+  variant_has_orders: 409,
 };
 
 /** Every /api/admin/products/* route handler's catch block goes through this. */

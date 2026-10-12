@@ -42,11 +42,30 @@ async function makeProduct(overrides: Record<string, unknown> = {}) {
   return product;
 }
 
+async function makeVariant(productId: string, overrides: Record<string, unknown> = {}) {
+  sequence += 1;
+  return prisma.productVariant.create({
+    data: {
+      productId,
+      sku: `CART-SVC-VARIANT-SKU-${sequence}`,
+      name: "100g",
+      netWeightGrams: 100,
+      price: "30.00",
+      currency: "LKR",
+      stockQuantity: 10,
+      isActive: true,
+      inStock: true,
+      ...overrides,
+    },
+  });
+}
+
 afterEach(async () => {
   await prisma.cartItem.deleteMany();
   await prisma.cart.deleteMany();
   await prisma.standardPrice.deleteMany();
   await prisma.productImage.deleteMany();
+  await prisma.productVariant.deleteMany({ where: { sku: { startsWith: "CART-SVC-VARIANT-SKU-" } } });
   await prisma.product.deleteMany({ where: { sku: { startsWith: "CART-SVC-SKU-" } } });
   await prisma.user.deleteMany({ where: { email: { contains: "cart-svc-" } } });
 });
@@ -139,6 +158,68 @@ describe("addItem / getCart", () => {
     const product = await makeProduct({ inStock: false, stockQuantity: 50 });
 
     await expect(addItem(user.id, null, product.id, 1)).rejects.toThrow(ProductUnavailableError);
+  });
+});
+
+describe("addItem — variants", () => {
+  it("adding two different sizes of the same product creates two independent cart lines", async () => {
+    const user = await makeUser();
+    const product = await makeProduct();
+    const small = await makeVariant(product.id, { name: "100g", price: "30.00" });
+    const large = await makeVariant(product.id, { name: "350g", price: "80.00" });
+
+    await addItem(user.id, null, product.id, 2, small.id);
+    await addItem(user.id, null, product.id, 1, large.id);
+    const summary = await getCart(user.id, null);
+
+    expect(summary.items).toHaveLength(2);
+    const smallLine = summary.items.find((item) => item.variantId === small.id);
+    const largeLine = summary.items.find((item) => item.variantId === large.id);
+    expect(smallLine).toMatchObject({ quantity: 2, unitPrice: 30, variantName: "100g" });
+    expect(largeLine).toMatchObject({ quantity: 1, unitPrice: 80, variantName: "350g" });
+  });
+
+  it("adding the same variant twice combines quantity into one line, not two", async () => {
+    const user = await makeUser();
+    const product = await makeProduct();
+    const variant = await makeVariant(product.id);
+
+    await addItem(user.id, null, product.id, 1, variant.id);
+    await addItem(user.id, null, product.id, 2, variant.id);
+    const summary = await getCart(user.id, null);
+
+    expect(summary.items).toHaveLength(1);
+    expect(summary.items[0]?.quantity).toBe(3);
+  });
+
+  it("prefers a variant's promoPrice over its base price", async () => {
+    const user = await makeUser();
+    const product = await makeProduct();
+    const variant = await makeVariant(product.id, { price: "30.00", promoPrice: "22.00" });
+
+    await addItem(user.id, null, product.id, 1, variant.id);
+    const summary = await getCart(user.id, null);
+
+    expect(summary.items[0]?.unitPrice).toBe(22);
+  });
+
+  it("rejects adding an inactive variant", async () => {
+    const user = await makeUser();
+    const product = await makeProduct();
+    const variant = await makeVariant(product.id, { isActive: false });
+
+    await expect(addItem(user.id, null, product.id, 1, variant.id)).rejects.toThrow(ProductUnavailableError);
+  });
+
+  it("rejects adding more than a variant's own stockQuantity, independent of the parent product's stock", async () => {
+    const user = await makeUser();
+    const product = await makeProduct({ stockQuantity: 0 });
+    const variant = await makeVariant(product.id, { stockQuantity: 2 });
+
+    await expect(addItem(user.id, null, product.id, 5, variant.id)).rejects.toThrow(StockExceededError);
+    await addItem(user.id, null, product.id, 2, variant.id);
+    const summary = await getCart(user.id, null);
+    expect(summary.items[0]?.quantity).toBe(2);
   });
 });
 

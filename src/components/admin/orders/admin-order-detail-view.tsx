@@ -152,7 +152,10 @@ export function AdminOrderDetailView({ orderId }: { orderId: string }) {
             <TableBody>
               {order.items.map((item) => (
                 <TableRow key={item.orderItemId}>
-                  <TableCell>{item.productName}</TableCell>
+                  <TableCell>
+                    {item.productName}
+                    {item.variantName && <span className="text-charcoal/70"> — {item.variantName}</span>}
+                  </TableCell>
                   <TableCell>{item.productSku}</TableCell>
                   <TableCell>{item.quantity}</TableCell>
                   <TableCell>{formatCurrency(item.unitPrice, order.currency)}</TableCell>

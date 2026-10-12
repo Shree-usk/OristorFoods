@@ -9,6 +9,9 @@ export interface CartLineItem {
   productId: string;
   productName: string;
   productSlug: string;
+  /** Null for an unvarianted product — every line that existed before Product Variants shipped stays null. */
+  variantId: string | null;
+  variantName: string | null;
   imageSrc: string;
   imageAlt: string;
   quantity: number;

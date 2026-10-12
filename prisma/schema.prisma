@@ -27,86 +27,86 @@ datasource db {
 // STORY-038. Do not extend this beyond auth's requirements here.
 
 model User {
-  id                String     @id @default(cuid())
-  name              String?
-  email             String?    @unique
-  emailVerified     DateTime?
-  image             String?
-  passwordHash      String?
+  id                            String                         @id @default(cuid())
+  name                          String?
+  email                         String?                        @unique
+  emailVerified                 DateTime?
+  image                         String?
+  passwordHash                  String?
   // STORY-033. `passwordChangedAt` doubles as the JWT session's
   // invalidation stamp (see src/lib/auth.ts) — a reset bumps it so
   // sessions issued before the reset stop verifying.
-  passwordChangedAt DateTime?
-  marketingOptIn    Boolean    @default(false)
+  passwordChangedAt             DateTime?
+  marketingOptIn                Boolean                        @default(false)
   // STORY-071. Drives resolvePrice()'s customer-group pricing tier —
   // every call site used to hardcode "Retail" since this field never
   // existed. See docs/architecture-decisions.md's STORY-024/STORY-071 entries.
-  customerGroup     CustomerGroup @default(Retail)
-  accounts          Account[]
-  sessions          Session[]
-  wishlist          Wishlist?
-  cart              Cart?
-  reviews           Review[]   @relation("ReviewAuthor")
-  questions         Question[] @relation("QuestionAsker")
-  blogComments      BlogComment[]
-  recipeReviews     RecipeReview[]
-  recipeBookmarks   RecipeBookmark[]
-  recipeQuestions   RecipeQuestion[] @relation("RecipeQuestionAsker")
-  addresses         Address[]
-  orders            Order[]
-  couponRedemptions CouponRedemption[]
-  rewardAccount      RewardAccount?
-  rewardTransactions RewardTransaction[]
-  badges             CustomerBadge[]
+  customerGroup                 CustomerGroup                  @default(Retail)
+  accounts                      Account[]
+  sessions                      Session[]
+  wishlist                      Wishlist?
+  cart                          Cart?
+  reviews                       Review[]                       @relation("ReviewAuthor")
+  questions                     Question[]                     @relation("QuestionAsker")
+  blogComments                  BlogComment[]
+  recipeReviews                 RecipeReview[]
+  recipeBookmarks               RecipeBookmark[]
+  recipeQuestions               RecipeQuestion[]               @relation("RecipeQuestionAsker")
+  addresses                     Address[]
+  orders                        Order[]
+  couponRedemptions             CouponRedemption[]
+  rewardAccount                 RewardAccount?
+  rewardTransactions            RewardTransaction[]
+  badges                        CustomerBadge[]
   // STORY-031.
-  referralCode       ReferralCode?
-  referralsMade      ReferralAttribution[] @relation("Referrer")
-  referredBy         ReferralAttribution?  @relation("Referred")
+  referralCode                  ReferralCode?
+  referralsMade                 ReferralAttribution[]          @relation("Referrer")
+  referredBy                    ReferralAttribution?           @relation("Referred")
   // STORY-032.
-  notificationPreference NotificationPreference?
-  notificationLogs       NotificationLog[]
+  notificationPreference        NotificationPreference?
+  notificationLogs              NotificationLog[]
   // STORY-036.
-  supportTickets          SupportTicket[]
+  supportTickets                SupportTicket[]
   // STORY-034.
-  phone                   String?
-  dateOfBirth             DateTime?
+  phone                         String?
+  dateOfBirth                   DateTime?
   // Set at email-change request time, swapped into `email` only once the
   // mailed verification link is confirmed (auth.service.ts-style token
   // flow) — `email` itself never changes until then. See
   // docs/architecture-decisions.md.
-  pendingEmail            String?
-  status                  AccountStatus @default(Active)
-  deactivationReason      String?
-  deactivationRequestedAt DateTime?
+  pendingEmail                  String?
+  status                        AccountStatus                  @default(Active)
+  deactivationReason            String?
+  deactivationRequestedAt       DateTime?
   // STORY-048. Set only when status is Suspended — an admin-initiated
   // block, distinct from the customer-initiated deactivation* fields
   // above.
-  suspendedReason         String?
-  suspendedAt             DateTime?
-  suspendedById           String?
-  suspendedBy             AdminUser? @relation(fields: [suspendedById], references: [id], onDelete: SetNull)
-  loginEvents             LoginEvent[]
-  adminNotes              AdminNote[]
-  restrictedCoupons       Coupon[]
+  suspendedReason               String?
+  suspendedAt                   DateTime?
+  suspendedById                 String?
+  suspendedBy                   AdminUser?                     @relation(fields: [suspendedById], references: [id], onDelete: SetNull)
+  loginEvents                   LoginEvent[]
+  adminNotes                    AdminNote[]
+  restrictedCoupons             Coupon[]
   // STORY-049.
-  fraudFlags              FraudFlag[]
+  fraudFlags                    FraudFlag[]
   // STORY-050a.
-  popupInteractions       PopupInteraction[]
+  popupInteractions             PopupInteraction[]
   // STORY-058.
-  distributorAccount      DistributorAccount?
+  distributorAccount            DistributorAccount?
   // STORY-060.
-  productInteractionEvents ProductInteractionEvent[]
-  recommendationEvents     RecommendationEvent[]
+  productInteractionEvents      ProductInteractionEvent[]
+  recommendationEvents          RecommendationEvent[]
   // STORY-061.
-  searchQueryLogs          SearchQueryLog[]
+  searchQueryLogs               SearchQueryLog[]
   // STORY-062.
-  recipeAssistantConversations RecipeAssistantConversation[]
+  recipeAssistantConversations  RecipeAssistantConversation[]
   // STORY-063.
   supportAssistantConversations SupportAssistantConversation[]
   // STORY-064.
-  churnScore         CustomerChurnScore?
-  createdAt         DateTime   @default(now())
-  updatedAt         DateTime   @updatedAt
+  churnScore                    CustomerChurnScore?
+  createdAt                     DateTime                       @default(now())
+  updatedAt                     DateTime                       @updatedAt
 }
 
 enum AccountStatus {
@@ -182,9 +182,9 @@ model Category {
   canonicalUrl    String?
   ogImage         String?
 
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
-  products  Product[]
+  createdAt          DateTime                 @default(now())
+  updatedAt          DateTime                 @updatedAt
+  products           Product[]
   couponScopeRefs    CouponScopeCategory[]
   promotionScopeRefs PromotionScopeCategory[]
 
@@ -292,34 +292,113 @@ model Product {
   certifications    Certification[]
   bundle            ProductBundle?
   bundleComponentOf BundleItem[]
+  // STORY (Product Variants). Any product may have zero-or-more variants;
+  // `variants.length > 0` is the sole signal that this product is sold
+  // by size/variant rather than as a single SKU — once true, this
+  // product's own stockQuantity/inStock/price rows are never read by
+  // variant-aware cart/checkout/order code (not deleted, just inert).
+  variants          ProductVariant[]
 
-  standardPrices      StandardPrice[]
-  salePrices          SalePrice[]
-  campaignPrices      CampaignPrice[]
-  customerGroupPrices CustomerGroupPrice[]
-  volumeDiscountTiers VolumeDiscountTier[]
-  wishlistItems       WishlistItem[]
-  cartItems           CartItem[]
-  orderItems          OrderItem[]
-  couponScopeRefs     CouponScopeProduct[]
-  promotionScopeRefs  PromotionScopeProduct[]
-  reviews             Review[]
-  ratingSummary       ProductRatingSummary?
-  questions           Question[]
-  recipeIngredients   RecipeIngredient[]
-  cookingTipRefs      CookingTipProductRef[]
-  foodAcademyRefs     FoodAcademyProductRef[]
+  standardPrices       StandardPrice[]
+  salePrices           SalePrice[]
+  campaignPrices       CampaignPrice[]
+  customerGroupPrices  CustomerGroupPrice[]
+  volumeDiscountTiers  VolumeDiscountTier[]
+  wishlistItems        WishlistItem[]
+  cartItems            CartItem[]
+  orderItems           OrderItem[]
+  couponScopeRefs      CouponScopeProduct[]
+  promotionScopeRefs   PromotionScopeProduct[]
+  reviews              Review[]
+  ratingSummary        ProductRatingSummary?
+  questions            Question[]
+  recipeIngredients    RecipeIngredient[]
+  cookingTipRefs       CookingTipProductRef[]
+  foodAcademyRefs      FoodAcademyProductRef[]
   // STORY-060.
-  interactionEvents      ProductInteractionEvent[]
-  associationsAsSource   ProductAssociation[]      @relation("AssociationSource")
-  associationsAsTarget   ProductAssociation[]      @relation("AssociationTarget")
-  recommendationEvents   RecommendationEvent[]
+  interactionEvents    ProductInteractionEvent[]
+  associationsAsSource ProductAssociation[]      @relation("AssociationSource")
+  associationsAsTarget ProductAssociation[]      @relation("AssociationTarget")
+  recommendationEvents RecommendationEvent[]
   // STORY-061.
-  embedding              ProductEmbedding?
+  embedding            ProductEmbedding?
 
   @@index([status])
   @@index([status, inStock])
   @@index([brandId])
+}
+
+enum VariantFulfilmentRestriction {
+  None
+  LocalOnly
+  ExportOnly
+  ManualApprovalRequired
+}
+
+// STORY (Product Variants). A sellable size/format of a Product — e.g.
+// "100g"/"200g"/"350g" of the same item. Pricing is deliberately just
+// two plain fields here (price/promoPrice), not wired into the
+// StandardPrice/SalePrice/CampaignPrice/CustomerGroupPrice/
+// VolumeDiscountTier system: that system is scoped to Product and
+// re-wiring it per-variant would multiply pricing.service.ts's
+// deliberately-capped query count for no requirement this story has.
+model ProductVariant {
+  id        String  @id @default(cuid())
+  productId String
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  sku     String  @unique
+  barcode String? @unique
+
+  name           String
+  netWeightGrams Int
+
+  price      Decimal  @db.Decimal(10, 2)
+  promoPrice Decimal? @db.Decimal(10, 2)
+  currency   String   @default("LKR")
+
+  inStock       Boolean @default(true)
+  stockQuantity Int     @default(0)
+
+  isActive  Boolean @default(true)
+  sortOrder Int     @default(0)
+
+  // Optional dimensions/shipping weight — nullable, same fail-safe
+  // convention as Product.weightGrams for the delivery-zone weight calc.
+  shippingWeightGrams Int?
+  lengthMm            Int?
+  widthMm             Int?
+  heightMm            Int?
+
+  fulfilmentRestriction VariantFulfilmentRestriction @default(None)
+
+  images ProductVariantImage[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  cartItems  CartItem[]
+  orderItems OrderItem[]
+
+  @@index([productId])
+  @@index([productId, isActive])
+}
+
+// Own table rather than a nullable scope field on ProductImage: most
+// variants have none and fall back to the parent product's own images,
+// and this way none of the many existing ProductImage query sites
+// (PDP, admin media tab, JSON-LD) need to change to filter it in/out.
+model ProductVariantImage {
+  id        String         @id @default(cuid())
+  variantId String
+  variant   ProductVariant @relation(fields: [variantId], references: [id], onDelete: Cascade)
+  url       String
+  altText   String?
+  isPrimary Boolean        @default(false)
+  sortOrder Int            @default(0)
+  createdAt DateTime       @default(now())
+
+  @@index([variantId])
 }
 
 model Wishlist {
@@ -542,12 +621,12 @@ model Review {
   // story's own comment, now removed) but pointed reviewedBy at `User` —
   // a pre-STORY-038 mistake, since nothing wrote them yet, corrected here
   // to `AdminUser` (a moderator is an admin, never a customer `User` row).
-  reviewedById    String?
-  reviewedBy      AdminUser? @relation("ReviewModerator", fields: [reviewedById], references: [id], onDelete: SetNull)
-  reviewedAt      DateTime?
-  moderatorNote   String?
-  adminReplyBody  String?
-  featured        Boolean    @default(false)
+  reviewedById   String?
+  reviewedBy     AdminUser? @relation("ReviewModerator", fields: [reviewedById], references: [id], onDelete: SetNull)
+  reviewedAt     DateTime?
+  moderatorNote  String?
+  adminReplyBody String?
+  featured       Boolean    @default(false)
 
   publishedAt DateTime?
   createdAt   DateTime  @default(now())
@@ -697,14 +776,14 @@ model RecipeDietaryTag {
 }
 
 model Recipe {
-  id                   String             @id @default(cuid())
-  slug                 String             @unique
+  id                   String                 @id @default(cuid())
+  slug                 String                 @unique
   title                String
   shortDescription     String
   heroImage            String
   heroImageAlt         String
   categoryId           String
-  category             RecipeCategory     @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  category             RecipeCategory         @relation(fields: [categoryId], references: [id], onDelete: Restrict)
   cuisine              String?
   difficulty           RecipeDifficulty
   prepTimeMinutes      Int
@@ -713,12 +792,12 @@ model Recipe {
   // Stored so the time filter and sort can use an index.
   totalTimeMinutes     Int
   servings             Int
-  status               RecipeStatus       @default(Draft)
-  isFeatured           Boolean            @default(false)
+  status               RecipeStatus           @default(Draft)
+  isFeatured           Boolean                @default(false)
   // Written by STORY-018 (views) and STORY-022 (ratings); seed values until then.
-  viewCount            Int                @default(0)
-  avgRating            Decimal?           @db.Decimal(2, 1)
-  ratingCount          Int                @default(0)
+  viewCount            Int                    @default(0)
+  avgRating            Decimal?               @db.Decimal(2, 1)
+  ratingCount          Int                    @default(0)
   chefNotes            String?
   nutritionCalories    Int?
   nutritionProtein     Int?
@@ -726,7 +805,7 @@ model Recipe {
   nutritionFat         Int?
   nutritionFiber       Int?
   nutritionSodium      Int?
-  galleryImageUrls     String[]           @default([])
+  galleryImageUrls     String[]               @default([])
   videoUrl             String?
   videoProvider        VideoProvider?
   videoDurationSeconds Int?
@@ -746,14 +825,14 @@ model Recipe {
   // in the audit log's metadata, not a separate comment-log table.
   reviewerComment      String?
   createdById          String?
-  createdBy            AdminUser?         @relation("RecipeCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdBy            AdminUser?             @relation("RecipeCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
   updatedById          String?
-  updatedBy            AdminUser?         @relation("RecipeUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+  updatedBy            AdminUser?             @relation("RecipeUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
   reviewedById         String?
-  reviewedBy           AdminUser?         @relation("RecipeReviewedBy", fields: [reviewedById], references: [id], onDelete: SetNull)
+  reviewedBy           AdminUser?             @relation("RecipeReviewedBy", fields: [reviewedById], references: [id], onDelete: SetNull)
   publishedAt          DateTime?
-  createdAt            DateTime           @default(now())
-  updatedAt            DateTime           @updatedAt
+  createdAt            DateTime               @default(now())
+  updatedAt            DateTime               @updatedAt
 
   @@index([status, publishedAt])
   @@index([status, categoryId])
@@ -940,37 +1019,37 @@ enum FoodAcademyContentType {
 }
 
 model FoodAcademyCategory {
-  id          String               @id @default(cuid())
+  id          String             @id @default(cuid())
   name        String
-  slug        String               @unique
+  slug        String             @unique
   description String?
-  sortOrder   Int                  @default(0)
-  status      ContentStatus        @default(Active)
+  sortOrder   Int                @default(0)
+  status      ContentStatus      @default(Active)
   entries     FoodAcademyEntry[]
 }
 
 model FoodAcademyEntry {
-  id           String                  @id @default(cuid())
-  slug         String                  @unique
-  title        String
-  summary      String
-  heroImageUrl String?
-  contentType  FoodAcademyContentType
-  categoryId   String
-  category     FoodAcademyCategory     @relation(fields: [categoryId], references: [id])
+  id                 String                 @id @default(cuid())
+  slug               String                 @unique
+  title              String
+  summary            String
+  heroImageUrl       String?
+  contentType        FoodAcademyContentType
+  categoryId         String
+  category           FoodAcademyCategory    @relation(fields: [categoryId], references: [id])
   // Markdown. Required in practice for Article/Guide, an optional short
   // intro for Course (whose real content lives in `sections`). There is no
   // create/update API in this story's scope — this is a seed-data
   // convention, not a runtime-validated one (mirrors CookingTip's
   // createCookingTip being seed-only).
-  bodyContent  String?
+  bodyContent        String?
   readingTimeMinutes Int?
-  authorName   String?
-  isFeatured   Boolean                 @default(false)
-  status       FoodAcademyEntryStatus  @default(Draft)
-  publishedAt  DateTime?
-  createdAt    DateTime                @default(now())
-  updatedAt    DateTime                @updatedAt
+  authorName         String?
+  isFeatured         Boolean                @default(false)
+  status             FoodAcademyEntryStatus @default(Draft)
+  publishedAt        DateTime?
+  createdAt          DateTime               @default(now())
+  updatedAt          DateTime               @updatedAt
 
   sections    FoodAcademySection[]
   recipeRefs  FoodAcademyRecipeRef[]
@@ -1222,40 +1301,45 @@ model DownloadResource {
 // --- Shopping Cart (STORY-024) ---
 
 model Cart {
-  id         String     @id @default(cuid())
-  userId     String?    @unique
-  user       User?      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  guestToken String?    @unique
-  items      CartItem[]
+  id             String     @id @default(cuid())
+  userId         String?    @unique
+  user           User?      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  guestToken     String?    @unique
+  items          CartItem[]
   // STORY-029. An FK, not a denormalized code, so it always reflects the
   // coupon's live state. Deliberately NOT copied over on a guest->user
   // merge (mergeGuestCartIntoUser) — see docs/architecture-decisions.md.
-  couponId   String?
-  coupon     Coupon?    @relation(fields: [couponId], references: [id], onDelete: SetNull)
+  couponId       String?
+  coupon         Coupon?    @relation(fields: [couponId], references: [id], onDelete: SetNull)
   // STORY-030. Parallel to couponId, but a plain value, not an FK — a
   // redemption "request" isn't a durable row until order placement.
   // Requires an authenticated identity (a guest cart never meaningfully
   // sets this); enforced in rewards.service.ts and the /api/cart/points
   // route, not as a DB constraint.
-  pointsToRedeem Int?   @default(0)
-  createdAt  DateTime   @default(now())
-  updatedAt  DateTime   @updatedAt
+  pointsToRedeem Int?       @default(0)
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
 
   @@index([guestToken])
 }
 
 model CartItem {
-  id                String   @id @default(cuid())
+  id                String          @id @default(cuid())
   cartId            String
-  cart              Cart     @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  cart              Cart            @relation(fields: [cartId], references: [id], onDelete: Cascade)
   productId         String
-  product           Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  product           Product         @relation(fields: [productId], references: [id], onDelete: Cascade)
+  // Nullable: null means "this product, unvarianted" — every row that
+  // exists today keeps this null. Non-null lets the same product appear
+  // as multiple independent cart lines, one per selected size.
+  variantId         String?
+  variant           ProductVariant? @relation(fields: [variantId], references: [id], onDelete: Cascade)
   quantity          Int
-  unitPriceSnapshot Decimal  @db.Decimal(10, 2)
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  unitPriceSnapshot Decimal         @db.Decimal(10, 2)
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
 
-  @@unique([cartId, productId])
+  @@unique([cartId, productId, variantId])
 }
 
 // --- Coupons & Promotions (STORY-029) ---
@@ -1282,28 +1366,28 @@ enum CouponScope {
 }
 
 model Coupon {
-  id           String             @id @default(cuid())
-  code         String             @unique
-  discountType CouponDiscountType
+  id                    String             @id @default(cuid())
+  code                  String             @unique
+  discountType          CouponDiscountType
   // Used when discountType is PercentageOff (0-100). Null otherwise.
-  percentOff   Decimal?           @db.Decimal(5, 2)
+  percentOff            Decimal?           @db.Decimal(5, 2)
   // Used when discountType is FixedAmountOff. Null otherwise.
-  amountOff    Decimal?           @db.Decimal(10, 2)
-  currency     String             @default("LKR")
-  startDate    DateTime
-  endDate      DateTime
-  minOrderValue Decimal?          @db.Decimal(10, 2)
+  amountOff             Decimal?           @db.Decimal(10, 2)
+  currency              String             @default("LKR")
+  startDate             DateTime
+  endDate               DateTime
+  minOrderValue         Decimal?           @db.Decimal(10, 2)
   // Null = unlimited.
   usageLimitGlobal      Int?
   usageLimitPerCustomer Int?
-  scope        CouponScope        @default(AllProducts)
+  scope                 CouponScope        @default(AllProducts)
   // Can this stack with other stackable coupons/promotions instead of
   // take-best? Default false matches the confirmed business default (no
   // stacking) — see docs/architecture-decisions.md.
-  stackable    Boolean            @default(false)
-  isActive     Boolean            @default(true)
-  createdAt    DateTime           @default(now())
-  updatedAt    DateTime           @updatedAt
+  stackable             Boolean            @default(false)
+  isActive              Boolean            @default(true)
+  createdAt             DateTime           @default(now())
+  updatedAt             DateTime           @updatedAt
 
   // STORY-048. Set only for a customer-admin-issued coupon
   // (coupon.service.ts::issueCouponToCustomer) — null for every
@@ -1314,10 +1398,10 @@ model Coupon {
   restrictedToUserId String?
   restrictedToUser   User?   @relation(fields: [restrictedToUserId], references: [id], onDelete: Cascade)
 
-  scopeProducts   CouponScopeProduct[]
-  scopeCategories CouponScopeCategory[]
-  redemptions     CouponRedemption[]
-  carts           Cart[]
+  scopeProducts     CouponScopeProduct[]
+  scopeCategories   CouponScopeCategory[]
+  redemptions       CouponRedemption[]
+  carts             Cart[]
   seasonalCampaigns SeasonalCampaign[]
 
   @@index([code, isActive])
@@ -1372,28 +1456,28 @@ model CouponRedemption {
 // "applied" to a Cart row like a Coupon — evaluated fresh on every read,
 // since by definition it requires no customer action.
 model Promotion {
-  id           String             @id @default(cuid())
-  name         String
+  id            String             @id @default(cuid())
+  name          String
   // Customer-facing label shown in the order summary, e.g. "Weekend Sale
   // — 10% off all products" — distinct from `name` (admin-facing), same
   // convention as DeliveryRateOverride.campaignName being customer-visible.
-  displayLabel String
-  discountType CouponDiscountType
-  percentOff   Decimal?           @db.Decimal(5, 2)
-  amountOff    Decimal?           @db.Decimal(10, 2)
-  currency     String             @default("LKR")
-  startDate    DateTime
-  endDate      DateTime
-  minOrderValue Decimal?          @db.Decimal(10, 2)
-  scope        CouponScope        @default(AllProducts)
-  stackable    Boolean            @default(false)
+  displayLabel  String
+  discountType  CouponDiscountType
+  percentOff    Decimal?           @db.Decimal(5, 2)
+  amountOff     Decimal?           @db.Decimal(10, 2)
+  currency      String             @default("LKR")
+  startDate     DateTime
+  endDate       DateTime
+  minOrderValue Decimal?           @db.Decimal(10, 2)
+  scope         CouponScope        @default(AllProducts)
+  stackable     Boolean            @default(false)
   // Tie-break among simultaneously-eligible promotions, and against a
   // non-stackable coupon of equal discount amount (the coupon always
   // wins that tie) — lower priority wins. See docs/architecture-decisions.md.
-  priority     Int                @default(0)
-  isActive     Boolean            @default(true)
-  createdAt    DateTime           @default(now())
-  updatedAt    DateTime           @updatedAt
+  priority      Int                @default(0)
+  isActive      Boolean            @default(true)
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
 
   scopeProducts   PromotionScopeProduct[]
   scopeCategories PromotionScopeCategory[]
@@ -1478,25 +1562,25 @@ model RewardAccount {
 // spendableBalance only — never lifetimeAchievement, so spending points
 // can never demote a customer's tier.
 model RewardTransaction {
-  id     String                @id @default(cuid())
-  userId String
-  user   User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
-  type   RewardTransactionType
-  points Int
-  orderId String?
-  order   Order?               @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  id                         String                @id @default(cuid())
+  userId                     String
+  user                       User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type                       RewardTransactionType
+  points                     Int
+  orderId                    String?
+  order                      Order?                @relation(fields: [orderId], references: [id], onDelete: SetNull)
   // Set only on an Earned row, only when RewardSetting.pointsExpiryDays
   // was configured at write time. Null = this batch never expires.
-  expiresAt DateTime?
+  expiresAt                  DateTime?
   // Set ONLY on an Expired row: points back to the Earned row it closes
   // out. @@unique means at most one Expired row can ever close a given
   // Earned batch — the lazy sweep (rewards.service.ts) is idempotent, a
   // re-run can never double-expire the same batch.
-  expiresEarnedTransactionId String?            @unique
-  expiresEarnedTransaction   RewardTransaction? @relation("EarnedExpiry", fields: [expiresEarnedTransactionId], references: [id], onDelete: SetNull)
-  expiredBy                  RewardTransaction? @relation("EarnedExpiry")
-  note   String?
-  createdAt DateTime @default(now())
+  expiresEarnedTransactionId String?               @unique
+  expiresEarnedTransaction   RewardTransaction?    @relation("EarnedExpiry", fields: [expiresEarnedTransactionId], references: [id], onDelete: SetNull)
+  expiredBy                  RewardTransaction?    @relation("EarnedExpiry")
+  note                       String?
+  createdAt                  DateTime              @default(now())
 
   // At most one Earned, one Redeemed, one Reversed row per order — the
   // idempotency guard for event-driven earning/clawback (a replayed
@@ -1746,90 +1830,94 @@ enum OrderStatus {
 }
 
 model Order {
-  id                 String      @id @default(cuid())
-  orderNumber        String      @unique
-  idempotencyKey     String      @unique
-  userId             String?
-  user               User?       @relation(fields: [userId], references: [id], onDelete: SetNull)
+  id                    String                  @id @default(cuid())
+  orderNumber           String                  @unique
+  idempotencyKey        String                  @unique
+  userId                String?
+  user                  User?                   @relation(fields: [userId], references: [id], onDelete: SetNull)
   // Verified guest-cart token snapshot: authorizes the guest's
   // confirmation view and idempotent-replay ownership check.
-  guestToken         String?
-  guestEmail         String?
-  status             OrderStatus @default(Confirmed)
-  subtotal           Decimal     @db.Decimal(10, 2)
-  deliveryCharge     Decimal     @db.Decimal(10, 2)
-  discount           Decimal     @db.Decimal(10, 2) @default(0)
-  tax                Decimal     @db.Decimal(10, 2) @default(0)
-  grandTotal         Decimal     @db.Decimal(10, 2)
-  couponCode         String?
+  guestToken            String?
+  guestEmail            String?
+  status                OrderStatus             @default(Confirmed)
+  subtotal              Decimal                 @db.Decimal(10, 2)
+  deliveryCharge        Decimal                 @db.Decimal(10, 2)
+  discount              Decimal                 @default(0) @db.Decimal(10, 2)
+  tax                   Decimal                 @default(0) @db.Decimal(10, 2)
+  grandTotal            Decimal                 @db.Decimal(10, 2)
+  couponCode            String?
   // STORY-029. A plain display-string snapshot of what discounted the
   // order ("Coupon SAVE10" or "Weekend Sale") — not an FK, so it survives
   // a later-deleted/deactivated Coupon or Promotion row unchanged.
-  discountLabel      String?
-  rewardPointsEarned Int         @default(0)
+  discountLabel         String?
+  rewardPointsEarned    Int                     @default(0)
   // STORY-030. Immutable snapshots of a points redemption applied at this
   // order's checkout — mirrors the discount/discountLabel pattern.
-  pointsRedeemed        Int     @default(0)
-  pointsRedemptionValue Decimal @db.Decimal(10, 2) @default(0)
-  erpSyncStatus      String?
+  pointsRedeemed        Int                     @default(0)
+  pointsRedemptionValue Decimal                 @default(0) @db.Decimal(10, 2)
+  erpSyncStatus         String?
   // Set together by order.service.ts's cancelOrder() (STORY-028). No
   // separate refund-reference column — refund state lives on
   // Payment.status (Refunded); duplicating it here would be a second
   // source of truth.
-  cancelledAt        DateTime?
-  cancellationReason String?     @db.VarChar(500)
-  paymentId          String?     @unique
-  payment            Payment?    @relation(fields: [paymentId], references: [id], onDelete: SetNull)
-  deliveryZoneName   String
-  estimatedDaysMin   Int?
-  estimatedDaysMax   Int?
+  cancelledAt           DateTime?
+  cancellationReason    String?                 @db.VarChar(500)
+  paymentId             String?                 @unique
+  payment               Payment?                @relation(fields: [paymentId], references: [id], onDelete: SetNull)
+  deliveryZoneName      String
+  estimatedDaysMin      Int?
+  estimatedDaysMax      Int?
   // STORY-036. Nothing writes these yet — admin console (STORY-047) will;
   // this story only reads/displays them when present.
-  carrier            String?
-  trackingNumber     String?
-  trackingUrl        String?
+  carrier               String?
+  trackingNumber        String?
+  trackingUrl           String?
   // Immutable address snapshot — flattened copies, no relation, so later
   // edits to a saved Address can never alter historical orders.
-  shipRecipientName  String
-  shipPhone          String
-  shipLine1          String
-  shipLine2          String?
-  shipCity           String
-  shipDistrict       String?
-  shipPostalCode     String?
-  items              OrderItem[]
-  statusHistory      OrderStatusHistory[]
-  integrationEvents  OrderIntegrationEvent[]
-  couponRedemption   CouponRedemption?
-  rewardTransactions RewardTransaction[]
-  badgesAwarded      CustomerBadge[]
+  shipRecipientName     String
+  shipPhone             String
+  shipLine1             String
+  shipLine2             String?
+  shipCity              String
+  shipDistrict          String?
+  shipPostalCode        String?
+  items                 OrderItem[]
+  statusHistory         OrderStatusHistory[]
+  integrationEvents     OrderIntegrationEvent[]
+  couponRedemption      CouponRedemption?
+  rewardTransactions    RewardTransaction[]
+  badgesAwarded         CustomerBadge[]
   // STORY-031. The referral this order qualified (if any) — set on the
   // attribution, not here; this is just the inverse relation.
-  referralAttributions ReferralAttribution[]
+  referralAttributions  ReferralAttribution[]
   // STORY-036.
-  returnRequests     ReturnRequest[]
-  supportTickets     SupportTicket[]
+  returnRequests        ReturnRequest[]
+  supportTickets        SupportTicket[]
   // STORY-047.
-  refundRecords      RefundRecord[]
-  createdAt          DateTime    @default(now())
-  updatedAt          DateTime    @updatedAt
+  refundRecords         RefundRecord[]
+  createdAt             DateTime                @default(now())
+  updatedAt             DateTime                @updatedAt
 
   @@index([userId])
 }
 
 model OrderItem {
-  id                 String   @id @default(cuid())
+  id                 String          @id @default(cuid())
   orderId            String
-  order              Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  order              Order           @relation(fields: [orderId], references: [id], onDelete: Cascade)
   productId          String?
-  product            Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
+  product            Product?        @relation(fields: [productId], references: [id], onDelete: SetNull)
+  variantId          String?
+  variant            ProductVariant? @relation(fields: [variantId], references: [id], onDelete: SetNull)
   // Snapshots at time of purchase — never rely on live product data.
   productName        String
   productSku         String
-  unitPrice          Decimal  @db.Decimal(10, 2)
+  variantName        String?
+  variantSku         String?
+  unitPrice          Decimal         @db.Decimal(10, 2)
   quantity           Int
-  lineTotal          Decimal  @db.Decimal(10, 2)
-  rewardPointsEarned Int      @default(0)
+  lineTotal          Decimal         @db.Decimal(10, 2)
+  rewardPointsEarned Int             @default(0)
 }
 
 model OrderStatusHistory {
@@ -1932,22 +2020,22 @@ enum SupportTicketSource {
 }
 
 model SupportTicket {
-  id        String                 @id @default(cuid())
-  userId    String
-  user      User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
-  orderId   String?
-  order     Order?                 @relation(fields: [orderId], references: [id], onDelete: SetNull)
-  category  SupportTicketCategory
-  subject   String
-  message   String                 @db.VarChar(4000)
-  status    SupportTicketStatus    @default(Open)
+  id             String                        @id @default(cuid())
+  userId         String
+  user           User                          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  orderId        String?
+  order          Order?                        @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  category       SupportTicketCategory
+  subject        String
+  message        String                        @db.VarChar(4000)
+  status         SupportTicketStatus           @default(Open)
   // STORY-063. Both additive/nullable-or-defaulted — no existing
   // SupportTicket caller needs to change.
-  source         SupportTicketSource @default(Customer)
+  source         SupportTicketSource           @default(Customer)
   conversationId String?
   conversation   SupportAssistantConversation? @relation(fields: [conversationId], references: [id], onDelete: SetNull)
-  createdAt DateTime               @default(now())
-  updatedAt DateTime               @updatedAt
+  createdAt      DateTime                      @default(now())
+  updatedAt      DateTime                      @updatedAt
 
   @@index([userId])
   @@index([userId, status])
@@ -1966,18 +2054,18 @@ enum OrderIntegrationEventStatus {
 }
 
 model OrderIntegrationEvent {
-  id        String                      @id @default(cuid())
-  orderId   String
-  order     Order                       @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  id          String                      @id @default(cuid())
+  orderId     String
+  order       Order                       @relation(fields: [orderId], references: [id], onDelete: Cascade)
   // "order.confirmed" | "order.cancelled" at the TS layer
   // (order-integration.service.ts's OrderEventType) — a plain string here
   // so a future event type never needs a migration.
-  eventType String
-  payload   Json
-  status    OrderIntegrationEventStatus @default(Pending)
+  eventType   String
+  payload     Json
+  status      OrderIntegrationEventStatus @default(Pending)
   processedAt DateTime?
-  error     String?
-  createdAt DateTime                    @default(now())
+  error       String?
+  createdAt   DateTime                    @default(now())
 
   @@index([orderId])
   @@index([status, createdAt])
@@ -1999,19 +2087,19 @@ enum SyncJobStatus {
 }
 
 model SyncJob {
-  id               String        @id @default(cuid())
+  id               String           @id @default(cuid())
   jobType          String
-  status           SyncJobStatus @default(Queued)
+  status           SyncJobStatus    @default(Queued)
   targetEntityType String?
   targetEntityId   String?
   payload          Json?
   errorMessage     String?
-  attemptCount     Int           @default(0)
+  attemptCount     Int              @default(0)
   nextRetryAt      DateTime?
   createdById      String?
-  createdBy        AdminUser?    @relation(fields: [createdById], references: [id])
-  createdAt        DateTime      @default(now())
-  updatedAt        DateTime      @updatedAt
+  createdBy        AdminUser?       @relation(fields: [createdById], references: [id])
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
   attempts         SyncJobAttempt[]
 
   @@index([status, createdAt])
@@ -2063,22 +2151,22 @@ model ReferralCode {
 // One row per referred customer (never per click) — created at
 // registration from whatever attribution cookie was present, if any.
 model ReferralAttribution {
-  id             String                    @id @default(cuid())
-  referrerUserId String
-  referrer       User                      @relation("Referrer", fields: [referrerUserId], references: [id], onDelete: Cascade)
+  id                String                    @id @default(cuid())
+  referrerUserId    String
+  referrer          User                      @relation("Referrer", fields: [referrerUserId], references: [id], onDelete: Cascade)
   // @unique: structurally impossible to attribute the same customer
   // twice, from this or a later visit via a different referral link.
-  referredUserId String                    @unique
-  referred       User                      @relation("Referred", fields: [referredUserId], references: [id], onDelete: Cascade)
-  status         ReferralAttributionStatus @default(Registered)
+  referredUserId    String                    @unique
+  referred          User                      @relation("Referred", fields: [referredUserId], references: [id], onDelete: Cascade)
+  status            ReferralAttributionStatus @default(Registered)
   // Free-text, extensible — e.g. "self_referral". Mirrors
   // Badge.criteriaType's "plain string, not enum" precedent.
-  excludedReason String?
+  excludedReason    String?
   qualifyingOrderId String?
-  qualifyingOrder   Order?  @relation(fields: [qualifyingOrderId], references: [id], onDelete: SetNull)
-  qualifiedAt    DateTime?
-  createdAt      DateTime                  @default(now())
-  updatedAt      DateTime                  @updatedAt
+  qualifyingOrder   Order?                    @relation(fields: [qualifyingOrderId], references: [id], onDelete: SetNull)
+  qualifiedAt       DateTime?
+  createdAt         DateTime                  @default(now())
+  updatedAt         DateTime                  @updatedAt
 
   @@index([referrerUserId])
   @@index([status])
@@ -2103,8 +2191,8 @@ model ReferralSetting {
   // STORY-049. Fraud threshold — a referrer attributing more than this
   // many referrals within referralPeriodDays is flagged (FraudFlag),
   // never auto-blocked. Null on either field = this check is off.
-  maxReferralsPerPeriod     Int?
-  referralPeriodDays        Int?
+  maxReferralsPerPeriod      Int?
+  referralPeriodDays         Int?
   updatedAt                  DateTime @updatedAt
 }
 
@@ -2131,20 +2219,20 @@ enum NotificationStatus {
 }
 
 model NotificationTemplate {
-  id         String              @id @default(cuid())
+  id          String              @id @default(cuid())
   // "order.confirmed" | "order.dispatched" | "order.delivered" |
   // "order.cancelled" | "rewards.points_earned" | "referral.qualified" —
   // a plain string, not an enum, mirroring OrderIntegrationEvent.eventType's
   // precedent, so a future notification type never needs a migration.
   templateKey String
-  channel    NotificationChannel
+  channel     NotificationChannel
   // Email only — null for SMS/WhatsApp.
-  subject    String?
+  subject     String?
   // {{variableName}} placeholders, substituted by notification.service.ts.
-  body       String
-  isActive   Boolean             @default(true)
-  createdAt  DateTime            @default(now())
-  updatedAt  DateTime            @updatedAt
+  body        String
+  isActive    Boolean             @default(true)
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
 
   @@unique([templateKey, channel])
 }
@@ -2154,10 +2242,10 @@ model NotificationTemplate {
 // NOT gated here (see NotificationLog/notification.service.ts) — this
 // table only governs the two consent-requiring channels.
 model NotificationPreference {
-  id            String   @id @default(cuid())
-  userId        String   @unique
-  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  phone         String?
+  id                 String   @id @default(cuid())
+  userId             String   @unique
+  user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  phone              String?
   // Order-lifecycle transactional emails (confirmed/dispatched/etc). Named
   // `emailOptIn` (not `orderUpdatesOptIn`) since it's the only email
   // category this app currently sends — kept the original STORY-032 name
@@ -2165,12 +2253,12 @@ model NotificationPreference {
   // emails" toggle is `User.marketingOptIn` instead (same concept already
   // captured at registration — no second field for it). See
   // docs/architecture-decisions.md.
-  emailOptIn    Boolean  @default(true)
-  smsOptIn      Boolean  @default(false)
-  whatsappOptIn Boolean  @default(false)
+  emailOptIn         Boolean  @default(true)
+  smsOptIn           Boolean  @default(false)
+  whatsappOptIn      Boolean  @default(false)
   // STORY-034. Points-earned / referral-qualified notifications.
-  rewardUpdatesOptIn Boolean @default(true)
-  updatedAt     DateTime @updatedAt
+  rewardUpdatesOptIn Boolean  @default(true)
+  updatedAt          DateTime @updatedAt
 }
 
 // One row per attempted send. `triggeringEventId` deliberately spans
@@ -2229,29 +2317,29 @@ enum CampaignStatus {
 }
 
 model EmailSmsCampaign {
-  id             String                 @id @default(cuid())
-  name           String
-  channel        NotificationChannel
-  audienceTarget CampaignAudienceTarget
+  id                  String                 @id @default(cuid())
+  name                String
+  channel             NotificationChannel
+  audienceTarget      CampaignAudienceTarget
   targetCustomerGroup CustomerGroup?
   // STORY-059a. Resolved live at send time by crm-segmentation.service.ts::resolveSegmentMembers — not a frozen snapshot.
-  targetSegmentId String?
-  targetSegment  SavedSegment?          @relation(fields: [targetSegmentId], references: [id])
+  targetSegmentId     String?
+  targetSegment       SavedSegment?          @relation(fields: [targetSegmentId], references: [id])
   // Email only — null for SMS/WhatsApp, mirroring NotificationTemplate.
-  subject        String?
+  subject             String?
   // {{name}} merge field, substituted by notification.service.ts::renderTemplate.
-  body           String
-  status         CampaignStatus         @default(Draft)
+  body                String
+  status              CampaignStatus         @default(Draft)
   // Null = send immediately when triggered. Past-due + Scheduled rows are
   // only actually sent when an admin triggers "Send due campaigns" — no
   // cron exists in this codebase; see docs/architecture-decisions.md.
-  scheduledAt    DateTime?
-  sentAt         DateTime?
-  createdById    String
-  createdBy      AdminUser              @relation(fields: [createdById], references: [id])
-  createdAt      DateTime               @default(now())
-  updatedAt      DateTime               @updatedAt
-  seasonalCampaigns SeasonalCampaign[]
+  scheduledAt         DateTime?
+  sentAt              DateTime?
+  createdById         String
+  createdBy           AdminUser              @relation(fields: [createdById], references: [id])
+  createdAt           DateTime               @default(now())
+  updatedAt           DateTime               @updatedAt
+  seasonalCampaigns   SeasonalCampaign[]
 
   @@index([status, scheduledAt])
 }
@@ -2273,16 +2361,16 @@ model EmailSmsCampaign {
 // speculative.
 
 model Role {
-  id            String           @id @default(cuid())
+  id          String           @id @default(cuid())
   // Stable machine identifier (e.g. "super_administrator"), separate from
   // `name` because the Super-Admin-floor and last-Super-Administrator
   // guards must key off something that survives a future rename via
   // STORY-057's role-editing UI.
-  key           String           @unique
-  name          String           @unique
-  createdAt     DateTime         @default(now())
-  adminUsers    AdminUser[]
-  permissions   RolePermission[]
+  key         String           @unique
+  name        String           @unique
+  createdAt   DateTime         @default(now())
+  adminUsers  AdminUser[]
+  permissions RolePermission[]
 }
 
 enum AdminModule {
@@ -2347,81 +2435,81 @@ enum AdminUserStatus {
 }
 
 model AdminUser {
-  id                 String          @id @default(cuid())
-  email              String          @unique
-  name               String
-  passwordHash       String
+  id                         String               @id @default(cuid())
+  email                      String               @unique
+  name                       String
+  passwordHash               String
   // Mirrors User.passwordChangedAt's role exactly — the JWT session-version
   // stamp checked on every request (see src/lib/admin-auth.ts). Bumping
   // this force-signs-out every outstanding session for this admin.
-  passwordChangedAt  DateTime        @default(now())
-  roleId             String
-  role               Role            @relation(fields: [roleId], references: [id])
-  status             AdminUserStatus @default(Active)
-  failedLoginAttempts Int            @default(0)
-  lockedUntil        DateTime?
-  auditLogs          AuditLog[]
+  passwordChangedAt          DateTime             @default(now())
+  roleId                     String
+  role                       Role                 @relation(fields: [roleId], references: [id])
+  status                     AdminUserStatus      @default(Active)
+  failedLoginAttempts        Int                  @default(0)
+  lockedUntil                DateTime?
+  auditLogs                  AuditLog[]
   // STORY-040.
-  productsCreated    Product[]       @relation("ProductCreatedBy")
-  productsUpdated    Product[]       @relation("ProductUpdatedBy")
+  productsCreated            Product[]            @relation("ProductCreatedBy")
+  productsUpdated            Product[]            @relation("ProductUpdatedBy")
   // STORY-041.
-  mediaAssetsUploaded MediaAsset[]
+  mediaAssetsUploaded        MediaAsset[]
   // STORY-042.
-  homepageLayoutsCreated HomepageLayout[] @relation("HomepageLayoutCreatedBy")
-  homepageLayoutsUpdated HomepageLayout[] @relation("HomepageLayoutUpdatedBy")
+  homepageLayoutsCreated     HomepageLayout[]     @relation("HomepageLayoutCreatedBy")
+  homepageLayoutsUpdated     HomepageLayout[]     @relation("HomepageLayoutUpdatedBy")
   // STORY-043.
-  recipesCreated     Recipe[]        @relation("RecipeCreatedBy")
-  recipesUpdated     Recipe[]        @relation("RecipeUpdatedBy")
-  recipesReviewed    Recipe[]        @relation("RecipeReviewedBy")
+  recipesCreated             Recipe[]             @relation("RecipeCreatedBy")
+  recipesUpdated             Recipe[]             @relation("RecipeUpdatedBy")
+  recipesReviewed            Recipe[]             @relation("RecipeReviewedBy")
   // STORY-044.
-  blogPostsCreated   BlogPost[]      @relation("BlogPostCreatedBy")
-  blogPostsUpdated   BlogPost[]      @relation("BlogPostUpdatedBy")
+  blogPostsCreated           BlogPost[]           @relation("BlogPostCreatedBy")
+  blogPostsUpdated           BlogPost[]           @relation("BlogPostUpdatedBy")
   // STORY-045.
-  reviewsModerated       Review[]       @relation("ReviewModerator")
-  recipeReviewsModerated RecipeReview[] @relation("RecipeReviewModerator")
+  reviewsModerated           Review[]             @relation("ReviewModerator")
+  recipeReviewsModerated     RecipeReview[]       @relation("RecipeReviewModerator")
   // STORY-046.
-  questionsAnswered  Question[]      @relation("QuestionAnswerer")
-  questionsApproved  Question[]      @relation("QuestionApprover")
+  questionsAnswered          Question[]           @relation("QuestionAnswerer")
+  questionsApproved          Question[]           @relation("QuestionApprover")
   // STORY-046.1.
-  recipeQuestionsAnswered RecipeQuestion[] @relation("RecipeQuestionAnswerer")
-  recipeQuestionsApproved RecipeQuestion[] @relation("RecipeQuestionApprover")
+  recipeQuestionsAnswered    RecipeQuestion[]     @relation("RecipeQuestionAnswerer")
+  recipeQuestionsApproved    RecipeQuestion[]     @relation("RecipeQuestionApprover")
   // STORY-047.
-  refundsProcessed  RefundRecord[]
-  returnsProcessed  ReturnRequest[]
+  refundsProcessed           RefundRecord[]
+  returnsProcessed           ReturnRequest[]
   // STORY-048.
-  customersSuspended User[]
-  adminNotesAuthored AdminNote[]
+  customersSuspended         User[]
+  adminNotesAuthored         AdminNote[]
   // STORY-049.
-  fraudFlagsResolved FraudFlag[]
+  fraudFlagsResolved         FraudFlag[]
   // STORY-050a.
-  popupsCreated      PromotionalPopup[]
+  popupsCreated              PromotionalPopup[]
   // STORY-050d.
-  emailSmsCampaignsCreated EmailSmsCampaign[]
+  emailSmsCampaignsCreated   EmailSmsCampaign[]
   // STORY-050e.
-  landingPagesCreated LandingPage[]
+  landingPagesCreated        LandingPage[]
   // STORY-050c.
-  seasonalCampaignsCreated SeasonalCampaign[]
+  seasonalCampaignsCreated   SeasonalCampaign[]
   // STORY-051b.
-  redirectsCreated   Redirect[]
+  redirectsCreated           Redirect[]
   // STORY-052.
-  menusCreated       Menu[]          @relation("MenuCreatedBy")
-  menusUpdated       Menu[]          @relation("MenuUpdatedBy")
+  menusCreated               Menu[]               @relation("MenuCreatedBy")
+  menusUpdated               Menu[]               @relation("MenuUpdatedBy")
   // STORY-053.
-  contentVersionsCreated ContentVersion[]
+  contentVersionsCreated     ContentVersion[]
   // STORY-056.
-  syncJobsCreated    SyncJob[]
+  syncJobsCreated            SyncJob[]
   // STORY-058.
   exportEnquiriesAssigned    ExportEnquiry[]      @relation("ExportEnquiryAssignee")
   exportEnquiryNotesAuthored ExportEnquiryNote[]
   distributorAccountsCreated DistributorAccount[] @relation("DistributorAccountCreatedBy")
   // STORY-059a.
-  savedSegmentsCreated SavedSegment[]
+  savedSegmentsCreated       SavedSegment[]
   // STORY-059c.
-  scheduledReportsCreated ScheduledReport[]
+  scheduledReportsCreated    ScheduledReport[]
   // STORY-063.
-  policyDocumentsUpdated PolicyDocument[]
-  createdAt          DateTime        @default(now())
-  updatedAt          DateTime        @updatedAt
+  policyDocumentsUpdated     PolicyDocument[]
+  createdAt                  DateTime             @default(now())
+  updatedAt                  DateTime             @updatedAt
 }
 
 // Minimal but real: used now for login/lockout/permission-denied events.
@@ -2493,18 +2581,18 @@ enum FraudFlagStatus {
 // Approves (dismiss, no reward change) or Reverses (claws back the
 // related reward via rewards.service.ts::reverseTransaction).
 model FraudFlag {
-  id                           String           @id @default(cuid())
+  id                           String          @id @default(cuid())
   customerId                   String
-  customer                     User             @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  customer                     User            @relation(fields: [customerId], references: [id], onDelete: Cascade)
   type                         String
   details                      Json?
   relatedRewardTransactionId   String?
   relatedReferralAttributionId String?
-  status                       FraudFlagStatus  @default(Pending)
+  status                       FraudFlagStatus @default(Pending)
   resolvedById                 String?
-  resolvedBy                   AdminUser?       @relation(fields: [resolvedById], references: [id], onDelete: SetNull)
+  resolvedBy                   AdminUser?      @relation(fields: [resolvedById], references: [id], onDelete: SetNull)
   resolvedAt                   DateTime?
-  createdAt                    DateTime         @default(now())
+  createdAt                    DateTime        @default(now())
 
   @@index([customerId])
   @@index([status])
@@ -2664,23 +2752,23 @@ enum SeasonalCampaignStatus {
 }
 
 model SeasonalCampaign {
-  id          String                 @id @default(cuid())
-  name        String
-  status      SeasonalCampaignStatus @default(Draft)
-  startDate   DateTime
-  endDate     DateTime
-  popupId     String?
-  popup       PromotionalPopup?      @relation(fields: [popupId], references: [id], onDelete: SetNull)
-  couponId    String?
-  coupon      Coupon?                @relation(fields: [couponId], references: [id], onDelete: SetNull)
+  id                 String                 @id @default(cuid())
+  name               String
+  status             SeasonalCampaignStatus @default(Draft)
+  startDate          DateTime
+  endDate            DateTime
+  popupId            String?
+  popup              PromotionalPopup?      @relation(fields: [popupId], references: [id], onDelete: SetNull)
+  couponId           String?
+  coupon             Coupon?                @relation(fields: [couponId], references: [id], onDelete: SetNull)
   emailSmsCampaignId String?
-  emailSmsCampaign   EmailSmsCampaign? @relation(fields: [emailSmsCampaignId], references: [id], onDelete: SetNull)
+  emailSmsCampaign   EmailSmsCampaign?      @relation(fields: [emailSmsCampaignId], references: [id], onDelete: SetNull)
   homepageSectionId  String?
-  homepageSection    HomepageSection?  @relation(fields: [homepageSectionId], references: [id], onDelete: SetNull)
-  createdById String
-  createdBy   AdminUser              @relation(fields: [createdById], references: [id])
-  createdAt   DateTime               @default(now())
-  updatedAt   DateTime               @updatedAt
+  homepageSection    HomepageSection?       @relation(fields: [homepageSectionId], references: [id], onDelete: SetNull)
+  createdById        String
+  createdBy          AdminUser              @relation(fields: [createdById], references: [id])
+  createdAt          DateTime               @default(now())
+  updatedAt          DateTime               @updatedAt
 
   @@index([status, startDate, endDate])
 }
@@ -2801,12 +2889,12 @@ model HomepageLayout {
 }
 
 model HomepageSection {
-  id       String              @id @default(cuid())
-  layoutId String
-  layout   HomepageLayout      @relation(fields: [layoutId], references: [id], onDelete: Cascade)
-  type     HomepageSectionType
-  sortOrder Int
-  visible  Boolean             @default(true)
+  id                  String              @id @default(cuid())
+  layoutId            String
+  layout              HomepageLayout      @relation(fields: [layoutId], references: [id], onDelete: Cascade)
+  type                HomepageSectionType
+  sortOrder           Int
+  visible             Boolean             @default(true)
   // Light-touch override for the 10 non-HeroBanner types — null falls
   // back to that section's existing hardcoded/fixture heading. Unused
   // (always null) for HeroBanner, which uses HeroBannerSlide instead. A
@@ -2816,10 +2904,10 @@ model HomepageSection {
   // duplicate-section is an explicit AC.
   titleOverride       String?
   descriptionOverride String?
-  banners  HeroBannerSlide[]
-  createdAt DateTime           @default(now())
-  updatedAt DateTime           @updatedAt
-  seasonalCampaigns SeasonalCampaign[]
+  banners             HeroBannerSlide[]
+  createdAt           DateTime            @default(now())
+  updatedAt           DateTime            @updatedAt
+  seasonalCampaigns   SeasonalCampaign[]
 
   @@index([layoutId])
 }
@@ -2868,18 +2956,18 @@ enum LandingPageStatus {
 }
 
 model LandingPage {
-  id              String            @id @default(cuid())
+  id              String             @id @default(cuid())
   name            String
-  slug            String            @unique
-  status          LandingPageStatus @default(Draft)
+  slug            String             @unique
+  status          LandingPageStatus  @default(Draft)
   metaTitle       String?
   metaDescription String?
   publishedAt     DateTime?
   blocks          LandingPageBlock[]
   createdById     String
-  createdBy       AdminUser         @relation(fields: [createdById], references: [id])
-  createdAt       DateTime          @default(now())
-  updatedAt       DateTime          @updatedAt
+  createdBy       AdminUser          @relation(fields: [createdById], references: [id])
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
 
   @@index([status])
 }
@@ -2967,12 +3055,12 @@ model Menu {
 }
 
 model MenuItem {
-  id       String     @id @default(cuid())
-  menuId   String
-  menu     Menu       @relation(fields: [menuId], references: [id], onDelete: Cascade)
-  parentId String?
-  parent   MenuItem?  @relation("MenuItemParent", fields: [parentId], references: [id], onDelete: Cascade)
-  children MenuItem[] @relation("MenuItemParent")
+  id        String     @id @default(cuid())
+  menuId    String
+  menu      Menu       @relation(fields: [menuId], references: [id], onDelete: Cascade)
+  parentId  String?
+  parent    MenuItem?  @relation("MenuItemParent", fields: [parentId], references: [id], onDelete: Cascade)
+  children  MenuItem[] @relation("MenuItemParent")
   sortOrder Int
 
   label        String
@@ -2982,7 +3070,7 @@ model MenuItem {
   openInNewTab Boolean      @default(false)
   // A curated name key into src/lib/menu-icons.ts's MENU_ICON_OPTIONS map,
   // not a free string — never rendered as raw HTML/executable content.
-  icon String?
+  icon         String?
 
   visibility          MenuItemVisibility @default(Always)
   targetCustomerGroup CustomerGroup?
@@ -3363,18 +3451,18 @@ enum ProductInteractionEventType {
 // strategy reads purchase signal from there directly rather than
 // duplicating it into a second table.
 model ProductInteractionEvent {
-  id         String                       @id @default(cuid())
+  id         String                      @id @default(cuid())
   customerId String?
-  customer   User?                        @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  customer   User?                       @relation(fields: [customerId], references: [id], onDelete: Cascade)
   // Anonymous-visitor correlation only — a lightweight, unsigned
   // crypto.randomUUID() cookie value, NOT Cart.guestToken's signed
   // HMAC mechanism (that guards cart content integrity, a materially
   // higher-stakes concern than this soft personalization signal).
   sessionId  String?
   productId  String
-  product    Product                      @relation(fields: [productId], references: [id], onDelete: Cascade)
+  product    Product                     @relation(fields: [productId], references: [id], onDelete: Cascade)
   eventType  ProductInteractionEventType
-  createdAt  DateTime                     @default(now())
+  createdAt  DateTime                    @default(now())
 
   @@index([customerId])
   @@index([productId])
@@ -3390,14 +3478,14 @@ enum ProductAssociationType {
 // STORY-050d/STORY-059c already resolved the same way). Every read
 // path reads these rows directly; nothing computes similarity live.
 model ProductAssociation {
-  id               String                 @id @default(cuid())
-  sourceProductId  String
-  sourceProduct    Product                @relation("AssociationSource", fields: [sourceProductId], references: [id], onDelete: Cascade)
-  targetProductId  String
-  targetProduct    Product                @relation("AssociationTarget", fields: [targetProductId], references: [id], onDelete: Cascade)
-  associationType  ProductAssociationType
-  score            Float
-  computedAt       DateTime               @default(now())
+  id              String                 @id @default(cuid())
+  sourceProductId String
+  sourceProduct   Product                @relation("AssociationSource", fields: [sourceProductId], references: [id], onDelete: Cascade)
+  targetProductId String
+  targetProduct   Product                @relation("AssociationTarget", fields: [targetProductId], references: [id], onDelete: Cascade)
+  associationType ProductAssociationType
+  score           Float
+  computedAt      DateTime               @default(now())
 
   @@unique([sourceProductId, targetProductId, associationType])
   @@index([sourceProductId, associationType])
@@ -3420,15 +3508,15 @@ enum RecommendationAction {
 // since the server has no way to know a product was shown as a
 // recommendation vs. organically without the client reporting it.
 model RecommendationEvent {
-  id         String                   @id @default(cuid())
+  id         String                  @id @default(cuid())
   customerId String?
-  customer   User?                    @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  customer   User?                   @relation(fields: [customerId], references: [id], onDelete: Cascade)
   sessionId  String?
   placement  RecommendationPlacement
   productId  String
-  product    Product                  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  product    Product                 @relation(fields: [productId], references: [id], onDelete: Cascade)
   action     RecommendationAction
-  createdAt  DateTime                 @default(now())
+  createdAt  DateTime                @default(now())
 
   @@index([productId])
   @@index([placement, action])
@@ -3462,12 +3550,12 @@ enum ContentSourceType {
 // three different tables), the same plain-reference pattern
 // AuditLog.targetId/OrderIntegrationEvent already use for this shape.
 model ContentEmbedding {
-  id           String            @id @default(cuid())
+  id           String                      @id @default(cuid())
   sourceType   ContentSourceType
   sourceId     String
   embedding    Unsupported("vector(1536)")
   modelVersion String
-  updatedAt    DateTime          @updatedAt
+  updatedAt    DateTime                    @updatedAt
 
   @@unique([sourceType, sourceId])
 }
@@ -3541,15 +3629,15 @@ enum RecipeAssistantMessageRole {
 // promptTokens/completionTokens are OpenAI's own reported usage, same
 // real-not-estimated standard as SearchQueryLog.embeddingTokens.
 model RecipeAssistantMessage {
-  id                String                       @id @default(cuid())
+  id                String                      @id @default(cuid())
   conversationId    String
-  conversation      RecipeAssistantConversation  @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  conversation      RecipeAssistantConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   role              RecipeAssistantMessageRole
   content           String
   structuredPayload Json?
   promptTokens      Int?
   completionTokens  Int?
-  createdAt         DateTime                     @default(now())
+  createdAt         DateTime                    @default(now())
 
   @@index([conversationId, createdAt])
 }
@@ -3565,13 +3653,13 @@ model RecipeAssistantMessage {
 // attempt against it must be rejected outright, never treated as an
 // OR-fallback. See docs/architecture-decisions.md.
 model SupportAssistantConversation {
-  id             String                     @id @default(cuid())
+  id             String                    @id @default(cuid())
   customerId     String?
-  customer       User?                      @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  customer       User?                     @relation(fields: [customerId], references: [id], onDelete: SetNull)
   sessionId      String?
-  startedAt      DateTime                   @default(now())
-  lastMessageAt  DateTime                   @default(now())
-  escalated      Boolean                    @default(false)
+  startedAt      DateTime                  @default(now())
+  lastMessageAt  DateTime                  @default(now())
+  escalated      Boolean                   @default(false)
   messages       SupportAssistantMessage[]
   supportTickets SupportTicket[]
 
@@ -3613,14 +3701,14 @@ model SupportAssistantMessage {
 // enum, matching this codebase's FeatureFlag/TaxRateRule key
 // convention for an open-ended admin-defined set.
 model PolicyDocument {
-  id          String    @id @default(cuid())
-  slug        String    @unique
+  id          String     @id @default(cuid())
+  slug        String     @unique
   title       String
   content     String
   updatedById String?
   updatedBy   AdminUser? @relation(fields: [updatedById], references: [id], onDelete: SetNull)
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
 }
 
 // STORY-064. RFM-based churn risk — classical statistics computed from
@@ -3680,8 +3768,8 @@ model BusinessInsightSnapshot {
   sequence          Int                       @default(0)
   generatedAt       DateTime                  @default(now())
 
-  @@index([metricType, generatedAt])
   @@unique([metricType, periodStart, periodEnd, sequence])
+  @@index([metricType, generatedAt])
 }
 
 // STORY-072. Covers every Contact Us enquiry type EXCEPT Export/International

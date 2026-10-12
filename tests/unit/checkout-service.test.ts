@@ -54,6 +54,33 @@ async function guestCartWith(productId: string, quantity: number): Promise<strin
   return identity.newCookieValue!;
 }
 
+async function makeVariant(productId: string, overrides: Record<string, unknown> = {}) {
+  sequence += 1;
+  return prisma.productVariant.create({
+    data: {
+      productId,
+      sku: `CHK-SVC-VARIANT-SKU-${sequence}`,
+      name: "100g",
+      netWeightGrams: 100,
+      price: "1000.00",
+      currency: "LKR",
+      stockQuantity: 10,
+      isActive: true,
+      inStock: true,
+      ...overrides,
+    },
+  });
+}
+
+async function guestCartWithVariants(productId: string, lines: { variantId: string; quantity: number }[]): Promise<string> {
+  let cookie: string | undefined;
+  for (const line of lines) {
+    const identity = await addItem(null, cookie, productId, line.quantity, line.variantId);
+    cookie = identity.newCookieValue ?? cookie;
+  }
+  return cookie!;
+}
+
 const address: PlaceOrderInput["address"] = {
   recipientName: "Test Guest",
   phone: "+94 77 123 4567",
@@ -74,6 +101,7 @@ afterEach(async () => {
   await prisma.deliveryZone.deleteMany();
   await prisma.shippingSetting.deleteMany();
   await prisma.standardPrice.deleteMany();
+  await prisma.productVariant.deleteMany({ where: { sku: { startsWith: "CHK-SVC-VARIANT-SKU-" } } });
   await prisma.product.deleteMany({ where: { sku: { startsWith: "CHK-SVC-SKU-" } } });
   await prisma.user.deleteMany({ where: { email: { contains: "chk-svc-" } } });
 });
@@ -253,5 +281,55 @@ describe("placeOrder", () => {
     const saved = await listSavedAddresses(user.id);
     expect(saved).toHaveLength(1);
     expect(saved[0]).toMatchObject({ city: "Colombo", isDefault: true });
+  });
+});
+
+describe("placeOrder — variants", () => {
+  it("places an order with two sizes of the same product as two distinct order lines", async () => {
+    await makeZone();
+    const product = await makeProduct();
+    const small = await makeVariant(product.id, { name: "100g", price: "300.00", stockQuantity: 10 });
+    const large = await makeVariant(product.id, { name: "350g", price: "900.00", stockQuantity: 10 });
+    const cookie = await guestCartWithVariants(product.id, [
+      { variantId: small.id, quantity: 2 },
+      { variantId: large.id, quantity: 1 },
+    ]);
+
+    const intent = await createIntentForCart(null, cookie, "Colombo");
+    await confirmPayment(intent.providerReference, { outcome: "success" });
+
+    const result = await placeOrder(null, cookie, {
+      idempotencyKey: crypto.randomUUID(),
+      address,
+      guestEmail: "guest@test.com",
+      providerReference: intent.providerReference,
+    });
+
+    const order = await prisma.order.findUnique({ where: { orderNumber: result.orderNumber }, include: { items: true } });
+    expect(order?.items).toHaveLength(2);
+    const smallLine = order?.items.find((item) => item.variantId === small.id);
+    const largeLine = order?.items.find((item) => item.variantId === large.id);
+    expect(smallLine).toMatchObject({ variantName: "100g", variantSku: small.sku, quantity: 2, unitPrice: expect.anything() });
+    expect(smallLine?.unitPrice.toFixed(2)).toBe("300.00");
+    expect(largeLine).toMatchObject({ variantName: "350g", variantSku: large.sku, quantity: 1 });
+    expect(largeLine?.unitPrice.toFixed(2)).toBe("900.00");
+
+    const smallAfter = await prisma.productVariant.findUnique({ where: { id: small.id } });
+    const largeAfter = await prisma.productVariant.findUnique({ where: { id: large.id } });
+    expect(smallAfter?.stockQuantity).toBe(8);
+    expect(largeAfter?.stockQuantity).toBe(9);
+    // The parent product's own stock is untouched — variant lines never decrement it.
+    expect((await prisma.product.findUnique({ where: { id: product.id } }))?.stockQuantity).toBe(10);
+  });
+
+  it("rejects checkout when a cart's variant went inactive after it was added", async () => {
+    await makeZone();
+    const product = await makeProduct();
+    const variant = await makeVariant(product.id);
+    const cookie = await guestCartWithVariants(product.id, [{ variantId: variant.id, quantity: 1 }]);
+
+    await prisma.productVariant.update({ where: { id: variant.id }, data: { isActive: false } });
+
+    await expect(createIntentForCart(null, cookie, "Colombo")).rejects.toBeInstanceOf(CartInvalidError);
   });
 });
