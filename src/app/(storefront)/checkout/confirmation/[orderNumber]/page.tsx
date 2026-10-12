@@ -81,7 +81,8 @@ export default async function OrderConfirmationPage({ params }: { params: Promis
             {order.items.map((item) => (
               <li key={`${item.productSku}`} className="flex items-center justify-between gap-4 py-2 text-body text-charcoal">
                 <span>
-                  {item.productName} <span className="text-charcoal/70">× {item.quantity}</span>
+                  {item.productName}
+                  {item.variantName && <span className="text-charcoal/70"> — {item.variantName}</span>} <span className="text-charcoal/70">× {item.quantity}</span>
                 </span>
                 <span className="font-number">
                   {order.currency} {item.lineTotal.toFixed(2)}

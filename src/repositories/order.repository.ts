@@ -13,6 +13,9 @@ export interface OrderLineInput {
   productId: string;
   productName: string;
   productSku: string;
+  variantId?: string | null;
+  variantName?: string | null;
+  variantSku?: string | null;
   unitPrice: string;
   quantity: number;
   lineTotal: string;
@@ -73,11 +76,21 @@ export interface CreateOrderInput {
 export function createOrderWithStockDecrement(input: CreateOrderInput) {
   return prisma.$transaction(async (tx) => {
     for (const line of input.items) {
-      const decremented = await tx.product.updateMany({
-        where: { id: line.productId, stockQuantity: { gte: line.quantity } },
-        data: { stockQuantity: { decrement: line.quantity } },
-      });
-      if (decremented.count === 0) throw new InsufficientStockError(line.productName);
+      // A variant line decrements its own stock row, never the parent
+      // Product's — the parent's stockQuantity is inert once variants
+      // exist (see Product Variants story's design decision). Same
+      // conditional-atomic-update idiom either way: zero rows matched
+      // means someone else just took the last unit.
+      const decremented = line.variantId
+        ? await tx.productVariant.updateMany({
+            where: { id: line.variantId, stockQuantity: { gte: line.quantity } },
+            data: { stockQuantity: { decrement: line.quantity } },
+          })
+        : await tx.product.updateMany({
+            where: { id: line.productId, stockQuantity: { gte: line.quantity } },
+            data: { stockQuantity: { decrement: line.quantity } },
+          });
+      if (decremented.count === 0) throw new InsufficientStockError(line.variantName ? `${line.productName} — ${line.variantName}` : line.productName);
     }
 
     const order = await tx.order.create({
@@ -113,6 +126,9 @@ export function createOrderWithStockDecrement(input: CreateOrderInput) {
             productId: line.productId,
             productName: line.productName,
             productSku: line.productSku,
+            variantId: line.variantId,
+            variantName: line.variantName,
+            variantSku: line.variantSku,
             unitPrice: line.unitPrice,
             quantity: line.quantity,
             lineTotal: line.lineTotal,
@@ -273,10 +289,14 @@ export async function cancelOrderWithStockRelease(orderId: string, expectedCurre
   return prisma.$transaction(async (tx) => {
     const items = await tx.orderItem.findMany({ where: { orderId } });
     for (const line of items) {
-      // A deleted product (SetNull on OrderItem.productId) has nothing
-      // left to restock.
-      if (!line.productId) continue;
-      await tx.product.update({ where: { id: line.productId }, data: { stockQuantity: { increment: line.quantity } } });
+      // A variant line restocks its own variant row, never the parent
+      // Product's. A deleted product/variant (SetNull on OrderItem's FKs)
+      // has nothing left to restock.
+      if (line.variantId) {
+        await tx.productVariant.update({ where: { id: line.variantId }, data: { stockQuantity: { increment: line.quantity } } });
+      } else if (line.productId) {
+        await tx.product.update({ where: { id: line.productId }, data: { stockQuantity: { increment: line.quantity } } });
+      }
     }
 
     const updated = await tx.order.updateMany({
@@ -389,18 +409,21 @@ export async function listOrdersForAdmin(filters: OrderAdminListFilters, page: n
 export async function restockOrderItems(items: { orderItemId: string; quantity: number }[]): Promise<void> {
   if (items.length === 0) return;
   const orderItemIds = items.map((item) => item.orderItemId);
-  const lines = await prisma.orderItem.findMany({ where: { id: { in: orderItemIds } }, select: { id: true, productId: true } });
-  const productIdByOrderItemId = new Map(lines.map((line) => [line.id, line.productId]));
+  const lines = await prisma.orderItem.findMany({ where: { id: { in: orderItemIds } }, select: { id: true, productId: true, variantId: true } });
+  const lineById = new Map(lines.map((line) => [line.id, line]));
 
   await prisma.$transaction(
     items
-      .filter((item) => productIdByOrderItemId.get(item.orderItemId))
-      .map((item) =>
-        prisma.product.update({
-          where: { id: productIdByOrderItemId.get(item.orderItemId)! },
-          data: { stockQuantity: { increment: item.quantity } },
-        }),
-      ),
+      .filter((item) => {
+        const line = lineById.get(item.orderItemId);
+        return line?.variantId || line?.productId;
+      })
+      .map((item) => {
+        const line = lineById.get(item.orderItemId)!;
+        return line.variantId
+          ? prisma.productVariant.update({ where: { id: line.variantId }, data: { stockQuantity: { increment: item.quantity } } })
+          : prisma.product.update({ where: { id: line.productId! }, data: { stockQuantity: { increment: item.quantity } } });
+      }),
   );
 }
 

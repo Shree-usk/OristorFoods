@@ -17,7 +17,7 @@ export async function POST(request: Request) {
     const userId = session?.user?.id ?? null;
     const guestCookieValue = readCartCookie(request);
 
-    const { newCookieValue } = await addItem(userId, guestCookieValue, parsed.data.productId, parsed.data.quantity);
+    const { newCookieValue } = await addItem(userId, guestCookieValue, parsed.data.productId, parsed.data.quantity, parsed.data.variantId ?? null);
 
     const response = NextResponse.json({ ok: true });
     if (newCookieValue) setCartCookie(response, newCookieValue);

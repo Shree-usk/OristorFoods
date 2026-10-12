@@ -74,7 +74,7 @@ describe("upsertCartItem", () => {
     const cart = await createUserCart(user.id);
     const product = await makeProduct();
 
-    const item = await upsertCartItem(cart.id, product.id, 2, "10.00");
+    const item = await upsertCartItem(cart.id, product.id, null, 2, "10.00");
     expect(item.quantity).toBe(2);
   });
 
@@ -83,8 +83,8 @@ describe("upsertCartItem", () => {
     const cart = await createUserCart(user.id);
     const product = await makeProduct();
 
-    await upsertCartItem(cart.id, product.id, 2, "10.00");
-    const second = await upsertCartItem(cart.id, product.id, 3, "10.00");
+    await upsertCartItem(cart.id, product.id, null, 2, "10.00");
+    const second = await upsertCartItem(cart.id, product.id, null, 3, "10.00");
 
     expect(second.quantity).toBe(5);
     const items = await listCartItemsWithProduct(cart.id);
@@ -97,7 +97,7 @@ describe("updateCartItemQuantity / deleteCartItem", () => {
     const user = await makeUser();
     const cart = await createUserCart(user.id);
     const product = await makeProduct();
-    const item = await upsertCartItem(cart.id, product.id, 1, "10.00");
+    const item = await upsertCartItem(cart.id, product.id, null, 1, "10.00");
 
     const updated = await updateCartItemQuantity(item.id, 5);
     expect(updated.quantity).toBe(5);
@@ -107,7 +107,7 @@ describe("updateCartItemQuantity / deleteCartItem", () => {
     const user = await makeUser();
     const cart = await createUserCart(user.id);
     const product = await makeProduct();
-    const item = await upsertCartItem(cart.id, product.id, 1, "10.00");
+    const item = await upsertCartItem(cart.id, product.id, null, 1, "10.00");
 
     await deleteCartItem(item.id);
     expect(await findCartItemById(item.id)).toBeNull();
@@ -120,8 +120,8 @@ describe("listCartItemsWithProduct", () => {
     const cart = await createUserCart(user.id);
     const productA = await makeProduct();
     const productB = await makeProduct();
-    await upsertCartItem(cart.id, productA.id, 1, "10.00");
-    await upsertCartItem(cart.id, productB.id, 2, "20.00");
+    await upsertCartItem(cart.id, productA.id, null, 1, "10.00");
+    await upsertCartItem(cart.id, productB.id, null, 2, "20.00");
 
     const items = await listCartItemsWithProduct(cart.id);
     expect(items).toHaveLength(2);
@@ -154,7 +154,7 @@ describe("deleteCart", () => {
     const user = await makeUser();
     const cart = await createUserCart(user.id);
     const product = await makeProduct();
-    await upsertCartItem(cart.id, product.id, 1, "10.00");
+    await upsertCartItem(cart.id, product.id, null, 1, "10.00");
 
     await deleteCart(cart.id);
 

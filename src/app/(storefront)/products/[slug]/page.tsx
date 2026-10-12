@@ -10,8 +10,8 @@ import { CertificationBadges } from "@/components/storefront/product/certificati
 import { FeaturedProductsRail } from "@/components/storefront/product/featured-products-rail";
 import { IngredientsList } from "@/components/storefront/product/ingredients-list";
 import { NutritionDisclosure } from "@/components/storefront/product/nutrition-disclosure";
-import { ProductActions } from "@/components/storefront/product/product-actions";
 import { ProductGallery } from "@/components/storefront/product/product-gallery";
+import { ProductPurchasePanel } from "@/components/storefront/product/product-purchase-panel";
 import { JsonLdScript } from "@/components/storefront/product/json-ld-script";
 import { ProductJsonLd } from "@/components/storefront/product/product-json-ld";
 import { QuickFacts } from "@/components/storefront/product/quick-facts";
@@ -125,28 +125,19 @@ export default async function ProductDetailPage({ params }: ProductDetailPagePro
               </span>
             </a>
           )}
-          <div className="mt-2 flex items-center gap-2 font-number text-h3 text-charcoal">
-            <span>
-              {product.currency} {product.price.toLocaleString()}
-            </span>
-            {product.originalPrice && (
-              <span className="text-body text-charcoal/50 line-through">
-                {product.currency} {product.originalPrice.toLocaleString()}
-              </span>
-            )}
+          <div className="mt-2">
+            <ProductPurchasePanel
+              productId={product.id}
+              price={product.price}
+              originalPrice={product.originalPrice}
+              currency={product.currency}
+              inStock={product.inStock}
+              rewardPoints={product.rewardPoints}
+              variants={product.variants}
+            />
           </div>
-          <p className="mt-1 text-caption text-charcoal/70">
-            Earn {product.rewardPoints} reward points with this purchase
-          </p>
-          <p className="mt-1 text-small text-charcoal/70">
-            {product.inStock ? "In stock" : "Currently out of stock"}
-          </p>
 
           <QuickFacts benefits={product.benefits} />
-
-          <div className="mt-6">
-            <ProductActions productId={product.id} inStock={product.inStock} />
-          </div>
 
           {product.story && <p className="mt-6 text-body text-charcoal">{product.story}</p>}
 

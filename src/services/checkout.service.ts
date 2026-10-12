@@ -49,6 +49,9 @@ interface CheckoutCartState {
     productId: string;
     productName: string;
     productSku: string;
+    variantId: string | null;
+    variantName: string | null;
+    variantSku: string | null;
     categoryIds: string[];
     unitPrice: number;
     quantity: number;
@@ -68,9 +71,13 @@ export async function requireCheckoutableCart(userId: string | null, guestCookie
   if (summary.items.some((line) => line.unavailable || line.quantityCapped)) throw new CartInvalidError();
 
   const productById = new Map(items.map((item) => [item.productId, item.product]));
+  const itemById = new Map(items.map((item) => [item.id, item]));
+  // A variant line's own weight drives the delivery-zone calc, never the
+  // parent product's — the parent's weightGrams is inert once variants
+  // exist (see Product Variants story's design decision).
   let totalWeightGrams: number | null = 0;
   for (const item of items) {
-    const weight = item.product.weightGrams;
+    const weight = item.variant ? item.variant.shippingWeightGrams ?? item.variant.netWeightGrams : item.product.weightGrams;
     if (weight === null) {
       totalWeightGrams = null;
       break;
@@ -91,6 +98,9 @@ export async function requireCheckoutableCart(userId: string | null, guestCookie
       productId: line.productId,
       productName: line.productName,
       productSku: productById.get(line.productId)?.sku ?? "",
+      variantId: line.variantId,
+      variantName: line.variantName,
+      variantSku: itemById.get(line.id)?.variant?.sku ?? null,
       categoryIds: productById.get(line.productId)?.categories.map((category) => category.id) ?? [],
       unitPrice: line.unitPrice,
       quantity: line.quantity,
@@ -252,6 +262,9 @@ export async function placeOrder(
       productId: line.productId,
       productName: line.productName,
       productSku: line.productSku,
+      variantId: line.variantId,
+      variantName: line.variantName,
+      variantSku: line.variantSku,
       unitPrice: line.unitPrice.toFixed(2),
       quantity: line.quantity,
       lineTotal: line.lineTotal.toFixed(2),
@@ -351,6 +364,7 @@ function toConfirmationSummary(order: Awaited<ReturnType<typeof getOrderForConfi
     items: order.items.map((item) => ({
       productName: item.productName,
       productSku: item.productSku,
+      variantName: item.variantName,
       unitPrice: item.unitPrice.toNumber(),
       quantity: item.quantity,
       lineTotal: item.lineTotal.toNumber(),

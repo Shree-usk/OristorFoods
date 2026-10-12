@@ -81,6 +81,7 @@ export interface OrderConfirmationSummary {
   items: Array<{
     productName: string;
     productSku: string;
+    variantName: string | null;
     unitPrice: number;
     quantity: number;
     lineTotal: number;

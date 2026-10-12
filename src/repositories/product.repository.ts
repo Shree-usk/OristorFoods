@@ -69,6 +69,11 @@ export function findProductDetailBySlug(slug: string) {
           },
         },
       },
+      variants: {
+        where: { isActive: true },
+        include: { images: { orderBy: [{ isPrimary: "desc" }, { sortOrder: "asc" }] } },
+        orderBy: { sortOrder: "asc" },
+      },
     },
   });
 }
@@ -317,6 +322,7 @@ const adminDetailInclude = {
   campaignPrices: { orderBy: { createdAt: "desc" } },
   customerGroupPrices: true,
   volumeDiscountTiers: { orderBy: { minQuantity: "asc" } },
+  variants: { include: { images: { orderBy: [{ isPrimary: "desc" }, { sortOrder: "asc" }] } }, orderBy: { sortOrder: "asc" } },
 } satisfies Prisma.ProductInclude;
 
 export type ProductAdminDetail = Prisma.ProductGetPayload<{ include: typeof adminDetailInclude }>;

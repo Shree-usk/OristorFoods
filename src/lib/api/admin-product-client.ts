@@ -222,3 +222,59 @@ export async function removeVolumeDiscountTier(productId: string, tierId: string
   const response = await fetch(`/api/admin/products/${productId}/pricing/volume-discount/${tierId}`, { method: "DELETE" });
   assertOk(response, "Failed to remove volume discount tier");
 }
+
+// --- Variants ---
+
+export interface VariantFormInput {
+  sku: string;
+  barcode?: string | null;
+  name: string;
+  netWeightGrams: number;
+  price: number;
+  promoPrice?: number | null;
+  currency: string;
+  inStock?: boolean;
+  stockQuantity?: number;
+  isActive?: boolean;
+  sortOrder?: number;
+  shippingWeightGrams?: number | null;
+  lengthMm?: number | null;
+  widthMm?: number | null;
+  heightMm?: number | null;
+  fulfilmentRestriction?: "None" | "LocalOnly" | "ExportOnly" | "ManualApprovalRequired";
+}
+
+export async function createVariant(productId: string, input: VariantFormInput) {
+  const response = await fetch(`/api/admin/products/${productId}/variants`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  assertOk(response, "Failed to create variant");
+  return response.json();
+}
+
+export async function updateVariant(productId: string, variantId: string, input: VariantFormInput) {
+  const response = await fetch(`/api/admin/products/${productId}/variants/${variantId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  assertOk(response, "Failed to save variant");
+  return response.json();
+}
+
+export async function deleteVariant(productId: string, variantId: string) {
+  const response = await fetch(`/api/admin/products/${productId}/variants/${variantId}`, { method: "DELETE" });
+  assertOk(response, "Failed to delete variant");
+}
+
+export async function setVariantImages(productId: string, variantId: string, images: { url: string; altText?: string | null; isPrimary?: boolean; sortOrder?: number }[]) {
+  const response = await fetch(`/api/admin/products/${productId}/variants/${variantId}/images`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ images }),
+  });
+  assertOk(response, "Failed to save variant images");
+  return response.json();
+}

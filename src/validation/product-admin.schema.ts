@@ -138,3 +138,40 @@ export const upsertVolumeDiscountTierSchema = z
     message: "Exactly one of discountPrice or discountPercent is required",
     path: ["discountPrice"],
   });
+
+// --- Variants ---
+
+const variantFulfilmentRestrictionEnum = z.enum(["None", "LocalOnly", "ExportOnly", "ManualApprovalRequired"]);
+
+/** Create and update share one shape, matching productAdminSchema's own convention — the panel always sends the full variant row, never a partial patch. */
+export const productVariantSchema = z.object({
+  sku: z.string().trim().min(1, "SKU is required.").max(64),
+  barcode: z.string().trim().max(64).optional().nullable(),
+  name: z.string().trim().min(1, "Name is required.").max(100),
+  netWeightGrams: z.number().int().positive("Net weight is required."),
+  price: z.number().nonnegative(),
+  promoPrice: z.number().nonnegative().optional().nullable(),
+  currency: z.string().trim().min(1).default("LKR"),
+  inStock: z.boolean().optional(),
+  stockQuantity: z.number().int().min(0).optional(),
+  isActive: z.boolean().optional(),
+  sortOrder: z.number().int().min(0).optional(),
+  shippingWeightGrams: z.number().int().positive().optional().nullable(),
+  lengthMm: z.number().int().positive().optional().nullable(),
+  widthMm: z.number().int().positive().optional().nullable(),
+  heightMm: z.number().int().positive().optional().nullable(),
+  fulfilmentRestriction: variantFulfilmentRestrictionEnum.optional(),
+});
+
+export type ProductVariantFormInput = z.infer<typeof productVariantSchema>;
+
+export const setVariantImagesSchema = z.object({
+  images: z.array(
+    z.object({
+      url: mediaUrlSchema,
+      altText: z.string().trim().max(200).optional().nullable(),
+      isPrimary: z.boolean().optional(),
+      sortOrder: z.number().int().min(0).optional(),
+    }),
+  ),
+});

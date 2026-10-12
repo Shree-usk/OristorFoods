@@ -273,6 +273,18 @@ export interface ProductDetailBundleItem {
   imageSrc: string;
   imageAlt: string;
 }
+export interface ProductDetailVariant {
+  id: string;
+  sku: string;
+  name: string;
+  netWeightGrams: number;
+  price: number;
+  promoPrice: number | null;
+  currency: string;
+  inStock: boolean;
+  stockQuantity: number;
+  images: { url: string; altText: string | null }[];
+}
 
 export interface ProductDetail {
   id: string;
@@ -296,6 +308,8 @@ export interface ProductDetail {
   allergens: { name: string; icon: string | null }[];
   certifications: { name: string; certificateImage: string | null }[];
   bundleItems: ProductDetailBundleItem[];
+  /** Non-empty only for a variant-driven product — see getProductDetail for how price/currency below are then derived from the default-selected variant instead of the 5-tier pricing system. */
+  variants: ProductDetailVariant[];
   price: number;
   originalPrice: number | null;
   currency: string;
@@ -353,16 +367,21 @@ export async function getProductDetail(
   if (!product || product.status !== "Published") return null;
 
   const categoryIds = product.categories.map((category) => category.id);
+  // A variant-driven product's price comes entirely from its variants
+  // (see the Product Variants story's design decision) — the parent's
+  // own StandardPrice/etc. rows are never consulted, and an admin isn't
+  // required to set one once variants exist.
+  const hasVariants = product.variants.length > 0;
 
   const [resolvedPrice, reviewSummary, qaSummary, recipeSummary, seoMeta] = await Promise.all([
-    pricingService.resolvePrice({ productId: product.id, customerGroup: customerGroup ?? "Retail" }),
+    hasVariants ? null : pricingService.resolvePrice({ productId: product.id, customerGroup: customerGroup ?? "Retail" }),
     getReviewSummary(product.id),
     getQaSummary(product.id),
     getRecipeSummary(product.id),
     seoRepository.findSeoMeta("Product", product.id),
   ]);
 
-  if (!resolvedPrice) {
+  if (!hasVariants && !resolvedPrice) {
     // Renders identically to a genuinely-missing product (notFound()) from
     // the outside, so this is the only signal an admin/dev gets that the
     // product exists and is Published but has no resolvable price.
@@ -373,12 +392,16 @@ export async function getProductDetail(
   }
 
   let originalPrice: number | null = null;
-  if (resolvedPrice.tier !== "standard") {
+  if (resolvedPrice && resolvedPrice.tier !== "standard") {
     const standard = await pricingService.getStandardPrice(product.id);
     if (standard && standard.price > resolvedPrice.price.toNumber()) {
       originalPrice = standard.price;
     }
   }
+
+  const defaultVariant = product.variants.find((variant) => variant.inStock && variant.stockQuantity > 0) ?? product.variants[0];
+  const variantPrice = defaultVariant ? (defaultVariant.promoPrice ?? defaultVariant.price).toNumber() : null;
+  const variantOriginalPrice = defaultVariant?.promoPrice ? defaultVariant.price.toNumber() : null;
 
   const categoryPath = product.categories[0]
     ? await categoryRepository.getCategoryAncestorPath(product.categories[0].id)
@@ -431,9 +454,21 @@ export async function getProductDetail(
       imageSrc: item.componentProduct.images[0]?.url ?? "",
       imageAlt: item.componentProduct.images[0]?.altText ?? item.componentProduct.name,
     })),
-    price: resolvedPrice.price.toNumber(),
-    originalPrice,
-    currency: resolvedPrice.currency,
+    variants: product.variants.map((variant) => ({
+      id: variant.id,
+      sku: variant.sku,
+      name: variant.name,
+      netWeightGrams: variant.netWeightGrams,
+      price: variant.price.toNumber(),
+      promoPrice: variant.promoPrice?.toNumber() ?? null,
+      currency: variant.currency,
+      inStock: variant.inStock,
+      stockQuantity: variant.stockQuantity,
+      images: variant.images.map((image) => ({ url: image.url, altText: image.altText })),
+    })),
+    price: hasVariants ? (variantPrice ?? 0) : resolvedPrice!.price.toNumber(),
+    originalPrice: hasVariants ? variantOriginalPrice : originalPrice,
+    currency: hasVariants ? (defaultVariant?.currency ?? "LKR") : resolvedPrice!.currency,
     categoryPath,
     categoryIds,
     reviewSummary,

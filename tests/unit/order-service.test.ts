@@ -89,6 +89,38 @@ function lineFor(product: { id: string; name: string; sku: string }, quantity: n
   };
 }
 
+async function makeVariant(productId: string, stockQuantity: number) {
+  sequence += 1;
+  return prisma.productVariant.create({
+    data: {
+      productId,
+      sku: `ORD-SVC-VARIANT-SKU-${sequence}`,
+      name: "100g",
+      netWeightGrams: 100,
+      price: "50.00",
+      currency: "LKR",
+      stockQuantity,
+      isActive: true,
+      inStock: true,
+    },
+  });
+}
+
+function lineForVariant(product: { id: string; name: string; sku: string }, variant: { id: string; name: string; sku: string }, quantity: number) {
+  return {
+    productId: product.id,
+    productName: product.name,
+    productSku: product.sku,
+    variantId: variant.id,
+    variantName: variant.name,
+    variantSku: variant.sku,
+    unitPrice: "50.00",
+    quantity,
+    lineTotal: (50 * quantity).toFixed(2),
+    rewardPointsEarned: quantity,
+  };
+}
+
 afterEach(async () => {
   resetOrderEventConsumerForTesting();
   // OrderIntegrationEvent cascades from Order, no separate cleanup needed.
@@ -98,6 +130,7 @@ afterEach(async () => {
   await prisma.payment.deleteMany({ where: { providerReference: { startsWith: "mock_ord-svc-" } } });
   await prisma.cartItem.deleteMany();
   await prisma.cart.deleteMany({ where: { guestToken: { startsWith: "ord-svc-token-" } } });
+  await prisma.productVariant.deleteMany({ where: { sku: { startsWith: "ORD-SVC-VARIANT-SKU-" } } });
   await prisma.product.deleteMany({ where: { sku: { startsWith: "ORD-SVC-SKU-" } } });
   await prisma.user.deleteMany({ where: { email: { startsWith: "ord-svc-user-" } } });
 });
@@ -160,6 +193,40 @@ describe("createOrder", () => {
     expect(await prisma.order.count()).toBe(0);
     const untouched = await prisma.product.findUnique({ where: { id: plenty.id } });
     expect(untouched?.stockQuantity).toBe(10); // the first line's decrement rolled back too
+  });
+
+  it("decrements a variant line's own stock, leaving the parent product's stock untouched", async () => {
+    const product = await makeProduct(0); // parent has no stock of its own — irrelevant once variants exist
+    const variant = await makeVariant(product.id, 5);
+    const payment = await makePayment("150.00");
+    const cart = await makeCart();
+
+    const { order } = await createOrder(
+      orderInput({ idempotencyKey: crypto.randomUUID(), paymentId: payment.id, cartId: cart.id, items: [lineForVariant(product, variant, 2)] }),
+    );
+
+    expect(order.items[0].variantId).toBe(variant.id);
+    expect(order.items[0].variantName).toBe("100g");
+
+    const liveVariant = await prisma.productVariant.findUnique({ where: { id: variant.id } });
+    expect(liveVariant?.stockQuantity).toBe(3);
+    const liveProduct = await prisma.product.findUnique({ where: { id: product.id } });
+    expect(liveProduct?.stockQuantity).toBe(0);
+  });
+
+  it("rejects a variant line whose own stock is insufficient, even though the parent product's stock would cover it", async () => {
+    const product = await makeProduct(100);
+    const variant = await makeVariant(product.id, 1);
+    const payment = await makePayment("150.00");
+    const cart = await makeCart();
+
+    await expect(
+      createOrder(orderInput({ idempotencyKey: crypto.randomUUID(), paymentId: payment.id, cartId: cart.id, items: [lineForVariant(product, variant, 2)] })),
+    ).rejects.toBeInstanceOf(InsufficientStockError);
+
+    expect(await prisma.order.count()).toBe(0);
+    const untouched = await prisma.productVariant.findUnique({ where: { id: variant.id } });
+    expect(untouched?.stockQuantity).toBe(1);
   });
 
   it("replays idempotently: the same key returns the existing order and never decrements twice", async () => {

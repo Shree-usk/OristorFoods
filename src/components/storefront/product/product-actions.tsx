@@ -10,10 +10,13 @@ import { useWishlist } from "@/hooks/use-wishlist";
 interface ProductActionsProps {
   productId: string;
   inStock: boolean;
+  variantId?: string | null;
+  /** True when the product has variants but none is currently selected — blocks an ambiguous add. */
+  variantRequired?: boolean;
 }
 
-export function ProductActions({ productId, inStock }: ProductActionsProps) {
-  const cart = useAddToCart(productId);
+export function ProductActions({ productId, inStock, variantId = null, variantRequired = false }: ProductActionsProps) {
+  const cart = useAddToCart(productId, variantId);
   const wishlist = useWishlist(productId);
 
   return (
@@ -22,7 +25,7 @@ export function ProductActions({ productId, inStock }: ProductActionsProps) {
         <Button
           type="button"
           size="lg"
-          disabled={!inStock || !cart.isAvailable || cart.isAdding}
+          disabled={!inStock || !cart.isAvailable || cart.isAdding || variantRequired}
           onClick={() => cart.addToCart()}
         >
           <ShoppingCart /> {inStock ? "Add to Cart" : "Out of Stock"}

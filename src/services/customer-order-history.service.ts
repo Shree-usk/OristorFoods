@@ -74,6 +74,7 @@ export interface OrderDetailLineItem {
   productId: string | null;
   productName: string;
   productSku: string;
+  variantName?: string | null;
   unitPrice: number;
   quantity: number;
   lineTotal: number;
@@ -152,6 +153,7 @@ export async function getOrderDetail(orderNumber: string, userId: string): Promi
       productId: item.productId,
       productName: item.productName,
       productSku: item.productSku,
+      variantName: item.variantName,
       unitPrice: item.unitPrice.toNumber(),
       quantity: item.quantity,
       lineTotal: item.lineTotal.toNumber(),
@@ -259,15 +261,20 @@ export async function reorderPastOrder(userId: string, orderNumber: string): Pro
   const products = await findProductsByIdsWithPrimaryImage(distinctProductIds(order.items));
   const stockLookup = new Map(products.map((product) => [product.id, { status: product.status, inStock: product.inStock, stockQuantity: product.stockQuantity }]));
 
-  const { reorderable, skipped } = filterReorderableItems(
-    order.items.map((item) => ({ productId: item.productId, productName: item.productName, quantity: item.quantity })),
+  // Variant-specific lines aren't reorderable yet — reordering onto the
+  // wrong (unvarianted) line would silently misrepresent what was
+  // actually bought, so they're reported as skipped rather than guessed.
+  const variantLines = order.items.filter((item) => item.variantId !== null);
+  const { reorderable, skipped: skippedFromFilter } = filterReorderableItems(
+    order.items.filter((item) => item.variantId === null).map((item) => ({ productId: item.productId, productName: item.productName, quantity: item.quantity })),
     stockLookup,
   );
+  const skipped = [...skippedFromFilter, ...variantLines.map((item) => ({ productName: item.variantName ? `${item.productName} — ${item.variantName}` : item.productName, reason: "Reorder a specific size from its product page." }))];
   if (reorderable.length === 0) return { addedCount: 0, skipped };
 
   const { cart } = await resolveCartIdentity(userId, undefined);
   const existingItems = await cartRepository.listCartItemsWithProduct(cart.id);
-  const existingByProductId = new Map(existingItems.map((item) => [item.productId, item]));
+  const existingByProductId = new Map(existingItems.filter((item) => item.variantId === null).map((item) => [item.productId, item]));
   const customerGroup = await resolveCustomerGroupForUser(userId);
 
   for (const line of reorderable) {
@@ -284,7 +291,7 @@ export async function reorderPastOrder(userId: string, orderNumber: string): Pro
       await cartRepository.updateCartItemQuantity(existing.id, cappedQuantity);
       await cartRepository.updateCartItemSnapshot(existing.id, unitPrice);
     } else {
-      await cartRepository.upsertCartItem(cart.id, line.productId, cappedQuantity, unitPrice);
+      await cartRepository.upsertCartItem(cart.id, line.productId, null, cappedQuantity, unitPrice);
     }
   }
 

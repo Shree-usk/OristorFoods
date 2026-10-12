@@ -40,6 +40,25 @@ describe("getProductDetail", () => {
     expect(await getProductDetail("pd-no-price")).toBeNull();
   });
 
+  it("does not 404 a variant-driven product even with no StandardPrice on the parent, and resolves price from the default variant", async () => {
+    const product = await createProduct({ sku: "PD-VARIANTS", slug: "pd-variants", name: "Variant Product", status: "Published" });
+    await prisma.productVariant.create({
+      data: { productId: product.id, sku: "PD-VARIANTS-100G", name: "100g", netWeightGrams: 100, price: "500.00", currency: "LKR", stockQuantity: 0, inStock: false, isActive: true },
+    });
+    await prisma.productVariant.create({
+      data: { productId: product.id, sku: "PD-VARIANTS-350G", name: "350g", netWeightGrams: 350, price: "900.00", promoPrice: "750.00", currency: "LKR", stockQuantity: 5, inStock: true, isActive: true },
+    });
+
+    const detail = await getProductDetail("pd-variants");
+    expect(detail).not.toBeNull();
+    expect(detail?.variants).toHaveLength(2);
+    // Defaults to the first in-stock variant, not just the first row.
+    expect(detail?.price).toBe(750);
+    expect(detail?.originalPrice).toBe(900);
+
+    await prisma.productVariant.deleteMany({ where: { productId: product.id } });
+  });
+
   it("aggregates catalogue, nutrition, ingredients, and price for a published product", async () => {
     const product = await createProduct({
       sku: "PD-3",

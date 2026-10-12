@@ -9254,3 +9254,169 @@ full table and flips the chevron. The existing e2e assertion
 (`product-detail.spec.ts`: `getByText("Nutrition Facts")`) only checks
 the label is visible, so it needed no change — it was never asserting
 on the table's open state.
+
+---
+
+## 2026-10-12 — Story 1 of 5: Product Variants
+
+First of a 5-story epic ("Product Variants, Bundles & Custom Export
+Packaging," full spec at
+`docs/ORISTOR_Product_Variants_Bundles_Custom_Packaging_Brief.md`).
+Confirmed order: **Variants → Bundles → Custom Packaging → Payment
+Restriction → Full integration pass**. This entry covers Variants only.
+
+Three parallel Explore agents confirmed this codebase had **no**
+product-variant concept at all before this story — a "100g/200g/350g"
+size range would otherwise be three unrelated `Product` rows. Genuine
+findings worth recording for Stories 2-4: `ProductBundle`/`BundleItem`
+exists since STORY-009 but is dead scaffolding (no admin UI, `priceOverride`
+never read for pricing, a bundle is added to cart as one plain SKU);
+checkout has exactly one undifferentiated mock payment flow today (no
+COD/bank-transfer, no `paymentMethod` field anywhere, `PaymentMethodSetting`
+is a decorative unconnected admin list); `OrderStatus.PendingConfirmation`
+exists but is currently unreachable.
+
+**Key design decisions** (all deliberately narrow, to avoid over-building
+what the brief didn't ask for):
+- No "is this a variant parent" flag on `Product` — `variants.length > 0`
+  is the live, always-truthful signal.
+- Once a product has variants, its own `stockQuantity`/`inStock`/price
+  rows are simply never read by variant-aware code — not deleted, not a
+  fallback. Avoids double-bookkeeping bugs; needs no backfill.
+- Variant pricing is two plain fields (`price`, `promoPrice`) directly on
+  `ProductVariant`, NOT wired into the 5-tier `StandardPrice`/`SalePrice`/
+  `CampaignPrice`/`CustomerGroupPrice`/`VolumeDiscountTier` system —
+  the brief only asks for a selling price + optional promo price per
+  variant, and reusing the 5-tier system would multiply
+  `resolvePricesForProducts`'s deliberately-capped query count (load-
+  bearing for PGlite's single-connection local-dev limit). `pricing.service.ts`
+  needed zero changes.
+- Additive throughout, not a refactor: every touched function gained an
+  optional `variantId`/`variantId?` and branches on its presence: the
+  non-variant path is byte-for-byte what existed before.
+
+**Schema**: new `ProductVariant` (own sku/barcode, name, netWeightGrams,
+price/promoPrice/currency, inStock/stockQuantity, isActive/sortOrder,
+optional dimensions, a new `VariantFulfilmentRestriction` enum) and
+`ProductVariantImage` (its own table, not a nullable scope on the
+existing `ProductImage`, so none of the many existing `ProductImage`
+query sites needed to change). `CartItem` gained nullable `variantId`
+and its `@@unique([cartId, productId])` became
+`@@unique([cartId, productId, variantId])` — safe with existing data,
+since every current row already satisfies `(cartId, productId, NULL)`
+uniquely. `OrderItem` gained nullable `variantId` + flat
+`variantName`/`variantSku` snapshot columns, mirroring its own existing
+`productId?`/`productName`/`productSku` immutable-snapshot convention
+exactly. Migration generated via `prisma migrate diff
+--from-config-datasource --to-schema=prisma/schema.prisma --script`
+(the live local DB was already in sync with all 22 prior migrations, so
+this diffed straight from it rather than needing a shadow database) —
+**hand-edited to drop two false-positive `DROP INDEX` lines** for
+`ContentEmbedding_embedding_hnsw_idx`/`ProductEmbedding_embedding_hnsw_idx`
+(Prisma's diff doesn't understand pgvector HNSW indexes and would have
+actually dropped them with no re-create statement anywhere in the diff —
+same category of Prisma-diff artifact this project has hit before with
+trgm indexes). Applied locally via `db push` + `migrate resolve --applied`,
+not `migrate dev` — a first `migrate dev` call against this project's
+`prisma dev` local server reliably fails with `P3006`/`P3018` replaying
+the very first migration against the shadow database (confirmed again
+this story; `db push`+`resolve --applied` remains the reliable local
+path, `migrate deploy` on the VPS is unaffected since it has no shadow
+DB).
+
+**One real correctness risk, found exactly where expected**: `CartItem`'s
+existing-row lookup (`cart.repository.ts::upsertCartItem`) had to switch
+from `findUnique({ cartId_productId })` to `findFirst({ where: { cartId,
+productId, variantId } })` — Prisma's generated compound-unique input
+for a 3-column key typed the nullable `variantId` member as non-nullable
+`string` even though the column itself is nullable (a known Prisma
+typing gotcha, not a runtime constraint issue) — `findUnique` wouldn't
+accept `null` there. `findFirst` is still a single-row lookup backed by
+the same unique index. Equally important: `cart.service.ts::addItem`'s
+existing-item match (`items.find((i) => i.productId === productId)`)
+had to also match `variantId`, or adding a second size would have wrongly
+incremented the first size's row instead of creating a new line — this
+is the exact mechanism the brief's "2×100g + 1×200g in one cart"
+scenario tests.
+
+**Stock/oversell**: `order.repository.ts::createOrderWithStockDecrement`
+branches `tx.productVariant.updateMany(...)` vs `tx.product.updateMany(...)`
+per line, reusing the exact existing conditional-atomic-update idiom
+(zero rows matched ⇒ `InsufficientStockError`) rather than introducing
+any new locking primitive. `cancelOrderWithStockRelease` and
+`restockOrderItems` got the identical branch for restocking.
+
+**PDP price-resolution guard fix**: `getProductDetail` previously 404'd
+any Published product with no resolvable price from the 5-tier system.
+Once a product has variants, its parent-level price is never set by the
+admin (see design decision above) — so the guard now skips the
+`resolvePrice()` call entirely when `product.variants.length > 0` and
+derives `price`/`originalPrice`/`currency` from the first
+active+in-stock variant (falling back to `promoPrice ?? price`) instead.
+Without this fix every variant-only product would have silently 404'd.
+
+**Admin UI**: new `ProductVariantsPanel`, a third self-contained panel
+alongside the existing `ProductPricingPanel`/`SeoFieldsPanel` on the
+product editor — confirmed `ProductPricingPanel` has zero `TAB_BY_FIELD`
+entries (it's not part of the parent form's single-submit schema), so
+Variants follows the identical pattern and needed none either. Variant
+CRUD functions were added directly to `product-admin.service.ts`
+alongside the existing pricing-tier CRUD functions (not a separate
+service file) — on inspection, pricing CRUD (`setStandardPrice`,
+`upsertSalePrice`, etc.) already lives there rather than in its own
+file, so matching that stronger, more specific existing precedent beat
+the more generic "give it its own service" instinct. A new
+`src/repositories/product-variant.repository.ts` stays separate, matching
+`pricing.repository.ts` being separate from `product.repository.ts`.
+The customer-facing availability/price resolution
+(`requireAvailableVariant`, `resolveVariantPrice`) lives in a new
+`product-variant.service.ts`, mirroring `pricing.service.ts`'s own role
+relative to the admin CRUD it doesn't own.
+
+**Storefront**: new `VariantSelector` (selectable size chips, inactive/
+out-of-stock sizes shown disabled rather than hidden) and
+`ProductPurchasePanel` (owns the one piece of client state a variant PDP
+needs — which size is selected — so price, stock message, and Add to
+Cart can all react together, which a server-rendered static price block
+couldn't). Renders byte-for-byte identically to the pre-variants PDP for
+every product with zero variants.
+
+**Tests**: `tests/unit/product-variant-service.test.ts` and
+`product-variant-repository.test.ts` (new); extended `cart-service.test.ts`
+(two sizes → two independent lines, same variant twice → combines,
+promoPrice preferred, inactive/out-of-stock rejected), `cart-repository.test.ts`,
+`checkout-service.test.ts` (full guest placeOrder with two variant lines
+producing two correct `OrderItem` snapshots; a cart rejected when its
+variant went inactive mid-checkout), `order-service.test.ts` (variant-level
+stock decrement and oversell, independent of the parent product's own
+stock), and `product-detail-service.test.ts` (a variant-only product no
+longer 404s, defaults to the first in-stock variant). Maps to the
+brief's acceptance scenarios 1, 2, and 5; every pre-existing
+non-variant test case in all of the above files was run and still
+passes unmodified — the regression guard for scenario 14.
+
+**A real bug was caught by this live verification that no unit test had
+exercised**: the admin Variants form's Barcode field is a controlled
+input whose value is `""` when left blank, never omitted — but
+`toVariantData`'s original `input.barcode ?? null` only normalizes
+`undefined`/`null`, not an empty string. Two variants saved with no
+barcode both got `barcode: ""`, and since `ProductVariant.barcode` is
+`@unique`, the second one 500'd on a live P2002. Every existing unit
+test constructed its fixture by omitting the `barcode` key entirely
+(`undefined`), so this never surfaced there. Fixed to
+`input.barcode?.trim() ? input.barcode.trim() : null` and added a
+regression test using the exact `barcode: ""` shape the real form
+sends, not the omitted-key shape the other tests happened to use.
+
+Verified end-to-end against the local dev server: logged in as the
+seeded admin, added two variants (100g and an intentionally
+out-of-stock 350g) to a real product via the new Variants tab — hit and
+fixed the barcode bug above in the process; on the storefront PDP,
+confirmed the size selector renders both chips, the 350g one is visibly
+disabled and unclickable, price/stock message read correctly for the
+selected 100g variant, and adding it to cart shows "Roasted Curry
+Powder 100g — 100g" at the correct price in the cart drawer. The
+multi-variant-in-one-order checkout path (brief scenario 2) is covered
+by the automated `checkout-service.test.ts` integration test above
+rather than re-walked manually in the browser, since that test already
+exercises the exact cart→checkout→order handoff end to end.

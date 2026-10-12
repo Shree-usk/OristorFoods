@@ -25,6 +25,7 @@ import {
 import { AssetPickerDialog } from "@/components/admin/media/asset-picker-dialog";
 import { DuplicateProductDialog } from "@/components/admin/products/duplicate-product-dialog";
 import { ProductPricingPanel } from "@/components/admin/products/product-pricing-panel";
+import { ProductVariantsPanel } from "@/components/admin/products/product-variants-panel";
 import { SeoFieldsPanel } from "@/components/admin/seo/seo-fields-panel";
 import { toastManager } from "@/lib/toast";
 import { productAdminSchema, type ProductAdminFormInput } from "@/validation/product-admin.schema";
@@ -315,6 +316,7 @@ export function AdminProductForm({ productId }: { productId?: string }) {
         <TabsList>
           <TabsTrigger value="general">General</TabsTrigger>
           <TabsTrigger value="pricing">Pricing</TabsTrigger>
+          <TabsTrigger value="variants">Variants</TabsTrigger>
           <TabsTrigger value="nutrition">Nutrition &amp; Ingredients</TabsTrigger>
           <TabsTrigger value="media">Media</TabsTrigger>
           <TabsTrigger value="seo">SEO</TabsTrigger>
@@ -445,6 +447,14 @@ export function AdminProductForm({ productId }: { productId?: string }) {
             <ProductPricingPanel productId={productId} />
           ) : (
             <p className="text-body text-charcoal/70">Save the product first to configure pricing.</p>
+          )}
+        </TabsContent>
+
+        <TabsContent value="variants" className="mt-4">
+          {productId ? (
+            <ProductVariantsPanel productId={productId} />
+          ) : (
+            <p className="text-body text-charcoal/70">Save the product first to configure variants.</p>
           )}
         </TabsContent>
 

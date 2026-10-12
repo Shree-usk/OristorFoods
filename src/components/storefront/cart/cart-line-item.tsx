@@ -29,6 +29,7 @@ export function CartLineItemRow({ item, onQuantityChange, onRemove, isMutating =
       <div className="flex-1">
         <Link href={`/products/${item.productSlug}`} className="text-body font-medium text-charcoal hover:underline">
           {item.productName}
+          {item.variantName && <span className="font-normal text-charcoal/70"> — {item.variantName}</span>}
         </Link>
         <p className="mt-1 text-small text-charcoal/70">
           {item.currency} {item.unitPrice.toFixed(2)} each
