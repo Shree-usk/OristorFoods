@@ -9216,3 +9216,41 @@ grid; `PATCH` with a different `productIds` correctly replaced (not
 merged) the set. Unit tests added to
 `tests/unit/collection-admin-service.test.ts` cover connect-on-create,
 replace-on-update, omitted-leaves-untouched, and clear-with-empty-array.
+
+---
+
+## 2026-10-12 — Product page: Nutrition Facts collapsed by default
+
+User asked for the Nutrition Facts table (product detail page only —
+`NutritionTable` was never rendered on the listing/grid card) to be
+folded by default, expanding on request, since the full nutrient
+breakdown isn't what most shoppers scan for first.
+
+**No disclosure/accordion primitive existed anywhere in this codebase**
+(`src/components/ui/` has no `accordion.tsx`/`collapsible.tsx`; grepped
+for `<Accordion`, `Disclosure`, `useState.*[Ee]xpanded` — zero hits).
+This project uses **Base UI** (`@base-ui/react`), not Radix — already a
+dependency, and it ships a `collapsible` module, so no new package was
+added. Added `src/components/ui/collapsible.tsx` as a thin wrapper
+(`Collapsible`/`CollapsibleTrigger`/`CollapsibleContent`) matching
+`tabs.tsx`'s exact existing wrapper pattern (`data-slot`, no semicolons —
+this directory's shadcn-style convention). The chevron rotation uses
+Base UI's `data-panel-open` attribute via a named Tailwind group
+(`group-data-panel-open/nutrition-trigger:rotate-180`), the same pattern
+`navigation-menu.tsx` already uses for its own open-state chevron.
+
+New `src/components/storefront/product/nutrition-disclosure.tsx`
+(`NutritionDisclosure`) wraps the existing, unmodified `NutritionTable`
+in this `Collapsible`, `defaultOpen={false}`. Kept as its own small
+client component (not inlined into the PDP) specifically so it's
+unit-testable in isolation from the PDP's async Server Component data
+fetching — `tests/unit/nutrition-disclosure.test.tsx` confirms the
+table is absent until the trigger is clicked, then present after.
+
+Verified visually against the local dev server: the "Nutrition Facts"
+heading now renders as a button with a chevron, collapsed by default
+between Serving Suggestions and Ingredients; clicking it expands the
+full table and flips the chevron. The existing e2e assertion
+(`product-detail.spec.ts`: `getByText("Nutrition Facts")`) only checks
+the label is visible, so it needed no change — it was never asserting
+on the table's open state.
