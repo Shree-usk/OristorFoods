@@ -47,7 +47,11 @@ const ADDRESS_FIELDS = [
 ] as const;
 
 export function AddressStep({ isAuthenticated }: { isAuthenticated: boolean }) {
-  const { address, guestEmail, saveAddress, setAddress, goToStep } = useCheckoutStore();
+  const { address, guestEmail, saveAddress, fulfilmentMethod, setAddress, goToStep } = useCheckoutStore();
+  // Export fulfilment flow. fulfilmentMethod is only ever set by
+  // ExportDetailsStep (step 1) — its presence means this cart went
+  // through that step, so there's somewhere to go back to.
+  const cameFromExportDetails = fulfilmentMethod !== null;
 
   const savedAddressesQuery = useQuery({
     queryKey: ["checkout-addresses"],
@@ -93,7 +97,7 @@ export function AddressStep({ isAuthenticated }: { isAuthenticated: boolean }) {
       // an abandoned checkout doesn't collect addresses.
       await validateAddress({ address: data.address, guestEmail: data.guestEmail || undefined });
       setAddress(data.address, isAuthenticated ? null : (data.guestEmail ?? null), data.save ?? false);
-      goToStep(2);
+      goToStep(3);
     } catch (error) {
       setError("root", { message: error instanceof ApiError ? error.message : "Something went wrong. Please try again." });
     }
@@ -196,9 +200,16 @@ export function AddressStep({ isAuthenticated }: { isAuthenticated: boolean }) {
           </p>
         )}
 
-        <Button type="submit" disabled={isSubmitting} className="sm:self-start">
-          Continue to Delivery
-        </Button>
+        <div className="flex flex-wrap gap-3">
+          {cameFromExportDetails && (
+            <Button type="button" variant="outline" onClick={() => goToStep(1)} disabled={isSubmitting}>
+              Back
+            </Button>
+          )}
+          <Button type="submit" disabled={isSubmitting} className="sm:self-start">
+            Continue to Delivery
+          </Button>
+        </div>
       </form>
     </div>
   );

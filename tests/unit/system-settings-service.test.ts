@@ -5,18 +5,24 @@ import type { AdminAction, AdminModule } from "@/generated/prisma/client";
 import { prisma } from "@/lib/db";
 import { PermissionDeniedError } from "@/services/permission.errors";
 import {
+  createBankAccount,
   createFeatureFlag,
   createPaymentMethod,
   createTaxRateRule,
+  deleteBankAccount,
   deleteFeatureFlag,
   deletePaymentMethod,
   getCompanySetting,
   getFreeShippingThreshold,
   getLowStockThreshold,
+  getPickupLocation,
   getResolvedCompanyInfo,
   isFeatureEnabled,
+  listBankAccounts,
+  listEligibleBankAccounts,
   listFeatureFlags,
   listPaymentMethods,
+  updateBankAccount,
   updateCompanySetting,
   updateCurrencySetting,
   updateFreeShippingThreshold,
@@ -53,6 +59,7 @@ afterEach(async () => {
   await prisma.taxSetting.deleteMany({});
   await prisma.taxRateRule.deleteMany({ where: { region: { startsWith: "system-settings-svc-test-" } } });
   await prisma.paymentMethodSetting.deleteMany({ where: { key: { startsWith: "system-settings-svc-test-" } } });
+  await prisma.bankAccountSetting.deleteMany({});
   await prisma.featureFlag.deleteMany({ where: { key: { startsWith: "system-settings-svc-test-" } } });
   await prisma.inventorySetting.deleteMany({});
   await prisma.shippingSetting.deleteMany({});
@@ -98,6 +105,55 @@ describe("system-settings.service — Company", () => {
       contactHeroSubcopy: "Custom subcopy",
       contactLocationHeading: "Find us here",
     });
+  });
+});
+
+describe("system-settings.service — Export fulfilment flow", () => {
+  it("getPickupLocation is null until an admin sets both the name and address, then returns them", async () => {
+    await expect(getPickupLocation()).resolves.toBeNull();
+
+    const admin = await makeFullAccessAdmin();
+    await updateCompanySetting(admin.id, { pickupLocationName: "Oristor Factory Outlet" });
+    await expect(getPickupLocation()).resolves.toBeNull();
+
+    await updateCompanySetting(admin.id, { pickupLocationAddress: "123 Factory Rd, Colombo" });
+    await expect(getPickupLocation()).resolves.toEqual({
+      name: "Oristor Factory Outlet",
+      address: "123 Factory Rd, Colombo",
+      mapUrl: null,
+    });
+  });
+
+  it("bank accounts: admin CRUD is permission-gated, and the customer-facing read returns only enabled accounts", async () => {
+    const admin = await makeFullAccessAdmin();
+    const viewer = await makeAdmin([{ module: "SystemSettings", action: "View" }]);
+
+    const account = await createBankAccount(admin.id, {
+      bankName: "Commercial Bank",
+      accountName: "Oristor Food Products (Pvt) Ltd",
+      accountNumber: "1234567890",
+      currency: "LKR",
+      enabled: true,
+    });
+    const disabledAccount = await createBankAccount(admin.id, {
+      bankName: "HNB",
+      accountName: "Oristor Food Products (Pvt) Ltd",
+      accountNumber: "0987654321",
+      currency: "USD",
+      enabled: false,
+    });
+
+    await expect(listEligibleBankAccounts()).resolves.toEqual([expect.objectContaining({ id: account.id })]);
+
+    await expect(createBankAccount(viewer.id, { bankName: "x", accountName: "x", accountNumber: "x", currency: "LKR", enabled: true })).rejects.toBeInstanceOf(
+      PermissionDeniedError,
+    );
+
+    await updateBankAccount(admin.id, account.id, { enabled: false });
+    await expect(listEligibleBankAccounts()).resolves.toEqual([]);
+
+    await deleteBankAccount(admin.id, disabledAccount.id);
+    await expect(listBankAccounts(admin.id)).resolves.toHaveLength(1);
   });
 });
 

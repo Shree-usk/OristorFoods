@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { BankAccountsPanel } from "./bank-accounts-panel";
 import { CompanySettingsPanel } from "./company-settings-panel";
 import { CurrencySettingsPanel } from "./currency-settings-panel";
 import { FeatureFlagsPanel } from "./feature-flags-panel";
@@ -23,7 +24,7 @@ import { TaxSettingsPanel } from "./tax-settings-panel";
  * full editing surface at /admin/rewards-referrals; duplicating it
  * here would contradict this story's own AC wording.
  */
-const TAB_VALUES = ["company", "currencies", "languages", "taxes", "shipping", "payment-methods", "notifications", "rewards-referrals", "feature-flags", "policy-documents", "integrations"];
+const TAB_VALUES = ["company", "currencies", "languages", "taxes", "shipping", "payment-methods", "bank-accounts", "notifications", "rewards-referrals", "feature-flags", "policy-documents", "integrations"];
 
 export function AdminSettingsView() {
   const searchParams = useSearchParams();
@@ -42,6 +43,7 @@ export function AdminSettingsView() {
           <TabsTrigger value="taxes">Taxes</TabsTrigger>
           <TabsTrigger value="shipping">Shipping &amp; Inventory</TabsTrigger>
           <TabsTrigger value="payment-methods">Payment Methods</TabsTrigger>
+          <TabsTrigger value="bank-accounts">Bank Accounts</TabsTrigger>
           <TabsTrigger value="notifications">Notifications</TabsTrigger>
           <TabsTrigger value="rewards-referrals">Rewards &amp; Referrals</TabsTrigger>
           <TabsTrigger value="feature-flags">Feature Flags</TabsTrigger>
@@ -66,6 +68,9 @@ export function AdminSettingsView() {
         </TabsContent>
         <TabsContent value="payment-methods" className="mt-4">
           <PaymentMethodsPanel />
+        </TabsContent>
+        <TabsContent value="bank-accounts" className="mt-4">
+          <BankAccountsPanel />
         </TabsContent>
         <TabsContent value="notifications" className="mt-4">
           <NotificationTemplatesPanel />

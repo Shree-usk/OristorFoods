@@ -2,8 +2,8 @@
 
 import { create } from "zustand";
 
-import type { DeliveryResolution, PaymentIntentResult, PaymentMethod } from "@/types/checkout";
-import type { CheckoutAddressInput } from "@/validation/checkout.schema";
+import type { DeliveryResolution, FulfilmentMethod, PaymentIntentResult, PaymentMethod } from "@/types/checkout";
+import type { CheckoutAddressInput, TravelerDetailsInput } from "@/validation/checkout.schema";
 
 /**
  * Client-held checkout wizard state (STORY-025, spec decision #1).
@@ -12,15 +12,26 @@ import type { CheckoutAddressInput } from "@/validation/checkout.schema";
  * server-side cart itself survives — the customer restarts at step 1).
  * Every amount shown from this store is display-only; place-order
  * recomputes everything server-side.
+ *
+ * Export fulfilment flow: fixed semantic step slots 1–5 (Export Details,
+ * Address, Delivery, Payment, Review). Step 1 only ever renders for a cart
+ * with an export-declared packaging line — checkout-wizard.tsx computes
+ * that at render time and skips straight to step 2 otherwise, so a plain
+ * cart's step numbering/back-forward flow is unaffected by this field
+ * existing. For Pickup, ExportDetailsStep's continue jumps straight to
+ * step 4 (Payment) — Address/Delivery (2/3) are skipped entirely.
  */
 
-export const CHECKOUT_STEPS = ["Address", "Delivery", "Payment", "Review"] as const;
-export type CheckoutStep = 1 | 2 | 3 | 4;
+export const CHECKOUT_STEPS = ["Export Details", "Address", "Delivery", "Payment", "Review"] as const;
+export type CheckoutStep = 1 | 2 | 3 | 4 | 5;
 
 interface CheckoutState {
   step: CheckoutStep;
   /** One key per checkout attempt — regenerated only when totals change (fresh attempt). */
   idempotencyKey: string;
+  /** Export fulfilment flow. Null until the ExportDetailsStep is submitted. */
+  fulfilmentMethod: FulfilmentMethod | null;
+  traveler: TravelerDetailsInput | null;
   address: CheckoutAddressInput | null;
   guestEmail: string | null;
   saveAddress: boolean;
@@ -37,6 +48,7 @@ interface CheckoutState {
    */
   completedOrderNumber: string | null;
   goToStep: (step: CheckoutStep) => void;
+  setExportDetails: (fulfilmentMethod: FulfilmentMethod, traveler: TravelerDetailsInput) => void;
   setAddress: (address: CheckoutAddressInput, guestEmail: string | null, saveAddress: boolean) => void;
   setDelivery: (delivery: DeliveryResolution | null) => void;
   setPaymentMethod: (paymentMethod: PaymentMethod | null) => void;
@@ -57,6 +69,8 @@ interface CheckoutState {
 const initialState = () => ({
   step: 1 as CheckoutStep,
   idempotencyKey: crypto.randomUUID(),
+  fulfilmentMethod: null,
+  traveler: null,
   address: null,
   guestEmail: null,
   saveAddress: false,
@@ -70,6 +84,10 @@ const initialState = () => ({
 export const useCheckoutStore = create<CheckoutState>((set) => ({
   ...initialState(),
   goToStep: (step) => set({ step }),
+  setExportDetails: (fulfilmentMethod, traveler) =>
+    // A changed fulfilment choice can change everything downstream (whether
+    // Address/Delivery even apply, the delivery charge, the grand total).
+    set({ fulfilmentMethod, traveler, address: null, delivery: null, paymentMethod: null, intent: null, paymentConfirmed: false }),
   setAddress: (address, guestEmail, saveAddress) =>
     // A changed address can change the zone/charge — void downstream state.
     set({ address, guestEmail, saveAddress, delivery: null, paymentMethod: null, intent: null, paymentConfirmed: false }),
@@ -79,6 +97,6 @@ export const useCheckoutStore = create<CheckoutState>((set) => ({
   markPaymentConfirmed: () => set({ paymentConfirmed: true }),
   completeOrder: (orderNumber) => set({ completedOrderNumber: orderNumber }),
   resetPaymentAttempt: () =>
-    set({ paymentMethod: null, intent: null, paymentConfirmed: false, idempotencyKey: crypto.randomUUID(), step: 3 }),
+    set({ paymentMethod: null, intent: null, paymentConfirmed: false, idempotencyKey: crypto.randomUUID(), step: 4 }),
   reset: () => set(initialState()),
 }));

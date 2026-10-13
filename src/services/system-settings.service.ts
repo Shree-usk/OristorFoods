@@ -31,6 +31,10 @@ export interface CompanySettingInput {
   contactHeroHeadline?: string | null;
   contactHeroSubcopy?: string | null;
   contactLocationHeading?: string | null;
+  /** Export fulfilment flow. */
+  pickupLocationName?: string | null;
+  pickupLocationAddress?: string | null;
+  pickupLocationMapUrl?: string | null;
 }
 
 export async function getCompanySetting(adminUserId: string) {
@@ -83,6 +87,19 @@ export async function getResolvedCompanyInfo() {
       "From authentic Sri Lankan flavours to international partnerships, we'd love to hear from you.",
     contactLocationHeading: setting?.contactLocationHeading ?? "Come and meet us.",
   };
+}
+
+/**
+ * Export fulfilment flow — checkout's own read (unguarded, same reasoning
+ * as getResolvedCompanyInfo above: storefront-facing, no admin session
+ * exists at checkout). Null until an admin has configured it — the
+ * Pickup checkout step disables itself with a clear message rather than
+ * ever showing a fabricated location (see checkout.service.ts).
+ */
+export async function getPickupLocation() {
+  const setting = await systemSettingsRepository.getCompanySetting();
+  if (!setting?.pickupLocationName || !setting?.pickupLocationAddress) return null;
+  return { name: setting.pickupLocationName, address: setting.pickupLocationAddress, mapUrl: setting.pickupLocationMapUrl };
 }
 
 // --- Currencies ---
@@ -226,6 +243,49 @@ export async function deletePaymentMethod(adminUserId: string, id: string) {
   await requirePermission(adminUserId, "SystemSettings", "Edit");
   await systemSettingsRepository.deletePaymentMethod(id);
   await writeAuditLog({ actorId: adminUserId, action: "payment_method_deleted", module: "SystemSettings", targetType: "PaymentMethodSetting", targetId: id });
+}
+
+// --- Bank accounts (Export fulfilment flow) ---
+
+export interface BankAccountAdminInput {
+  bankName: string;
+  accountName: string;
+  accountNumber: string;
+  branch?: string | null;
+  swiftCode?: string | null;
+  currency: string;
+  enabled: boolean;
+}
+
+export async function listBankAccounts(adminUserId: string) {
+  await requirePermission(adminUserId, "SystemSettings", "View");
+  return systemSettingsRepository.listBankAccounts();
+}
+
+/** Checkout's own read — unguarded, same reasoning as getPickupLocation above. */
+export async function listEligibleBankAccounts() {
+  return systemSettingsRepository.listEnabledBankAccounts();
+}
+
+export async function createBankAccount(adminUserId: string, input: BankAccountAdminInput) {
+  await requirePermission(adminUserId, "SystemSettings", "Edit");
+  const sortOrder = await systemSettingsRepository.nextBankAccountSortOrder();
+  const account = await systemSettingsRepository.createBankAccount({ ...input, sortOrder });
+  await writeAuditLog({ actorId: adminUserId, action: "bank_account_created", module: "SystemSettings", targetType: "BankAccountSetting", targetId: account.id });
+  return account;
+}
+
+export async function updateBankAccount(adminUserId: string, id: string, input: Partial<BankAccountAdminInput>) {
+  await requirePermission(adminUserId, "SystemSettings", "Edit");
+  const account = await systemSettingsRepository.updateBankAccount(id, input);
+  await writeAuditLog({ actorId: adminUserId, action: "bank_account_updated", module: "SystemSettings", targetType: "BankAccountSetting", targetId: id });
+  return account;
+}
+
+export async function deleteBankAccount(adminUserId: string, id: string) {
+  await requirePermission(adminUserId, "SystemSettings", "Edit");
+  await systemSettingsRepository.deleteBankAccount(id);
+  await writeAuditLog({ actorId: adminUserId, action: "bank_account_deleted", module: "SystemSettings", targetType: "BankAccountSetting", targetId: id });
 }
 
 // --- Feature flags ---

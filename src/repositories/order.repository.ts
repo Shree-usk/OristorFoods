@@ -2,7 +2,7 @@ import { prisma } from "@/lib/db";
 import { createRedemption } from "@/repositories/coupon.repository";
 import { createRedeemedTransaction } from "@/repositories/rewards.repository";
 import { ConcurrentTransitionError, InsufficientStockError } from "@/services/order.errors";
-import type { OrderStatus, PaymentMethod, Prisma } from "@/generated/prisma/client";
+import type { FulfilmentMethod, OrderStatus, PaymentMethod, Prisma } from "@/generated/prisma/client";
 
 /**
  * The only place Order/OrderItem/OrderStatusHistory/OrderIntegrationEvent
@@ -30,6 +30,8 @@ export interface OrderLineInput {
   packagingCharge?: string | null;
   packagingDeclaredAvailability?: "Local" | "Export" | null;
   packagingRequiresManualReview?: boolean;
+  /** Export fulfilment flow. Snapshot of ProductPackagingOption.customerInstructions — null for a line with no packaging selected, or one whose option left it unset. */
+  packagingInstructions?: string | null;
 }
 
 /** Story 2 (Bundles). One entry per distinct bundle instance in the order — only OwnStock ones trigger the bundle-level decrement/restock step below. */
@@ -85,6 +87,12 @@ export interface CreateOrderInput {
   requiresManualReview?: boolean;
   /** Story 4 (Payment Restriction). Omitted only by pre-Story-4 test callers — the schema column defaults "Card" when omitted from the create data, matching every historical order's actual payment flow. */
   paymentMethod?: PaymentMethod;
+  /** Export fulfilment flow. Omitted defaults "Delivery" at the DB level, matching every pre-existing order. Pickup is only ever passed by checkout.service.ts for an export-declared cart. */
+  fulfilmentMethod?: FulfilmentMethod;
+  /** Export fulfilment flow. Collected only for an export-declared cart (both Pickup and Delivery sub-choices) — null for every standard order. */
+  travelerName?: string | null;
+  travelerCountry?: string | null;
+  travelerPhone?: string | null;
 }
 
 /**
@@ -154,6 +162,10 @@ export function createOrderWithStockDecrement(input: CreateOrderInput) {
         rewardPointsEarned: input.rewardPointsEarned,
         paymentId: input.paymentId,
         paymentMethod: input.paymentMethod,
+        fulfilmentMethod: input.fulfilmentMethod,
+        travelerName: input.travelerName,
+        travelerCountry: input.travelerCountry,
+        travelerPhone: input.travelerPhone,
         deliveryZoneName: input.deliveryZoneName,
         estimatedDaysMin: input.estimatedDaysMin,
         estimatedDaysMax: input.estimatedDaysMax,
@@ -180,6 +192,7 @@ export function createOrderWithStockDecrement(input: CreateOrderInput) {
             packagingCharge: line.packagingCharge,
             packagingDeclaredAvailability: line.packagingDeclaredAvailability,
             packagingRequiresManualReview: line.packagingRequiresManualReview ?? false,
+            packagingInstructions: line.packagingInstructions,
             unitPrice: line.unitPrice,
             quantity: line.quantity,
             lineTotal: line.lineTotal,
@@ -249,6 +262,26 @@ export function findOrderByNumberWithPayment(orderNumber: string) {
 
 export function findOrderById(orderId: string) {
   return prisma.order.findUnique({ where: { id: orderId }, include: { items: true } });
+}
+
+/**
+ * Export fulfilment flow. A plain field write, deliberately independent
+ * of OrderStatus's own transition state machine (readyForPickupAt is
+ * informational/notification-triggering only, never a status) — an admin
+ * can mark a Pickup order ready regardless of its current status. Returns
+ * null if the order wasn't found or isn't a Pickup order, so the service
+ * layer can distinguish "nothing to do" from "already marked ready"
+ * (idempotent: a second call just re-sets the same timestamp).
+ */
+export async function markOrderReadyForPickup(orderId: string) {
+  const order = await prisma.order.findUnique({ where: { id: orderId }, select: { fulfilmentMethod: true } });
+  if (!order || order.fulfilmentMethod !== "Pickup") return null;
+
+  return prisma.order.update({
+    where: { id: orderId },
+    data: { readyForPickupAt: new Date() },
+    select: { id: true, orderNumber: true, userId: true, readyForPickupAt: true },
+  });
 }
 
 /**

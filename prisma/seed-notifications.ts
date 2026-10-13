@@ -46,6 +46,16 @@ export async function seedNotificationTemplates() {
       sms: "Oristor: Order {{orderNumber}} was cancelled. Any payment will be refunded.",
       whatsapp: "Your Oristor order *{{orderNumber}}* was cancelled. Any payment made will be refunded.",
     },
+    // Export fulfilment flow.
+    {
+      templateKey: "order.ready_for_pickup",
+      email: {
+        subject: "Your Oristor order {{orderNumber}} is ready for pickup",
+        body: "Order {{orderNumber}} is ready for you to collect. Please bring a copy of your order confirmation.",
+      },
+      sms: "Oristor: Order {{orderNumber}} is ready for pickup.",
+      whatsapp: "Your Oristor order *{{orderNumber}}* is ready for pickup. Please bring a copy of your order confirmation.",
+    },
     {
       templateKey: "rewards.points_earned",
       email: {

@@ -21,6 +21,9 @@ export const companySettingSchema = z.object({
   contactHeroHeadline: z.preprocess(emptyToNull, z.string().trim().min(1).nullable().optional()),
   contactHeroSubcopy: z.preprocess(emptyToNull, z.string().trim().min(1).nullable().optional()),
   contactLocationHeading: z.preprocess(emptyToNull, z.string().trim().min(1).nullable().optional()),
+  pickupLocationName: z.preprocess(emptyToNull, z.string().trim().min(1).nullable().optional()),
+  pickupLocationAddress: z.preprocess(emptyToNull, z.string().trim().min(1).nullable().optional()),
+  pickupLocationMapUrl: z.preprocess(emptyToNull, z.string().trim().url("Enter a valid URL.").nullable().optional()),
 });
 
 export const currencySettingSchema = z.object({
@@ -68,6 +71,18 @@ export const updatePaymentMethodSchema = z.object({
   method: paymentMethodTagSchema,
   allowedForRestrictedOrders: z.boolean().optional(),
 });
+
+export const createBankAccountSchema = z.object({
+  bankName: z.string().trim().min(1, "Bank name is required."),
+  accountName: z.string().trim().min(1, "Account name is required."),
+  accountNumber: z.string().trim().min(1, "Account number is required."),
+  branch: z.preprocess(emptyToNull, z.string().trim().min(1).nullable().optional()),
+  swiftCode: z.preprocess(emptyToNull, z.string().trim().min(1).nullable().optional()),
+  currency: z.string().trim().length(3, "Use a 3-letter currency code.").default("LKR"),
+  enabled: z.boolean().default(true),
+});
+
+export const updateBankAccountSchema = createBankAccountSchema.partial();
 
 export const createFeatureFlagSchema = z.object({
   key: z.string().trim().min(1).max(60),

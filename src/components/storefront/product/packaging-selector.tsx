@@ -35,10 +35,12 @@ function isAvailabilityCompatible(optionAvailability: ProductDetailPackagingOpti
  * a self-declaration (no address/country infrastructure exists on this
  * storefront — see the brief's confirmed scope decision), then the
  * declaration-filtered packaging chips themselves, including an implicit
- * "Standard packaging" chip for "declared, but no special packaging". The
- * PDP always adds a single unit at a time, so a minimum-quantity option is
- * shown but disabled rather than hidden — same "visible but disabled, not
- * hidden" precedent VariantSelector already uses for an out-of-stock size.
+ * "Standard packaging" chip for "declared, but no special packaging".
+ * Selecting an option with a minimum quantity doesn't disable it — the
+ * parent (product-purchase-panel.tsx) auto-bumps the quantity stepper to
+ * that minimum on selection, per the brief's "fetch the MOQ automatically,
+ * let the customer add more" requirement. The "(min N)" annotation stays
+ * as a hint either way.
  */
 export function PackagingSelector({ options, selectedVariantId, currency, value, onChange, acknowledged, onAcknowledgedChange }: PackagingSelectorProps) {
   const eligible = options.filter((option) => option.variantId === null || option.variantId === selectedVariantId);
@@ -101,23 +103,21 @@ export function PackagingSelector({ options, selectedVariantId, currency, value,
             Standard packaging
           </button>
           {optionsForDeclaration.map((option) => {
-            const belowMinimum = option.minQuantity != null && option.minQuantity > 1;
+            const hasMinimum = option.minQuantity != null && option.minQuantity > 1;
             const selected = value?.optionId === option.id;
             return (
               <button
                 key={option.id}
                 type="button"
-                disabled={belowMinimum}
                 aria-pressed={selected}
                 onClick={() => selectOption(option.id)}
                 className={cn(
                   "rounded-md border px-3 py-2 text-small transition-colors",
                   selected ? "border-chilli bg-chilli/10 text-chilli" : "border-input text-charcoal hover:border-charcoal/40",
-                  belowMinimum && "cursor-not-allowed border-input bg-muted text-charcoal/40 hover:border-input",
                 )}
               >
                 {option.packagingMethodName} (+{currency} {option.charge.toLocaleString()})
-                {belowMinimum && <span className="ml-1.5">(min {option.minQuantity})</span>}
+                {hasMinimum && <span className="ml-1.5">(min {option.minQuantity})</span>}
               </button>
             );
           })}

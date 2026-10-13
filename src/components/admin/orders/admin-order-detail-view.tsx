@@ -16,6 +16,7 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   changeOrderStatusAdmin,
   fetchOrderAdminDetail,
+  markOrderReadyForPickupAdmin,
   orderInvoiceUrl,
   orderPackingSlipUrl,
   orderShippingLabelUrl,
@@ -102,6 +103,11 @@ export function AdminOrderDetailView({ orderId }: { orderId: string }) {
             Mark as {next}
           </Button>
         ))}
+        {order.fulfilmentMethod === "Pickup" && !order.readyForPickupAt && (
+          <Button type="button" size="sm" variant="outline" onClick={() => runAction(() => markOrderReadyForPickupAdmin(orderId))}>
+            Mark ready for pickup
+          </Button>
+        )}
         <Button type="button" size="sm" variant="outline" onClick={() => setRefundOpen(true)} disabled={!order.payment || remainingRefundable <= 0}>
           Refund
         </Button>
@@ -162,6 +168,7 @@ export function AdminOrderDetailView({ orderId }: { orderId: string }) {
                         {item.packagingRequiresManualReview && " (manual review)"}
                       </span>
                     )}
+                    {item.packagingInstructions && <span className="mt-1 block text-caption text-chilli">{item.packagingInstructions}</span>}
                   </TableCell>
                   <TableCell>{item.productSku}</TableCell>
                   <TableCell>{item.quantity}</TableCell>
@@ -232,26 +239,50 @@ export function AdminOrderDetailView({ orderId }: { orderId: string }) {
         </div>
 
         <div>
-          <h2 className="text-h4 font-heading text-charcoal">Shipping</h2>
-          <div className="mt-2 text-small text-charcoal/80">
-            <p>{order.shippingAddress.recipientName}</p>
-            <p>{order.shippingAddress.phone}</p>
-            <p>{order.shippingAddress.line1}</p>
-            {order.shippingAddress.line2 && <p>{order.shippingAddress.line2}</p>}
-            <p>
-              {order.shippingAddress.city}
-              {order.shippingAddress.district ? `, ${order.shippingAddress.district}` : ""}
-              {order.shippingAddress.postalCode ? ` ${order.shippingAddress.postalCode}` : ""}
-            </p>
-          </div>
-          <p className="mt-2 text-small text-charcoal/70">
-            Zone: {order.deliveryZoneName}
-            {order.estimatedDaysMin != null && order.estimatedDaysMax != null ? ` (${order.estimatedDaysMin}–${order.estimatedDaysMax} days)` : ""}
-          </p>
-          {order.tracking.trackingNumber && (
-            <p className="mt-2 text-small text-charcoal/70">
-              Tracking: {order.tracking.carrier} {order.tracking.trackingNumber}
-            </p>
+          <h2 className="text-h4 font-heading text-charcoal">{order.fulfilmentMethod === "Pickup" ? "Pickup" : "Shipping"}</h2>
+          {order.fulfilmentMethod === "Pickup" ? (
+            <>
+              <p className="mt-2 text-small text-charcoal/80">
+                {order.readyForPickupAt ? `Ready for pickup since ${new Date(order.readyForPickupAt).toLocaleString()}` : "Not yet marked ready."}
+              </p>
+              {order.travelerName && (
+                <p className="mt-2 text-small text-charcoal/70">
+                  Traveler: {order.travelerName}
+                  {order.travelerCountry ? ` (${order.travelerCountry})` : ""}
+                  {order.travelerPhone ? ` · ${order.travelerPhone}` : ""}
+                </p>
+              )}
+            </>
+          ) : (
+            <>
+              <div className="mt-2 text-small text-charcoal/80">
+                <p>{order.shippingAddress.recipientName}</p>
+                <p>{order.shippingAddress.phone}</p>
+                <p>{order.shippingAddress.line1}</p>
+                {order.shippingAddress.line2 && <p>{order.shippingAddress.line2}</p>}
+                <p>
+                  {order.shippingAddress.city}
+                  {order.shippingAddress.district ? `, ${order.shippingAddress.district}` : ""}
+                  {order.shippingAddress.postalCode ? ` ${order.shippingAddress.postalCode}` : ""}
+                </p>
+              </div>
+              <p className="mt-2 text-small text-charcoal/70">
+                Zone: {order.deliveryZoneName}
+                {order.estimatedDaysMin != null && order.estimatedDaysMax != null ? ` (${order.estimatedDaysMin}–${order.estimatedDaysMax} days)` : ""}
+              </p>
+              {order.travelerName && (
+                <p className="mt-2 text-small text-charcoal/70">
+                  Traveler: {order.travelerName}
+                  {order.travelerCountry ? ` (${order.travelerCountry})` : ""}
+                  {order.travelerPhone ? ` · ${order.travelerPhone}` : ""}
+                </p>
+              )}
+              {order.tracking.trackingNumber && (
+                <p className="mt-2 text-small text-charcoal/70">
+                  Tracking: {order.tracking.carrier} {order.tracking.trackingNumber}
+                </p>
+              )}
+            </>
           )}
 
           <h2 className="mt-6 text-h4 font-heading text-charcoal">Payment</h2>

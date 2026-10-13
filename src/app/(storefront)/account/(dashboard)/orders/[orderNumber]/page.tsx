@@ -107,6 +107,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ or
                     {item.variantName && <span className="font-normal text-charcoal/70"> — {item.variantName}</span>}
                     {item.bundleName && <span className="ml-1 text-caption text-charcoal/60">(part of {item.bundleName})</span>}
                     {item.packagingMethodName && <span className="ml-1 text-caption text-charcoal/60">+ {item.packagingMethodName} packaging</span>}
+                    {item.packagingInstructions && <span className="mt-1 block text-caption text-chilli">{item.packagingInstructions}</span>}
                   </p>
                   <p className="text-small text-charcoal/70">
                     Qty {item.quantity} × {formatCurrency(item.unitPrice, order.currency)}
@@ -135,7 +136,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ or
               </div>
             )}
             <div className="flex items-center justify-between">
-              <dt>Delivery ({order.deliveryZoneName})</dt>
+              <dt>{order.fulfilmentMethod === "Pickup" ? "Pickup" : `Delivery (${order.deliveryZoneName})`}</dt>
               <dd className="font-number">{order.deliveryCharge === 0 ? "Free" : formatCurrency(order.deliveryCharge, order.currency)}</dd>
             </div>
             {order.tax > 0 && (
@@ -158,12 +159,25 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ or
         </CardHeader>
         <CardContent className="flex flex-col gap-4 sm:flex-row sm:justify-between">
           <div>
-            <p className="text-small font-medium text-charcoal">Shipping address</p>
-            <p className="text-small text-charcoal/70">
-              {order.shippingAddress.recipientName}, {order.shippingAddress.line1}
-              {order.shippingAddress.line2 ? `, ${order.shippingAddress.line2}` : ""}, {order.shippingAddress.city}
-              {order.shippingAddress.district ? `, ${order.shippingAddress.district}` : ""}
-            </p>
+            <p className="text-small font-medium text-charcoal">{order.fulfilmentMethod === "Pickup" ? "Collecting in person" : "Shipping address"}</p>
+            {order.fulfilmentMethod === "Pickup" ? (
+              <p className="text-small text-charcoal/70">
+                {order.shippingAddress.city} — {order.shippingAddress.line1}
+                {order.readyForPickupAt && <span className="mt-1 block text-leaf-dark">Ready for pickup since {formatDate(order.readyForPickupAt)}</span>}
+              </p>
+            ) : (
+              <p className="text-small text-charcoal/70">
+                {order.shippingAddress.recipientName}, {order.shippingAddress.line1}
+                {order.shippingAddress.line2 ? `, ${order.shippingAddress.line2}` : ""}, {order.shippingAddress.city}
+                {order.shippingAddress.district ? `, ${order.shippingAddress.district}` : ""}
+              </p>
+            )}
+            {order.travelerName && (
+              <p className="mt-1 text-small text-charcoal/70">
+                Traveler: {order.travelerName}
+                {order.travelerCountry ? ` (${order.travelerCountry})` : ""}
+              </p>
+            )}
           </div>
           <div>
             <p className="text-small font-medium text-charcoal">Payment</p>

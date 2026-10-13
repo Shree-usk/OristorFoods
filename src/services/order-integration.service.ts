@@ -18,8 +18,11 @@ import * as orderRepository from "@/repositories/order.repository";
 
 // STORY-032 added "order.dispatched"/"order.delivered" — order.service.ts's
 // transitionOrderStatus is the only place those statuses are ever reached,
-// and previously emitted no event at all.
-export type OrderEventType = "order.confirmed" | "order.cancelled" | "order.dispatched" | "order.delivered";
+// and previously emitted no event at all. Export fulfilment flow added
+// "order.ready_for_pickup" — emitted by markOrderReadyForPickup
+// (order-admin.service.ts), independent of the OrderStatus state machine,
+// since readyForPickupAt is informational/notification-triggering only.
+export type OrderEventType = "order.confirmed" | "order.cancelled" | "order.dispatched" | "order.delivered" | "order.ready_for_pickup";
 
 /** Must stay JSON-serializable — this is written straight to the OrderIntegrationEvent.payload Json column. */
 export interface OrderIntegrationEventPayload {

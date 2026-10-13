@@ -2060,6 +2060,17 @@ enum PaymentMethod {
   CashOnDelivery
 }
 
+// Export fulfilment flow. A customer declaring "Export" on a packaging
+// selection (see PackagingDeclaredAvailability) chooses between picking
+// the order up themselves (no shipping address needed at all — the one
+// fixed pickup location on CompanySetting applies) or having it delivered
+// through the existing Sri Lanka address/delivery-zone flow, same as any
+// standard order. Every standard order defaults Delivery.
+enum FulfilmentMethod {
+  Delivery
+  Pickup
+}
+
 model Order {
   id                    String                  @id @default(cuid())
   orderNumber           String                  @unique
@@ -2099,6 +2110,18 @@ model Order {
   // chose — defaults Card so every pre-Story-4 order (all of which went
   // through the one undifferentiated mock flow) backfills correctly.
   paymentMethod         PaymentMethod           @default(Card)
+  // Export fulfilment flow. Delivery for every standard order (default);
+  // Pickup only reachable via the export-declared checkout path (see
+  // checkout.service.ts). travelerName/Country/Phone are collected
+  // ONLY for an export-declared cart, regardless of Pickup vs Delivery —
+  // null for every standard order. readyForPickupAt is set once by the
+  // admin "Mark ready for pickup" action (Pickup orders only); it never
+  // drives OrderStatus, which stays on its own existing state machine.
+  fulfilmentMethod      FulfilmentMethod        @default(Delivery)
+  travelerName          String?
+  travelerCountry       String?
+  travelerPhone         String?
+  readyForPickupAt      DateTime?
   deliveryZoneName      String
   estimatedDaysMin      Int?
   estimatedDaysMax      Int?
@@ -2108,7 +2131,12 @@ model Order {
   trackingNumber        String?
   trackingUrl           String?
   // Immutable address snapshot — flattened copies, no relation, so later
-  // edits to a saved Address can never alter historical orders.
+  // edits to a saved Address can never alter historical orders. For a
+  // Pickup order (no real shipping address collected), these are
+  // synthesized from the traveler's own details + the admin's configured
+  // pickup location (see checkout.service.ts) — never left blank, so
+  // every existing consumer (admin order list, packing slip/shipping
+  // label PDFs) keeps working unmodified.
   shipRecipientName     String
   shipPhone             String
   shipLine1             String
@@ -2170,6 +2198,11 @@ model OrderItem {
   packagingCharge                Decimal?                        @db.Decimal(10, 2)
   packagingDeclaredAvailability PackagingDeclaredAvailability?
   packagingRequiresManualReview Boolean                          @default(false)
+  // Snapshot of ProductPackagingOption.customerInstructions — the "special
+  // conditions" text (e.g. advance-payment-only, non-returnable, minimum
+  // preparation days) admins enter per option, carried onto the order the
+  // same way every other packaging field already is.
+  packagingInstructions         String?
   unitPrice          Decimal         @db.Decimal(10, 2)
   quantity           Int
   lineTotal          Decimal         @db.Decimal(10, 2)
@@ -3400,6 +3433,15 @@ model CompanySetting {
   contactHeroHeadline    String?
   contactHeroSubcopy     String?
   contactLocationHeading String?
+  // Export fulfilment flow. One fixed pickup location (not a repeating
+  // list — confirmed scope) a customer collecting their own export order
+  // sees at checkout and on their confirmation. Deliberately separate
+  // from `address` above (the general business address) since this is
+  // specifically "where a customer picks up an order," which could
+  // differ from the registered business address.
+  pickupLocationName    String?
+  pickupLocationAddress String?
+  pickupLocationMapUrl  String?
   updatedAt              DateTime @updatedAt
 }
 
@@ -3519,6 +3561,25 @@ model PaymentMethodSetting {
   allowedForRestrictedOrders Boolean        @default(false)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+// Export fulfilment flow. Admin-entered bank accounts shown to every
+// customer who selects Bank Transfer at checkout — more than one is
+// expected (confirmed scope: the customer picks whichever account suits
+// them, e.g. by bank/currency, no server-side selection needed), so this
+// is a real list, same shape precedent as PaymentMethodSetting.
+model BankAccountSetting {
+  id            String   @id @default(cuid())
+  bankName      String
+  accountName   String
+  accountNumber String
+  branch        String?
+  swiftCode     String?
+  currency      String   @default("LKR")
+  enabled       Boolean  @default(true)
+  sortOrder     Int      @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 }
 
 model FeatureFlag {

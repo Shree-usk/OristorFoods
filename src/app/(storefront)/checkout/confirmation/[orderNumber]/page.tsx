@@ -90,6 +90,7 @@ export default async function OrderConfirmationPage({ params }: { params: Promis
                   {item.variantName && <span className="text-charcoal/70"> — {item.variantName}</span>} <span className="text-charcoal/70">× {item.quantity}</span>
                   {item.bundleName && <span className="ml-1 text-caption text-charcoal/60">(part of {item.bundleName})</span>}
                   {item.packagingMethodName && <span className="ml-1 text-caption text-charcoal/60">+ {item.packagingMethodName} packaging</span>}
+                  {item.packagingInstructions && <span className="mt-1 block text-caption text-chilli">{item.packagingInstructions}</span>}
                 </span>
                 <span className="font-number">
                   {order.currency} {item.lineTotal.toFixed(2)}
@@ -113,7 +114,7 @@ export default async function OrderConfirmationPage({ params }: { params: Promis
               </div>
             )}
             <div className="flex items-center justify-between">
-              <dt>Delivery ({order.deliveryZoneName})</dt>
+              <dt>{order.fulfilmentMethod === "Pickup" ? "Pickup" : `Delivery (${order.deliveryZoneName})`}</dt>
               <dd className="font-number">
                 {order.deliveryCharge === 0 ? "Free" : `${order.currency} ${order.deliveryCharge.toFixed(2)}`}
               </dd>
@@ -142,16 +143,34 @@ export default async function OrderConfirmationPage({ params }: { params: Promis
 
         <section aria-labelledby="confirmation-delivery" className="mt-6 rounded-lg border border-input p-6">
           <h2 id="confirmation-delivery" className="text-h4 font-heading text-charcoal">
-            Delivery
+            {order.fulfilmentMethod === "Pickup" ? "Collecting in person" : "Delivery"}
           </h2>
-          <p className="mt-2 text-body text-charcoal">
-            {order.shippingAddress.recipientName}, {order.shippingAddress.line1}
-            {order.shippingAddress.line2 ? `, ${order.shippingAddress.line2}` : ""}, {order.shippingAddress.city}
-            {order.shippingAddress.district ? `, ${order.shippingAddress.district}` : ""}
-            {order.shippingAddress.postalCode ? ` ${order.shippingAddress.postalCode}` : ""}
-          </p>
-          <p className="mt-1 text-small text-charcoal/70">{order.shippingAddress.phone}</p>
-          {window && <p className="mt-2 text-small text-charcoal/70">Estimated delivery: {window}</p>}
+          {order.fulfilmentMethod === "Pickup" ? (
+            <>
+              <p className="mt-2 text-body text-charcoal">{order.shippingAddress.recipientName}</p>
+              <p className="mt-1 text-small text-charcoal/70">
+                {order.shippingAddress.city} — {order.shippingAddress.line1}
+              </p>
+            </>
+          ) : (
+            <>
+              <p className="mt-2 text-body text-charcoal">
+                {order.shippingAddress.recipientName}, {order.shippingAddress.line1}
+                {order.shippingAddress.line2 ? `, ${order.shippingAddress.line2}` : ""}, {order.shippingAddress.city}
+                {order.shippingAddress.district ? `, ${order.shippingAddress.district}` : ""}
+                {order.shippingAddress.postalCode ? ` ${order.shippingAddress.postalCode}` : ""}
+              </p>
+              <p className="mt-1 text-small text-charcoal/70">{order.shippingAddress.phone}</p>
+              {window && <p className="mt-2 text-small text-charcoal/70">Estimated delivery: {window}</p>}
+            </>
+          )}
+          {order.travelerName && (
+            <p className="mt-2 text-small text-charcoal/70">
+              Traveler: {order.travelerName}
+              {order.travelerCountry ? ` (${order.travelerCountry})` : ""}
+              {order.travelerPhone ? ` · ${order.travelerPhone}` : ""}
+            </p>
+          )}
         </section>
 
         {isGuest && (

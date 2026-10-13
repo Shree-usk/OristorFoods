@@ -1,4 +1,4 @@
-import type { OrderStatus, PaymentMethod } from "@/generated/prisma/client";
+import type { FulfilmentMethod, OrderStatus, PaymentMethod } from "@/generated/prisma/client";
 import * as cartRepository from "@/repositories/cart.repository";
 import { findProductsByIdsWithPrimaryImage } from "@/repositories/product.repository";
 import * as orderRepository from "@/repositories/order.repository";
@@ -81,6 +81,8 @@ export interface OrderDetailLineItem {
   packagingMethodName?: string | null;
   packagingCharge?: number | null;
   packagingRequiresManualReview?: boolean;
+  /** Export fulfilment flow. Permanent snapshot of the "special conditions" the admin set on this packaging option. */
+  packagingInstructions?: string | null;
   unitPrice: number;
   quantity: number;
   lineTotal: number;
@@ -119,6 +121,13 @@ export interface OrderDetail {
   /** Story 4 (Payment Restriction). Permanent snapshot — independent of Payment.status (a Succeeded/Refunded/etc. transition never changes what the customer originally chose). */
   paymentMethod: PaymentMethod;
   rewardPointsEarned: number;
+  /** Export fulfilment flow. "Delivery" for every pre-existing order. */
+  fulfilmentMethod: FulfilmentMethod;
+  travelerName: string | null;
+  travelerCountry: string | null;
+  travelerPhone: string | null;
+  /** Export fulfilment flow. Set once an admin marks a Pickup order ready — null otherwise. */
+  readyForPickupAt: string | null;
   deliveryZoneName: string;
   estimatedDaysMin: number | null;
   estimatedDaysMax: number | null;
@@ -166,6 +175,7 @@ export async function getOrderDetail(orderNumber: string, userId: string): Promi
       packagingMethodName: item.packagingMethodName,
       packagingCharge: item.packagingCharge?.toNumber() ?? null,
       packagingRequiresManualReview: item.packagingRequiresManualReview,
+      packagingInstructions: item.packagingInstructions,
       unitPrice: item.unitPrice.toNumber(),
       quantity: item.quantity,
       lineTotal: item.lineTotal.toNumber(),
@@ -183,6 +193,11 @@ export async function getOrderDetail(orderNumber: string, userId: string): Promi
     currency: "LKR",
     paymentMethod: order.paymentMethod,
     rewardPointsEarned: order.rewardPointsEarned,
+    fulfilmentMethod: order.fulfilmentMethod,
+    travelerName: order.travelerName,
+    travelerCountry: order.travelerCountry,
+    travelerPhone: order.travelerPhone,
+    readyForPickupAt: order.readyForPickupAt?.toISOString() ?? null,
     deliveryZoneName: order.deliveryZoneName,
     estimatedDaysMin: order.estimatedDaysMin,
     estimatedDaysMax: order.estimatedDaysMax,

@@ -190,6 +190,7 @@ describe("Story 5: full epic integration — one cart, all four features togethe
     const result = await placeOrder(null, cookie, {
       idempotencyKey: crypto.randomUUID(),
       address,
+      traveler: { travelerName: "Jane Traveler", travelerCountry: "Australia", travelerPhone: "+94771234567" },
       guestEmail: "guest@test.com",
       providerReference: intent.providerReference,
       paymentMethod: "Card",
@@ -236,6 +237,7 @@ describe("Story 5: full epic integration — one cart, all four features togethe
     const result = await placeOrder(null, cookie, {
       idempotencyKey: crypto.randomUUID(),
       address,
+      traveler: { travelerName: "Jane Traveler", travelerCountry: "Australia", travelerPhone: "+94771234567" },
       guestEmail: "guest@test.com",
       providerReference: intent.providerReference,
       paymentMethod: "Card",
@@ -264,6 +266,7 @@ describe("Story 5: full epic integration — one cart, all four features togethe
     const result = await placeOrder(null, cookie, {
       idempotencyKey: crypto.randomUUID(),
       address,
+      traveler: { travelerName: "Jane Traveler", travelerCountry: "Australia", travelerPhone: "+94771234567" },
       guestEmail: "guest@test.com",
       providerReference: intent.providerReference,
       paymentMethod: "Card",

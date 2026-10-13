@@ -4,7 +4,8 @@ import type { OrderAdminListFilters } from "@/repositories/order.repository";
 import * as refundRecordRepository from "@/repositories/refund-record.repository";
 import * as returnRequestRepository from "@/repositories/return-request.repository";
 import type { OrderDetail, OrderDetailLineItem } from "@/services/customer-order-history.service";
-import { OrderHasNoPaymentError, OrderNotFoundError, OrderRefundAmountExceedsRemainingError } from "@/services/order.errors";
+import { emitOrderEvent } from "@/services/order-integration.service";
+import { OrderHasNoPaymentError, OrderNotFoundError, OrderNotPickupError, OrderRefundAmountExceedsRemainingError } from "@/services/order.errors";
 import { isTransitionAllowed, transitionOrderStatus } from "@/services/order.service";
 import { refundPayment } from "@/services/payment.service";
 import { writeAuditLog } from "@/services/audit-log.service";
@@ -104,6 +105,7 @@ export async function getOrderAdminDetail(adminUserId: string, orderId: string):
     packagingMethodName: item.packagingMethodName,
     packagingCharge: item.packagingCharge?.toNumber() ?? null,
     packagingRequiresManualReview: item.packagingRequiresManualReview,
+    packagingInstructions: item.packagingInstructions,
     unitPrice: item.unitPrice.toNumber(),
     quantity: item.quantity,
     lineTotal: item.lineTotal.toNumber(),
@@ -136,6 +138,11 @@ export async function getOrderAdminDetail(adminUserId: string, orderId: string):
     currency: "LKR",
     paymentMethod: order.paymentMethod,
     rewardPointsEarned: order.rewardPointsEarned,
+    fulfilmentMethod: order.fulfilmentMethod,
+    travelerName: order.travelerName,
+    travelerCountry: order.travelerCountry,
+    travelerPhone: order.travelerPhone,
+    readyForPickupAt: order.readyForPickupAt?.toISOString() ?? null,
     deliveryZoneName: order.deliveryZoneName,
     estimatedDaysMin: order.estimatedDaysMin,
     estimatedDaysMax: order.estimatedDaysMax,
@@ -188,6 +195,29 @@ export async function changeOrderStatus(adminUserId: string, orderId: string, to
   await requirePermission(adminUserId, "Orders", "Edit");
   const order = await transitionOrderStatus(orderId, to, `admin:${adminUserId}`);
   await writeAuditLog({ actorId: adminUserId, action: "order_status_changed", module: "Orders", targetType: "Order", targetId: orderId, metadata: { to } });
+  return order;
+}
+
+/**
+ * Export fulfilment flow. Deliberately independent of the OrderStatus
+ * state machine (see order.repository.ts::markOrderReadyForPickup) — an
+ * admin can mark a Pickup order ready regardless of its current status.
+ * Fires the "order.ready_for_pickup" notification the same way
+ * order.service.ts fires dispatched/delivered — after the write commits.
+ */
+export async function markOrderReadyForPickup(adminUserId: string, orderId: string) {
+  await requirePermission(adminUserId, "Orders", "Edit");
+  const order = await orderRepository.markOrderReadyForPickup(orderId);
+  if (!order) throw new OrderNotPickupError();
+
+  await writeAuditLog({ actorId: adminUserId, action: "order_marked_ready_for_pickup", module: "Orders", targetType: "Order", targetId: orderId, metadata: {} });
+
+  try {
+    await emitOrderEvent("order.ready_for_pickup", order.id, { orderNumber: order.orderNumber, userId: order.userId });
+  } catch (emitError) {
+    console.error(`[order-integration] failed to record order.ready_for_pickup for order ${order.orderNumber}`, emitError);
+  }
+
   return order;
 }
 

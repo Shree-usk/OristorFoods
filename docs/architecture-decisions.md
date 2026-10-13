@@ -10014,3 +10014,147 @@ has been tested end-to-end"), this is flagged explicitly rather than
 silently assumed — the end-to-end proof here is at the service layer
 (real Postgres, real Prisma transactions, no mocks), not a real
 browser session.
+
+## 2026-10-13 — Export Fulfilment & Enhanced Packaging Checkout
+
+User-requested feature, built on top of the just-closed 5-story Variants/
+Bundles/Packaging epic, filling in the originally-scoped-but-never-built
+"taking this abroad" checkout flow plus three refinements: (a) a packaging
+option's minimum quantity now auto-sets the PDP's quantity stepper instead
+of just disabling the chip; (b) `ProductPackagingOption.customerInstructions`
+(already admin-editable, already shown on the PDP) is now also snapshotted
+onto `OrderItem.packagingInstructions` and surfaced at checkout Review, the
+order confirmation page, the account order-detail page, and the admin
+order-detail view; (c) a genuine Pickup-vs-Deliver fork within the export
+flow, with a new traveler-details checkout step, admin-configurable
+multi-account Bank Transfer details, and an admin "Mark ready for pickup"
+action with its own notification template.
+
+**Three design decisions locked via AskUserQuestion before writing any
+code** (do not re-litigate):
+1. Pickup skips the normal address/delivery-zone step entirely (fixed
+   pickup location + map shown instead); Deliver goes through the normal
+   Sri Lanka address/delivery-zone flow exactly like any standard order,
+   with the extra traveler fields added on top.
+2. The "name, country of visiting, local contact number" collection is a
+   brand-new checkout step (`ExportDetailsStep`), shown only when the cart
+   has an export-declared packaging line — not folded into the existing
+   Address step, and required for BOTH the Pickup and Deliver sub-choices.
+3. For Bank Transfer, the customer sees every active bank account an admin
+   has configured and picks whichever suits them (e.g. by currency) — no
+   server-side account selection/recording.
+
+**Schema** (additive only, migration
+`20261013150000_add_export_fulfilment`): new `FulfilmentMethod` enum
+(`Delivery`/`Pickup`, default `Delivery`); `Order` gains
+`fulfilmentMethod`/`travelerName`/`travelerCountry`/`travelerPhone`/
+`readyForPickupAt`; `OrderItem` gains `packagingInstructions` (permanent
+snapshot — `ProductPackagingOption.customerInstructions` already existed,
+this just gives it an order-level home); `CompanySetting` gains
+`pickupLocationName`/`pickupLocationAddress`/`pickupLocationMapUrl` (null
+until an admin sets them, which is also what disables the Pickup choice
+storewide — no separate feature flag); new `BankAccountSetting` model
+(bank/account/branch/SWIFT/currency/enabled/sortOrder), independent of the
+decorative-until-Story-4 `PaymentMethodSetting` list.
+
+**`checkout.service.ts`** is where almost all the real logic lives:
+- `requiresExportDetails(lines)` — `lines.some(line =>
+  line.packagingDeclaredAvailability === "Export")`. Computed fresh from
+  the live, re-validated cart on every call (never trusted from client
+  state), exactly like every other cart-derived checkout gate in this
+  file.
+- `createIntentForCart` gained a 5th parameter, `fulfilmentMethod:
+  FulfilmentMethod = "Delivery"`, and `city` became `string | null` (null
+  only valid for Pickup). Refactored so `resolveDiscountForCart` is called
+  exactly once either way, with `rawDeliveryCharge` as 0 (Pickup) or the
+  real zone charge (Delivery/non-export) feeding into it — not two
+  branches each separately calling discount resolution, which would have
+  diverged from the pre-existing single-call structure.
+- `placeOrder` resolves `fulfilmentMethod` (defaults `"Delivery"` when
+  omitted, matching every historical caller), throws
+  `ExportDetailsRequiredError` if the cart needs export details but no
+  `traveler` was supplied, throws `PickupUnavailableError` if `Pickup` is
+  requested on a non-export cart or with no pickup location configured.
+  For Pickup, ship* fields are synthesized (`shipRecipientName`/`shipPhone`
+  from the traveler, `shipLine1`/`shipCity` from the admin's pickup
+  location) rather than making the NOT-NULL ship* columns nullable — the
+  same "avoid a disruptive migration/code sweep" call made for Story 3's
+  packaging charge snapshot.
+- `toConfirmationSummary` and the `customer-order-history.service.ts` /
+  `order-admin.service.ts` equivalents all gained the same additive
+  `fulfilmentMethod`/traveler/`readyForPickupAt`/`packagingInstructions`
+  mapping, in one shared shape (`OrderDetail` in
+  `customer-order-history.service.ts`, which `OrderAdminDetail` already
+  structurally extends) — so the account order-detail page, the admin
+  order-detail view, and the confirmation page all got the new fields from
+  one set of edits, not three.
+
+**Checkout wizard**: `CheckoutStep` widened from `1|2|3|4` to `1|2|3|4|5`
+with fixed semantic slots (1 Export Details, 2 Address, 3 Delivery, 4
+Payment, 5 Review). A non-export cart never shows step 1 — `checkout-
+wizard.tsx` computes `effectiveStep = step === 1 && !requiresExportDetails
+? 2 : step` purely at render time (no `useEffect`+`setState` sync, per
+this project's established React-Compiler-safe discipline) and builds a
+`CheckoutStepIndicator`-filtered step list from `requiresExportDetails`/
+`isPickup`. For Pickup, `ExportDetailsStep`'s continue jumps straight to
+step 4 (Payment), skipping Address/Delivery entirely; every other step's
+`goToStep()` call numbers shifted by the slot each one now occupies.
+`checkout-store.ts` gained `fulfilmentMethod`/`traveler` state and a
+`setExportDetails` action that voids every downstream field (address,
+delivery, payment) the same way `setAddress` already does.
+
+**MOQ auto-select**: `packaging-selector.tsx` no longer disables a
+minimum-quantity option — `product-purchase-panel.tsx` now owns a
+`quantity` stepper (new; none existed on the PDP before this feature) and
+bumps it to the option's `minQuantity` on selection (never down), via a
+`handlePackagingChange` wrapper around the existing `onChange` prop.
+`ProductActions`/`useAddToCart` already accepted an optional quantity
+argument end-to-end — this was wiring a UI control onto an existing,
+unused parameter, not new plumbing.
+
+**"Mark ready for pickup"**: deliberately independent of the `OrderStatus`
+state machine (`order.repository.ts::markOrderReadyForPickup` just writes
+`readyForPickupAt`, gated only on `fulfilmentMethod === "Pickup"`) — an
+admin can mark a Pickup order ready regardless of its current status,
+mirroring the brief's framing of "ready for pickup" as a fact about the
+physical goods, not a lifecycle stage. Fires a new `order.ready_for_pickup`
+event through the existing `order-integration.service.ts` outbox +
+`notification.service.ts`'s generic event-to-template dispatch (the same
+infra `order.dispatched`/`order.delivered` already use) — a new
+`ORDER_EVENT_TEMPLATE_KEYS` entry and a new seeded template in
+`prisma/seed-notifications.ts` were the only additions needed; zero new
+notification plumbing.
+
+**Testing note**: all new `placeOrder`/`createIntentForCart` tests needed
+real traveler details once a line is Export-declared — three pre-existing
+Story 3/5 tests (`checkout-service.test.ts`,
+`epic-integration.test.ts` ×3) used `declaredAvailability: "Export"`
+without a traveler and started failing against the new
+`ExportDetailsRequiredError` gate; fixed by adding `traveler` to each call,
+not by weakening the gate. New coverage: a dedicated "Export Fulfilment
+Flow" describe block in `checkout-service.test.ts` (Pickup rejected off a
+non-export cart, Pickup rejected with no pickup location configured,
+`ExportDetailsRequiredError` on a bare export cart, a full successful
+Pickup order with ship-field/traveler assertions, and a Deliver-within-
+export-flow order proving the normal zone/charge path still runs) and a
+new "Export fulfilment flow" describe block in
+`system-settings-service.test.ts` (`getPickupLocation`'s both-fields-
+required null behavior, bank-account CRUD permission gating, and the
+customer-facing read returning only enabled accounts).
+
+**PGlite wedged again during this pass's test run** (`P1001` on a plain
+`npx prisma db push`) — recovered via the established ritual (kill the
+listening `prisma dev` process via its PID from `Get-NetTCPConnection`,
+delete `Data\default\server.json`, `Data\durable-streams\default\
+server.json`/`server.lock.lock`/`server.lock`, restart via `nohup npx
+prisma dev &`). The restart reset the database to empty exactly as the
+known gotcha warns — confirmed via a throwaway `tsx` script counting
+`Product`/`Order`/`User` rows (all 0 immediately after restart), then
+fixed with `npx prisma db seed`. Flagging again here since this is at
+least the sixth occurrence this session: the recovery ritual works, but
+always re-seed and never assume "db push succeeded" means "data survived."
+
+**Not yet done**: deployment (schema/migration applied locally only, not
+on the VPS; no commit/branch/PR created — all changes sit uncommitted on
+`master` pending the user's explicit go-ahead, per this session's
+established per-step confirmation convention).

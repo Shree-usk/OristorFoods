@@ -1,5 +1,5 @@
 import { readApiError } from "@/lib/api/api-error";
-import type { DeliveryResolution, EligiblePaymentMethod, PaymentIntentResult, PaymentMethod, SavedAddress } from "@/types/checkout";
+import type { CheckoutBankAccount, DeliveryResolution, EligiblePaymentMethod, FulfilmentMethod, PaymentIntentResult, PaymentMethod, PickupLocation, SavedAddress } from "@/types/checkout";
 import type { CheckoutAddressInput, PlaceOrderInput } from "@/validation/checkout.schema";
 
 /**
@@ -48,15 +48,33 @@ export async function fetchEligiblePaymentMethods(): Promise<EligiblePaymentMeth
   return (await response.json()) as EligiblePaymentMethod[];
 }
 
-export async function createPaymentIntent(city: string, paymentMethod: PaymentMethod): Promise<PaymentIntentResult> {
+export async function createPaymentIntent(
+  city: string | null,
+  paymentMethod: PaymentMethod,
+  fulfilmentMethod: FulfilmentMethod = "Delivery",
+): Promise<PaymentIntentResult> {
   const response = await fetch("/api/checkout/payment/intent", {
     method: "POST",
     credentials: "include",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ city, paymentMethod }),
+    body: JSON.stringify({ city: city ?? undefined, paymentMethod, fulfilmentMethod }),
   });
   if (!response.ok) throw await readApiError(response);
   return (await response.json()) as PaymentIntentResult;
+}
+
+/** Export fulfilment flow. Null until an admin has configured a pickup location. */
+export async function fetchPickupLocation(): Promise<PickupLocation | null> {
+  const response = await fetch("/api/checkout/pickup-location", { credentials: "include" });
+  if (!response.ok) throw await readApiError(response);
+  return (await response.json()) as PickupLocation | null;
+}
+
+/** Export fulfilment flow. Every active bank account — shown once the customer chooses Bank Transfer. */
+export async function fetchCheckoutBankAccounts(): Promise<CheckoutBankAccount[]> {
+  const response = await fetch("/api/checkout/bank-accounts", { credentials: "include" });
+  if (!response.ok) throw await readApiError(response);
+  return (await response.json()) as CheckoutBankAccount[];
 }
 
 export async function confirmPayment(

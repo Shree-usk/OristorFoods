@@ -3,12 +3,24 @@
 import { cn } from "@/lib/utils";
 import { CHECKOUT_STEPS, type CheckoutStep } from "@/lib/stores/checkout-store";
 
-export function CheckoutStepIndicator({ currentStep }: { currentStep: CheckoutStep }) {
+/**
+ * `steps` is a list of { number, label } pairs rather than always
+ * CHECKOUT_STEPS.map((label, i) => i + 1) — a non-export cart never shows
+ * step 1 (Export Details) at all, so the caller (checkout-wizard.tsx)
+ * passes the filtered, renumbered-for-display list that actually applies
+ * to the current cart.
+ */
+export function CheckoutStepIndicator({
+  currentStep,
+  steps = CHECKOUT_STEPS.map((label, index) => ({ number: (index + 1) as CheckoutStep, label })),
+}: {
+  currentStep: CheckoutStep;
+  steps?: { number: CheckoutStep; label: string }[];
+}) {
   return (
     <nav aria-label="Checkout progress">
       <ol className="flex flex-wrap items-center gap-2 sm:gap-4">
-        {CHECKOUT_STEPS.map((label, index) => {
-          const stepNumber = index + 1;
+        {steps.map(({ number: stepNumber, label }, index) => {
           const isCurrent = stepNumber === currentStep;
           const isComplete = stepNumber < currentStep;
           return (
@@ -22,13 +34,13 @@ export function CheckoutStepIndicator({ currentStep }: { currentStep: CheckoutSt
                   !isCurrent && !isComplete && "border-input text-charcoal/70",
                 )}
               >
-                {isComplete ? "✓" : stepNumber}
+                {isComplete ? "✓" : index + 1}
               </span>
               <span className={cn("text-small", isCurrent ? "font-semibold text-charcoal" : "text-charcoal/70")}>
                 {label}
                 {isComplete && <span className="sr-only"> (completed)</span>}
               </span>
-              {stepNumber < CHECKOUT_STEPS.length && <span aria-hidden="true" className="hidden text-charcoal/30 sm:inline">—</span>}
+              {index < steps.length - 1 && <span aria-hidden="true" className="hidden text-charcoal/30 sm:inline">—</span>}
             </li>
           );
         })}
