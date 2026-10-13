@@ -153,12 +153,17 @@ export async function updateLowStockThreshold(lowStockThreshold: number): Promis
   return response.json();
 }
 
+/** Story 4 (Payment Restriction). Mirrors the Prisma PaymentMethod enum's exact values. */
+export type PaymentMethodTag = "Card" | "BankTransfer" | "CashOnDelivery";
+
 export interface PaymentMethodSetting {
   id: string;
   key: string;
   label: string;
   enabled: boolean;
   sortOrder: number;
+  method: PaymentMethodTag | null;
+  allowedForRestrictedOrders: boolean;
 }
 
 export async function fetchPaymentMethods(): Promise<PaymentMethodSetting[]> {
@@ -167,13 +172,21 @@ export async function fetchPaymentMethods(): Promise<PaymentMethodSetting[]> {
   return response.json();
 }
 
-export async function createPaymentMethod(input: { key: string; label: string; enabled: boolean }): Promise<PaymentMethodSetting> {
+export interface PaymentMethodAdminInput {
+  key: string;
+  label: string;
+  enabled: boolean;
+  method?: PaymentMethodTag | null;
+  allowedForRestrictedOrders?: boolean;
+}
+
+export async function createPaymentMethod(input: PaymentMethodAdminInput): Promise<PaymentMethodSetting> {
   const response = await fetch("/api/admin/settings/payment-methods", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(input) });
   await assertOkWithServerMessage(response, "Failed to add the payment method");
   return response.json();
 }
 
-export async function updatePaymentMethod(id: string, input: { label?: string; enabled?: boolean }): Promise<PaymentMethodSetting> {
+export async function updatePaymentMethod(id: string, input: Partial<Omit<PaymentMethodAdminInput, "key">>): Promise<PaymentMethodSetting> {
   const response = await fetch(`/api/admin/settings/payment-methods/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(input) });
   await assertOkWithServerMessage(response, "Failed to update the payment method");
   return response.json();

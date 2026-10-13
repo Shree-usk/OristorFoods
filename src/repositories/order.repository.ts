@@ -2,7 +2,7 @@ import { prisma } from "@/lib/db";
 import { createRedemption } from "@/repositories/coupon.repository";
 import { createRedeemedTransaction } from "@/repositories/rewards.repository";
 import { ConcurrentTransitionError, InsufficientStockError } from "@/services/order.errors";
-import type { OrderStatus, Prisma } from "@/generated/prisma/client";
+import type { OrderStatus, PaymentMethod, Prisma } from "@/generated/prisma/client";
 
 /**
  * The only place Order/OrderItem/OrderStatusHistory/OrderIntegrationEvent
@@ -83,6 +83,8 @@ export interface CreateOrderInput {
   pointsRedemption: { userId: string; points: number } | null;
   /** Story 3 (Custom Packaging). True when any line's packaging option requires manual review — the order is created PendingConfirmation instead of Confirmed. Omitted/false for every pre-packaging caller, which still produces "Confirmed" byte-for-byte. */
   requiresManualReview?: boolean;
+  /** Story 4 (Payment Restriction). Omitted only by pre-Story-4 test callers — the schema column defaults "Card" when omitted from the create data, matching every historical order's actual payment flow. */
+  paymentMethod?: PaymentMethod;
 }
 
 /**
@@ -151,6 +153,7 @@ export function createOrderWithStockDecrement(input: CreateOrderInput) {
         grandTotal: input.grandTotal,
         rewardPointsEarned: input.rewardPointsEarned,
         paymentId: input.paymentId,
+        paymentMethod: input.paymentMethod,
         deliveryZoneName: input.deliveryZoneName,
         estimatedDaysMin: input.estimatedDaysMin,
         estimatedDaysMax: input.estimatedDaysMax,
@@ -322,6 +325,22 @@ export async function applyStatusTransition(orderId: string, expectedCurrentStat
     if (updated.count === 0) throw new ConcurrentTransitionError();
 
     await tx.orderStatusHistory.create({ data: { orderId, status: to, actor } });
+
+    // Story 4 (Payment Restriction). Confirming a PendingConfirmation
+    // bank-transfer order IS "the existing payment-verification workflow"
+    // the brief asks for — no separate admin action, reusing the exact
+    // generic status-transition button Story 3's packaging review already
+    // uses. The linked Payment only flips Pending -> Succeeded here, never
+    // backwards, and never for Card (already Succeeded via the mock
+    // provider before checkout ever placed the order) or CashOnDelivery
+    // (collected physically at delivery, outside this flow entirely).
+    if (expectedCurrentStatus === "PendingConfirmation" && to === "Confirmed") {
+      const order = await tx.order.findUniqueOrThrow({ where: { id: orderId }, select: { paymentMethod: true, paymentId: true } });
+      if (order.paymentMethod === "BankTransfer" && order.paymentId) {
+        await tx.payment.updateMany({ where: { id: order.paymentId, status: "Pending" }, data: { status: "Succeeded" } });
+      }
+    }
+
     return tx.order.findUniqueOrThrow({ where: { id: orderId }, include: { items: true } });
   });
 }

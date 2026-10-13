@@ -2049,6 +2049,17 @@ enum OrderStatus {
   Returned
 }
 
+// Story 4 (Payment Restriction). The concrete, checkout-selectable payment
+// methods — distinct from PaymentMethodSetting's own free-form `key`
+// (which also covers any future non-checkout-wired entries an admin adds).
+// A PaymentMethodSetting row only participates in real checkout logic once
+// an admin tags it with one of these.
+enum PaymentMethod {
+  Card
+  BankTransfer
+  CashOnDelivery
+}
+
 model Order {
   id                    String                  @id @default(cuid())
   orderNumber           String                  @unique
@@ -2084,6 +2095,10 @@ model Order {
   cancellationReason    String?                 @db.VarChar(500)
   paymentId             String?                 @unique
   payment               Payment?                @relation(fields: [paymentId], references: [id], onDelete: SetNull)
+  // Story 4 (Payment Restriction). Permanent snapshot of what the customer
+  // chose — defaults Card so every pre-Story-4 order (all of which went
+  // through the one undifferentiated mock flow) backfills correctly.
+  paymentMethod         PaymentMethod           @default(Card)
   deliveryZoneName      String
   estimatedDaysMin      Int?
   estimatedDaysMax      Int?
@@ -3489,11 +3504,19 @@ model TaxRateRule {
 // 10), so this lists configured methods generically rather than
 // hardcoding one gateway's shape.
 model PaymentMethodSetting {
-  id        String   @id @default(cuid())
-  key       String   @unique
+  id        String         @id @default(cuid())
+  key       String         @unique
   label     String
-  enabled   Boolean  @default(true)
-  sortOrder Int      @default(0)
+  enabled   Boolean        @default(true)
+  sortOrder Int            @default(0)
+  // Story 4 (Payment Restriction). Optional tag connecting a row to real
+  // checkout logic — a row with no `method` stays purely decorative, same
+  // as every row before this story. `allowedForRestrictedOrders` is the
+  // admin-configurable source of truth for "card + bank transfer only"
+  // (brief Section 6) rather than hardcoding those two keys in code, per
+  // this project's "manageable through the Admin Console" principle.
+  method                     PaymentMethod? @unique
+  allowedForRestrictedOrders Boolean        @default(false)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }

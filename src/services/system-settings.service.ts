@@ -1,9 +1,9 @@
-import { Prisma, type TaxPricingDisplayMode } from "@/generated/prisma/client";
+import { Prisma, type PaymentMethod, type TaxPricingDisplayMode } from "@/generated/prisma/client";
 import { contactInfo as staticContactInfo } from "@/lib/footer-config";
 import * as systemSettingsRepository from "@/repositories/system-settings.repository";
 import * as shippingRepository from "@/repositories/shipping.repository";
 import { writeAuditLog } from "@/services/audit-log.service";
-import { FeatureFlagKeyConflictError, PaymentMethodKeyConflictError } from "@/services/system-settings.errors";
+import { FeatureFlagKeyConflictError, PaymentMethodKeyConflictError, PaymentMethodTagConflictError } from "@/services/system-settings.errors";
 import { requirePermission } from "@/services/permission.service";
 
 /**
@@ -187,10 +187,26 @@ export async function listPaymentMethods(adminUserId: string) {
   return systemSettingsRepository.listPaymentMethods();
 }
 
-export async function createPaymentMethod(adminUserId: string, input: { key: string; label: string; enabled: boolean }) {
+interface PaymentMethodAdminInput {
+  key: string;
+  label: string;
+  enabled: boolean;
+  /** Story 4 (Payment Restriction). Tags this row as one of checkout's real, selectable methods — null/omitted keeps it purely decorative, same as every row before Story 4. */
+  method?: PaymentMethod | null;
+  allowedForRestrictedOrders?: boolean;
+}
+
+async function requireNoPaymentMethodTagConflict(method: PaymentMethod | null | undefined, excludeId?: string) {
+  if (!method) return;
+  const existing = await systemSettingsRepository.findPaymentMethodByMethod(method);
+  if (existing && existing.id !== excludeId) throw new PaymentMethodTagConflictError();
+}
+
+export async function createPaymentMethod(adminUserId: string, input: PaymentMethodAdminInput) {
   await requirePermission(adminUserId, "SystemSettings", "Edit");
   const existing = await systemSettingsRepository.listPaymentMethods();
   if (existing.some((method) => method.key === input.key)) throw new PaymentMethodKeyConflictError();
+  await requireNoPaymentMethodTagConflict(input.method);
 
   const sortOrder = await systemSettingsRepository.nextPaymentMethodSortOrder();
   const method = await systemSettingsRepository.createPaymentMethod({ ...input, sortOrder });
@@ -198,8 +214,9 @@ export async function createPaymentMethod(adminUserId: string, input: { key: str
   return method;
 }
 
-export async function updatePaymentMethod(adminUserId: string, id: string, input: { label?: string; enabled?: boolean }) {
+export async function updatePaymentMethod(adminUserId: string, id: string, input: Omit<Partial<PaymentMethodAdminInput>, "key">) {
   await requirePermission(adminUserId, "SystemSettings", "Edit");
+  await requireNoPaymentMethodTagConflict(input.method, id);
   const method = await systemSettingsRepository.updatePaymentMethod(id, input);
   await writeAuditLog({ actorId: adminUserId, action: "payment_method_updated", module: "SystemSettings", targetType: "PaymentMethodSetting", targetId: id });
   return method;

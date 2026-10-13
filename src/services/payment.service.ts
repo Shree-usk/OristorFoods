@@ -1,3 +1,5 @@
+import { randomBytes } from "node:crypto";
+
 import * as paymentRepository from "@/repositories/payment.repository";
 import {
   PaymentNotFoundError,
@@ -30,6 +32,29 @@ export async function createPaymentIntent(amount: number, currency: string): Pro
   const intent = await provider.createIntent({ amount, currency });
   await paymentRepository.createPayment(provider.name, intent.providerReference, amount.toFixed(2), currency);
   return { providerReference: intent.providerReference, amount, currency };
+}
+
+/**
+ * Story 4 (Payment Restriction). Bank transfer and Cash on Delivery have
+ * no real-time gateway confirmation — there is no "provider" to call at
+ * all, so this bypasses the PaymentProvider interface entirely and writes
+ * the Payment row directly, left Pending (brief: "Do not mark an order
+ * paid solely because a customer selected card or bank transfer"). A
+ * bank-transfer Payment later flips to Succeeded when an admin confirms
+ * the order (order.repository.ts::applyStatusTransition); a
+ * CashOnDelivery Payment is never flipped by this codebase — settlement
+ * happens physically at delivery, outside this story's scope. Returns the
+ * same PaymentIntentResult shape createPaymentIntent does, so checkout.service.ts
+ * and the storefront wizard handle every method uniformly from here on.
+ */
+export async function createManualPaymentIntent(
+  provider: "bank_transfer" | "cod",
+  amount: number,
+  currency: string,
+): Promise<PaymentIntentResult> {
+  const providerReference = `${provider}_${randomBytes(12).toString("hex")}`;
+  await paymentRepository.createPayment(provider, providerReference, amount.toFixed(2), currency);
+  return { providerReference, amount, currency };
 }
 
 export interface ConfirmPaymentResult {

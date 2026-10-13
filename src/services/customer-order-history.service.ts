@@ -1,4 +1,4 @@
-import type { OrderStatus } from "@/generated/prisma/client";
+import type { OrderStatus, PaymentMethod } from "@/generated/prisma/client";
 import * as cartRepository from "@/repositories/cart.repository";
 import { findProductsByIdsWithPrimaryImage } from "@/repositories/product.repository";
 import * as orderRepository from "@/repositories/order.repository";
@@ -116,6 +116,8 @@ export interface OrderDetail {
   tax: number;
   grandTotal: number;
   currency: string;
+  /** Story 4 (Payment Restriction). Permanent snapshot — independent of Payment.status (a Succeeded/Refunded/etc. transition never changes what the customer originally chose). */
+  paymentMethod: PaymentMethod;
   rewardPointsEarned: number;
   deliveryZoneName: string;
   estimatedDaysMin: number | null;
@@ -179,6 +181,7 @@ export async function getOrderDetail(orderNumber: string, userId: string): Promi
     tax: order.tax.toNumber(),
     grandTotal: order.grandTotal.toNumber(),
     currency: "LKR",
+    paymentMethod: order.paymentMethod,
     rewardPointsEarned: order.rewardPointsEarned,
     deliveryZoneName: order.deliveryZoneName,
     estimatedDaysMin: order.estimatedDaysMin,

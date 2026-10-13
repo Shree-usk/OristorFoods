@@ -255,6 +255,9 @@ export function AdminOrderDetailView({ orderId }: { orderId: string }) {
           )}
 
           <h2 className="mt-6 text-h4 font-heading text-charcoal">Payment</h2>
+          <p className="mt-1 text-small text-charcoal/70">
+            Method: {order.paymentMethod === "Card" ? "Card" : order.paymentMethod === "BankTransfer" ? "Bank Transfer" : "Cash on Delivery"}
+          </p>
           {order.payment ? (
             <p className="mt-2 text-small text-charcoal/80">
               {order.payment.provider} — {order.payment.status} — {formatCurrency(order.payment.amount, order.payment.currency)}

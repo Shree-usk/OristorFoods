@@ -49,9 +49,13 @@ export const checkoutDeliverySchema = z.object({
 
 export type CheckoutDeliveryInput = z.infer<typeof checkoutDeliverySchema>;
 
+/** Story 4 (Payment Restriction). Mirrors the Prisma PaymentMethod enum's exact values. */
+export const paymentMethodSchema = z.enum(["Card", "BankTransfer", "CashOnDelivery"]);
+
 /** Step 3 payload: intent creation — amount is always computed server-side. */
 export const checkoutPaymentIntentSchema = z.object({
   city: trimmedRequired("City", 100),
+  paymentMethod: paymentMethodSchema,
 });
 
 export type CheckoutPaymentIntentInput = z.infer<typeof checkoutPaymentIntentSchema>;
@@ -61,6 +65,7 @@ export const placeOrderSchema = z.object({
   address: checkoutAddressSchema,
   guestEmail: z.email("Enter a valid email address").optional(),
   providerReference: trimmedRequired("Payment reference", 128),
+  paymentMethod: paymentMethodSchema,
   save: z.boolean().optional(),
 });
 

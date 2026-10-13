@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { prisma } from "@/lib/db";
 import { createProduct } from "@/repositories/product.repository";
@@ -9,12 +9,14 @@ import {
   DeliveryUnavailableError,
   EmptyCartError,
   GuestEmailRequiredError,
+  PaymentMethodNotAllowedError,
   PaymentNotConfirmedError,
   TotalsChangedError,
 } from "@/services/checkout.errors";
 import {
   createIntentForCart,
   getConfirmation,
+  listEligiblePaymentMethods,
   listSavedAddresses,
   placeOrder,
   resolveDeliveryForCart,
@@ -95,6 +97,29 @@ async function makePackagingOption(productId: string, overrides: Record<string, 
   return prisma.productPackagingOption.create({ data: { productId, packagingMethodId: method.id, charge: "50.00", ...overrides } });
 }
 
+/**
+ * Story 4 (Payment Restriction). Every createIntentForCart/placeOrder call
+ * now requires at least one admin-configured, enabled PaymentMethodSetting
+ * row to exist — exactly the real-world prerequisite the brief's Admin
+ * Console Principle asks for (nothing hardcoded; an admin who hasn't
+ * configured any payment methods yet genuinely can't take orders).
+ * Seeded fresh before every test here so the pre-existing (pre-Story-4)
+ * tests below keep exercising Card's own flow unchanged.
+ */
+async function seedPaymentMethods() {
+  await prisma.paymentMethodSetting.createMany({
+    data: [
+      { key: "card", label: "Card", enabled: true, sortOrder: 0, method: "Card", allowedForRestrictedOrders: true },
+      { key: "bank_transfer", label: "Bank Transfer", enabled: true, sortOrder: 1, method: "BankTransfer", allowedForRestrictedOrders: true },
+      { key: "cash_on_delivery", label: "Cash on Delivery", enabled: true, sortOrder: 2, method: "CashOnDelivery", allowedForRestrictedOrders: false },
+    ],
+  });
+}
+
+beforeEach(async () => {
+  await seedPaymentMethods();
+});
+
 afterEach(async () => {
   await prisma.orderStatusHistory.deleteMany();
   await prisma.orderItem.deleteMany();
@@ -113,6 +138,7 @@ afterEach(async () => {
   await prisma.productVariant.deleteMany({ where: { sku: { startsWith: "CHK-SVC-VARIANT-SKU-" } } });
   await prisma.product.deleteMany({ where: { sku: { startsWith: "CHK-SVC-SKU-" } } });
   await prisma.user.deleteMany({ where: { email: { contains: "chk-svc-" } } });
+  await prisma.paymentMethodSetting.deleteMany();
 });
 
 describe("resolveDeliveryForCart", () => {
@@ -145,7 +171,7 @@ describe("createIntentForCart", () => {
     const product = await makeProduct();
     const cookie = await guestCartWith(product.id, 2);
 
-    const intent = await createIntentForCart(null, cookie, "Colombo");
+    const intent = await createIntentForCart(null, cookie, "Colombo", "Card");
     expect(intent.amount).toBe(2350); // 2 × 1000 + 350 flat
 
     const payment = await prisma.payment.findUnique({ where: { providerReference: intent.providerReference } });
@@ -157,13 +183,13 @@ describe("createIntentForCart", () => {
     const product = await makeProduct();
     const cookie = await guestCartWith(product.id, 2);
 
-    await expect(createIntentForCart(null, cookie, "Jaffna")).rejects.toBeInstanceOf(DeliveryUnavailableError);
+    await expect(createIntentForCart(null, cookie, "Jaffna", "Card")).rejects.toBeInstanceOf(DeliveryUnavailableError);
   });
 });
 
 describe("placeOrder", () => {
   async function checkoutToConfirmedPayment(cookie: string) {
-    const intent = await createIntentForCart(null, cookie, "Colombo");
+    const intent = await createIntentForCart(null, cookie, "Colombo", "Card");
     await confirmPayment(intent.providerReference, { outcome: "success" });
     return intent;
   }
@@ -179,6 +205,7 @@ describe("placeOrder", () => {
       address,
       guestEmail: "guest@test.com",
       providerReference: intent.providerReference,
+      paymentMethod: "Card",
     });
 
     expect(result.replayed).toBe(false);
@@ -209,7 +236,7 @@ describe("placeOrder", () => {
     const intent = await checkoutToConfirmedPayment(cookie);
 
     await expect(
-      placeOrder(null, cookie, { idempotencyKey: crypto.randomUUID(), address, providerReference: intent.providerReference }),
+      placeOrder(null, cookie, { idempotencyKey: crypto.randomUUID(), address, providerReference: intent.providerReference, paymentMethod: "Card" }),
     ).rejects.toBeInstanceOf(GuestEmailRequiredError);
   });
 
@@ -217,7 +244,7 @@ describe("placeOrder", () => {
     await makeZone();
     const product = await makeProduct();
     const cookie = await guestCartWith(product.id, 2);
-    const intent = await createIntentForCart(null, cookie, "Colombo"); // never confirmed
+    const intent = await createIntentForCart(null, cookie, "Colombo", "Card"); // never confirmed
 
     await expect(
       placeOrder(null, cookie, {
@@ -225,6 +252,7 @@ describe("placeOrder", () => {
         address,
         guestEmail: "guest@test.com",
         providerReference: intent.providerReference,
+        paymentMethod: "Card",
       }),
     ).rejects.toBeInstanceOf(PaymentNotConfirmedError);
   });
@@ -244,6 +272,7 @@ describe("placeOrder", () => {
         address,
         guestEmail: "guest@test.com",
         providerReference: intent.providerReference,
+        paymentMethod: "Card",
       }),
     ).rejects.toBeInstanceOf(TotalsChangedError);
 
@@ -258,7 +287,7 @@ describe("placeOrder", () => {
     const cookie = await guestCartWith(product.id, 2);
     const intent = await checkoutToConfirmedPayment(cookie);
     const idempotencyKey = crypto.randomUUID();
-    const input = { idempotencyKey, address, guestEmail: "guest@test.com", providerReference: intent.providerReference };
+    const input = { idempotencyKey, address, guestEmail: "guest@test.com", providerReference: intent.providerReference, paymentMethod: "Card" as const };
 
     const first = await placeOrder(null, cookie, input);
     const retry = await placeOrder(null, cookie, input); // cart is empty now — must not reject
@@ -277,13 +306,14 @@ describe("placeOrder", () => {
     const user = await prisma.user.create({ data: { email: `chk-svc-${sequence}@test.com` } });
     const product = await makeProduct();
     await addItem(user.id, undefined, product.id, 1);
-    const intent = await createIntentForCart(user.id, undefined, "Colombo");
+    const intent = await createIntentForCart(user.id, undefined, "Colombo", "Card");
     await confirmPayment(intent.providerReference, { outcome: "success" });
 
     await placeOrder(user.id, undefined, {
       idempotencyKey: crypto.randomUUID(),
       address,
       providerReference: intent.providerReference,
+      paymentMethod: "Card",
       save: true,
     });
 
@@ -304,7 +334,7 @@ describe("placeOrder — variants", () => {
       { variantId: large.id, quantity: 1 },
     ]);
 
-    const intent = await createIntentForCart(null, cookie, "Colombo");
+    const intent = await createIntentForCart(null, cookie, "Colombo", "Card");
     await confirmPayment(intent.providerReference, { outcome: "success" });
 
     const result = await placeOrder(null, cookie, {
@@ -312,6 +342,7 @@ describe("placeOrder — variants", () => {
       address,
       guestEmail: "guest@test.com",
       providerReference: intent.providerReference,
+      paymentMethod: "Card",
     });
 
     const order = await prisma.order.findUnique({ where: { orderNumber: result.orderNumber }, include: { items: true } });
@@ -339,7 +370,7 @@ describe("placeOrder — variants", () => {
 
     await prisma.productVariant.update({ where: { id: variant.id }, data: { isActive: false } });
 
-    await expect(createIntentForCart(null, cookie, "Colombo")).rejects.toBeInstanceOf(CartInvalidError);
+    await expect(createIntentForCart(null, cookie, "Colombo", "Card")).rejects.toBeInstanceOf(CartInvalidError);
   });
 });
 
@@ -353,7 +384,7 @@ describe("placeOrder — Custom Packaging (Story 3)", () => {
 
     await prisma.productPackagingOption.update({ where: { id: option.id }, data: { status: "Discontinued" } });
 
-    await expect(createIntentForCart(null, cookie, "Colombo")).rejects.toBeInstanceOf(CartInvalidError);
+    await expect(createIntentForCart(null, cookie, "Colombo", "Card")).rejects.toBeInstanceOf(CartInvalidError);
   });
 
   it("derives requiresManualReview from the cart and creates the order PendingConfirmation, with the packaging snapshot on the order item", async () => {
@@ -362,7 +393,7 @@ describe("placeOrder — Custom Packaging (Story 3)", () => {
     const option = await makePackagingOption(product.id, { requiresManualReview: true, availability: "Export" });
     const identity = await addItem(null, undefined, product.id, 1, null, { packagingOptionId: option.id, declaredAvailability: "Export" });
     const cookie = identity.newCookieValue!;
-    const intent = await createIntentForCart(null, cookie, "Colombo");
+    const intent = await createIntentForCart(null, cookie, "Colombo", "Card");
     await confirmPayment(intent.providerReference, { outcome: "success" });
 
     const result = await placeOrder(null, cookie, {
@@ -370,6 +401,7 @@ describe("placeOrder — Custom Packaging (Story 3)", () => {
       address,
       guestEmail: "guest@test.com",
       providerReference: intent.providerReference,
+      paymentMethod: "Card",
     });
 
     const order = await prisma.order.findUnique({ where: { orderNumber: result.orderNumber }, include: { items: true } });
@@ -383,7 +415,7 @@ describe("placeOrder — Custom Packaging (Story 3)", () => {
     const option = await makePackagingOption(product.id, { requiresManualReview: false });
     const identity = await addItem(null, undefined, product.id, 1, null, { packagingOptionId: option.id, declaredAvailability: "Local" });
     const cookie = identity.newCookieValue!;
-    const intent = await createIntentForCart(null, cookie, "Colombo");
+    const intent = await createIntentForCart(null, cookie, "Colombo", "Card");
     await confirmPayment(intent.providerReference, { outcome: "success" });
 
     const result = await placeOrder(null, cookie, {
@@ -391,7 +423,144 @@ describe("placeOrder — Custom Packaging (Story 3)", () => {
       address,
       guestEmail: "guest@test.com",
       providerReference: intent.providerReference,
+      paymentMethod: "Card",
     });
+
+    const order = await prisma.order.findUnique({ where: { orderNumber: result.orderNumber } });
+    expect(order?.status).toBe("Confirmed");
+  });
+});
+
+describe("Restricted Payment Methods (Story 4)", () => {
+  it("a standard (no packaging) cart offers every admin-enabled method, including Cash on Delivery — acceptance scenario 14", async () => {
+    await makeZone();
+    const product = await makeProduct();
+    const cookie = await guestCartWith(product.id, 1);
+
+    const methods = await listEligiblePaymentMethods(null, cookie);
+
+    expect(methods.map((m) => m.method).sort()).toEqual(["BankTransfer", "CashOnDelivery", "Card"].sort());
+  });
+
+  it("a custom-packaging cart offers only card and bank transfer — acceptance scenario 9", async () => {
+    await makeZone();
+    const product = await makeProduct();
+    const option = await makePackagingOption(product.id);
+    const identity = await addItem(null, undefined, product.id, 1, null, { packagingOptionId: option.id, declaredAvailability: "Local" });
+    const cookie = identity.newCookieValue!;
+
+    const methods = await listEligiblePaymentMethods(null, cookie);
+
+    expect(methods.map((m) => m.method).sort()).toEqual(["BankTransfer", "Card"].sort());
+  });
+
+  it("a mixed cart (standard item + custom-packaged item) still restricts to card/bank transfer — acceptance scenario 10", async () => {
+    await makeZone();
+    const standard = await makeProduct();
+    const packaged = await makeProduct();
+    const option = await makePackagingOption(packaged.id);
+    const { newCookieValue } = await addItem(null, undefined, standard.id, 1);
+    const cookie = newCookieValue!;
+    await addItem(null, cookie, packaged.id, 1, null, { packagingOptionId: option.id, declaredAvailability: "Local" });
+
+    const methods = await listEligiblePaymentMethods(null, cookie);
+
+    expect(methods.map((m) => m.method).sort()).toEqual(["BankTransfer", "Card"].sort());
+  });
+
+  it("createIntentForCart rejects a disallowed method for a custom-packaging cart before any Payment row is created", async () => {
+    await makeZone();
+    const product = await makeProduct();
+    const option = await makePackagingOption(product.id);
+    const identity = await addItem(null, undefined, product.id, 1, null, { packagingOptionId: option.id, declaredAvailability: "Local" });
+    const cookie = identity.newCookieValue!;
+
+    await expect(createIntentForCart(null, cookie, "Colombo", "CashOnDelivery")).rejects.toBeInstanceOf(PaymentMethodNotAllowedError);
+    expect(await prisma.payment.count()).toBe(0);
+  });
+
+  it("createIntentForCart rejects a method with no matching admin-enabled row at all (defense against a client sending a method the admin never configured)", async () => {
+    await makeZone();
+    const product = await makeProduct();
+    const cookie = await guestCartWith(product.id, 1);
+    await prisma.paymentMethodSetting.updateMany({ where: { method: "CashOnDelivery" }, data: { enabled: false } });
+
+    await expect(createIntentForCart(null, cookie, "Colombo", "CashOnDelivery")).rejects.toBeInstanceOf(PaymentMethodNotAllowedError);
+  });
+
+  it("placeOrder rejects a disallowed method server-side even if a (now-invalid) intent was already created — acceptance scenario 11", async () => {
+    await makeZone();
+    const product = await makeProduct();
+    const option = await makePackagingOption(product.id);
+
+    // An intent is created for the STANDARD cart (Cash on Delivery allowed then)...
+    const { newCookieValue } = await addItem(null, undefined, product.id, 1);
+    const cookie = newCookieValue!;
+    const intent = await createIntentForCart(null, cookie, "Colombo", "CashOnDelivery");
+
+    // ...then the cart gains a custom-packaging line before placing the order.
+    await addItem(null, cookie, product.id, 1, null, { packagingOptionId: option.id, declaredAvailability: "Local" });
+
+    await expect(
+      placeOrder(null, cookie, { idempotencyKey: crypto.randomUUID(), address, guestEmail: "guest@test.com", providerReference: intent.providerReference, paymentMethod: "CashOnDelivery" }),
+    ).rejects.toBeInstanceOf(PaymentMethodNotAllowedError);
+    expect(await prisma.order.count()).toBe(0);
+  });
+
+  it("a custom-packaging order paid by Card places normally, Confirmed, with the Payment Succeeded", async () => {
+    await makeZone();
+    const product = await makeProduct();
+    const option = await makePackagingOption(product.id, { requiresManualReview: false });
+    const identity = await addItem(null, undefined, product.id, 1, null, { packagingOptionId: option.id, declaredAvailability: "Local" });
+    const cookie = identity.newCookieValue!;
+    const intent = await createIntentForCart(null, cookie, "Colombo", "Card");
+    await confirmPayment(intent.providerReference, { outcome: "success" });
+
+    const result = await placeOrder(null, cookie, { idempotencyKey: crypto.randomUUID(), address, guestEmail: "guest@test.com", providerReference: intent.providerReference, paymentMethod: "Card" });
+
+    const order = await prisma.order.findUnique({ where: { orderNumber: result.orderNumber } });
+    expect(order?.status).toBe("Confirmed");
+    expect(order?.paymentMethod).toBe("Card");
+  });
+
+  it("a custom-packaging order paid by Bank Transfer places as PendingConfirmation, with the Payment left Pending — never marked paid solely for selecting the method", async () => {
+    await makeZone();
+    const product = await makeProduct();
+    const option = await makePackagingOption(product.id, { requiresManualReview: false });
+    const identity = await addItem(null, undefined, product.id, 1, null, { packagingOptionId: option.id, declaredAvailability: "Local" });
+    const cookie = identity.newCookieValue!;
+    const intent = await createIntentForCart(null, cookie, "Colombo", "BankTransfer"); // never confirmed — no gateway to confirm with
+
+    const result = await placeOrder(null, cookie, { idempotencyKey: crypto.randomUUID(), address, guestEmail: "guest@test.com", providerReference: intent.providerReference, paymentMethod: "BankTransfer" });
+
+    const order = await prisma.order.findUnique({ where: { orderNumber: result.orderNumber }, include: { payment: true } });
+    expect(order?.status).toBe("PendingConfirmation");
+    expect(order?.paymentMethod).toBe("BankTransfer");
+    expect(order?.payment?.status).toBe("Pending");
+  });
+
+  it("a standard order paid by Cash on Delivery places as Confirmed immediately, with the Payment left Pending", async () => {
+    await makeZone();
+    const product = await makeProduct();
+    const cookie = await guestCartWith(product.id, 1);
+    const intent = await createIntentForCart(null, cookie, "Colombo", "CashOnDelivery");
+
+    const result = await placeOrder(null, cookie, { idempotencyKey: crypto.randomUUID(), address, guestEmail: "guest@test.com", providerReference: intent.providerReference, paymentMethod: "CashOnDelivery" });
+
+    const order = await prisma.order.findUnique({ where: { orderNumber: result.orderNumber }, include: { payment: true } });
+    expect(order?.status).toBe("Confirmed");
+    expect(order?.paymentMethod).toBe("CashOnDelivery");
+    expect(order?.payment?.status).toBe("Pending");
+  });
+
+  it("a plain Card order (no packaging) is unaffected — acceptance scenario 14, the pre-Story-4 regression case", async () => {
+    await makeZone();
+    const product = await makeProduct();
+    const cookie = await guestCartWith(product.id, 1);
+    const intent = await createIntentForCart(null, cookie, "Colombo", "Card");
+    await confirmPayment(intent.providerReference, { outcome: "success" });
+
+    const result = await placeOrder(null, cookie, { idempotencyKey: crypto.randomUUID(), address, guestEmail: "guest@test.com", providerReference: intent.providerReference, paymentMethod: "Card" });
 
     const order = await prisma.order.findUnique({ where: { orderNumber: result.orderNumber } });
     expect(order?.status).toBe("Confirmed");

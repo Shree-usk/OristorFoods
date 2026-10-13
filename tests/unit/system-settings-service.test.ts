@@ -25,7 +25,7 @@ import {
   updatePaymentMethod,
   updateTaxDisplayMode,
 } from "@/services/system-settings.service";
-import { FeatureFlagKeyConflictError, PaymentMethodKeyConflictError } from "@/services/system-settings.errors";
+import { FeatureFlagKeyConflictError, PaymentMethodKeyConflictError, PaymentMethodTagConflictError } from "@/services/system-settings.errors";
 
 const EMAIL_DOMAIN = "@system-settings-svc-test.test";
 const ROLE_KEY_PREFIX = "system-settings-svc-test-role-";
@@ -158,6 +158,43 @@ describe("system-settings.service — Payment methods", () => {
     const admin = await makeFullAccessAdmin();
     await createPaymentMethod(admin.id, { key: "system-settings-svc-test-dup", label: "First", enabled: true });
     await expect(createPaymentMethod(admin.id, { key: "system-settings-svc-test-dup", label: "Second", enabled: true })).rejects.toBeInstanceOf(PaymentMethodKeyConflictError);
+  });
+
+  describe("Story 4 (Payment Restriction) — method tag + allowedForRestrictedOrders", () => {
+    it("creates a row tagged with a concrete checkout method, defaulting allowedForRestrictedOrders false", async () => {
+      const admin = await makeFullAccessAdmin();
+      const method = await createPaymentMethod(admin.id, { key: "system-settings-svc-test-cod2", label: "Cash on Delivery", enabled: true, method: "CashOnDelivery" });
+      expect(method.method).toBe("CashOnDelivery");
+      expect(method.allowedForRestrictedOrders).toBe(false);
+    });
+
+    it("allows updating allowedForRestrictedOrders independently of enabled", async () => {
+      const admin = await makeFullAccessAdmin();
+      const method = await createPaymentMethod(admin.id, { key: "system-settings-svc-test-card", label: "Card", enabled: true, method: "Card" });
+      const updated = await updatePaymentMethod(admin.id, method.id, { allowedForRestrictedOrders: true });
+      expect(updated.allowedForRestrictedOrders).toBe(true);
+      expect(updated.enabled).toBe(true);
+    });
+
+    it("rejects a second row tagged with the same method — PaymentMethodSetting.method is @unique", async () => {
+      const admin = await makeFullAccessAdmin();
+      await createPaymentMethod(admin.id, { key: "system-settings-svc-test-bank1", label: "Bank Transfer", enabled: true, method: "BankTransfer" });
+      await expect(
+        createPaymentMethod(admin.id, { key: "system-settings-svc-test-bank2", label: "Bank Transfer (duplicate)", enabled: true, method: "BankTransfer" }),
+      ).rejects.toBeInstanceOf(PaymentMethodTagConflictError);
+    });
+
+    it("allows re-saving a row's own existing method tag without a false-positive conflict", async () => {
+      const admin = await makeFullAccessAdmin();
+      const method = await createPaymentMethod(admin.id, { key: "system-settings-svc-test-card2", label: "Card", enabled: true, method: "Card" });
+      await expect(updatePaymentMethod(admin.id, method.id, { method: "Card", label: "Card (renamed)" })).resolves.toMatchObject({ method: "Card", label: "Card (renamed)" });
+    });
+
+    it("allows multiple untagged (method: null) rows — only a real tag is constrained", async () => {
+      const admin = await makeFullAccessAdmin();
+      await createPaymentMethod(admin.id, { key: "system-settings-svc-test-untagged1", label: "Untagged One", enabled: true });
+      await expect(createPaymentMethod(admin.id, { key: "system-settings-svc-test-untagged2", label: "Untagged Two", enabled: true })).resolves.toMatchObject({ method: null });
+    });
   });
 });
 

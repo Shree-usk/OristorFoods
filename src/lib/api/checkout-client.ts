@@ -1,5 +1,5 @@
 import { readApiError } from "@/lib/api/api-error";
-import type { DeliveryResolution, PaymentIntentResult, SavedAddress } from "@/types/checkout";
+import type { DeliveryResolution, EligiblePaymentMethod, PaymentIntentResult, PaymentMethod, SavedAddress } from "@/types/checkout";
 import type { CheckoutAddressInput, PlaceOrderInput } from "@/validation/checkout.schema";
 
 /**
@@ -41,12 +41,19 @@ export async function resolveDelivery(city: string): Promise<DeliveryResolution>
   return (await response.json()) as DeliveryResolution;
 }
 
-export async function createPaymentIntent(city: string): Promise<PaymentIntentResult> {
+/** Story 4 (Payment Restriction). The Payment step's own read — eligible methods for the caller's current cart, already restriction-filtered server-side. */
+export async function fetchEligiblePaymentMethods(): Promise<EligiblePaymentMethod[]> {
+  const response = await fetch("/api/checkout/payment-methods", { credentials: "include" });
+  if (!response.ok) throw await readApiError(response);
+  return (await response.json()) as EligiblePaymentMethod[];
+}
+
+export async function createPaymentIntent(city: string, paymentMethod: PaymentMethod): Promise<PaymentIntentResult> {
   const response = await fetch("/api/checkout/payment/intent", {
     method: "POST",
     credentials: "include",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ city }),
+    body: JSON.stringify({ city, paymentMethod }),
   });
   if (!response.ok) throw await readApiError(response);
   return (await response.json()) as PaymentIntentResult;

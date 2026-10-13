@@ -165,14 +165,12 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ or
               {order.shippingAddress.district ? `, ${order.shippingAddress.district}` : ""}
             </p>
           </div>
-          {order.payment && (
-            <div>
-              <p className="text-small font-medium text-charcoal">Payment</p>
-              <p className="text-small text-charcoal/70">
-                {order.payment.provider} — {order.payment.status}
-              </p>
-            </div>
-          )}
+          <div>
+            <p className="text-small font-medium text-charcoal">Payment</p>
+            <p className="text-small text-charcoal/70">
+              {order.paymentMethod === "Card" ? "Card" : order.paymentMethod === "BankTransfer" ? "Bank Transfer" : "Cash on Delivery"}
+            </p>
+          </div>
         </CardContent>
       </Card>
 

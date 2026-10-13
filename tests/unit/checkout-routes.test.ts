@@ -67,9 +67,21 @@ const address = {
   city: "Colombo",
 };
 
-beforeEach(() => {
+/** Story 4 (Payment Restriction) — see checkout-service.test.ts's own copy of this helper for why it's needed on every test now. */
+async function seedPaymentMethods() {
+  await prisma.paymentMethodSetting.createMany({
+    data: [
+      { key: "card", label: "Card", enabled: true, sortOrder: 0, method: "Card", allowedForRestrictedOrders: true },
+      { key: "bank_transfer", label: "Bank Transfer", enabled: true, sortOrder: 1, method: "BankTransfer", allowedForRestrictedOrders: true },
+      { key: "cash_on_delivery", label: "Cash on Delivery", enabled: true, sortOrder: 2, method: "CashOnDelivery", allowedForRestrictedOrders: false },
+    ],
+  });
+}
+
+beforeEach(async () => {
   mockAuth.mockReset();
   mockAuth.mockResolvedValue(null);
+  await seedPaymentMethods();
 });
 
 afterEach(async () => {
@@ -86,6 +98,7 @@ afterEach(async () => {
   await prisma.standardPrice.deleteMany();
   await prisma.product.deleteMany({ where: { sku: { startsWith: "CHK-ROUTE-SKU-" } } });
   await prisma.user.deleteMany({ where: { email: { contains: "chk-route-" } } });
+  await prisma.paymentMethodSetting.deleteMany();
 });
 
 describe("GET /api/checkout/addresses", () => {
@@ -169,7 +182,7 @@ describe("checkout payment + place-order flow", () => {
     const { newCookieValue } = await addItem(null, undefined, product.id, 2);
     const cookie = newCookieValue!;
 
-    const intentResponse = await postIntent(jsonRequest("http://localhost/api/checkout/payment/intent", { city: "Colombo" }, cookie));
+    const intentResponse = await postIntent(jsonRequest("http://localhost/api/checkout/payment/intent", { city: "Colombo", paymentMethod: "Card" }, cookie));
     const intent = (await intentResponse.json()) as { providerReference: string; amount: number };
     expect(intentResponse.status).toBe(200);
     expect(intent.amount).toBe(2350);
@@ -185,7 +198,7 @@ describe("checkout payment + place-order flow", () => {
     const response = await postPlaceOrder(
       jsonRequest(
         "http://localhost/api/checkout/place-order",
-        { idempotencyKey: crypto.randomUUID(), address, guestEmail: "guest@test.com", providerReference: intent.providerReference },
+        { idempotencyKey: crypto.randomUUID(), address, guestEmail: "guest@test.com", providerReference: intent.providerReference, paymentMethod: "Card" },
         cookie,
       ),
     );
@@ -198,7 +211,7 @@ describe("checkout payment + place-order flow", () => {
   it("returns 200 (not 201) for an idempotent replay", async () => {
     const { cookie, intent } = await guestCheckoutThroughPayment("success");
     const idempotencyKey = crypto.randomUUID();
-    const payload = { idempotencyKey, address, guestEmail: "guest@test.com", providerReference: intent.providerReference };
+    const payload = { idempotencyKey, address, guestEmail: "guest@test.com", providerReference: intent.providerReference, paymentMethod: "Card" };
 
     const first = await postPlaceOrder(jsonRequest("http://localhost/api/checkout/place-order", payload, cookie));
     expect(first.status).toBe(201);
@@ -216,7 +229,7 @@ describe("checkout payment + place-order flow", () => {
     const response = await postPlaceOrder(
       jsonRequest(
         "http://localhost/api/checkout/place-order",
-        { idempotencyKey: crypto.randomUUID(), address, guestEmail: "guest@test.com", providerReference: intent.providerReference },
+        { idempotencyKey: crypto.randomUUID(), address, guestEmail: "guest@test.com", providerReference: intent.providerReference, paymentMethod: "Card" },
         cookie,
       ),
     );
@@ -228,7 +241,7 @@ describe("checkout payment + place-order flow", () => {
     const product = await makeProduct();
     const { newCookieValue } = await addItem(null, undefined, product.id, 1);
 
-    const intentResponse = await postIntent(jsonRequest("http://localhost/api/checkout/payment/intent", { city: "Colombo" }, newCookieValue!));
+    const intentResponse = await postIntent(jsonRequest("http://localhost/api/checkout/payment/intent", { city: "Colombo", paymentMethod: "Card" }, newCookieValue!));
     const intent = (await intentResponse.json()) as { providerReference: string };
 
     const timeoutResponse = await postConfirm(jsonRequest("http://localhost/api/payments/confirm", { providerReference: intent.providerReference, outcome: "timeout" }));

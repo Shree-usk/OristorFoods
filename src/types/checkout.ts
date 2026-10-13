@@ -50,6 +50,15 @@ export interface PaymentIntentResult {
   currency: string;
 }
 
+/** Story 4 (Payment Restriction). Mirrors the Prisma PaymentMethod enum's values exactly — kept as a plain string union here since this file stays free of server-only imports. */
+export type PaymentMethod = "Card" | "BankTransfer" | "CashOnDelivery";
+
+/** A payment method the current cart is allowed to use — admin-configured key/label, filtered server-side to the restricted set when the cart requires it. */
+export interface EligiblePaymentMethod {
+  method: PaymentMethod;
+  label: string;
+}
+
 export interface OrderStatusHistoryEntry {
   status: string;
   actor: string;
@@ -73,6 +82,8 @@ export interface OrderConfirmationSummary {
   tax: number;
   grandTotal: number;
   currency: string;
+  /** Story 4 (Payment Restriction). Permanent snapshot of what the customer chose at checkout. */
+  paymentMethod: PaymentMethod;
   rewardPointsEarned: number;
   deliveryZoneName: string;
   estimatedDaysMin: number | null;

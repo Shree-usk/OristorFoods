@@ -119,13 +119,20 @@ export default async function OrderConfirmationPage({ params }: { params: Promis
               </dd>
             </div>
             <div className="flex items-center justify-between font-semibold">
-              <dt>Total paid</dt>
+              {/* Story 4 (Payment Restriction): only Card is actually
+                  charged at this point — Bank Transfer/Cash on Delivery
+                  settle outside checkout, so "Total paid" would overclaim. */}
+              <dt>{order.paymentMethod === "Card" ? "Total paid" : "Order total"}</dt>
               <dd className="font-number">
                 {order.currency} {order.grandTotal.toFixed(2)}
               </dd>
             </div>
           </dl>
-          <p className="mt-2 text-small text-charcoal/70">Prices include applicable taxes.</p>
+          <p className="mt-2 text-small text-charcoal/70">
+            Payment method:{" "}
+            {order.paymentMethod === "Card" ? "Card" : order.paymentMethod === "BankTransfer" ? "Bank Transfer" : "Cash on Delivery"}
+          </p>
+          <p className="mt-1 text-small text-charcoal/70">Prices include applicable taxes.</p>
           {order.rewardPointsEarned > 0 && (
             <p className="mt-1 text-small text-charcoal/70">
               You earned <span className="font-number">{order.rewardPointsEarned}</span> reward points with this order.
