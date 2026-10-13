@@ -110,9 +110,13 @@ export async function listProducts(params: ProductListingParams): Promise<Produc
 
   let candidates: Candidate[] = [];
   for (const product of products) {
+    const variantPrice = resolveListingVariantPrice(product.variants);
     const resolved = resolvedPrices.get(product.id);
-    if (!resolved) continue; // no price configured — never shown on the storefront
-    candidates.push({ product, price: resolved.price.toNumber(), currency: resolved.currency });
+    if (variantPrice) {
+      candidates.push({ product, price: variantPrice.price, currency: variantPrice.currency });
+    } else if (resolved) {
+      candidates.push({ product, price: resolved.price.toNumber(), currency: resolved.currency });
+    } // else: no price configured — never shown on the storefront
   }
 
   if (filters.priceMin !== undefined) {
@@ -141,6 +145,26 @@ export async function listProducts(params: ProductListingParams): Promise<Produc
     pageSize,
     hasNextPage: start + pageSize < total,
   };
+}
+
+/**
+ * A variant-driven product deliberately has no StandardPrice row (see
+ * getProductDetail's own comment on this), so resolvePricesForProducts
+ * alone can never price it — this mirrors getProductDetail's own
+ * default-variant selection (first in-stock, else first overall) so
+ * listProducts/listRelatedProducts/getProductsByIds stop silently
+ * dropping a Published, in-stock, variant-driven product from every
+ * listing. Bundle-driven products have the identical gap (no StandardPrice
+ * either) but aren't fixed here — not the reported symptom, and bundle
+ * pricing needs resolveBundleDetail's full discount computation, not a
+ * flat bulk lookup; tracked as a known follow-up in architecture-decisions.md.
+ */
+export function resolveListingVariantPrice(
+  variants: { price: Prisma.Decimal; promoPrice: Prisma.Decimal | null; currency: string; inStock: boolean; stockQuantity: number }[],
+): { price: number; currency: string } | null {
+  if (variants.length === 0) return null;
+  const defaultVariant = variants.find((variant) => variant.inStock && variant.stockQuantity > 0) ?? variants[0];
+  return resolveVariantPrice(defaultVariant);
 }
 
 export function sortCandidates<T extends { product: { publishedAt: Date | null }; price: number }>(
@@ -218,9 +242,15 @@ export async function listRelatedProducts(params: {
 
   const items: ProductListItem[] = [];
   for (const candidate of candidates) {
+    const variantPrice = resolveListingVariantPrice(candidate.variants);
     const resolved = resolvedPrices.get(candidate.id);
-    if (!resolved) continue;
-    items.push(toProductListItem(candidate, resolved.price.toNumber(), resolved.currency));
+    if (variantPrice) {
+      items.push(toProductListItem(candidate, variantPrice.price, variantPrice.currency));
+    } else if (resolved) {
+      items.push(toProductListItem(candidate, resolved.price.toNumber(), resolved.currency));
+    } else {
+      continue;
+    }
     if (items.length >= limit) break;
   }
   return items;
@@ -237,9 +267,13 @@ export async function getProductsByIds(ids: string[], customerGroup?: CustomerGr
 
   const items: ProductListItem[] = [];
   for (const candidate of candidates) {
+    const variantPrice = resolveListingVariantPrice(candidate.variants);
     const resolved = resolvedPrices.get(candidate.id);
-    if (!resolved) continue;
-    items.push(toProductListItem(candidate, resolved.price.toNumber(), resolved.currency));
+    if (variantPrice) {
+      items.push(toProductListItem(candidate, variantPrice.price, variantPrice.currency));
+    } else if (resolved) {
+      items.push(toProductListItem(candidate, resolved.price.toNumber(), resolved.currency));
+    }
   }
   return items;
 }

@@ -137,7 +137,13 @@ export function AdminProductForm({ productId }: { productId?: string }) {
     queryFn: fetchProductFormReferenceData,
   });
 
-  const { data: existingProduct } = useQuery({
+  const {
+    data: existingProduct,
+    isLoading: isLoadingProduct,
+    isError: isProductError,
+    error: productError,
+    refetch: refetchProduct,
+  } = useQuery({
     queryKey: ["admin-product", productId],
     queryFn: () => fetchAdminProduct(productId!),
     enabled: Boolean(productId),
@@ -150,6 +156,11 @@ export function AdminProductForm({ productId }: { productId?: string }) {
     // moving window focus — must never race an in-progress form edit.
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
+    // A failed fetch (permission mismatch, transient 5xx, etc.) must never
+    // be silently indistinguishable from "new product" — without a retry,
+    // reset() below simply never fires and the form stays at EMPTY_VALUES
+    // forever with zero visible signal. See the isProductError branch below.
+    retry: 1,
   });
 
   const {
@@ -276,6 +287,25 @@ export function AdminProductForm({ productId }: { productId?: string }) {
   async function handleDelete() {
     await deleteAdminProduct(productId!);
     router.push("/admin/products");
+  }
+
+  // A failed/still-pending fetch for an EXISTING product must never render
+  // as a blank, saveable form — that silently looks like a fresh/empty
+  // product and invites an admin to overwrite real saved data with
+  // EMPTY_VALUES. New-product mode (no productId, query disabled) is
+  // unaffected — isLoadingProduct/isProductError are both false there.
+  if (productId && isLoadingProduct) {
+    return <p className="text-body text-charcoal/70">Loading product…</p>;
+  }
+  if (productId && isProductError) {
+    return (
+      <div className="rounded-lg border border-destructive/40 bg-destructive/5 p-4">
+        <p className="text-body text-destructive">Failed to load this product: {productError instanceof Error ? productError.message : "Unknown error"}</p>
+        <Button type="button" variant="outline" size="sm" className="mt-2" onClick={() => refetchProduct()}>
+          Retry
+        </Button>
+      </div>
+    );
   }
 
   return (

@@ -33,13 +33,20 @@ export function groupCartItems(items: CartLineItem[]): CartLineGroup[] {
   return groups;
 }
 
-export function BundleGroupHeader({ name, onRemove, isRemoving }: { name: string | null; onRemove: () => void; isRemoving?: boolean }) {
+export function BundleGroupHeader({ name, onRemove, isRemoving, error }: { name: string | null; onRemove: () => void; isRemoving?: boolean; error?: string | null }) {
   return (
-    <div className="flex items-center justify-between border-b border-dashed border-input pb-2 pt-4">
-      <p className="text-small font-medium text-charcoal">{name ?? "Bundle"}</p>
-      <Button type="button" variant="ghost" size="sm" disabled={isRemoving} onClick={onRemove}>
-        Remove bundle
-      </Button>
+    <div className="border-b border-dashed border-input pb-2 pt-4">
+      <div className="flex items-center justify-between">
+        <p className="text-small font-medium text-charcoal">{name ?? "Bundle"}</p>
+        <Button type="button" variant="ghost" size="sm" disabled={isRemoving} onClick={onRemove}>
+          Remove bundle
+        </Button>
+      </div>
+      {error && (
+        <p role="alert" className="mt-1 text-caption text-destructive">
+          {error}
+        </p>
+      )}
     </div>
   );
 }

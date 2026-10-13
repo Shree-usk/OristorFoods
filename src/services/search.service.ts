@@ -4,6 +4,7 @@ import * as pricingService from "@/services/pricing.service";
 import * as productRepository from "@/repositories/product.repository";
 import * as searchRepository from "@/repositories/search.repository";
 import {
+  resolveListingVariantPrice,
   sortCandidates,
   toProductListItem,
   type ProductListingFiltersInput,
@@ -107,9 +108,18 @@ export async function searchProducts(
 
   let candidates: Candidate[] = [];
   for (const product of products) {
+    // A variant-driven product has no StandardPrice row by design — see
+    // product.service.ts::resolveListingVariantPrice's own comment. Without
+    // this, a search for a variant-driven product's own name matched it
+    // (searchRepository.findRankedProductMatches) but then silently
+    // dropped it right back out of the results here.
+    const variantPrice = resolveListingVariantPrice(product.variants);
     const resolved = resolvedPrices.get(product.id);
-    if (!resolved) continue; // no price configured — never shown on the storefront
-    candidates.push({ product, price: resolved.price.toNumber(), currency: resolved.currency });
+    if (variantPrice) {
+      candidates.push({ product, price: variantPrice.price, currency: variantPrice.currency });
+    } else if (resolved) {
+      candidates.push({ product, price: resolved.price.toNumber(), currency: resolved.currency });
+    } // else: no price configured — never shown on the storefront
   }
 
   if (filters.priceMin !== undefined) {
