@@ -8,9 +8,11 @@ import {
   CartInvalidError,
   DeliveryUnavailableError,
   EmptyCartError,
+  ExportDetailsRequiredError,
   GuestEmailRequiredError,
   PaymentMethodNotAllowedError,
   PaymentNotConfirmedError,
+  PickupUnavailableError,
   TotalsChangedError,
 } from "@/services/checkout.errors";
 import {
@@ -139,6 +141,7 @@ afterEach(async () => {
   await prisma.product.deleteMany({ where: { sku: { startsWith: "CHK-SVC-SKU-" } } });
   await prisma.user.deleteMany({ where: { email: { contains: "chk-svc-" } } });
   await prisma.paymentMethodSetting.deleteMany();
+  await prisma.companySetting.deleteMany({});
 });
 
 describe("resolveDeliveryForCart", () => {
@@ -398,7 +401,9 @@ describe("placeOrder — Custom Packaging (Story 3)", () => {
 
     const result = await placeOrder(null, cookie, {
       idempotencyKey: crypto.randomUUID(),
+      fulfilmentMethod: "Delivery",
       address,
+      traveler: { travelerName: "Jane Traveler", travelerCountry: "Australia", travelerPhone: "+94771234567" },
       guestEmail: "guest@test.com",
       providerReference: intent.providerReference,
       paymentMethod: "Card",
@@ -428,6 +433,122 @@ describe("placeOrder — Custom Packaging (Story 3)", () => {
 
     const order = await prisma.order.findUnique({ where: { orderNumber: result.orderNumber } });
     expect(order?.status).toBe("Confirmed");
+  });
+});
+
+describe("Export Fulfilment Flow", () => {
+  const traveler = { travelerName: "Jane Traveler", travelerCountry: "Australia", travelerPhone: "+94771234567" };
+
+  async function makeExportCartCookie(overrides: Record<string, unknown> = {}) {
+    const product = await makeProduct();
+    const option = await makePackagingOption(product.id, { availability: "Export", ...overrides });
+    const identity = await addItem(null, undefined, product.id, 1, null, { packagingOptionId: option.id, declaredAvailability: "Export" });
+    return identity.newCookieValue!;
+  }
+
+  it("rejects Pickup on createIntentForCart when the cart has no export-declared line", async () => {
+    await makeZone();
+    const product = await makeProduct();
+    const cookie = await guestCartWith(product.id, 1);
+
+    await expect(createIntentForCart(null, cookie, null, "Card", "Pickup")).rejects.toBeInstanceOf(PickupUnavailableError);
+  });
+
+  it("rejects Pickup on createIntentForCart when no admin has configured a pickup location yet", async () => {
+    const cookie = await makeExportCartCookie();
+
+    await expect(createIntentForCart(null, cookie, null, "Card", "Pickup")).rejects.toBeInstanceOf(PickupUnavailableError);
+  });
+
+  it("rejects placeOrder for an export-declared cart with no traveler details", async () => {
+    await makeZone();
+    const cookie = await makeExportCartCookie();
+    const intent = await createIntentForCart(null, cookie, "Colombo", "Card");
+    await confirmPayment(intent.providerReference, { outcome: "success" });
+
+    await expect(
+      placeOrder(null, cookie, {
+        idempotencyKey: crypto.randomUUID(),
+        address,
+        guestEmail: "guest@test.com",
+        providerReference: intent.providerReference,
+        paymentMethod: "Card",
+      }),
+    ).rejects.toBeInstanceOf(ExportDetailsRequiredError);
+  });
+
+  it("rejects Pickup on placeOrder when the cart has no export-declared line, even with traveler details supplied", async () => {
+    await makeZone();
+    const product = await makeProduct();
+    const cookie = await guestCartWith(product.id, 1);
+    const intent = await createIntentForCart(null, cookie, "Colombo", "Card");
+    await confirmPayment(intent.providerReference, { outcome: "success" });
+
+    await expect(
+      placeOrder(null, cookie, {
+        idempotencyKey: crypto.randomUUID(),
+        fulfilmentMethod: "Pickup",
+        traveler,
+        guestEmail: "guest@test.com",
+        providerReference: intent.providerReference,
+        paymentMethod: "Card",
+      }),
+    ).rejects.toBeInstanceOf(PickupUnavailableError);
+  });
+
+  it("places a Pickup order with a zero delivery charge and ship fields synthesized from the traveler + admin's pickup location", async () => {
+    await prisma.companySetting.upsert({
+      where: { id: "global" },
+      create: { id: "global", pickupLocationName: "Oristor Factory Outlet", pickupLocationAddress: "123 Factory Rd, Colombo" },
+      update: { pickupLocationName: "Oristor Factory Outlet", pickupLocationAddress: "123 Factory Rd, Colombo" },
+    });
+    const cookie = await makeExportCartCookie();
+
+    const intent = await createIntentForCart(null, cookie, null, "Card", "Pickup");
+    await confirmPayment(intent.providerReference, { outcome: "success" });
+
+    const result = await placeOrder(null, cookie, {
+      idempotencyKey: crypto.randomUUID(),
+      fulfilmentMethod: "Pickup",
+      traveler,
+      guestEmail: "guest@test.com",
+      providerReference: intent.providerReference,
+      paymentMethod: "Card",
+    });
+
+    const order = await prisma.order.findUniqueOrThrow({ where: { orderNumber: result.orderNumber } });
+    expect(order.fulfilmentMethod).toBe("Pickup");
+    expect(order.deliveryCharge.toFixed(2)).toBe("0.00");
+    expect(order.shipRecipientName).toBe(traveler.travelerName);
+    expect(order.shipPhone).toBe(traveler.travelerPhone);
+    expect(order.shipLine1).toBe("123 Factory Rd, Colombo");
+    expect(order.shipCity).toBe("Oristor Factory Outlet");
+    expect(order.travelerName).toBe(traveler.travelerName);
+    expect(order.travelerCountry).toBe(traveler.travelerCountry);
+    expect(order.travelerPhone).toBe(traveler.travelerPhone);
+  });
+
+  it("a Deliver (not Pickup) export order still goes through the normal address/delivery-zone flow, with traveler fields layered on top", async () => {
+    await makeZone();
+    const cookie = await makeExportCartCookie();
+    const intent = await createIntentForCart(null, cookie, "Colombo", "Card", "Delivery");
+    await confirmPayment(intent.providerReference, { outcome: "success" });
+
+    const result = await placeOrder(null, cookie, {
+      idempotencyKey: crypto.randomUUID(),
+      fulfilmentMethod: "Delivery",
+      address,
+      traveler,
+      guestEmail: "guest@test.com",
+      providerReference: intent.providerReference,
+      paymentMethod: "Card",
+    });
+
+    const order = await prisma.order.findUniqueOrThrow({ where: { orderNumber: result.orderNumber } });
+    expect(order.fulfilmentMethod).toBe("Delivery");
+    expect(order.shipCity).toBe("Colombo");
+    expect(order.deliveryCharge.toFixed(2)).toBe("350.00");
+    expect(order.travelerName).toBe(traveler.travelerName);
   });
 });
 

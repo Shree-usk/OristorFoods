@@ -17,6 +17,7 @@ const orderStatusByCode: Record<OrderErrorCode, number> = {
   invalid_return_quantity: 400,
   refund_amount_exceeds_remaining: 400,
   no_payment_on_order: 409,
+  not_pickup_order: 409,
 };
 
 const paymentStatusByCode: Record<PaymentErrorCode, number> = {

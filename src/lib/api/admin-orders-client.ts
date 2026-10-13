@@ -13,6 +13,8 @@ async function assertOkWithServerMessage(response: Response, fallback: string): 
 export type OrderStatusValue = "PendingConfirmation" | "Confirmed" | "Processing" | "Dispatched" | "Delivered" | "Cancelled" | "Returned";
 export type PaymentStatusValue = "Pending" | "Succeeded" | "Failed" | "Refunded";
 export type ReturnReasonCodeValue = "Damaged" | "WrongItem" | "NotAsDescribed" | "ChangedMind" | "Other";
+/** Export fulfilment flow. Mirrors the Prisma FulfilmentMethod enum's values exactly. */
+export type FulfilmentMethodValue = "Delivery" | "Pickup";
 
 export interface OrderAdminListItem {
   id: string;
@@ -52,6 +54,7 @@ export interface OrderAdminDetailLineItem {
   packagingMethodName?: string | null;
   packagingCharge?: number | null;
   packagingRequiresManualReview?: boolean;
+  packagingInstructions?: string | null;
   unitPrice: number;
   quantity: number;
   lineTotal: number;
@@ -73,6 +76,12 @@ export interface OrderAdminDetail {
   currency: string;
   /** Story 4 (Payment Restriction). */
   paymentMethod: "Card" | "BankTransfer" | "CashOnDelivery";
+  /** Export fulfilment flow. "Delivery" for every pre-existing order. */
+  fulfilmentMethod: FulfilmentMethodValue;
+  travelerName: string | null;
+  travelerCountry: string | null;
+  travelerPhone: string | null;
+  readyForPickupAt: string | null;
   deliveryZoneName: string;
   estimatedDaysMin: number | null;
   estimatedDaysMax: number | null;
@@ -115,6 +124,13 @@ export async function changeOrderStatusAdmin(id: string, status: OrderStatusValu
     body: JSON.stringify({ status }),
   });
   await assertOkWithServerMessage(response, "Failed to change status");
+  return response.json();
+}
+
+/** Export fulfilment flow. Only legal for a Pickup-fulfilment order. */
+export async function markOrderReadyForPickupAdmin(id: string): Promise<OrderAdminDetail> {
+  const response = await fetch(`/api/admin/orders/${id}/ready-for-pickup`, { method: "POST" });
+  await assertOkWithServerMessage(response, "Failed to mark the order ready for pickup");
   return response.json();
 }
 

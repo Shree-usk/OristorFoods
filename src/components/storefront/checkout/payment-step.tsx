@@ -5,7 +5,7 @@ import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { ApiError } from "@/lib/api/api-error";
-import { confirmPayment, createPaymentIntent, fetchEligiblePaymentMethods } from "@/lib/api/checkout-client";
+import { confirmPayment, createPaymentIntent, fetchCheckoutBankAccounts, fetchEligiblePaymentMethods } from "@/lib/api/checkout-client";
 import { useCheckoutStore } from "@/lib/stores/checkout-store";
 import type { PaymentMethod } from "@/types/checkout";
 
@@ -25,7 +25,8 @@ const MOCK_OUTCOMES = [
 ];
 
 export function PaymentStep() {
-  const { address, paymentMethod, setPaymentMethod, intent, setIntent, markPaymentConfirmed, goToStep } = useCheckoutStore();
+  const { address, fulfilmentMethod, paymentMethod, setPaymentMethod, intent, setIntent, markPaymentConfirmed, goToStep } = useCheckoutStore();
+  const isPickup = fulfilmentMethod === "Pickup";
   const [selectedOutcome, setSelectedOutcome] = useState<"success" | "decline">("success");
   const [isProcessing, setIsProcessing] = useState(false);
   const [paymentError, setPaymentError] = useState<string | null>(null);
@@ -35,8 +36,14 @@ export function PaymentStep() {
     queryFn: fetchEligiblePaymentMethods,
   });
 
+  const { data: bankAccounts } = useQuery({
+    queryKey: ["checkout-bank-accounts"],
+    queryFn: fetchCheckoutBankAccounts,
+    enabled: paymentMethod === "BankTransfer",
+  });
+
   async function handleSelectMethod(method: PaymentMethod) {
-    if (!address) return;
+    if (!isPickup && !address) return;
     setPaymentError(null);
     setPaymentMethod(method);
     setIsProcessing(true);
@@ -44,8 +51,9 @@ export function PaymentStep() {
       // A fresh intent per selection: a declined Card intent's Payment row
       // stays Failed and can't be resurrected (payment.service.ts), so
       // switching methods (or retrying) always starts clean at the
-      // current server-computed amount.
-      const freshIntent = await createPaymentIntent(address.city, method);
+      // current server-computed amount. Pickup has no city to resolve a
+      // delivery charge from — the server charges 0 for it either way.
+      const freshIntent = await createPaymentIntent(isPickup ? null : address!.city, method, fulfilmentMethod ?? "Delivery");
       setIntent(freshIntent);
     } catch (error) {
       setPaymentError(error instanceof ApiError ? error.message : "Could not start this payment method. Please try again.");
@@ -62,7 +70,7 @@ export function PaymentStep() {
       const result = await confirmPayment(intent.providerReference, selectedOutcome);
       if (result.status === "Succeeded") {
         markPaymentConfirmed();
-        goToStep(4);
+        goToStep(5);
       } else {
         setPaymentError(result.failureReason ?? "Your payment was declined. Please try another method.");
       }
@@ -79,7 +87,7 @@ export function PaymentStep() {
     // checkout.service.ts::placeOrder's method-aware status gate).
     // markPaymentConfirmed only advances the wizard's own local UI state.
     markPaymentConfirmed();
-    goToStep(4);
+    goToStep(5);
   }
 
   return (
@@ -152,9 +160,25 @@ export function PaymentStep() {
       {paymentMethod && intent && paymentMethod === "BankTransfer" && (
         <div className="mt-6 rounded-lg border border-input bg-cream p-4 text-small text-charcoal">
           <p>
-            Please transfer <span className="font-number font-semibold">LKR {intent.amount.toFixed(2)}</span> to our business bank
-            account, using <span className="font-number font-semibold">{intent.providerReference}</span> as the payment reference.
+            Please transfer <span className="font-number font-semibold">LKR {intent.amount.toFixed(2)}</span> to one of our business
+            bank accounts below, using <span className="font-number font-semibold">{intent.providerReference}</span> as the payment
+            reference.
           </p>
+          {bankAccounts && bankAccounts.length > 0 && (
+            <ul className="mt-3 flex flex-col gap-3">
+              {bankAccounts.map((account) => (
+                <li key={account.accountNumber} className="rounded-lg border border-input bg-white p-3">
+                  <p className="font-semibold">{account.bankName}</p>
+                  <p>{account.accountName}</p>
+                  <p className="font-number">
+                    {account.accountNumber} ({account.currency})
+                  </p>
+                  {account.branch && <p className="text-charcoal/70">Branch: {account.branch}</p>}
+                  {account.swiftCode && <p className="text-charcoal/70">SWIFT: {account.swiftCode}</p>}
+                </li>
+              ))}
+            </ul>
+          )}
           <p className="mt-2 text-charcoal/70">
             Your order will be placed and reviewed by our team — we&apos;ll confirm it once we&apos;ve received your transfer.
           </p>
@@ -179,8 +203,8 @@ export function PaymentStep() {
       </div>
 
       <div className="mt-6 flex flex-wrap gap-3">
-        <Button type="button" variant="outline" onClick={() => goToStep(2)} disabled={isProcessing}>
-          Back to Delivery
+        <Button type="button" variant="outline" onClick={() => goToStep(isPickup ? 1 : 3)} disabled={isProcessing}>
+          {isPickup ? "Back" : "Back to Delivery"}
         </Button>
         {paymentMethod && intent && paymentMethod === "Card" && (
           <Button type="button" onClick={handlePayCard} disabled={isProcessing}>

@@ -262,6 +262,7 @@ const ORDER_EVENT_TEMPLATE_KEYS: Partial<Record<OrderEventType, string>> = {
   "order.dispatched": "order.dispatched",
   "order.delivered": "order.delivered",
   "order.cancelled": "order.cancelled",
+  "order.ready_for_pickup": "order.ready_for_pickup",
 };
 
 /** Order-lifecycle notifications — see this file's header comment for why this is event-driven while points-earned/referral-qualified aren't. */

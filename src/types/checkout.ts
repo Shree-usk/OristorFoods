@@ -53,6 +53,26 @@ export interface PaymentIntentResult {
 /** Story 4 (Payment Restriction). Mirrors the Prisma PaymentMethod enum's values exactly — kept as a plain string union here since this file stays free of server-only imports. */
 export type PaymentMethod = "Card" | "BankTransfer" | "CashOnDelivery";
 
+/** Export fulfilment flow. Mirrors the Prisma FulfilmentMethod enum's values exactly. */
+export type FulfilmentMethod = "Delivery" | "Pickup";
+
+/** Export fulfilment flow. The admin's one configured pickup location — null until set, which disables the Pickup choice storewide. */
+export interface PickupLocation {
+  name: string;
+  address: string;
+  mapUrl: string | null;
+}
+
+/** Export fulfilment flow. One bank account shown at checkout once the customer chooses Bank Transfer. */
+export interface CheckoutBankAccount {
+  bankName: string;
+  accountName: string;
+  accountNumber: string;
+  branch: string | null;
+  swiftCode: string | null;
+  currency: string;
+}
+
 /** A payment method the current cart is allowed to use — admin-configured key/label, filtered server-side to the restricted set when the cart requires it. */
 export interface EligiblePaymentMethod {
   method: PaymentMethod;
@@ -85,6 +105,12 @@ export interface OrderConfirmationSummary {
   /** Story 4 (Payment Restriction). Permanent snapshot of what the customer chose at checkout. */
   paymentMethod: PaymentMethod;
   rewardPointsEarned: number;
+  /** Export fulfilment flow. "Delivery" for every pre-existing order. */
+  fulfilmentMethod: FulfilmentMethod;
+  /** Export fulfilment flow. Null for every order that isn't export-declared. */
+  travelerName: string | null;
+  travelerCountry: string | null;
+  travelerPhone: string | null;
   deliveryZoneName: string;
   estimatedDaysMin: number | null;
   estimatedDaysMax: number | null;
@@ -100,6 +126,8 @@ export interface OrderConfirmationSummary {
     packagingMethodName: string | null;
     packagingCharge: number | null;
     packagingRequiresManualReview: boolean;
+    /** Export fulfilment flow. Permanent snapshot of the "special conditions" the admin set on this packaging option. */
+    packagingInstructions: string | null;
     unitPrice: number;
     quantity: number;
     lineTotal: number;

@@ -21,6 +21,9 @@ const EMPTY_VALUES: CompanySettingInput = {
   businessRegistrationId: "",
   taxId: "",
   socialLinks: [],
+  pickupLocationName: "",
+  pickupLocationAddress: "",
+  pickupLocationMapUrl: "",
 };
 
 /**
@@ -52,6 +55,9 @@ export function CompanySettingsPanel() {
       businessRegistrationId: data.businessRegistrationId ?? "",
       taxId: data.taxId ?? "",
       socialLinks: data.socialLinks ?? [],
+      pickupLocationName: data.pickupLocationName ?? "",
+      pickupLocationAddress: data.pickupLocationAddress ?? "",
+      pickupLocationMapUrl: data.pickupLocationMapUrl ?? "",
     });
   }
 
@@ -143,6 +149,31 @@ export function CompanySettingsPanel() {
           <Button type="button" variant="ghost" size="sm" onClick={() => setField("socialLinks", [...socialLinks, { label: "", href: "" }])}>
             Add social link
           </Button>
+        </div>
+      </div>
+
+      <div>
+        <Label>Export pickup location</Label>
+        <p className="mb-2 text-small text-charcoal/60">
+          Shown to a customer at checkout when they choose to collect an export-packaged order themselves. Leave blank to
+          disable the Pickup option storewide.
+        </p>
+        <div className="grid gap-3">
+          <Input
+            placeholder="Location name (e.g. Oristor Factory Outlet, Colombo)"
+            value={values.pickupLocationName ?? ""}
+            onChange={(event) => setField("pickupLocationName", event.target.value)}
+          />
+          <Textarea
+            placeholder="Full address"
+            value={values.pickupLocationAddress ?? ""}
+            onChange={(event) => setField("pickupLocationAddress", event.target.value)}
+          />
+          <Input
+            placeholder="Map URL (e.g. a Google Maps link)"
+            value={values.pickupLocationMapUrl ?? ""}
+            onChange={(event) => setField("pickupLocationMapUrl", event.target.value)}
+          />
         </div>
       </div>
 

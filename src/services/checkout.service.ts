@@ -1,4 +1,4 @@
-import type { PaymentMethod } from "@/generated/prisma/client";
+import type { FulfilmentMethod, PaymentMethod } from "@/generated/prisma/client";
 import { verifyCartCookieValue } from "@/lib/cart-token";
 import * as bundleRepository from "@/repositories/bundle.repository";
 import * as couponRepository from "@/repositories/coupon.repository";
@@ -11,9 +11,11 @@ import {
   CartInvalidError,
   DeliveryUnavailableError,
   EmptyCartError,
+  ExportDetailsRequiredError,
   GuestEmailRequiredError,
   PaymentMethodNotAllowedError,
   PaymentNotConfirmedError,
+  PickupUnavailableError,
   TotalsChangedError,
 } from "@/services/checkout.errors";
 import { CouponNotFoundError } from "@/services/coupon.errors";
@@ -25,6 +27,7 @@ import { createOrder, getOrderForConfirmation } from "@/services/order.service";
 import { createManualPaymentIntent, createPaymentIntent, getPaymentByReference } from "@/services/payment.service";
 import { resolvePointsRedemptionForCart, validateRedemptionAtPlaceOrder } from "@/services/rewards.service";
 import { resolveDelivery } from "@/services/shipping.service";
+import { getPickupLocation } from "@/services/system-settings.service";
 import type { DeliveryResolution, EligiblePaymentMethod, OrderConfirmationSummary, PaymentIntentResult, SavedAddress } from "@/types/checkout";
 import type { CheckoutAddressInput, PlaceOrderInput } from "@/validation/checkout.schema";
 
@@ -71,6 +74,8 @@ interface CheckoutCartState {
     packagingCharge: number;
     packagingDeclaredAvailability: "Local" | "Export" | null;
     packagingRequiresManualReview: boolean;
+    /** Export fulfilment flow. Snapshot of ProductPackagingOption.customerInstructions — shown at checkout Review, not just the PDP. */
+    packagingInstructions: string | null;
   }>;
 }
 
@@ -128,8 +133,18 @@ export async function requireCheckoutableCart(userId: string | null, guestCookie
       packagingCharge: line.packagingCharge,
       packagingDeclaredAvailability: line.packagingDeclaredAvailability,
       packagingRequiresManualReview: line.packagingRequiresManualReview,
+      packagingInstructions: line.packagingInstructions,
     })),
   };
+}
+
+/**
+ * Export fulfilment flow. True when any line was self-declared "taking
+ * this abroad" at packaging selection — gates both the new ExportDetails
+ * checkout step and whether Pickup is even a legal choice.
+ */
+function requiresExportDetails(lines: CheckoutCartState["lines"]): boolean {
+  return lines.some((line) => line.packagingDeclaredAvailability === "Export");
 }
 
 /** Story 2 (Bundles). One entry per distinct bundle instance, with its current stockMode — see createOrderWithStockDecrement's OwnStock decrement step. */
@@ -212,8 +227,9 @@ export async function resolveDeliveryForCart(
 export async function createIntentForCart(
   userId: string | null,
   guestCookieValue: string | null | undefined,
-  city: string,
+  city: string | null,
   method: PaymentMethod,
+  fulfilmentMethod: FulfilmentMethod = "Delivery",
 ): Promise<PaymentIntentResult> {
   const cart = await requireCheckoutableCart(userId, guestCookieValue);
   // Story 4 (Payment Restriction). Rejected before any Payment row is
@@ -223,10 +239,22 @@ export async function createIntentForCart(
   const allowed = await resolveAllowedPaymentMethods(requiresRestrictedPayment(cart.lines));
   if (!allowed.some((entry) => entry.method === method)) throw new PaymentMethodNotAllowedError();
 
-  const delivery = await resolveDelivery(city, cart.subtotal, cart.totalWeightGrams);
-  if (delivery.status !== "ok") throw new DeliveryUnavailableError(delivery.status);
-  const discount = await resolveDiscountForCart({ couponId: cart.couponId }, toDiscountableLines(cart), cart.subtotal, delivery.charge, userId);
-  const deliveryCharge = discount.freeShippingApplied ? 0 : delivery.charge;
+  // Export fulfilment flow. Pickup skips delivery-zone resolution entirely
+  // — no charge, no zone — but is only a legal choice for an export-declared
+  // cart with an admin-configured pickup location.
+  let rawDeliveryCharge = 0;
+  if (fulfilmentMethod === "Pickup") {
+    if (!requiresExportDetails(cart.lines)) throw new PickupUnavailableError();
+    if (!(await getPickupLocation())) throw new PickupUnavailableError();
+  } else {
+    if (!city) throw new DeliveryUnavailableError("config_error");
+    const delivery = await resolveDelivery(city, cart.subtotal, cart.totalWeightGrams);
+    if (delivery.status !== "ok") throw new DeliveryUnavailableError(delivery.status);
+    rawDeliveryCharge = delivery.charge;
+  }
+
+  const discount = await resolveDiscountForCart({ couponId: cart.couponId }, toDiscountableLines(cart), cart.subtotal, rawDeliveryCharge, userId);
+  const deliveryCharge = discount.freeShippingApplied ? 0 : rawDeliveryCharge;
   const payableBeforePoints = roundMoney(cart.subtotal - discount.totalAmount + deliveryCharge);
   // STORY-030: points layer as an ADDITIONAL reduction on top of the
   // coupon/promotion result — never part of that take-best competition,
@@ -302,10 +330,60 @@ export async function placeOrder(
     await validateCoupon(appliedCoupon, discountableLines, cart.subtotal, userId, guestEmailForValidation);
   }
 
-  const delivery = await resolveDelivery(input.address.city, cart.subtotal, cart.totalWeightGrams);
-  if (delivery.status !== "ok") throw new DeliveryUnavailableError(delivery.status);
-  const discount = await resolveDiscountForCart({ couponId: cart.couponId }, discountableLines, cart.subtotal, delivery.charge, userId);
-  const deliveryCharge = discount.freeShippingApplied ? 0 : delivery.charge;
+  // Export fulfilment flow. A cart with an export-declared packaging line
+  // requires the traveler's details regardless of which sub-choice
+  // (Pickup or Deliver) they make; Pickup itself is only legal within that
+  // same flow, and only once an admin has configured a pickup location.
+  const needsExportDetails = requiresExportDetails(cart.lines);
+  if (needsExportDetails && !input.traveler) throw new ExportDetailsRequiredError();
+  const fulfilmentMethod: FulfilmentMethod = input.fulfilmentMethod ?? "Delivery";
+  if (fulfilmentMethod === "Pickup" && !needsExportDetails) throw new PickupUnavailableError();
+
+  let rawDeliveryCharge = 0;
+  let deliveryZoneName: string;
+  let estimatedDaysMin: number | null = null;
+  let estimatedDaysMax: number | null = null;
+  let shipRecipientName: string;
+  let shipPhone: string;
+  let shipLine1: string;
+  let shipLine2: string | null = null;
+  let shipCity: string;
+  let shipDistrict: string | null = null;
+  let shipPostalCode: string | null = null;
+
+  if (fulfilmentMethod === "Pickup") {
+    const pickupLocation = await getPickupLocation();
+    if (!pickupLocation) throw new PickupUnavailableError();
+    // Guaranteed present: needsExportDetails is true here (checked above,
+    // since Pickup requires it), and placeOrderSchema doesn't itself
+    // enforce traveler on Pickup — this is the one server-side check that does.
+    const traveler = input.traveler;
+    if (!traveler) throw new ExportDetailsRequiredError();
+    shipRecipientName = traveler.travelerName;
+    shipPhone = traveler.travelerPhone;
+    shipLine1 = pickupLocation.address;
+    shipCity = pickupLocation.name;
+    deliveryZoneName = `Pickup — ${pickupLocation.name}`;
+  } else {
+    // Guaranteed present by placeOrderSchema's superRefine (address required for Delivery).
+    const address = input.address!;
+    const delivery = await resolveDelivery(address.city, cart.subtotal, cart.totalWeightGrams);
+    if (delivery.status !== "ok") throw new DeliveryUnavailableError(delivery.status);
+    rawDeliveryCharge = delivery.charge;
+    deliveryZoneName = delivery.zoneName;
+    estimatedDaysMin = delivery.estimatedDaysMin;
+    estimatedDaysMax = delivery.estimatedDaysMax;
+    shipRecipientName = address.recipientName;
+    shipPhone = address.phone;
+    shipLine1 = address.line1;
+    shipLine2 = address.line2 ?? null;
+    shipCity = address.city;
+    shipDistrict = address.district ?? null;
+    shipPostalCode = address.postalCode ?? null;
+  }
+
+  const discount = await resolveDiscountForCart({ couponId: cart.couponId }, discountableLines, cart.subtotal, rawDeliveryCharge, userId);
+  const deliveryCharge = discount.freeShippingApplied ? 0 : rawDeliveryCharge;
   const payableBeforePoints = roundMoney(cart.subtotal - discount.totalAmount + deliveryCharge);
 
   // Final, THROWING points re-validation — mirrors the coupon
@@ -368,16 +446,20 @@ export async function placeOrder(
     rewardPointsEarned: cart.rewardPointsEarned,
     paymentId: payment.id,
     paymentMethod: input.paymentMethod,
-    deliveryZoneName: delivery.zoneName,
-    estimatedDaysMin: delivery.estimatedDaysMin,
-    estimatedDaysMax: delivery.estimatedDaysMax,
-    shipRecipientName: input.address.recipientName,
-    shipPhone: input.address.phone,
-    shipLine1: input.address.line1,
-    shipLine2: input.address.line2 ?? null,
-    shipCity: input.address.city,
-    shipDistrict: input.address.district ?? null,
-    shipPostalCode: input.address.postalCode ?? null,
+    fulfilmentMethod,
+    travelerName: input.traveler?.travelerName ?? null,
+    travelerCountry: input.traveler?.travelerCountry ?? null,
+    travelerPhone: input.traveler?.travelerPhone ?? null,
+    deliveryZoneName,
+    estimatedDaysMin,
+    estimatedDaysMax,
+    shipRecipientName,
+    shipPhone,
+    shipLine1,
+    shipLine2,
+    shipCity,
+    shipDistrict,
+    shipPostalCode,
     items: cart.lines.map((line) => ({
       productId: line.productId,
       productName: line.productName,
@@ -397,6 +479,7 @@ export async function placeOrder(
       packagingCharge: line.packagingCharge.toFixed(2),
       packagingDeclaredAvailability: line.packagingDeclaredAvailability,
       packagingRequiresManualReview: line.packagingRequiresManualReview,
+      packagingInstructions: line.packagingInstructions,
     })),
     // Story 2 (Bundles). Grouped from this same checkout-time cart.lines
     // snapshot — one entry per distinct bundle instance in the cart
@@ -410,10 +493,11 @@ export async function placeOrder(
     requiresManualReview,
   });
 
-  if (userId && input.save) {
+  if (userId && input.save && input.address) {
     // Best-effort, same as this codebase's other checkout-adjacent side
     // effects — a customer who already has 10 saved addresses (STORY-034's
     // cap) can still complete the order; the address just isn't saved.
+    // Pickup orders have no address to save (input.address is undefined).
     try {
       await saveAddressFromCheckout(userId, input.address);
     } catch (error) {
@@ -486,6 +570,10 @@ function toConfirmationSummary(order: Awaited<ReturnType<typeof getOrderForConfi
     currency: "LKR",
     paymentMethod: order.paymentMethod,
     rewardPointsEarned: order.rewardPointsEarned,
+    fulfilmentMethod: order.fulfilmentMethod,
+    travelerName: order.travelerName,
+    travelerCountry: order.travelerCountry,
+    travelerPhone: order.travelerPhone,
     deliveryZoneName: order.deliveryZoneName,
     estimatedDaysMin: order.estimatedDaysMin,
     estimatedDaysMax: order.estimatedDaysMax,
@@ -507,6 +595,7 @@ function toConfirmationSummary(order: Awaited<ReturnType<typeof getOrderForConfi
       packagingMethodName: item.packagingMethodName,
       packagingCharge: item.packagingCharge?.toNumber() ?? null,
       packagingRequiresManualReview: item.packagingRequiresManualReview,
+      packagingInstructions: item.packagingInstructions,
       unitPrice: item.unitPrice.toNumber(),
       quantity: item.quantity,
       lineTotal: item.lineTotal.toNumber(),

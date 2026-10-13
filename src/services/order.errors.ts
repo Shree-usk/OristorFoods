@@ -9,7 +9,8 @@ export type OrderErrorCode =
   | "return_not_allowed"
   | "invalid_return_quantity"
   | "refund_amount_exceeds_remaining"
-  | "no_payment_on_order";
+  | "no_payment_on_order"
+  | "not_pickup_order";
 
 export class OrderServiceError extends Error {
   constructor(
@@ -102,5 +103,12 @@ export class OrderRefundAmountExceedsRemainingError extends OrderServiceError {
 export class OrderHasNoPaymentError extends OrderServiceError {
   constructor() {
     super("no_payment_on_order", "This order has no payment to refund.");
+  }
+}
+
+/** Export fulfilment flow. "Mark ready for pickup" only applies to a Pickup-fulfilment order. */
+export class OrderNotPickupError extends OrderServiceError {
+  constructor() {
+    super("not_pickup_order", "Only a pickup order can be marked ready for pickup.");
   }
 }

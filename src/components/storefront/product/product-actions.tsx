@@ -11,6 +11,8 @@ interface ProductActionsProps {
   productId: string;
   inStock: boolean;
   variantId?: string | null;
+  /** Export fulfilment flow. Defaults to 1 — auto-bumped by product-purchase-panel.tsx when a minimum-quantity packaging option is selected. */
+  quantity?: number;
   /** True when the product has variants but none is currently selected — blocks an ambiguous add. */
   variantRequired?: boolean;
   /** Story 3 (Custom Packaging). Null = default packaging (no surcharge). */
@@ -19,7 +21,15 @@ interface ProductActionsProps {
   packagingBlocked?: boolean;
 }
 
-export function ProductActions({ productId, inStock, variantId = null, variantRequired = false, packaging = null, packagingBlocked = false }: ProductActionsProps) {
+export function ProductActions({
+  productId,
+  inStock,
+  variantId = null,
+  quantity = 1,
+  variantRequired = false,
+  packaging = null,
+  packagingBlocked = false,
+}: ProductActionsProps) {
   const cart = useAddToCart(productId, variantId, packaging);
   const wishlist = useWishlist(productId);
 
@@ -30,7 +40,7 @@ export function ProductActions({ productId, inStock, variantId = null, variantRe
           type="button"
           size="lg"
           disabled={!inStock || !cart.isAvailable || cart.isAdding || variantRequired || packagingBlocked}
-          onClick={() => cart.addToCart()}
+          onClick={() => cart.addToCart(quantity)}
         >
           <ShoppingCart /> {inStock ? "Add to Cart" : "Out of Stock"}
         </Button>

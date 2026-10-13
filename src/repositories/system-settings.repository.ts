@@ -104,6 +104,37 @@ export function deleteFeatureFlag(id: string) {
   return prisma.featureFlag.delete({ where: { id } });
 }
 
+// Export fulfilment flow — bank accounts shown to a customer paying by
+// Bank Transfer (Story 4), more than one expected.
+
+export function listBankAccounts() {
+  return prisma.bankAccountSetting.findMany({ orderBy: { sortOrder: "asc" } });
+}
+
+export function listEnabledBankAccounts() {
+  return prisma.bankAccountSetting.findMany({ where: { enabled: true }, orderBy: { sortOrder: "asc" } });
+}
+
+export async function nextBankAccountSortOrder(): Promise<number> {
+  const last = await prisma.bankAccountSetting.findFirst({ orderBy: { sortOrder: "desc" } });
+  return (last?.sortOrder ?? -1) + 1;
+}
+
+export function createBankAccount(data: { bankName: string; accountName: string; accountNumber: string; branch?: string | null; swiftCode?: string | null; currency: string; enabled: boolean; sortOrder: number }) {
+  return prisma.bankAccountSetting.create({ data });
+}
+
+export function updateBankAccount(
+  id: string,
+  data: { bankName?: string; accountName?: string; accountNumber?: string; branch?: string | null; swiftCode?: string | null; currency?: string; enabled?: boolean; sortOrder?: number },
+) {
+  return prisma.bankAccountSetting.update({ where: { id }, data });
+}
+
+export function deleteBankAccount(id: string) {
+  return prisma.bankAccountSetting.delete({ where: { id } });
+}
+
 export function getInventorySetting() {
   return prisma.inventorySetting.findUnique({ where: { id: "global" } });
 }

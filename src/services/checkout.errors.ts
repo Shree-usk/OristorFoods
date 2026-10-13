@@ -8,7 +8,9 @@ export type CheckoutErrorCode =
   | "totals_changed"
   | "guest_email_required"
   | "address_not_found"
-  | "payment_method_not_allowed";
+  | "payment_method_not_allowed"
+  | "export_details_required"
+  | "pickup_unavailable";
 
 export class CheckoutServiceError extends Error {
   constructor(
@@ -80,5 +82,28 @@ export class AddressNotFoundError extends CheckoutServiceError {
 export class PaymentMethodNotAllowedError extends CheckoutServiceError {
   constructor() {
     super("payment_method_not_allowed", "The selected payment method isn't available for this order. Please choose another method.");
+  }
+}
+
+/**
+ * Export fulfilment flow. The cart contains an export-declared packaging
+ * line, so the traveler's name/country/local contact are required before
+ * checkout can continue — thrown by both createIntentForCart and placeOrder
+ * if the client tries to skip the ExportDetailsStep.
+ */
+export class ExportDetailsRequiredError extends CheckoutServiceError {
+  constructor() {
+    super("export_details_required", "Please provide your travel details before continuing — your cart includes an item declared for export.");
+  }
+}
+
+/**
+ * Export fulfilment flow. Pickup was requested but either the cart has no
+ * export-declared line (Pickup only ever applies within that flow) or no
+ * admin has configured a pickup location yet.
+ */
+export class PickupUnavailableError extends CheckoutServiceError {
+  constructor() {
+    super("pickup_unavailable", "Pickup isn't available right now. Please choose delivery, or contact us.");
   }
 }

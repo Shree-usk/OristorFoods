@@ -28,26 +28,43 @@ import type { CartSummary } from "@/types/cart";
 export function ReviewStep({ cart }: { cart: CartSummary }) {
   const router = useRouter();
   const queryClient = useQueryClient();
-  const { address, guestEmail, saveAddress, delivery, paymentMethod, intent, idempotencyKey, resetPaymentAttempt, goToStep, completeOrder } =
-    useCheckoutStore();
+  const {
+    address,
+    guestEmail,
+    saveAddress,
+    delivery,
+    fulfilmentMethod,
+    traveler,
+    paymentMethod,
+    intent,
+    idempotencyKey,
+    resetPaymentAttempt,
+    goToStep,
+    completeOrder,
+  } = useCheckoutStore();
   const [isPlacing, setIsPlacing] = useState(false);
   const [placeError, setPlaceError] = useState<string | null>(null);
 
-  if (!address || delivery?.status !== "ok" || !paymentMethod || !intent) return null;
+  const isPickup = fulfilmentMethod === "Pickup";
+  if (!isPickup && (!address || delivery?.status !== "ok")) return null;
+  if (!paymentMethod || !intent) return null;
 
   const discountAmount = cart.discount?.amount ?? 0;
-  const deliveryCharge = cart.discount?.freeShippingApplied ? 0 : delivery.charge;
+  const deliveryCharge = isPickup || cart.discount?.freeShippingApplied ? 0 : (delivery as Extract<typeof delivery, { status: "ok" }>).charge;
   const pointsRedemptionValue = cart.pointsRedemption?.value ?? 0;
   const grandTotal = Math.round((cart.subtotal - discountAmount + deliveryCharge - pointsRedemptionValue) * 100) / 100;
 
   async function handlePlaceOrder() {
-    if (!address || !paymentMethod || !intent) return;
+    if (!paymentMethod || !intent) return;
+    if (!isPickup && !address) return;
     setIsPlacing(true);
     setPlaceError(null);
     try {
       const result = await placeOrder({
         idempotencyKey,
-        address,
+        fulfilmentMethod: fulfilmentMethod ?? "Delivery",
+        address: isPickup ? undefined : address!,
+        traveler: traveler ?? undefined,
         guestEmail: guestEmail ?? undefined,
         providerReference: intent.providerReference,
         paymentMethod,
@@ -89,6 +106,9 @@ export function ReviewStep({ cart }: { cart: CartSummary }) {
                   {item.variantName && <span className="text-charcoal/70"> — {item.variantName}</span>} <span className="text-charcoal/70">× {item.quantity}</span>
                   {item.bundleName && <span className="ml-1 text-caption text-charcoal/60">(part of {item.bundleName})</span>}
                   {item.packagingMethodName && <span className="ml-1 text-caption text-charcoal/60">+ {item.packagingMethodName} packaging</span>}
+                  {item.packagingInstructions && (
+                    <span className="mt-1 block text-caption text-chilli">{item.packagingInstructions}</span>
+                  )}
                 </span>
                 <span className="font-number">
                   {item.currency} {item.lineTotal.toFixed(2)}
@@ -100,18 +120,40 @@ export function ReviewStep({ cart }: { cart: CartSummary }) {
 
         <section aria-labelledby="review-address-heading">
           <h3 id="review-address-heading" className="text-h4 font-heading text-charcoal">
-            Delivering to
+            {isPickup ? "Collecting in person" : "Delivering to"}
           </h3>
-          <p className="mt-2 text-body text-charcoal">
-            {address.recipientName}, {address.line1}
-            {address.line2 ? `, ${address.line2}` : ""}, {address.city}
-            {address.district ? `, ${address.district}` : ""}
-            {address.postalCode ? ` ${address.postalCode}` : ""} · {address.phone}
-          </p>
-          <p className="mt-1 text-small text-charcoal/70">
-            Zone: {delivery.zoneName}
-            {delivery.campaignApplied ? ` (${delivery.campaignApplied})` : ""}
-          </p>
+          {isPickup ? (
+            <>
+              {traveler && (
+                <p className="mt-2 text-body text-charcoal">
+                  {traveler.travelerName} ({traveler.travelerCountry}) · {traveler.travelerPhone}
+                </p>
+              )}
+              <p className="mt-1 text-small text-charcoal/70">You&apos;ll collect this order yourself — no delivery charge.</p>
+            </>
+          ) : (
+            address && (
+              <>
+                <p className="mt-2 text-body text-charcoal">
+                  {address.recipientName}, {address.line1}
+                  {address.line2 ? `, ${address.line2}` : ""}, {address.city}
+                  {address.district ? `, ${address.district}` : ""}
+                  {address.postalCode ? ` ${address.postalCode}` : ""} · {address.phone}
+                </p>
+                {delivery?.status === "ok" && (
+                  <p className="mt-1 text-small text-charcoal/70">
+                    Zone: {delivery.zoneName}
+                    {delivery.campaignApplied ? ` (${delivery.campaignApplied})` : ""}
+                  </p>
+                )}
+                {traveler && (
+                  <p className="mt-1 text-small text-charcoal/70">
+                    Traveler: {traveler.travelerName} ({traveler.travelerCountry}) · {traveler.travelerPhone}
+                  </p>
+                )}
+              </>
+            )
+          )}
           <p className="mt-1 text-small text-charcoal/70">
             Payment: {paymentMethod === "Card" ? "Card" : paymentMethod === "BankTransfer" ? "Bank Transfer" : "Cash on Delivery"}
           </p>
@@ -173,7 +215,7 @@ export function ReviewStep({ cart }: { cart: CartSummary }) {
       </div>
 
       <div className="mt-6 flex flex-wrap gap-3">
-        <Button type="button" variant="outline" onClick={() => goToStep(3)} disabled={isPlacing}>
+        <Button type="button" variant="outline" onClick={() => goToStep(4)} disabled={isPlacing}>
           Back to Payment
         </Button>
         <Button type="button" onClick={handlePlaceOrder} disabled={isPlacing}>

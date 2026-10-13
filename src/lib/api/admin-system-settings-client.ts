@@ -22,6 +22,10 @@ export interface CompanySetting {
   contactHeroHeadline: string | null;
   contactHeroSubcopy: string | null;
   contactLocationHeading: string | null;
+  /** Export fulfilment flow. */
+  pickupLocationName: string | null;
+  pickupLocationAddress: string | null;
+  pickupLocationMapUrl: string | null;
 }
 
 export type CompanySettingInput = Partial<Omit<CompanySetting, "id">>;
@@ -195,6 +199,52 @@ export async function updatePaymentMethod(id: string, input: Partial<Omit<Paymen
 export async function deletePaymentMethod(id: string): Promise<void> {
   const response = await fetch(`/api/admin/settings/payment-methods/${id}`, { method: "DELETE" });
   await assertOkWithServerMessage(response, "Failed to remove the payment method");
+}
+
+/** Export fulfilment flow. Customer sees every enabled account at checkout; admin manages the full list here. */
+export interface BankAccountSetting {
+  id: string;
+  bankName: string;
+  accountName: string;
+  accountNumber: string;
+  branch: string | null;
+  swiftCode: string | null;
+  currency: string;
+  enabled: boolean;
+  sortOrder: number;
+}
+
+export async function fetchBankAccounts(): Promise<BankAccountSetting[]> {
+  const response = await fetch("/api/admin/settings/bank-accounts");
+  if (!response.ok) throw new Error(`Failed to load bank accounts (${response.status})`);
+  return response.json();
+}
+
+export interface BankAccountAdminInput {
+  bankName: string;
+  accountName: string;
+  accountNumber: string;
+  branch?: string | null;
+  swiftCode?: string | null;
+  currency: string;
+  enabled: boolean;
+}
+
+export async function createBankAccount(input: BankAccountAdminInput): Promise<BankAccountSetting> {
+  const response = await fetch("/api/admin/settings/bank-accounts", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(input) });
+  await assertOkWithServerMessage(response, "Failed to add the bank account");
+  return response.json();
+}
+
+export async function updateBankAccount(id: string, input: Partial<BankAccountAdminInput>): Promise<BankAccountSetting> {
+  const response = await fetch(`/api/admin/settings/bank-accounts/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(input) });
+  await assertOkWithServerMessage(response, "Failed to update the bank account");
+  return response.json();
+}
+
+export async function deleteBankAccount(id: string): Promise<void> {
+  const response = await fetch(`/api/admin/settings/bank-accounts/${id}`, { method: "DELETE" });
+  await assertOkWithServerMessage(response, "Failed to remove the bank account");
 }
 
 export interface FeatureFlag {

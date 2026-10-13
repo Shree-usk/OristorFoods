@@ -16,6 +16,8 @@ const checkoutStatusByCode: Record<CheckoutErrorCode, number> = {
   guest_email_required: 400,
   address_not_found: 404,
   payment_method_not_allowed: 409,
+  export_details_required: 400,
+  pickup_unavailable: 422,
 };
 
 const orderStatusByCode: Record<OrderErrorCode, number> = {
@@ -30,6 +32,7 @@ const orderStatusByCode: Record<OrderErrorCode, number> = {
   invalid_return_quantity: 400,
   refund_amount_exceeds_remaining: 400,
   no_payment_on_order: 409,
+  not_pickup_order: 409,
 };
 
 const paymentStatusByCode: Record<PaymentErrorCode, number> = {

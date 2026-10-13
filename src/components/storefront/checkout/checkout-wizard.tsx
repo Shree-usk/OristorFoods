@@ -7,10 +7,11 @@ import { useEffect, useRef } from "react";
 import { AddressStep } from "@/components/storefront/checkout/address-step";
 import { CheckoutStepIndicator } from "@/components/storefront/checkout/checkout-step-indicator";
 import { DeliveryStep } from "@/components/storefront/checkout/delivery-step";
+import { ExportDetailsStep } from "@/components/storefront/checkout/export-details-step";
 import { PaymentStep } from "@/components/storefront/checkout/payment-step";
 import { ReviewStep } from "@/components/storefront/checkout/review-step";
 import { useCart } from "@/hooks/use-cart";
-import { CHECKOUT_STEPS, useCheckoutStore } from "@/lib/stores/checkout-store";
+import { CHECKOUT_STEPS, type CheckoutStep, useCheckoutStore } from "@/lib/stores/checkout-store";
 
 /**
  * The four-step checkout wizard (STORY-025). Wizard state is client-held
@@ -22,7 +23,7 @@ export function CheckoutWizard() {
   const router = useRouter();
   const { status } = useSession();
   const { cart, isPending } = useCart();
-  const { step, completedOrderNumber, reset } = useCheckoutStore();
+  const { step, fulfilmentMethod, completedOrderNumber, reset } = useCheckoutStore();
 
   const cartIsEmpty = !isPending && (!cart || cart.items.length === 0);
   const orderJustPlaced = completedOrderNumber !== null;
@@ -67,11 +68,21 @@ export function CheckoutWizard() {
   // before reaching the Payment step, not just once they get there.
   const hasRestrictedPayment = cart.items.some((item) => item.packagingOptionId !== null);
 
+  // Export fulfilment flow. Step 1 (Export Details) only ever applies to a
+  // cart with an export-declared packaging line — computed at render time
+  // (never synced into the store via an effect) so a plain cart's step
+  // numbering is unaffected by this field existing at all.
+  const requiresExportDetails = cart.items.some((item) => item.packagingDeclaredAvailability === "Export");
+  const isPickup = fulfilmentMethod === "Pickup";
+  const effectiveStep: CheckoutStep = step === 1 && !requiresExportDetails ? 2 : step;
+  const visibleStepNumbers: CheckoutStep[] = requiresExportDetails ? (isPickup ? [1, 4, 5] : [1, 2, 3, 4, 5]) : [2, 3, 4, 5];
+  const indicatorSteps = visibleStepNumbers.map((number) => ({ number, label: CHECKOUT_STEPS[number - 1] }));
+
   return (
     <div className="mt-8">
-      <CheckoutStepIndicator currentStep={step} />
+      <CheckoutStepIndicator currentStep={effectiveStep} steps={indicatorSteps} />
       <p aria-live="polite" className="sr-only">
-        Step {step} of {CHECKOUT_STEPS.length}: {CHECKOUT_STEPS[step - 1]}
+        Step {indicatorSteps.findIndex((entry) => entry.number === effectiveStep) + 1} of {indicatorSteps.length}: {CHECKOUT_STEPS[effectiveStep - 1]}
       </p>
 
       {!hasBlockedLines && hasRestrictedPayment && (
@@ -90,10 +101,11 @@ export function CheckoutWizard() {
         </p>
       ) : (
         <div className="mt-8 max-w-2xl">
-          {step === 1 && <AddressStep isAuthenticated={status === "authenticated"} />}
-          {step === 2 && <DeliveryStep />}
-          {step === 3 && <PaymentStep />}
-          {step === 4 && <ReviewStep cart={cart} />}
+          {effectiveStep === 1 && <ExportDetailsStep />}
+          {effectiveStep === 2 && <AddressStep isAuthenticated={status === "authenticated"} />}
+          {effectiveStep === 3 && <DeliveryStep />}
+          {effectiveStep === 4 && <PaymentStep />}
+          {effectiveStep === 5 && <ReviewStep cart={cart} />}
         </div>
       )}
     </div>

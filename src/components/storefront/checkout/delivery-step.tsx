@@ -94,10 +94,10 @@ export function DeliveryStep() {
       </div>
 
       <div className="mt-6 flex flex-wrap gap-3">
-        <Button type="button" variant="outline" onClick={() => goToStep(1)}>
+        <Button type="button" variant="outline" onClick={() => goToStep(2)}>
           Back to Address
         </Button>
-        <Button type="button" disabled={resolution?.status !== "ok"} onClick={() => goToStep(3)}>
+        <Button type="button" disabled={resolution?.status !== "ok"} onClick={() => goToStep(4)}>
           Continue to Payment
         </Button>
       </div>
