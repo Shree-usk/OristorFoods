@@ -134,6 +134,7 @@ export async function getOrderAdminDetail(adminUserId: string, orderId: string):
     tax: order.tax.toNumber(),
     grandTotal: order.grandTotal.toNumber(),
     currency: "LKR",
+    paymentMethod: order.paymentMethod,
     rewardPointsEarned: order.rewardPointsEarned,
     deliveryZoneName: order.deliveryZoneName,
     estimatedDaysMin: order.estimatedDaysMin,

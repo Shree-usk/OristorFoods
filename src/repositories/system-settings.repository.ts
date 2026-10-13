@@ -1,4 +1,4 @@
-import type { Prisma, TaxPricingDisplayMode } from "@/generated/prisma/client";
+import type { PaymentMethod, Prisma, TaxPricingDisplayMode } from "@/generated/prisma/client";
 import { prisma } from "@/lib/db";
 
 /** STORY-054. The only place CompanySetting/CurrencySetting/LocaleSetting/TaxSetting/TaxRateRule/PaymentMethodSetting/FeatureFlag/InventorySetting are queried/mutated. Singleton rows upserted by id: "global" — same pattern as ShippingSetting/RewardSetting. */
@@ -55,16 +55,28 @@ export function listPaymentMethods() {
   return prisma.paymentMethodSetting.findMany({ orderBy: { sortOrder: "asc" } });
 }
 
+/** Story 4 (Payment Restriction). Checkout's own read — only rows an admin has tagged with a concrete PaymentMethod AND enabled. */
+export function listCheckoutEnabledPaymentMethods() {
+  return prisma.paymentMethodSetting.findMany({ where: { enabled: true, method: { not: null } }, orderBy: { sortOrder: "asc" } });
+}
+
 export async function nextPaymentMethodSortOrder(): Promise<number> {
   const last = await prisma.paymentMethodSetting.findFirst({ orderBy: { sortOrder: "desc" } });
   return (last?.sortOrder ?? -1) + 1;
 }
 
-export function createPaymentMethod(data: { key: string; label: string; enabled: boolean; sortOrder: number }) {
+export function findPaymentMethodByMethod(method: PaymentMethod) {
+  return prisma.paymentMethodSetting.findUnique({ where: { method } });
+}
+
+export function createPaymentMethod(data: { key: string; label: string; enabled: boolean; sortOrder: number; method?: PaymentMethod | null; allowedForRestrictedOrders?: boolean }) {
   return prisma.paymentMethodSetting.create({ data });
 }
 
-export function updatePaymentMethod(id: string, data: { label?: string; enabled?: boolean; sortOrder?: number }) {
+export function updatePaymentMethod(
+  id: string,
+  data: { label?: string; enabled?: boolean; sortOrder?: number; method?: PaymentMethod | null; allowedForRestrictedOrders?: boolean },
+) {
   return prisma.paymentMethodSetting.update({ where: { id }, data });
 }
 

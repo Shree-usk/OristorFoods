@@ -62,6 +62,10 @@ export function CheckoutWizard() {
   }
 
   const hasBlockedLines = cart.items.some((item) => item.unavailable || item.quantityCapped);
+  // Story 4 (Payment Restriction), brief Section 6: shown up front — before
+  // Address/Delivery — so the customer knows the limited payment choice
+  // before reaching the Payment step, not just once they get there.
+  const hasRestrictedPayment = cart.items.some((item) => item.packagingOptionId !== null);
 
   return (
     <div className="mt-8">
@@ -69,6 +73,12 @@ export function CheckoutWizard() {
       <p aria-live="polite" className="sr-only">
         Step {step} of {CHECKOUT_STEPS.length}: {CHECKOUT_STEPS[step - 1]}
       </p>
+
+      {!hasBlockedLines && hasRestrictedPayment && (
+        <p className="mt-4 rounded-lg border border-input bg-cream p-4 text-small text-charcoal">
+          Your order includes custom packaging, so it must be paid by card or bank transfer.
+        </p>
+      )}
 
       {hasBlockedLines ? (
         <p role="alert" className="mt-8 rounded-lg border border-gold bg-cream p-4 text-body text-charcoal">

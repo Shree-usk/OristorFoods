@@ -25,6 +25,7 @@ const FIXTURE_ORDER: OrderAdminDetail = {
   tax: 0,
   grandTotal: 1300,
   currency: "LKR",
+  paymentMethod: "Card",
   rewardPointsEarned: 10,
   deliveryZoneName: "Western",
   estimatedDaysMin: 1,

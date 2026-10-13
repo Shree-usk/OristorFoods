@@ -22,7 +22,7 @@ export async function POST(request: Request) {
     const userId = session?.user?.id ?? null;
     const guestCookieValue = readCartCookie(request);
 
-    const intent = await createIntentForCart(userId, guestCookieValue, parsed.data.city);
+    const intent = await createIntentForCart(userId, guestCookieValue, parsed.data.city, parsed.data.paymentMethod);
     return NextResponse.json(intent);
   } catch (error) {
     return checkoutErrorResponse(error);

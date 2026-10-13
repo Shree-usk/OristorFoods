@@ -6,6 +6,7 @@ import { SystemSettingsError, type SystemSettingsErrorCode } from "@/services/sy
 
 const statusByCode: Record<SystemSettingsErrorCode, number> = {
   payment_method_key_conflict: 409,
+  payment_method_tag_conflict: 409,
   feature_flag_key_conflict: 409,
 };
 

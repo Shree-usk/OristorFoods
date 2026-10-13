@@ -375,6 +375,64 @@ describe("transitionOrderStatus", () => {
     const events = await prisma.orderIntegrationEvent.findMany({ where: { orderId: order.id }, orderBy: { createdAt: "asc" } });
     expect(events.map((e) => e.eventType)).toEqual(["order.confirmed", "order.dispatched", "order.delivered"]);
   });
+
+  describe("Story 4 (Payment Restriction) — confirming a bank-transfer order", () => {
+    async function makePendingPayment(amount: string) {
+      sequence += 1;
+      return prisma.payment.create({
+        data: { provider: "bank_transfer", providerReference: `mock_ord-svc-${sequence}`, status: "Pending", amount, currency: "LKR" },
+      });
+    }
+
+    it("flips the linked Payment from Pending to Succeeded — this IS the brief's own payment-verification workflow", async () => {
+      const product = await makeProduct(10);
+      const payment = await makePendingPayment("150.00");
+      const cart = await makeCart();
+      const { order } = await createOrder(
+        orderInput({ idempotencyKey: crypto.randomUUID(), paymentId: payment.id, cartId: cart.id, items: [lineFor(product, 2)], paymentMethod: "BankTransfer", requiresManualReview: true }),
+      );
+      expect(order.status).toBe("PendingConfirmation");
+
+      await transitionOrderStatus(order.id, "Confirmed", "admin:test-admin");
+
+      const updatedPayment = await prisma.payment.findUniqueOrThrow({ where: { id: payment.id } });
+      expect(updatedPayment.status).toBe("Succeeded");
+    });
+
+    it("never flips a Card payment's status — only BankTransfer orders get this treatment", async () => {
+      // A manual-review PACKAGING selection (Story 3) can also land an
+      // order in PendingConfirmation even when paid by Card — that
+      // Payment is already Succeeded from the real (mock) confirm step
+      // and must stay untouched here.
+      const product = await makeProduct(10);
+      const payment = await makePayment("150.00"); // provider "mock", status "Succeeded" by this file's own helper
+      const cart = await makeCart();
+      const { order } = await createOrder(
+        orderInput({ idempotencyKey: crypto.randomUUID(), paymentId: payment.id, cartId: cart.id, items: [lineFor(product, 2)], paymentMethod: "Card", requiresManualReview: true }),
+      );
+      expect(order.status).toBe("PendingConfirmation");
+
+      await transitionOrderStatus(order.id, "Confirmed", "admin:test-admin");
+
+      const updatedPayment = await prisma.payment.findUniqueOrThrow({ where: { id: payment.id } });
+      expect(updatedPayment.status).toBe("Succeeded"); // unchanged — it already was
+    });
+
+    it("leaves a CashOnDelivery order's Payment Pending — settlement happens outside this codebase's flow entirely", async () => {
+      const product = await makeProduct(10);
+      const payment = await makePendingPayment("150.00");
+      const cart = await makeCart();
+      const { order } = await createOrder(
+        orderInput({ idempotencyKey: crypto.randomUUID(), paymentId: payment.id, cartId: cart.id, items: [lineFor(product, 2)], paymentMethod: "CashOnDelivery", requiresManualReview: true }),
+      );
+      expect(order.status).toBe("PendingConfirmation");
+
+      await transitionOrderStatus(order.id, "Confirmed", "admin:test-admin");
+
+      const updatedPayment = await prisma.payment.findUniqueOrThrow({ where: { id: payment.id } });
+      expect(updatedPayment.status).toBe("Pending");
+    });
+  });
 });
 
 describe("cancelOrder", () => {

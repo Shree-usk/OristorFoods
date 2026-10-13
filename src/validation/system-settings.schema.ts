@@ -51,15 +51,22 @@ export const freeShippingThresholdSchema = z.object({
   value: z.number().min(0),
 });
 
+/** Story 4 (Payment Restriction). "" (an unselected <select>) means "no concrete method tag" — stored as SQL NULL, same convention as emptyToNull above. */
+const paymentMethodTagSchema = z.preprocess(emptyToNull, z.enum(["Card", "BankTransfer", "CashOnDelivery"]).nullable().optional());
+
 export const createPaymentMethodSchema = z.object({
   key: z.string().trim().min(1).max(60),
   label: z.string().trim().min(1).max(100),
   enabled: z.boolean().default(true),
+  method: paymentMethodTagSchema,
+  allowedForRestrictedOrders: z.boolean().optional(),
 });
 
 export const updatePaymentMethodSchema = z.object({
   label: z.string().trim().min(1).max(100).optional(),
   enabled: z.boolean().optional(),
+  method: paymentMethodTagSchema,
+  allowedForRestrictedOrders: z.boolean().optional(),
 });
 
 export const createFeatureFlagSchema = z.object({

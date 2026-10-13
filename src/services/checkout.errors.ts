@@ -7,7 +7,8 @@ export type CheckoutErrorCode =
   | "payment_not_confirmed"
   | "totals_changed"
   | "guest_email_required"
-  | "address_not_found";
+  | "address_not_found"
+  | "payment_method_not_allowed";
 
 export class CheckoutServiceError extends Error {
   constructor(
@@ -64,5 +65,20 @@ export class GuestEmailRequiredError extends CheckoutServiceError {
 export class AddressNotFoundError extends CheckoutServiceError {
   constructor() {
     super("address_not_found", "The selected address could not be found.");
+  }
+}
+
+/**
+ * Story 4 (Payment Restriction). Thrown when the requested payment method
+ * isn't eligible for the cart's current contents — either it's not
+ * configured/enabled at all, or the cart contains custom packaging and the
+ * method isn't in the admin-approved restricted set (brief Section 6).
+ * Mirrors TotalsChangedError's own 409 status: the existing checkout
+ * wizard already treats any 409 as "something changed, back to Payment,"
+ * so a stale selection after a cart change is handled for free.
+ */
+export class PaymentMethodNotAllowedError extends CheckoutServiceError {
+  constructor() {
+    super("payment_method_not_allowed", "The selected payment method isn't available for this order. Please choose another method.");
   }
 }

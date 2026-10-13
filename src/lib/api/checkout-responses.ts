@@ -15,6 +15,7 @@ const checkoutStatusByCode: Record<CheckoutErrorCode, number> = {
   totals_changed: 409,
   guest_email_required: 400,
   address_not_found: 404,
+  payment_method_not_allowed: 409,
 };
 
 const orderStatusByCode: Record<OrderErrorCode, number> = {

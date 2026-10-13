@@ -71,6 +71,8 @@ export interface OrderAdminDetail {
   discountLabel: string | null;
   grandTotal: number;
   currency: string;
+  /** Story 4 (Payment Restriction). */
+  paymentMethod: "Card" | "BankTransfer" | "CashOnDelivery";
   deliveryZoneName: string;
   estimatedDaysMin: number | null;
   estimatedDaysMax: number | null;

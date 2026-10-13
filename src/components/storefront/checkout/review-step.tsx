@@ -28,12 +28,12 @@ import type { CartSummary } from "@/types/cart";
 export function ReviewStep({ cart }: { cart: CartSummary }) {
   const router = useRouter();
   const queryClient = useQueryClient();
-  const { address, guestEmail, saveAddress, delivery, intent, idempotencyKey, resetPaymentAttempt, goToStep, completeOrder } =
+  const { address, guestEmail, saveAddress, delivery, paymentMethod, intent, idempotencyKey, resetPaymentAttempt, goToStep, completeOrder } =
     useCheckoutStore();
   const [isPlacing, setIsPlacing] = useState(false);
   const [placeError, setPlaceError] = useState<string | null>(null);
 
-  if (!address || delivery?.status !== "ok" || !intent) return null;
+  if (!address || delivery?.status !== "ok" || !paymentMethod || !intent) return null;
 
   const discountAmount = cart.discount?.amount ?? 0;
   const deliveryCharge = cart.discount?.freeShippingApplied ? 0 : delivery.charge;
@@ -41,7 +41,7 @@ export function ReviewStep({ cart }: { cart: CartSummary }) {
   const grandTotal = Math.round((cart.subtotal - discountAmount + deliveryCharge - pointsRedemptionValue) * 100) / 100;
 
   async function handlePlaceOrder() {
-    if (!address || !intent) return;
+    if (!address || !paymentMethod || !intent) return;
     setIsPlacing(true);
     setPlaceError(null);
     try {
@@ -50,6 +50,7 @@ export function ReviewStep({ cart }: { cart: CartSummary }) {
         address,
         guestEmail: guestEmail ?? undefined,
         providerReference: intent.providerReference,
+        paymentMethod,
         save: saveAddress || undefined,
       });
       completeOrder(result.orderNumber);
@@ -110,6 +111,9 @@ export function ReviewStep({ cart }: { cart: CartSummary }) {
           <p className="mt-1 text-small text-charcoal/70">
             Zone: {delivery.zoneName}
             {delivery.campaignApplied ? ` (${delivery.campaignApplied})` : ""}
+          </p>
+          <p className="mt-1 text-small text-charcoal/70">
+            Payment: {paymentMethod === "Card" ? "Card" : paymentMethod === "BankTransfer" ? "Bank Transfer" : "Cash on Delivery"}
           </p>
         </section>
 

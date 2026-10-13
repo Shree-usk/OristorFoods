@@ -2,7 +2,7 @@
 
 import { create } from "zustand";
 
-import type { DeliveryResolution, PaymentIntentResult } from "@/types/checkout";
+import type { DeliveryResolution, PaymentIntentResult, PaymentMethod } from "@/types/checkout";
 import type { CheckoutAddressInput } from "@/validation/checkout.schema";
 
 /**
@@ -25,6 +25,8 @@ interface CheckoutState {
   guestEmail: string | null;
   saveAddress: boolean;
   delivery: DeliveryResolution | null;
+  /** Story 4 (Payment Restriction). The customer's choice on the Payment step — null until they pick one. */
+  paymentMethod: PaymentMethod | null;
   intent: PaymentIntentResult | null;
   paymentConfirmed: boolean;
   /**
@@ -37,10 +39,17 @@ interface CheckoutState {
   goToStep: (step: CheckoutStep) => void;
   setAddress: (address: CheckoutAddressInput, guestEmail: string | null, saveAddress: boolean) => void;
   setDelivery: (delivery: DeliveryResolution | null) => void;
+  setPaymentMethod: (paymentMethod: PaymentMethod | null) => void;
   setIntent: (intent: PaymentIntentResult | null) => void;
   markPaymentConfirmed: () => void;
   completeOrder: (orderNumber: string) => void;
-  /** Totals changed mid-checkout: void the intent and start a fresh attempt. */
+  /**
+   * Totals changed mid-checkout, OR the chosen payment method is no
+   * longer allowed (Story 4: the cart gained/lost custom packaging since
+   * the method was picked) — void the intent AND the method, forcing a
+   * genuine re-selection per the brief's own rule, and start a fresh
+   * attempt.
+   */
   resetPaymentAttempt: () => void;
   reset: () => void;
 }
@@ -52,6 +61,7 @@ const initialState = () => ({
   guestEmail: null,
   saveAddress: false,
   delivery: null,
+  paymentMethod: null,
   intent: null,
   paymentConfirmed: false,
   completedOrderNumber: null,
@@ -62,12 +72,13 @@ export const useCheckoutStore = create<CheckoutState>((set) => ({
   goToStep: (step) => set({ step }),
   setAddress: (address, guestEmail, saveAddress) =>
     // A changed address can change the zone/charge — void downstream state.
-    set({ address, guestEmail, saveAddress, delivery: null, intent: null, paymentConfirmed: false }),
-  setDelivery: (delivery) => set({ delivery, intent: null, paymentConfirmed: false }),
+    set({ address, guestEmail, saveAddress, delivery: null, paymentMethod: null, intent: null, paymentConfirmed: false }),
+  setDelivery: (delivery) => set({ delivery, paymentMethod: null, intent: null, paymentConfirmed: false }),
+  setPaymentMethod: (paymentMethod) => set({ paymentMethod, intent: null, paymentConfirmed: false }),
   setIntent: (intent) => set({ intent, paymentConfirmed: false }),
   markPaymentConfirmed: () => set({ paymentConfirmed: true }),
   completeOrder: (orderNumber) => set({ completedOrderNumber: orderNumber }),
   resetPaymentAttempt: () =>
-    set({ intent: null, paymentConfirmed: false, idempotencyKey: crypto.randomUUID(), step: 3 }),
+    set({ paymentMethod: null, intent: null, paymentConfirmed: false, idempotencyKey: crypto.randomUUID(), step: 3 }),
   reset: () => set(initialState()),
 }));

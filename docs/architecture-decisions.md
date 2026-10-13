@@ -9808,3 +9808,209 @@ Migration: `20261013090000_add_custom_packaging` — purely additive
 as Story 2's migration (`migrate diff --from-schema=<git-show-HEAD-copy>
 --to-schema=prisma/schema.prisma --script`, diffing the git-HEAD schema
 snapshot against the working tree rather than `--from-config-datasource`).
+
+## 2026-10-13 — Story 4 of 5: Mandatory Payment Restriction for Custom Packaging
+
+Fourth story of the Variants/Bundles/Custom Packaging epic. The brief
+(section 6) assumes a set of "existing eligible payment options" for
+standard orders — Card, Bank Transfer, Cash on Delivery, implying COD
+is normally offered and must be excluded for custom-packaging orders.
+Research before writing any code found this assumption didn't match
+reality: checkout had exactly one undifferentiated mock payment flow
+(`payment-step.tsx`'s "Mock payment — Success/Decline" radio), no
+`PaymentMethod` concept anywhere in the `Payment`/`Order` schema, and
+no method-selection UI at all. The one piece of real infrastructure
+that DID already exist — `PaymentMethodSetting` (STORY-054, System
+Settings) — was, per the 2026-10-12 Story 1 entry's own prior research,
+"a decorative unconnected admin list": full CRUD, zero relation to
+Order/Payment/checkout. Two scope decisions were confirmed with the
+user before implementation (both matched the recommended option):
+build Card + Bank Transfer + Cash on Delivery as real, distinct,
+selectable checkout methods (not just Card + Bank Transfer, which
+would make "restriction" a no-op); and build bank-transfer
+verification by reusing Story 3's `PendingConfirmation` pattern exactly
+(an admin confirming the order IS the verification step), rather than
+inventing a parallel one-off "mark as received" action.
+
+**Schema, additive, wired into the previously-decorative
+`PaymentMethodSetting`**: new `PaymentMethod` enum (`Card`,
+`BankTransfer`, `CashOnDelivery`). `PaymentMethodSetting` gains
+`method PaymentMethod? @unique` (tags a row as one of checkout's real
+methods — an untagged row stays exactly as decorative as every row was
+before this story) and `allowedForRestrictedOrders Boolean @default(false)`
+— the admin-configurable source of truth for the brief's "card + bank
+transfer only" rule, deliberately NOT hardcoded as two key-string
+literals in code, per this project's Admin Console Principle.
+`Order` gains `paymentMethod PaymentMethod @default(Card)` — a
+permanent snapshot, defaulting "Card" so every pre-Story-4 order (all
+of which went through the one undifferentiated mock flow) backfills
+correctly with zero data migration beyond the column default itself.
+Migration `20261013120000_add_payment_restriction` — purely additive,
+same `migrate diff` workflow as every prior story's migration.
+
+**The restriction trigger is "any selected custom-packaging option,"
+not "manual-review packaging."** The brief's section 6 says "orders
+containing custom travel/export packaging" and "orders requiring
+custom packaging" — plain language, never mentioning Story 3's own
+`requiresManualReview` flag (an orthogonal, internal "needs admin
+review before confirming stock/availability" concept). A line with
+`packagingOptionId` set but `requiresManualReview: false` still
+restricts payment per this reading — `checkout.service.ts
+::requiresRestrictedPayment` checks `packagingOptionId !== null` on
+any line, decoupled entirely from the manual-review flag.
+
+**Server-side enforcement is dual, matching this file's own existing
+discipline** (discount/points are each checked once in
+`createIntentForCart` and again independently in `placeOrder`, never
+trusting client state): `createIntentForCart` now takes a `method`
+parameter and rejects a disallowed one before any `Payment` row is
+ever created; `placeOrder` re-derives the restriction from a freshly
+re-fetched cart and rejects again before looking up the confirmed
+payment — catching a cart that gained/lost custom packaging between
+the Payment step and order placement, even if the client never
+re-checked. Both throw the same new `PaymentMethodNotAllowedError`
+(409), which the checkout wizard's existing "any 409 means something
+changed, back to Payment" handling (`review-step.tsx`'s
+`error.status === 409` branch, built for `totals_changed`) already
+catches with zero new client-side plumbing — the brief's own rule ("if
+a selected payment method becomes invalid after cart changes, require
+the customer to select an allowed method again") falls out of
+machinery that already existed.
+
+**Bank Transfer and Cash on Delivery have no gateway to call at all.**
+`payment.service.ts::createManualPaymentIntent` bypasses the
+`PaymentProvider` interface entirely and writes a `Payment` row
+directly (`provider: "bank_transfer"` / `"cod"`, `status: "Pending"`,
+a generated reference) — brief: "do not introduce a real payment
+provider." `placeOrder`'s existing Card-only gate
+(`payment.status !== "Succeeded"` → reject) now branches: Card alone
+still requires a real Succeeded confirmation (the mock-gateway flow,
+unchanged); Bank Transfer/Cash on Delivery intentionally stay Pending
+through order placement (brief: "do not mark an order paid solely
+because a customer selected card or bank transfer") — only an
+already-`Failed` payment blocks placement. `requiresManualReview`
+(the same flag Story 3 introduced) is now
+`cart.lines.some(manual-review packaging) || paymentMethod === "BankTransfer"`
+— either condition alone, or both together, sends the order to
+`PendingConfirmation` instead of `Confirmed`.
+
+**Confirming a bank-transfer order IS the verification workflow the
+brief asks for** — no separate admin action exists or was built.
+`order.repository.ts::applyStatusTransition` already runs inside one
+`$transaction`; it now additionally checks, only on a
+`PendingConfirmation` → `Confirmed` transition, whether the order's
+`paymentMethod` is `BankTransfer` and its linked `Payment` is still
+`Pending` — if so, flips that `Payment` to `Succeeded` in the same
+transaction. This reuses Story 3's already-built generic "Mark as
+Confirmed" admin button with **zero new admin UI** — the exact
+"mirrors Story 3's manual-review packaging pattern" design the user
+confirmed. A Card payment reaching `PendingConfirmation` via a
+manual-review *packaging* selection (already `Succeeded` from its own
+real confirm step) is correctly left untouched by this check — it's
+gated on `paymentMethod === "BankTransfer"` specifically, never on the
+order's status alone.
+
+**Storefront**: `payment-step.tsx` replaced its hardcoded mock-only
+radio with a live `GET /api/checkout/payment-methods` read (new
+`checkout.service.ts::listEligiblePaymentMethods` — the eligible set
+for the caller's CURRENT cart, already restriction-filtered
+server-side so the client never re-implements that rule), branching
+into three flows: Card keeps the existing mock success/decline
+sub-step; Bank Transfer shows the generated payment reference + a
+"we'll confirm once received" notice; Cash on Delivery shows a plain
+"pay at delivery" notice — both skip straight to Review with no
+confirm step at all, matching the "never mark paid" rule above.
+`checkout-store.ts`'s `paymentMethod` field is nulled by the exact
+same "upstream change voids downstream state" cascade `setAddress`/
+`setDelivery` already used for `intent` (and `resetPaymentAttempt`,
+the totals-changed/method-rejected recovery path, now also nulls it —
+forcing a genuine re-selection per the brief's own rule).
+`checkout-wizard.tsx` shows an informational "card or bank transfer
+only" banner as soon as a custom-packaging line is detected in the
+cart, ahead of Address/Delivery — not just once the customer reaches
+Payment.
+
+**Admin**: `payment-methods-panel.tsx` (System Settings) gained a
+"Checkout method" `<Select>` (Card/Bank Transfer/Cash on Delivery/
+untagged) and an "Allowed when restricted" checkbox per row — an admin
+must tag and enable at least Card (or any method) before checkout can
+function at all, and this project's own convention of never seeding
+System Settings list data (confirmed: even Story 3's own planned demo
+`PackagingMethod` seed never actually landed in `prisma/seed.ts`)
+means this is **required administrator configuration before deploying
+this story** — documented explicitly in the PR rather than silently
+assumed. No new admin order-detail UI — `order.paymentMethod` is shown
+as an additive display line next to the existing payment summary,
+reusing Story 3's already-built generic status-transition buttons for
+confirmation.
+
+**Test infrastructure note**: every `createIntentForCart`/`placeOrder`
+test now needs at least one enabled, tagged `PaymentMethodSetting` row
+to exist — exactly the real-world prerequisite above. Added a shared
+`seedPaymentMethods()` helper (Card/BankTransfer/CashOnDelivery, all
+enabled, Card+BankTransfer `allowedForRestrictedOrders: true`) via
+`beforeEach` in `checkout-service.test.ts` and `checkout-routes.test.ts`
+— the only two test files that call either function directly.
+
+## 2026-10-13 — Story 5 of 5: Epic Integration Pass
+
+Final story of the Variants/Bundles/Custom Packaging epic. Stories
+1-4 each shipped with thorough tests scoped to their own feature in
+isolation — no existing test before this story put a variant, a
+bundle, a custom-packaged line, and a restricted payment method in the
+SAME cart at once, the way a real customer's order could combine them.
+New `tests/unit/epic-integration.test.ts` closes that gap: one shared
+`buildCombinedCart()` helper builds a cart with all three product
+types, then six tests exercise it through the real
+`checkout.service.ts` flow end to end (never calling `order.service.ts`
+directly, unlike several per-story unit tests that legitimately bypass
+checkout to isolate `order.repository.ts`'s own logic). All six passed
+on the first run.
+
+**Acceptance scenario coverage** (brief section 9, all 14 scenarios):
+1-2 (variant purchase, multiple sizes) and 5 (unavailable variant) —
+Story 1's own suite, re-confirmed by the full regression sweep below;
+3-4 (bundle pricing, no double-discount) — Story 2's own suite,
+likewise re-confirmed; 6-8 (packaging eligibility, charge/lead-time/
+shelf-life display) — Story 3's own suite; 9-11 (payment restriction,
+mixed-cart restriction, server-side rejection) — Story 4's own suite
+PLUS this file's own combined-cart version of each, since a
+single-feature cart can't prove the restriction trigger correctly
+reads ANY line in a cart that also contains unrelated variant/bundle
+lines; 12 (settings changes never alter placed-order snapshots) — this
+file's dedicated test mutates the variant's price, the packaging
+option's charge, the component product's own price, and the component
+product's name AFTER placing a combined order, and asserts every
+snapshotted field on the order is untouched; 13 (Admin Console
+configures everything without code changes) — confirmed by inspection
+rather than a new test: every feature this epic touches (variant
+pricing/stock, bundle definitions, packaging methods/options, payment
+methods) already has a complete admin CRUD surface from its own story,
+and Story 4's `PaymentMethodSetting` extension was the last piece
+needed to make that statement true for payment methods too; 14
+(existing standard purchases/payment flows keep working) — this file's
+own baseline no-new-features test, plus the full regression sweep.
+
+**Full regression sweep performed for this story** (every test file
+touched by any of the four stories, run individually — PGlite's
+single-connection local dev DB wedges under concurrent file runs, a
+known infra limitation unrelated to the epic's own code): `checkout-service`,
+`checkout-routes`, `order-service`, `system-settings-service`,
+`order-admin-pdf-services`, `order-bundle-stock`, `order-packaging-status`,
+`packaging-service`, `packaging-admin-service`, `product-service`,
+`search-service`, `product-detail-service`, `cart-repository`,
+`cart-service`, and the new `epic-integration` — all green. `tsc
+--noEmit` and `npm run lint` both clean (the same 17 pre-existing,
+unrelated warnings this project has carried all session).
+
+**Not performed in this pass**: a live click-through of
+`staging.oristor.com` exercising all four features in one real browser
+session — this requires Stories 3/4 to actually be deployed first
+(Story 4's PR was still pending merge/deploy confirmation when this
+pass was written) and this session's browser-automation tooling had
+already disconnected earlier (see the Story 2 entry above). Per the
+brief's own instruction ("do not claim a feature is complete until it
+has been tested end-to-end"), this is flagged explicitly rather than
+silently assumed — the end-to-end proof here is at the service layer
+(real Postgres, real Prisma transactions, no mocks), not a real
+browser session.

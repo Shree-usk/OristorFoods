@@ -1,7 +1,9 @@
+import type { PaymentMethod } from "@/generated/prisma/client";
 import { verifyCartCookieValue } from "@/lib/cart-token";
 import * as bundleRepository from "@/repositories/bundle.repository";
 import * as couponRepository from "@/repositories/coupon.repository";
 import { findOrderByIdempotencyKey } from "@/repositories/order.repository";
+import * as systemSettingsRepository from "@/repositories/system-settings.repository";
 import { AddressLimitExceededError } from "@/services/address.errors";
 import { listAddresses, saveAddressFromCheckout } from "@/services/address.service";
 import { getCartForCheckout } from "@/services/cart.service";
@@ -10,6 +12,7 @@ import {
   DeliveryUnavailableError,
   EmptyCartError,
   GuestEmailRequiredError,
+  PaymentMethodNotAllowedError,
   PaymentNotConfirmedError,
   TotalsChangedError,
 } from "@/services/checkout.errors";
@@ -19,10 +22,10 @@ import { resolveDiscountForCart } from "@/services/discount.service";
 import { checkRedemptionVelocity } from "@/services/fraud-detection.service";
 import type { DiscountableLine } from "@/services/discount.service";
 import { createOrder, getOrderForConfirmation } from "@/services/order.service";
-import { createPaymentIntent, getPaymentByReference } from "@/services/payment.service";
+import { createManualPaymentIntent, createPaymentIntent, getPaymentByReference } from "@/services/payment.service";
 import { resolvePointsRedemptionForCart, validateRedemptionAtPlaceOrder } from "@/services/rewards.service";
 import { resolveDelivery } from "@/services/shipping.service";
-import type { DeliveryResolution, OrderConfirmationSummary, PaymentIntentResult, SavedAddress } from "@/types/checkout";
+import type { DeliveryResolution, EligiblePaymentMethod, OrderConfirmationSummary, PaymentIntentResult, SavedAddress } from "@/types/checkout";
 import type { CheckoutAddressInput, PlaceOrderInput } from "@/validation/checkout.schema";
 
 /**
@@ -149,6 +152,41 @@ function toDiscountableLines(cart: CheckoutCartState): DiscountableLine[] {
   return cart.lines.map((line) => ({ productId: line.productId, categoryIds: line.categoryIds, lineTotal: line.lineTotal }));
 }
 
+/**
+ * Story 4 (Payment Restriction), brief Section 6: "orders containing
+ * custom travel/export packaging" — any line with a selected packaging
+ * option, regardless of whether that option itself requires manual
+ * review (a decoupled Story 3 concept; see docs/architecture-decisions.md).
+ * "If a cart mixes standard products with custom-packaged products, apply
+ * the restricted payment set to the entire order" — `.some(...)` over
+ * every line, not just the packaged ones, satisfies that directly.
+ */
+function requiresRestrictedPayment(lines: CheckoutCartState["lines"]): boolean {
+  return lines.some((line) => line.packagingOptionId !== null);
+}
+
+/**
+ * The admin-configured, checkout-usable payment methods — optionally
+ * narrowed to the brief's restricted set (`allowedForRestrictedOrders`,
+ * admin-editable in System Settings rather than hardcoding "Card" +
+ * "BankTransfer" in code, per this project's Admin Console Principle).
+ * Shared by the customer-facing read below and both server-side
+ * enforcement points (createIntentForCart, placeOrder) so there is
+ * exactly one definition of "allowed."
+ */
+async function resolveAllowedPaymentMethods(restricted: boolean): Promise<EligiblePaymentMethod[]> {
+  const rows = await systemSettingsRepository.listCheckoutEnabledPaymentMethods();
+  const eligible = restricted ? rows.filter((row) => row.allowedForRestrictedOrders) : rows;
+  // `method` is guaranteed non-null by listCheckoutEnabledPaymentMethods's own `{ not: null }` filter.
+  return eligible.map((row) => ({ method: row.method as PaymentMethod, label: row.label }));
+}
+
+/** Customer-facing read for the Payment step — the eligible set for the caller's CURRENT cart, server-derived so the client never has to re-implement the restriction rule. */
+export async function listEligiblePaymentMethods(userId: string | null, guestCookieValue: string | null | undefined): Promise<EligiblePaymentMethod[]> {
+  const cart = await requireCheckoutableCart(userId, guestCookieValue);
+  return resolveAllowedPaymentMethods(requiresRestrictedPayment(cart.lines));
+}
+
 /** Step 2: resolve the delivery charge for the caller's live cart. */
 export async function resolveDeliveryForCart(
   userId: string | null,
@@ -175,8 +213,16 @@ export async function createIntentForCart(
   userId: string | null,
   guestCookieValue: string | null | undefined,
   city: string,
+  method: PaymentMethod,
 ): Promise<PaymentIntentResult> {
   const cart = await requireCheckoutableCart(userId, guestCookieValue);
+  // Story 4 (Payment Restriction). Rejected before any Payment row is
+  // ever created — the first of two defense-in-depth gates, mirrored
+  // again in placeOrder below for a cart that changed between intent
+  // creation and order placement.
+  const allowed = await resolveAllowedPaymentMethods(requiresRestrictedPayment(cart.lines));
+  if (!allowed.some((entry) => entry.method === method)) throw new PaymentMethodNotAllowedError();
+
   const delivery = await resolveDelivery(city, cart.subtotal, cart.totalWeightGrams);
   if (delivery.status !== "ok") throw new DeliveryUnavailableError(delivery.status);
   const discount = await resolveDiscountForCart({ couponId: cart.couponId }, toDiscountableLines(cart), cart.subtotal, delivery.charge, userId);
@@ -189,7 +235,14 @@ export async function createIntentForCart(
   // to placeOrder's throwing re-validation below.
   const points = await resolvePointsRedemptionForCart(userId, cart.pointsToRedeem, payableBeforePoints);
   const grandTotal = roundMoney(payableBeforePoints - points.discountValue);
-  return createPaymentIntent(grandTotal, cart.currency);
+
+  // Story 4 (Payment Restriction). Card alone goes through the real
+  // PaymentProvider interface (the mock, until a gateway is chosen —
+  // brief: "do not introduce a real payment provider"); BankTransfer and
+  // CashOnDelivery have no gateway to call at all, so they write a
+  // Pending Payment row directly. See payment.service.ts::createManualPaymentIntent.
+  if (method === "Card") return createPaymentIntent(grandTotal, cart.currency);
+  return createManualPaymentIntent(method === "BankTransfer" ? "bank_transfer" : "cod", grandTotal, cart.currency);
 }
 
 export interface PlaceOrderResult {
@@ -225,6 +278,16 @@ export async function placeOrder(
   const cart = await requireCheckoutableCart(userId, guestCookieValue);
   const guestEmailForValidation = userId ? null : (input.guestEmail ?? null);
 
+  // Story 4 (Payment Restriction), second defense-in-depth gate — the
+  // cart (and therefore whether restriction even applies) may have
+  // changed since the Payment step's intent was created. A now-disallowed
+  // method maps to a 409, which the existing checkout wizard already
+  // treats as "something changed, back to Payment" (same handling
+  // totals_changed already gets) — no new client-side plumbing needed.
+  const restricted = requiresRestrictedPayment(cart.lines);
+  const allowedMethods = await resolveAllowedPaymentMethods(restricted);
+  if (!allowedMethods.some((entry) => entry.method === input.paymentMethod)) throw new PaymentMethodNotAllowedError();
+
   // Final, THROWING coupon re-validation — distinct from
   // resolveDiscountForCart's silent-skip read below. This is the one
   // point a guest's per-customer usage limit can be enforced (their
@@ -255,8 +318,20 @@ export async function placeOrder(
   const grandTotal = roundMoney(payableBeforePoints - points.discountValue);
 
   const payment = await getPaymentByReference(input.providerReference);
-  if (!payment || payment.status !== "Succeeded") throw new PaymentNotConfirmedError();
+  if (!payment) throw new PaymentNotConfirmedError();
   if (payment.amount.toFixed(2) !== grandTotal.toFixed(2)) throw new TotalsChangedError();
+  // Story 4 (Payment Restriction), brief: "Do not mark an order paid
+  // solely because a customer selected card or bank transfer." Card alone
+  // requires a real Succeeded confirmation (the existing mock-gateway
+  // flow, unchanged). BankTransfer/CashOnDelivery intentionally stay
+  // Pending through order placement — settlement happens outside checkout
+  // (an admin confirming the order for bank transfer, cash at delivery
+  // for COD) — only an already-Failed payment blocks placement.
+  if (input.paymentMethod === "Card") {
+    if (payment.status !== "Succeeded") throw new PaymentNotConfirmedError();
+  } else if (payment.status === "Failed") {
+    throw new PaymentNotConfirmedError();
+  }
 
   // Only record a redemption when the coupon actually won a non-zero
   // share of the applied discount(s) — a validly-applied coupon that lost
@@ -267,10 +342,14 @@ export async function placeOrder(
   const discountLabel = discount.applied.length > 0 ? discount.applied.map((entry) => entry.label).join(", ") : null;
   const pointsRedemption = points.pointsToRedeem > 0 && userId ? { userId, points: points.pointsToRedeem } : null;
 
-  // Story 3 (Custom Packaging). Any line flagged for manual review (per its
-  // ProductPackagingOption config) sends the WHOLE order to PendingConfirmation
-  // instead of Confirmed — see order.repository.ts::createOrderWithStockDecrement.
-  const requiresManualReview = cart.lines.some((line) => line.packagingRequiresManualReview);
+  // Story 3 (Custom Packaging) + Story 4 (Payment Restriction). Either a
+  // manual-review packaging line OR an unverified bank-transfer payment
+  // sends the WHOLE order to PendingConfirmation instead of Confirmed —
+  // see order.repository.ts::createOrderWithStockDecrement. Confirming
+  // the order later is the verification step for BOTH cases (packaging
+  // review, bank-transfer receipt) — order.repository.ts::applyStatusTransition
+  // additionally flips a BankTransfer Payment to Succeeded at that point.
+  const requiresManualReview = cart.lines.some((line) => line.packagingRequiresManualReview) || input.paymentMethod === "BankTransfer";
 
   const { order, replayed: wasReplay } = await createOrder({
     idempotencyKey: input.idempotencyKey,
@@ -288,6 +367,7 @@ export async function placeOrder(
     grandTotal: grandTotal.toFixed(2),
     rewardPointsEarned: cart.rewardPointsEarned,
     paymentId: payment.id,
+    paymentMethod: input.paymentMethod,
     deliveryZoneName: delivery.zoneName,
     estimatedDaysMin: delivery.estimatedDaysMin,
     estimatedDaysMax: delivery.estimatedDaysMax,
@@ -404,6 +484,7 @@ function toConfirmationSummary(order: Awaited<ReturnType<typeof getOrderForConfi
     tax: order.tax.toNumber(),
     grandTotal: order.grandTotal.toNumber(),
     currency: "LKR",
+    paymentMethod: order.paymentMethod,
     rewardPointsEarned: order.rewardPointsEarned,
     deliveryZoneName: order.deliveryZoneName,
     estimatedDaysMin: order.estimatedDaysMin,

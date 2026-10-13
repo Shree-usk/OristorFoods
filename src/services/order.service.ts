@@ -152,10 +152,10 @@ export async function listOrdersForUser(userId: string, page: number, pageSize: 
 // legal state graph at a glance. Cancelled/Returned are terminal (no
 // outgoing edges). Self-transitions are illegal: a repeated/duplicate
 // transition request should be rejected, not silently no-op'd, so a
-// caller bug surfaces instead of hiding. PendingConfirmation is
-// currently unreachable in this codebase — checkout only ever creates
-// orders after payment is verified Succeeded, so every order is created
-// Confirmed — but the edge is kept for a future pay-later flow (see
+// caller bug surfaces instead of hiding. PendingConfirmation is reached
+// by a manual-review packaging selection (Story 3) or a bank-transfer
+// payment awaiting verification (Story 4) — in both cases, confirming
+// the order IS the admin's verification action (see
 // docs/architecture-decisions.md).
 const ALLOWED_TRANSITIONS: Record<OrderStatus, readonly OrderStatus[]> = {
   PendingConfirmation: ["Confirmed", "Cancelled"],
