@@ -13,6 +13,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
+import { PackagingInstructionsList } from "@/components/storefront/product/packaging-instructions-list";
 import {
   changeOrderStatusAdmin,
   fetchOrderAdminDetail,
@@ -168,7 +169,7 @@ export function AdminOrderDetailView({ orderId }: { orderId: string }) {
                         {item.packagingRequiresManualReview && " (manual review)"}
                       </span>
                     )}
-                    {item.packagingInstructions && <span className="mt-1 block text-caption text-chilli">{item.packagingInstructions}</span>}
+                    {item.packagingInstructions && <PackagingInstructionsList text={item.packagingInstructions} className="mt-1 text-caption text-chilli" />}
                   </TableCell>
                   <TableCell>{item.productSku}</TableCell>
                   <TableCell>{item.quantity}</TableCell>

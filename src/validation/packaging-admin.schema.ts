@@ -40,6 +40,7 @@ export const productPackagingOptionAdminSchema = z
     shelfLifeDays: z.number().int().min(0).optional().nullable(),
     shelfLifeText: z.string().trim().max(500).optional().nullable(),
     customerInstructions: z.string().trim().max(1000).optional().nullable(),
+    acknowledgementText: z.string().trim().max(300).optional().nullable(),
     availabilityStartDate: optionalCoercedDate,
     availabilityEndDate: optionalCoercedDate,
     orderCutoffDate: optionalCoercedDate,

@@ -88,6 +88,7 @@ function toOptionData(input: ProductPackagingOptionAdminFormInput) {
     shelfLifeDays: input.shelfLifeDays ?? null,
     shelfLifeText: input.shelfLifeText ?? null,
     customerInstructions: input.customerInstructions ?? null,
+    acknowledgementText: input.acknowledgementText ?? null,
     availabilityStartDate: input.availabilityStartDate ?? null,
     availabilityEndDate: input.availabilityEndDate ?? null,
     orderCutoffDate: input.orderCutoffDate ?? null,

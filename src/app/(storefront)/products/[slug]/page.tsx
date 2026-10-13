@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import { cache } from "react";
 
@@ -8,6 +7,7 @@ import { Section } from "@/components/storefront/layout/section";
 import { BulletList } from "@/components/storefront/product/bullet-list";
 import { BundleDisplay } from "@/components/storefront/product/bundle-display";
 import { CertificationBadges } from "@/components/storefront/product/certification-badges";
+import { RelatedRecipesBlock } from "@/components/storefront/food-academy/related-recipes-block";
 import { FeaturedProductsRail } from "@/components/storefront/product/featured-products-rail";
 import { IngredientsList } from "@/components/storefront/product/ingredients-list";
 import { NutritionDisclosure } from "@/components/storefront/product/nutrition-disclosure";
@@ -175,20 +175,11 @@ export default async function ProductDetailPage({ params }: ProductDetailPagePro
         </div>
       </div>
 
-      <div className="mt-12">
-        <h2 className="text-h3 font-heading text-charcoal">Recipes Using This Product</h2>
-        {product.recipeSummary && product.recipeSummary.recipes.length > 0 ? (
-          <div className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
-            {product.recipeSummary.recipes.map((recipe) => (
-              <Link key={recipe.id} href={`/recipes/${recipe.slug}`} className="block text-small text-charcoal">
-                {recipe.title}
-              </Link>
-            ))}
-          </div>
-        ) : (
-          <p className="mt-2 text-small text-charcoal/70">Recipes for this product are coming soon.</p>
-        )}
-      </div>
+      <RelatedRecipesBlock
+        recipes={product.recipeSummary?.recipes ?? []}
+        heading="Recipes Using This Product"
+        emptyMessage="Recipes for this product are coming soon."
+      />
 
       <div className="mt-12">
         <ReviewsSection productSlug={product.slug} summary={product.reviewSummary} />

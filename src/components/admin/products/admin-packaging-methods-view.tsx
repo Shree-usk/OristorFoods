@@ -133,7 +133,14 @@ export function AdminPackagingMethodsView() {
                   <TableRow key={method.id}>
                     <TableCell>{method.name}</TableCell>
                     <TableCell className="max-w-xs truncate">{method.description ?? "—"}</TableCell>
-                    <TableCell>{method.image ? "✓" : "—"}</TableCell>
+                    <TableCell>
+                      {method.image ? (
+                        // eslint-disable-next-line @next/next/no-img-element -- admin thumbnail only, URL can be external (typed directly, not only Media Library)
+                        <img src={method.image} alt="" className="size-8 rounded object-cover" />
+                      ) : (
+                        "—"
+                      )}
+                    </TableCell>
                     <TableCell>
                       <CheckboxOption label={method.status} checked={method.status === "Active"} onCheckedChange={() => toggleStatus(method)} />
                     </TableCell>
@@ -164,7 +171,12 @@ export function AdminPackagingMethodsView() {
             </div>
             <div>
               <Label htmlFor="packaging-method-image">Image</Label>
-              <div className="flex gap-2">
+              <p className="-mt-1 mb-1 text-caption text-charcoal/60">Shown as a small icon next to this packaging on the product page.</p>
+              <div className="flex items-center gap-2">
+                {form.image && (
+                  // eslint-disable-next-line @next/next/no-img-element -- admin preview only, URL can be external (typed directly, not only Media Library)
+                  <img src={form.image} alt="" className="size-10 shrink-0 rounded object-cover" />
+                )}
                 <Input id="packaging-method-image" value={form.image ?? ""} onChange={(event) => setForm((prev) => ({ ...prev, image: event.target.value }))} className="flex-1" />
                 <Button type="button" size="sm" variant="outline" onClick={() => setImagePickerOpen(true)}>
                   Browse Library

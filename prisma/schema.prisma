@@ -699,6 +699,8 @@ model ProductPackagingOption {
   shelfLifeDays        Int?
   shelfLifeText        String?
   customerInstructions String?
+  /** Checkbox label on the PDP acknowledgement gate — falls back to a generic default when unset. */
+  acknowledgementText  String?
 
   availabilityStartDate DateTime?
   availabilityEndDate   DateTime?

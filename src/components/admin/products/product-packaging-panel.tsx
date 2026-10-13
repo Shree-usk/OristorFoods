@@ -46,6 +46,7 @@ const EMPTY_ITEM_FORM: PackagingOptionFormInput = {
   shelfLifeDays: null,
   shelfLifeText: "",
   customerInstructions: "",
+  acknowledgementText: "",
   availabilityStartDate: "",
   availabilityEndDate: "",
   orderCutoffDate: "",
@@ -69,6 +70,7 @@ function toItemForm(option: AdminPackagingOption): PackagingOptionFormInput {
     shelfLifeDays: option.shelfLifeDays ?? null,
     shelfLifeText: option.shelfLifeText ?? "",
     customerInstructions: option.customerInstructions ?? "",
+    acknowledgementText: option.acknowledgementText ?? "",
     availabilityStartDate: toDateInputValue(option.availabilityStartDate),
     availabilityEndDate: toDateInputValue(option.availabilityEndDate),
     orderCutoffDate: toDateInputValue(option.orderCutoffDate),
@@ -319,10 +321,24 @@ export function ProductPackagingPanel({ productId }: { productId: string }) {
 
           <div>
             <Label htmlFor="packaging-option-instructions">Customer instructions (optional)</Label>
+            <p className="-mt-1 mb-1 text-caption text-charcoal/60">One condition per line — shown to the customer as a numbered list.</p>
             <Textarea
               id="packaging-option-instructions"
               value={itemForm.customerInstructions ?? ""}
               onChange={(event) => setItemForm((prev) => (prev ? { ...prev, customerInstructions: event.target.value } : prev))}
+            />
+          </div>
+
+          <div>
+            <Label htmlFor="packaging-option-acknowledgement">Acknowledgement checkbox text (optional)</Label>
+            <p className="-mt-1 mb-1 text-caption text-charcoal/60">
+              What the customer confirms before adding this packaging to their cart. Leave blank to use the default wording.
+            </p>
+            <Input
+              id="packaging-option-acknowledgement"
+              placeholder="I understand this packaging's lead time and shelf life as described above."
+              value={itemForm.acknowledgementText ?? ""}
+              onChange={(event) => setItemForm((prev) => (prev ? { ...prev, acknowledgementText: event.target.value } : prev))}
             />
           </div>
 
