@@ -9951,3 +9951,66 @@ to exist — exactly the real-world prerequisite above. Added a shared
 enabled, Card+BankTransfer `allowedForRestrictedOrders: true`) via
 `beforeEach` in `checkout-service.test.ts` and `checkout-routes.test.ts`
 — the only two test files that call either function directly.
+
+## 2026-10-13 — Story 5 of 5: Epic Integration Pass
+
+Final story of the Variants/Bundles/Custom Packaging epic. Stories
+1-4 each shipped with thorough tests scoped to their own feature in
+isolation — no existing test before this story put a variant, a
+bundle, a custom-packaged line, and a restricted payment method in the
+SAME cart at once, the way a real customer's order could combine them.
+New `tests/unit/epic-integration.test.ts` closes that gap: one shared
+`buildCombinedCart()` helper builds a cart with all three product
+types, then six tests exercise it through the real
+`checkout.service.ts` flow end to end (never calling `order.service.ts`
+directly, unlike several per-story unit tests that legitimately bypass
+checkout to isolate `order.repository.ts`'s own logic). All six passed
+on the first run.
+
+**Acceptance scenario coverage** (brief section 9, all 14 scenarios):
+1-2 (variant purchase, multiple sizes) and 5 (unavailable variant) —
+Story 1's own suite, re-confirmed by the full regression sweep below;
+3-4 (bundle pricing, no double-discount) — Story 2's own suite,
+likewise re-confirmed; 6-8 (packaging eligibility, charge/lead-time/
+shelf-life display) — Story 3's own suite; 9-11 (payment restriction,
+mixed-cart restriction, server-side rejection) — Story 4's own suite
+PLUS this file's own combined-cart version of each, since a
+single-feature cart can't prove the restriction trigger correctly
+reads ANY line in a cart that also contains unrelated variant/bundle
+lines; 12 (settings changes never alter placed-order snapshots) — this
+file's dedicated test mutates the variant's price, the packaging
+option's charge, the component product's own price, and the component
+product's name AFTER placing a combined order, and asserts every
+snapshotted field on the order is untouched; 13 (Admin Console
+configures everything without code changes) — confirmed by inspection
+rather than a new test: every feature this epic touches (variant
+pricing/stock, bundle definitions, packaging methods/options, payment
+methods) already has a complete admin CRUD surface from its own story,
+and Story 4's `PaymentMethodSetting` extension was the last piece
+needed to make that statement true for payment methods too; 14
+(existing standard purchases/payment flows keep working) — this file's
+own baseline no-new-features test, plus the full regression sweep.
+
+**Full regression sweep performed for this story** (every test file
+touched by any of the four stories, run individually — PGlite's
+single-connection local dev DB wedges under concurrent file runs, a
+known infra limitation unrelated to the epic's own code): `checkout-service`,
+`checkout-routes`, `order-service`, `system-settings-service`,
+`order-admin-pdf-services`, `order-bundle-stock`, `order-packaging-status`,
+`packaging-service`, `packaging-admin-service`, `product-service`,
+`search-service`, `product-detail-service`, `cart-repository`,
+`cart-service`, and the new `epic-integration` — all green. `tsc
+--noEmit` and `npm run lint` both clean (the same 17 pre-existing,
+unrelated warnings this project has carried all session).
+
+**Not performed in this pass**: a live click-through of
+`staging.oristor.com` exercising all four features in one real browser
+session — this requires Stories 3/4 to actually be deployed first
+(Story 4's PR was still pending merge/deploy confirmation when this
+pass was written) and this session's browser-automation tooling had
+already disconnected earlier (see the Story 2 entry above). Per the
+brief's own instruction ("do not claim a feature is complete until it
+has been tested end-to-end"), this is flagged explicitly rather than
+silently assumed — the end-to-end proof here is at the service layer
+(real Postgres, real Prisma transactions, no mocks), not a real
+browser session.
