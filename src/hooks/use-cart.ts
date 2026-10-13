@@ -35,12 +35,30 @@ export function useCart() {
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ["cart"] });
 
   const addItemMutation = useMutation({
-    mutationFn: async ({ productId, quantity, variantId }: { productId: string; quantity: number; variantId?: string | null }) => {
+    mutationFn: async ({
+      productId,
+      quantity,
+      variantId,
+      packagingOptionId,
+      packagingDeclaredAvailability,
+    }: {
+      productId: string;
+      quantity: number;
+      variantId?: string | null;
+      packagingOptionId?: string | null;
+      packagingDeclaredAvailability?: "Local" | "Export" | null;
+    }) => {
       const response = await fetch("/api/cart/items", {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ productId, quantity, variantId: variantId ?? undefined }),
+        body: JSON.stringify({
+          productId,
+          quantity,
+          variantId: variantId ?? undefined,
+          packagingOptionId: packagingOptionId ?? undefined,
+          packagingDeclaredAvailability: packagingDeclaredAvailability ?? undefined,
+        }),
       });
       if (!response.ok) await throwWithServerMessage(response, "Failed to add to cart");
     },
@@ -138,8 +156,13 @@ export function useCart() {
   return {
     cart: query.data,
     isPending: query.isPending,
-    addItem: (productId: string, quantity = 1, options?: { onSuccess?: () => void }, variantId?: string | null) =>
-      addItemMutation.mutate({ productId, quantity, variantId }, options),
+    addItem: (
+      productId: string,
+      quantity = 1,
+      options?: { onSuccess?: () => void },
+      variantId?: string | null,
+      packaging?: { packagingOptionId: string; declaredAvailability: "Local" | "Export" } | null,
+    ) => addItemMutation.mutate({ productId, quantity, variantId, packagingOptionId: packaging?.packagingOptionId, packagingDeclaredAvailability: packaging?.declaredAvailability }, options),
     updateQuantity: (itemId: string, quantity: number) => updateQuantityMutation.mutate({ itemId, quantity }),
     removeItem: (itemId: string) => removeItemMutation.mutate(itemId),
     isAddingItem: addItemMutation.isPending,

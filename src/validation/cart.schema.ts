@@ -1,10 +1,19 @@
 import { z } from "zod";
 
-export const addCartItemSchema = z.object({
-  productId: z.string().min(1),
-  quantity: z.number({ error: "Quantity is required" }).int().positive(),
-  variantId: z.string().min(1).optional(),
-});
+const packagingDeclaredAvailabilityEnum = z.enum(["Local", "Export"]);
+
+export const addCartItemSchema = z
+  .object({
+    productId: z.string().min(1),
+    quantity: z.number({ error: "Quantity is required" }).int().positive(),
+    variantId: z.string().min(1).optional(),
+    packagingOptionId: z.string().min(1).optional(),
+    packagingDeclaredAvailability: packagingDeclaredAvailabilityEnum.optional(),
+  })
+  .refine((data) => (data.packagingOptionId != null) === (data.packagingDeclaredAvailability != null), {
+    message: "packagingOptionId and packagingDeclaredAvailability must be given together",
+    path: ["packagingOptionId"],
+  });
 
 export type AddCartItemInput = z.infer<typeof addCartItemSchema>;
 

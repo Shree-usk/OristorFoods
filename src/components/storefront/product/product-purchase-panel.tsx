@@ -2,9 +2,10 @@
 
 import { useState } from "react";
 
+import { PackagingSelector, type PackagingSelectionValue } from "@/components/storefront/product/packaging-selector";
 import { ProductActions } from "@/components/storefront/product/product-actions";
 import { VariantSelector } from "@/components/storefront/product/variant-selector";
-import type { ProductDetailVariant } from "@/services/product.service";
+import type { ProductDetailPackagingOption, ProductDetailVariant } from "@/services/product.service";
 
 interface ProductPurchasePanelProps {
   productId: string;
@@ -14,6 +15,7 @@ interface ProductPurchasePanelProps {
   inStock: boolean;
   rewardPoints: number;
   variants: ProductDetailVariant[];
+  packagingOptions: ProductDetailPackagingOption[];
 }
 
 function defaultVariantId(variants: ProductDetailVariant[]): string | null {
@@ -30,14 +32,31 @@ function defaultVariantId(variants: ProductDetailVariant[]): string | null {
  * is selected" requirement. Renders identically to the old static PDP
  * block when the product has zero variants.
  */
-export function ProductPurchasePanel({ productId, price, originalPrice, currency, inStock, rewardPoints, variants }: ProductPurchasePanelProps) {
+export function ProductPurchasePanel({ productId, price, originalPrice, currency, inStock, rewardPoints, variants, packagingOptions }: ProductPurchasePanelProps) {
   const [selectedVariantId, setSelectedVariantId] = useState<string | null>(() => defaultVariantId(variants));
   const selectedVariant = variants.find((variant) => variant.id === selectedVariantId) ?? null;
+
+  // Story 3 (Custom Packaging). Reset directly in the variant-change
+  // handler (a discrete user action), not via a useEffect watching
+  // selectedVariantId — same "no effect/setState-sync" discipline
+  // Story 2's React Compiler lint fix already established for this
+  // codebase: a packaging option pinned to the old variant may no
+  // longer apply to the new one.
+  const [packagingSelection, setPackagingSelection] = useState<PackagingSelectionValue | null>(null);
+  const [packagingAcknowledged, setPackagingAcknowledged] = useState(false);
+
+  function handleSelectVariant(variantId: string) {
+    setSelectedVariantId(variantId);
+    setPackagingSelection(null);
+    setPackagingAcknowledged(false);
+  }
 
   const displayPrice = selectedVariant ? (selectedVariant.promoPrice ?? selectedVariant.price) : price;
   const displayOriginalPrice = selectedVariant?.promoPrice ? selectedVariant.price : originalPrice;
   const displayCurrency = selectedVariant?.currency ?? currency;
   const displayInStock = selectedVariant ? selectedVariant.inStock && selectedVariant.stockQuantity > 0 : inStock;
+
+  const packagingRequiresAcknowledgement = Boolean(packagingSelection?.optionId) && !packagingAcknowledged;
 
   return (
     <div>
@@ -54,10 +73,27 @@ export function ProductPurchasePanel({ productId, price, originalPrice, currency
       <p className="mt-1 text-caption text-charcoal/70">Earn {rewardPoints} reward points with this purchase</p>
       <p className="mt-1 text-small text-charcoal/70">{displayInStock ? "In stock" : "Currently out of stock"}</p>
 
-      <VariantSelector variants={variants} selectedVariantId={selectedVariantId} onSelect={setSelectedVariantId} />
+      <VariantSelector variants={variants} selectedVariantId={selectedVariantId} onSelect={handleSelectVariant} />
+
+      <PackagingSelector
+        options={packagingOptions}
+        selectedVariantId={selectedVariantId}
+        currency={displayCurrency}
+        value={packagingSelection}
+        onChange={setPackagingSelection}
+        acknowledged={packagingAcknowledged}
+        onAcknowledgedChange={setPackagingAcknowledged}
+      />
 
       <div className="mt-6">
-        <ProductActions productId={productId} inStock={displayInStock} variantId={selectedVariantId} variantRequired={variants.length > 0 && !selectedVariantId} />
+        <ProductActions
+          productId={productId}
+          inStock={displayInStock}
+          variantId={selectedVariantId}
+          variantRequired={variants.length > 0 && !selectedVariantId}
+          packaging={packagingSelection?.optionId ? { packagingOptionId: packagingSelection.optionId, declaredAvailability: packagingSelection.declaredAvailability } : null}
+          packagingBlocked={packagingRequiresAcknowledgement}
+        />
       </div>
     </div>
   );

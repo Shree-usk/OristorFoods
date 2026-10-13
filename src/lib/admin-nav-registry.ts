@@ -43,6 +43,7 @@ export const ADMIN_NAV_GROUPS: AdminNavGroup[] = [
       { label: "Products", href: "/admin/products", module: "Products", action: "View" },
       { label: "Categories", href: "/admin/categories", module: "Products", action: "View" },
       { label: "Collections", href: "/admin/collections", module: "Products", action: "View" },
+      { label: "Packaging methods", href: "/admin/packaging-methods", module: "Products", action: "View" },
       { label: "Certifications & allergens", href: "/admin/certifications", module: "Products", action: "View" },
       { label: "Search glossary", href: "/admin/search-glossary", module: "Products", action: "View" },
       { label: "Recipes", href: "/admin/recipes", module: "Recipes", action: "View" },

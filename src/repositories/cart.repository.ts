@@ -21,6 +21,11 @@ const withProduct = {
   // include separately (bundle.service.ts::resolveBundleInstancePrices),
   // never this one.
   bundle: { select: { name: true } },
+  // Story 3 (Custom Packaging). The full row (+ its method) — unlike a
+  // bundle instance, a packaging option's eligibility depends only on its
+  // own fields, so packaging.service.ts::resolvePackagingForCartItems
+  // re-validates straight off this include with no second query.
+  packagingOption: { include: { packagingMethod: true } },
 } satisfies Prisma.CartItemInclude;
 
 export type CartItemWithProduct = Prisma.CartItemGetPayload<{ include: typeof withProduct }>;
@@ -46,7 +51,9 @@ export function createGuestCart(guestToken: string) {
 }
 
 export function findCartItemById(id: string) {
-  return prisma.cartItem.findUnique({ where: { id } });
+  // Story 3: includes the pinned packaging option's minQuantity — needed
+  // by cart.service.ts::updateItemQuantity's synchronous MOQ guard.
+  return prisma.cartItem.findUnique({ where: { id }, include: { packagingOption: { select: { minQuantity: true } } } });
 }
 
 /**
@@ -75,13 +82,16 @@ export async function upsertCartItem(
   quantityDelta: number,
   unitPriceSnapshot: string,
   bundle: { bundleId: string; bundleInstanceId: string } | null = null,
+  packaging: { packagingOptionId: string; declaredAvailability: "Local" | "Export"; chargeSnapshot: string } | null = null,
 ) {
   // findFirst, not findUnique: Prisma's generated compound-unique input
   // for a compound key with nullable members types them as non-nullable
   // even though the columns are nullable (a known Prisma typing gotcha),
   // so a plain `where` filter is used instead — still a single-row
   // lookup backed by the same unique index at the DB level.
-  const existing = await prisma.cartItem.findFirst({ where: { cartId, productId, variantId, bundleInstanceId: bundle?.bundleInstanceId ?? null } });
+  const existing = await prisma.cartItem.findFirst({
+    where: { cartId, productId, variantId, bundleInstanceId: bundle?.bundleInstanceId ?? null, packagingOptionId: packaging?.packagingOptionId ?? null },
+  });
   if (existing) {
     return prisma.cartItem.update({
       where: { id: existing.id },
@@ -97,6 +107,9 @@ export async function upsertCartItem(
       unitPriceSnapshot,
       bundleId: bundle?.bundleId ?? null,
       bundleInstanceId: bundle?.bundleInstanceId ?? null,
+      packagingOptionId: packaging?.packagingOptionId ?? null,
+      packagingDeclaredAvailability: packaging?.declaredAvailability ?? null,
+      packagingChargeSnapshot: packaging?.chargeSnapshot ?? null,
     },
   });
 }
@@ -116,6 +129,11 @@ export function updateCartItemQuantity(id: string, quantity: number) {
 
 export function updateCartItemSnapshot(id: string, unitPriceSnapshot: string) {
   return prisma.cartItem.update({ where: { id }, data: { unitPriceSnapshot } });
+}
+
+/** Story 3. Re-snapshots a live packaging-charge change, mirroring updateCartItemSnapshot's own re-price convention. */
+export function updateCartItemPackagingChargeSnapshot(id: string, packagingChargeSnapshot: string) {
+  return prisma.cartItem.update({ where: { id }, data: { packagingChargeSnapshot } });
 }
 
 export function deleteCartItem(id: string) {

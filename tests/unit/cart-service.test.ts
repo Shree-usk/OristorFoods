@@ -11,6 +11,8 @@ import {
   BundleLineLockedError,
   CartItemForbiddenError,
   CartItemNotFoundError,
+  PackagingAvailabilityMismatchError,
+  PackagingMinimumQuantityError,
   ProductUnavailableError,
   StockExceededError,
 } from "@/services/cart.errors";
@@ -63,11 +65,20 @@ async function makeVariant(productId: string, overrides: Record<string, unknown>
   });
 }
 
+/** Story 3 (Custom Packaging). */
+async function makePackagingOption(productId: string, overrides: Record<string, unknown> = {}) {
+  sequence += 1;
+  const method = await prisma.packagingMethod.create({ data: { name: `Cart Svc Packaging Method ${sequence}` } });
+  return prisma.productPackagingOption.create({ data: { productId, packagingMethodId: method.id, charge: "15.00", ...overrides } });
+}
+
 afterEach(async () => {
   await prisma.cartItem.deleteMany();
   await prisma.cart.deleteMany();
   await prisma.bundleItem.deleteMany();
   await prisma.productBundle.deleteMany();
+  await prisma.productPackagingOption.deleteMany({ where: { packagingMethod: { name: { startsWith: "Cart Svc Packaging Method " } } } });
+  await prisma.packagingMethod.deleteMany({ where: { name: { startsWith: "Cart Svc Packaging Method " } } });
   await prisma.standardPrice.deleteMany();
   await prisma.productImage.deleteMany();
   await prisma.productVariant.deleteMany({ where: { sku: { startsWith: "CART-SVC-VARIANT-SKU-" } } });
@@ -499,5 +510,85 @@ describe("Bundles (Story 2)", () => {
 
     const summary = await getCart(null, newCookieValue);
     expect(summary.items.every((item) => item.unavailable)).toBe(true);
+  });
+});
+
+describe("Custom Packaging (Story 3)", () => {
+  it("folds the packaging charge into lineTotal/subtotal while unitPrice stays the product's own price", async () => {
+    const user = await makeUser();
+    const product = await makeProduct();
+    const option = await makePackagingOption(product.id, { charge: "15.00" });
+
+    await addItem(user.id, null, product.id, 2, null, { packagingOptionId: option.id, declaredAvailability: "Local" });
+    const summary = await getCart(user.id, null);
+
+    expect(summary.items).toHaveLength(1);
+    expect(summary.items[0]).toMatchObject({ unitPrice: 25, packagingCharge: 15, quantity: 2, lineTotal: 80 });
+    expect(summary.subtotal).toBe(80);
+  });
+
+  it("rejects adding an Export-only option declared Local", async () => {
+    const user = await makeUser();
+    const product = await makeProduct();
+    const option = await makePackagingOption(product.id, { availability: "Export" });
+
+    await expect(addItem(user.id, null, product.id, 1, null, { packagingOptionId: option.id, declaredAvailability: "Local" })).rejects.toBeInstanceOf(PackagingAvailabilityMismatchError);
+  });
+
+  it("rejects adding below the option's minimum quantity", async () => {
+    const user = await makeUser();
+    const product = await makeProduct();
+    const option = await makePackagingOption(product.id, { minQuantity: 3 });
+
+    await expect(addItem(user.id, null, product.id, 1, null, { packagingOptionId: option.id, declaredAvailability: "Local" })).rejects.toBeInstanceOf(PackagingMinimumQuantityError);
+  });
+
+  it("a deactivated packaging option flags the line unavailable on read, without throwing or removing it", async () => {
+    const user = await makeUser();
+    const product = await makeProduct();
+    const option = await makePackagingOption(product.id);
+    await addItem(user.id, null, product.id, 1, null, { packagingOptionId: option.id, declaredAvailability: "Local" });
+
+    await prisma.productPackagingOption.update({ where: { id: option.id }, data: { status: "Discontinued" } });
+
+    const summary = await getCart(user.id, null);
+    expect(summary.items).toHaveLength(1);
+    expect(summary.items[0]?.unavailable).toBe(true);
+  });
+
+  it("a past order-cutoff date flags the line unavailable on a later read", async () => {
+    const user = await makeUser();
+    const product = await makeProduct();
+    const option = await makePackagingOption(product.id, { orderCutoffDate: new Date(Date.now() + 60_000) });
+    await addItem(user.id, null, product.id, 1, null, { packagingOptionId: option.id, declaredAvailability: "Local" });
+
+    await prisma.productPackagingOption.update({ where: { id: option.id }, data: { orderCutoffDate: new Date(Date.now() - 60_000) } });
+
+    const summary = await getCart(user.id, null);
+    expect(summary.items[0]?.unavailable).toBe(true);
+  });
+
+  it("rejects lowering quantity below the pinned option's minimum quantity", async () => {
+    const user = await makeUser();
+    const product = await makeProduct();
+    const option = await makePackagingOption(product.id, { minQuantity: 2 });
+    await addItem(user.id, null, product.id, 2, null, { packagingOptionId: option.id, declaredAvailability: "Local" });
+    const summary = await getCart(user.id, null);
+    const itemId = summary.items[0]!.id;
+
+    await expect(updateItemQuantity(user.id, null, itemId, 1)).rejects.toBeInstanceOf(PackagingMinimumQuantityError);
+  });
+
+  it("two different packaging selections of the same product are independent lines, never merged", async () => {
+    const user = await makeUser();
+    const product = await makeProduct();
+    const optionA = await makePackagingOption(product.id);
+    const optionB = await makePackagingOption(product.id);
+
+    await addItem(user.id, null, product.id, 1, null, { packagingOptionId: optionA.id, declaredAvailability: "Local" });
+    await addItem(user.id, null, product.id, 1, null, { packagingOptionId: optionB.id, declaredAvailability: "Local" });
+
+    const summary = await getCart(user.id, null);
+    expect(summary.items).toHaveLength(2);
   });
 });

@@ -24,6 +24,12 @@ export interface OrderLineInput {
   bundleId?: string | null;
   bundleInstanceId?: string | null;
   bundleName?: string | null;
+  /** Story 3 (Custom Packaging). Flat snapshots — null for a line with no packaging selected. */
+  packagingOptionId?: string | null;
+  packagingMethodName?: string | null;
+  packagingCharge?: string | null;
+  packagingDeclaredAvailability?: "Local" | "Export" | null;
+  packagingRequiresManualReview?: boolean;
 }
 
 /** Story 2 (Bundles). One entry per distinct bundle instance in the order — only OwnStock ones trigger the bundle-level decrement/restock step below. */
@@ -75,6 +81,8 @@ export interface CreateOrderInput {
   couponRedemption: { couponId: string; discountAmount: string } | null;
   /** Present only when the customer redeemed points at this order's checkout. userId is required here (redemption is authenticated-only). */
   pointsRedemption: { userId: string; points: number } | null;
+  /** Story 3 (Custom Packaging). True when any line's packaging option requires manual review — the order is created PendingConfirmation instead of Confirmed. Omitted/false for every pre-packaging caller, which still produces "Confirmed" byte-for-byte. */
+  requiresManualReview?: boolean;
 }
 
 /**
@@ -88,6 +96,10 @@ export interface CreateOrderInput {
  * confirmation view via Order.guestToken.
  */
 export function createOrderWithStockDecrement(input: CreateOrderInput) {
+  // Story 3 (Custom Packaging). Every pre-packaging caller omits
+  // requiresManualReview, so this is the literal string "Confirmed" for
+  // them — byte-for-byte identical to before this story.
+  const initialStatus: OrderStatus = input.requiresManualReview ? "PendingConfirmation" : "Confirmed";
   return prisma.$transaction(async (tx) => {
     // Story 2 (Bundles). An ADDITIONAL cap layered on top of every
     // component's own stock decrement below — never a substitute for it,
@@ -128,7 +140,7 @@ export function createOrderWithStockDecrement(input: CreateOrderInput) {
         userId: input.userId,
         guestToken: input.guestToken,
         guestEmail: input.guestEmail,
-        status: "Confirmed",
+        status: initialStatus,
         subtotal: input.subtotal,
         deliveryCharge: input.deliveryCharge,
         discount: input.discount,
@@ -160,6 +172,11 @@ export function createOrderWithStockDecrement(input: CreateOrderInput) {
             bundleId: line.bundleId,
             bundleInstanceId: line.bundleInstanceId,
             bundleName: line.bundleName,
+            packagingOptionId: line.packagingOptionId,
+            packagingMethodName: line.packagingMethodName,
+            packagingCharge: line.packagingCharge,
+            packagingDeclaredAvailability: line.packagingDeclaredAvailability,
+            packagingRequiresManualReview: line.packagingRequiresManualReview ?? false,
             unitPrice: line.unitPrice,
             quantity: line.quantity,
             lineTotal: line.lineTotal,
@@ -167,7 +184,7 @@ export function createOrderWithStockDecrement(input: CreateOrderInput) {
           })),
         },
         statusHistory: {
-          create: [{ status: "Confirmed", actor: "system:checkout" }],
+          create: [{ status: initialStatus, actor: "system:checkout" }],
         },
       },
       include: { items: true },

@@ -10,7 +10,12 @@ export type ProductAdminErrorCode =
   | "variant_has_orders"
   | "bundle_not_found"
   | "bundle_already_exists"
-  | "bundle_item_not_found";
+  | "bundle_item_not_found"
+  | "packaging_method_not_found"
+  | "packaging_method_name_conflict"
+  | "packaging_option_not_found"
+  | "packaging_option_duplicate"
+  | "packaging_option_variant_mismatch";
 
 export class ProductAdminError extends Error {
   constructor(
@@ -92,5 +97,36 @@ export class BundleAlreadyExistsError extends ProductAdminError {
 export class BundleItemNotFoundError extends ProductAdminError {
   constructor() {
     super("bundle_item_not_found", "Bundle component not found.");
+  }
+}
+
+export class PackagingMethodNotFoundError extends ProductAdminError {
+  constructor() {
+    super("packaging_method_not_found", "Packaging method not found.");
+  }
+}
+
+export class PackagingMethodNameConflictError extends ProductAdminError {
+  constructor(public readonly name: string) {
+    super("packaging_method_name_conflict", `A packaging method named "${name}" already exists.`);
+  }
+}
+
+export class PackagingOptionNotFoundError extends ProductAdminError {
+  constructor() {
+    super("packaging_option_not_found", "Packaging option not found.");
+  }
+}
+
+export class PackagingOptionDuplicateError extends ProductAdminError {
+  constructor() {
+    super("packaging_option_duplicate", "This product already has that packaging method configured for this scope.");
+  }
+}
+
+/** The optional variant pin must be one of this same product's own variants — unlike BundleItem, which legitimately points at an arbitrary other product's variant. */
+export class PackagingOptionVariantMismatchError extends ProductAdminError {
+  constructor() {
+    super("packaging_option_variant_mismatch", "The selected variant does not belong to this product.");
   }
 }

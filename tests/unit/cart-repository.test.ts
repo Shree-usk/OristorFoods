@@ -37,9 +37,18 @@ async function makeProduct(overrides: Record<string, unknown> = {}) {
   });
 }
 
+/** Story 3 (Custom Packaging). */
+async function makePackagingOption(productId: string) {
+  sequence += 1;
+  const method = await prisma.packagingMethod.create({ data: { name: `Cart Repo Packaging Method ${sequence}` } });
+  return prisma.productPackagingOption.create({ data: { productId, packagingMethodId: method.id, charge: "50.00" } });
+}
+
 afterEach(async () => {
   await prisma.cartItem.deleteMany();
   await prisma.cart.deleteMany();
+  await prisma.productPackagingOption.deleteMany({ where: { packagingMethod: { name: { startsWith: "Cart Repo Packaging Method " } } } });
+  await prisma.packagingMethod.deleteMany({ where: { name: { startsWith: "Cart Repo Packaging Method " } } });
   await prisma.product.deleteMany({ where: { sku: { startsWith: "CART-REPO-SKU-" } } });
   await prisma.user.deleteMany({ where: { email: { contains: "cart-repo-" } } });
 });
@@ -89,6 +98,49 @@ describe("upsertCartItem", () => {
     expect(second.quantity).toBe(5);
     const items = await listCartItemsWithProduct(cart.id);
     expect(items).toHaveLength(1);
+  });
+});
+
+describe("upsertCartItem — packaging (Story 3)", () => {
+  it("two different packaging selections of the same product create independent rows, never merging quantity", async () => {
+    const user = await makeUser();
+    const cart = await createUserCart(user.id);
+    const product = await makeProduct();
+    const optionA = await makePackagingOption(product.id);
+    const optionB = await makePackagingOption(product.id);
+
+    await upsertCartItem(cart.id, product.id, null, 1, "10.00", null, { packagingOptionId: optionA.id, declaredAvailability: "Local", chargeSnapshot: "50.00" });
+    await upsertCartItem(cart.id, product.id, null, 1, "10.00", null, { packagingOptionId: optionB.id, declaredAvailability: "Export", chargeSnapshot: "50.00" });
+
+    const items = await listCartItemsWithProduct(cart.id);
+    expect(items).toHaveLength(2);
+    expect(items.every((item) => item.quantity === 1)).toBe(true);
+    expect(items.map((item) => item.packagingOptionId).sort()).toEqual([optionA.id, optionB.id].sort());
+  });
+
+  it("re-adding the same packaging selection increments quantity rather than duplicating the row", async () => {
+    const user = await makeUser();
+    const cart = await createUserCart(user.id);
+    const product = await makeProduct();
+    const option = await makePackagingOption(product.id);
+
+    await upsertCartItem(cart.id, product.id, null, 1, "10.00", null, { packagingOptionId: option.id, declaredAvailability: "Local", chargeSnapshot: "50.00" });
+    const second = await upsertCartItem(cart.id, product.id, null, 2, "10.00", null, { packagingOptionId: option.id, declaredAvailability: "Local", chargeSnapshot: "50.00" });
+
+    expect(second.quantity).toBe(3);
+    expect(await listCartItemsWithProduct(cart.id)).toHaveLength(1);
+  });
+
+  it("a packaging selection and a plain (no packaging) line for the same product never merge", async () => {
+    const user = await makeUser();
+    const cart = await createUserCart(user.id);
+    const product = await makeProduct();
+    const option = await makePackagingOption(product.id);
+
+    await upsertCartItem(cart.id, product.id, null, 1, "10.00");
+    await upsertCartItem(cart.id, product.id, null, 1, "10.00", null, { packagingOptionId: option.id, declaredAvailability: "Local", chargeSnapshot: "50.00" });
+
+    expect(await listCartItemsWithProduct(cart.id)).toHaveLength(2);
   });
 });
 

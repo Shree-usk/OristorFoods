@@ -48,12 +48,16 @@ export default async function OrderConfirmationPage({ params }: { params: Promis
 
   const isGuest = !session?.user?.id;
   const window = estimatedWindow(order);
+  // Story 3 (Custom Packaging). A manual-review packaging selection lands
+  // the order in PendingConfirmation rather than Confirmed — the banner
+  // says so instead of claiming the order is confirmed when it isn't yet.
+  const pendingReview = order.status === "PendingConfirmation";
 
   return (
     <Section>
       <div className="mx-auto max-w-2xl">
-        <p className="text-small font-semibold uppercase tracking-wide text-leaf-dark">Order confirmed</p>
-        <h1 className="mt-2 text-h1 font-heading text-charcoal">Thank you for your order!</h1>
+        <p className="text-small font-semibold uppercase tracking-wide text-leaf-dark">{pendingReview ? "Order received" : "Order confirmed"}</p>
+        <h1 className="mt-2 text-h1 font-heading text-charcoal">{pendingReview ? "Thank you — we're reviewing your order!" : "Thank you for your order!"}</h1>
         <p className="mt-3 text-body text-charcoal">
           Your order number is <span className="font-number font-semibold">{order.orderNumber}</span>.
           {order.guestEmail && (
@@ -62,6 +66,7 @@ export default async function OrderConfirmationPage({ params }: { params: Promis
               A confirmation will be sent to <span className="font-semibold">{order.guestEmail}</span>.
             </>
           )}
+          {pendingReview && " Your selected packaging needs a quick review by our team before we confirm the order."}
         </p>
 
         <section aria-labelledby="confirmation-status" className="mt-8 rounded-lg border border-input p-6">
@@ -84,6 +89,7 @@ export default async function OrderConfirmationPage({ params }: { params: Promis
                   {item.productName}
                   {item.variantName && <span className="text-charcoal/70"> — {item.variantName}</span>} <span className="text-charcoal/70">× {item.quantity}</span>
                   {item.bundleName && <span className="ml-1 text-caption text-charcoal/60">(part of {item.bundleName})</span>}
+                  {item.packagingMethodName && <span className="ml-1 text-caption text-charcoal/60">+ {item.packagingMethodName} packaging</span>}
                 </span>
                 <span className="font-number">
                   {order.currency} {item.lineTotal.toFixed(2)}

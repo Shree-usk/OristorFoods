@@ -25,6 +25,7 @@ import {
 import { AssetPickerDialog } from "@/components/admin/media/asset-picker-dialog";
 import { DuplicateProductDialog } from "@/components/admin/products/duplicate-product-dialog";
 import { ProductBundlePanel } from "@/components/admin/products/product-bundle-panel";
+import { ProductPackagingPanel } from "@/components/admin/products/product-packaging-panel";
 import { ProductPricingPanel } from "@/components/admin/products/product-pricing-panel";
 import { ProductVariantsPanel } from "@/components/admin/products/product-variants-panel";
 import { SeoFieldsPanel } from "@/components/admin/seo/seo-fields-panel";
@@ -319,6 +320,7 @@ export function AdminProductForm({ productId }: { productId?: string }) {
           <TabsTrigger value="pricing">Pricing</TabsTrigger>
           <TabsTrigger value="variants">Variants</TabsTrigger>
           <TabsTrigger value="bundle">Bundle</TabsTrigger>
+          <TabsTrigger value="packaging">Packaging</TabsTrigger>
           <TabsTrigger value="nutrition">Nutrition &amp; Ingredients</TabsTrigger>
           <TabsTrigger value="media">Media</TabsTrigger>
           <TabsTrigger value="seo">SEO</TabsTrigger>
@@ -465,6 +467,14 @@ export function AdminProductForm({ productId }: { productId?: string }) {
             <ProductBundlePanel productId={productId} />
           ) : (
             <p className="text-body text-charcoal/70">Save the product first to configure a bundle.</p>
+          )}
+        </TabsContent>
+
+        <TabsContent value="packaging" className="mt-4">
+          {productId ? (
+            <ProductPackagingPanel productId={productId} />
+          ) : (
+            <p className="text-body text-charcoal/70">Save the product first to configure custom packaging.</p>
           )}
         </TabsContent>
 
