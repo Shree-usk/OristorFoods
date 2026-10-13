@@ -7,6 +7,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { CouponInput } from "@/components/storefront/cart/coupon-input";
 import { PointsRedemptionInput } from "@/components/storefront/checkout/points-redemption-input";
+import { PackagingInstructionsList } from "@/components/storefront/product/packaging-instructions-list";
 import { ApiError } from "@/lib/api/api-error";
 import { placeOrder } from "@/lib/api/checkout-client";
 import { useCheckoutStore } from "@/lib/stores/checkout-store";
@@ -106,9 +107,7 @@ export function ReviewStep({ cart }: { cart: CartSummary }) {
                   {item.variantName && <span className="text-charcoal/70"> — {item.variantName}</span>} <span className="text-charcoal/70">× {item.quantity}</span>
                   {item.bundleName && <span className="ml-1 text-caption text-charcoal/60">(part of {item.bundleName})</span>}
                   {item.packagingMethodName && <span className="ml-1 text-caption text-charcoal/60">+ {item.packagingMethodName} packaging</span>}
-                  {item.packagingInstructions && (
-                    <span className="mt-1 block text-caption text-chilli">{item.packagingInstructions}</span>
-                  )}
+                  {item.packagingInstructions && <PackagingInstructionsList text={item.packagingInstructions} className="mt-1 text-caption text-chilli" />}
                 </span>
                 <span className="font-number">
                   {item.currency} {item.lineTotal.toFixed(2)}

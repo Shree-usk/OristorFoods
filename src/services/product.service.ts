@@ -358,6 +358,8 @@ export interface ProductDetailPackagingOption {
   shelfLifeDays: number | null;
   shelfLifeText: string | null;
   customerInstructions: string | null;
+  /** Checkbox label on the PDP acknowledgement gate — null falls back to the storefront's default wording. */
+  acknowledgementText: string | null;
 }
 
 export interface ProductDetail {
@@ -627,6 +629,7 @@ export async function getProductDetail(
       shelfLifeDays: option.shelfLifeDays,
       shelfLifeText: option.shelfLifeText,
       customerInstructions: option.customerInstructions,
+      acknowledgementText: option.acknowledgementText,
     })),
     price: hasVariants ? (variantPrice ?? 0) : hasBundle ? (bundleDetail.bundle?.discountedTotal ?? 0) : resolvedPrice!.price.toNumber(),
     originalPrice: hasVariants ? variantOriginalPrice : hasBundle ? bundleOriginalPrice : originalPrice,

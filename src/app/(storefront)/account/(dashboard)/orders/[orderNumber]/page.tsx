@@ -6,6 +6,7 @@ import { notFound } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { OrderStatusTimeline } from "@/components/storefront/orders/order-status-timeline";
+import { PackagingInstructionsList } from "@/components/storefront/product/packaging-instructions-list";
 import { ReorderButton } from "@/components/storefront/account/reorder-button";
 import { ReturnRequestDialog } from "@/components/storefront/account/return-request-dialog";
 import { getOrderDetail } from "@/services/customer-order-history.service";
@@ -107,7 +108,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ or
                     {item.variantName && <span className="font-normal text-charcoal/70"> — {item.variantName}</span>}
                     {item.bundleName && <span className="ml-1 text-caption text-charcoal/60">(part of {item.bundleName})</span>}
                     {item.packagingMethodName && <span className="ml-1 text-caption text-charcoal/60">+ {item.packagingMethodName} packaging</span>}
-                    {item.packagingInstructions && <span className="mt-1 block text-caption text-chilli">{item.packagingInstructions}</span>}
+                    {item.packagingInstructions && <PackagingInstructionsList text={item.packagingInstructions} className="mt-1 text-caption text-chilli" />}
                   </p>
                   <p className="text-small text-charcoal/70">
                     Qty {item.quantity} × {formatCurrency(item.unitPrice, order.currency)}

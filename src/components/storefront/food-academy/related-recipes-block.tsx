@@ -2,12 +2,27 @@ import Image from "next/image";
 import Link from "next/link";
 import type { RecipePreview } from "@/services/product-detail-extensions";
 
-export function RelatedRecipesBlock({ recipes }: { recipes: RecipePreview[] }) {
-  if (recipes.length === 0) return null;
+interface RelatedRecipesBlockProps {
+  recipes: RecipePreview[];
+  heading?: string;
+  /** Shown instead of rendering nothing when `recipes` is empty — omit to render nothing, matching the original Food Academy usage. */
+  emptyMessage?: string;
+}
+
+export function RelatedRecipesBlock({ recipes, heading = "Recipes to try", emptyMessage }: RelatedRecipesBlockProps) {
+  if (recipes.length === 0) {
+    if (!emptyMessage) return null;
+    return (
+      <div className="mt-8">
+        <h2 className="text-h4 font-heading text-charcoal">{heading}</h2>
+        <p className="mt-2 text-small text-charcoal/70">{emptyMessage}</p>
+      </div>
+    );
+  }
 
   return (
     <div className="mt-8">
-      <h2 className="text-h4 font-heading text-charcoal">Recipes to try</h2>
+      <h2 className="text-h4 font-heading text-charcoal">{heading}</h2>
       <div className="mt-4 grid grid-cols-1 gap-6 sm:grid-cols-2 xl:grid-cols-3">
         {recipes.map((recipe) => (
           <Link key={recipe.id} href={`/recipes/${recipe.slug}`} className="group block">

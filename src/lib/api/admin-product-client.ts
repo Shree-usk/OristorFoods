@@ -400,6 +400,7 @@ export interface PackagingOptionFormInput {
   shelfLifeDays?: number | null;
   shelfLifeText?: string | null;
   customerInstructions?: string | null;
+  acknowledgementText?: string | null;
   availabilityStartDate?: string | null;
   availabilityEndDate?: string | null;
   orderCutoffDate?: string | null;

@@ -5,6 +5,7 @@ import { notFound } from "next/navigation";
 
 import { Section } from "@/components/storefront/layout/section";
 import { OrderStatusTimeline } from "@/components/storefront/orders/order-status-timeline";
+import { PackagingInstructionsList } from "@/components/storefront/product/packaging-instructions-list";
 import { buttonVariants } from "@/components/ui/button";
 import { auth } from "@/lib/auth";
 import { CART_COOKIE_NAME } from "@/services/cart.service";
@@ -90,7 +91,7 @@ export default async function OrderConfirmationPage({ params }: { params: Promis
                   {item.variantName && <span className="text-charcoal/70"> — {item.variantName}</span>} <span className="text-charcoal/70">× {item.quantity}</span>
                   {item.bundleName && <span className="ml-1 text-caption text-charcoal/60">(part of {item.bundleName})</span>}
                   {item.packagingMethodName && <span className="ml-1 text-caption text-charcoal/60">+ {item.packagingMethodName} packaging</span>}
-                  {item.packagingInstructions && <span className="mt-1 block text-caption text-chilli">{item.packagingInstructions}</span>}
+                  {item.packagingInstructions && <PackagingInstructionsList text={item.packagingInstructions} className="mt-1 text-caption text-chilli" />}
                 </span>
                 <span className="font-number">
                   {order.currency} {item.lineTotal.toFixed(2)}

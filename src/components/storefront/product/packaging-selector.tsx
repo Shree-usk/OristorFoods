@@ -1,8 +1,11 @@
 "use client";
 
 import { CheckboxOption } from "@/components/storefront/listing/checkbox-option";
+import { PackagingInstructionsList } from "@/components/storefront/product/packaging-instructions-list";
 import { cn } from "@/lib/utils";
 import type { ProductDetailPackagingOption } from "@/services/product.service";
+
+const DEFAULT_ACKNOWLEDGEMENT_TEXT = "I understand this packaging's lead time and shelf life as described above.";
 
 /**
  * `optionId: ""` means "declared, but Standard packaging (no option)
@@ -112,12 +115,18 @@ export function PackagingSelector({ options, selectedVariantId, currency, value,
                 aria-pressed={selected}
                 onClick={() => selectOption(option.id)}
                 className={cn(
-                  "rounded-md border px-3 py-2 text-small transition-colors",
+                  "inline-flex items-center gap-1.5 rounded-md border px-3 py-2 text-small transition-colors",
                   selected ? "border-chilli bg-chilli/10 text-chilli" : "border-input text-charcoal hover:border-charcoal/40",
                 )}
               >
-                {option.packagingMethodName} (+{currency} {option.charge.toLocaleString()})
-                {hasMinimum && <span className="ml-1.5">(min {option.minQuantity})</span>}
+                {option.packagingMethodImage && (
+                  // eslint-disable-next-line @next/next/no-img-element -- admin types this URL freely (no Media Library picker for it yet); next/image's static-domain allowlist isn't worth it for this small icon
+                  <img src={option.packagingMethodImage} alt="" className="size-5 shrink-0 rounded object-cover" />
+                )}
+                <span>
+                  {option.packagingMethodName} (+{currency} {option.charge.toLocaleString()})
+                  {hasMinimum && <span className="ml-1.5">(min {option.minQuantity})</span>}
+                </span>
               </button>
             );
           })}
@@ -132,10 +141,10 @@ export function PackagingSelector({ options, selectedVariantId, currency, value,
           ) : (
             selectedOption.shelfLifeDays !== null && <p>Shelf life: {selectedOption.shelfLifeDays} day(s)</p>
           )}
-          {selectedOption.customerInstructions && <p>{selectedOption.customerInstructions}</p>}
+          {selectedOption.customerInstructions && <PackagingInstructionsList text={selectedOption.customerInstructions} />}
           <div className="pt-1">
             <CheckboxOption
-              label="I understand this packaging's lead time and shelf life as described above."
+              label={selectedOption.acknowledgementText || DEFAULT_ACKNOWLEDGEMENT_TEXT}
               checked={acknowledged}
               onCheckedChange={onAcknowledgedChange}
             />
