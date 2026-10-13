@@ -432,17 +432,27 @@ export async function mergeGuestCartIntoUser(userId: string, guestCookieValue: s
 
   const { cart: userCart } = await resolveCartIdentity(userId, undefined);
   const userItems = await cartRepository.listCartItemsWithProduct(userCart.id);
-  // Keyed by productId+variantId+packagingOptionId — two different sizes,
-  // or two different packaging choices, of the same product must merge
-  // independently, never combine into one row. (Bundle rows, keyed also by
-  // bundleInstanceId, are a pre-existing gap in this merge function not
-  // addressed by Story 2 or this story — out of scope here.)
-  const lineKey = (productId: string, variantId: string | null, packagingOptionId: string | null) => `${productId}:${variantId ?? ""}:${packagingOptionId ?? ""}`;
-  const userItemByKey = new Map(userItems.map((item) => [lineKey(item.productId, item.variantId, item.packagingOptionId), item]));
+  // Keyed by productId+variantId+bundleInstanceId+packagingOptionId — two
+  // different sizes, two different packaging choices, or two different
+  // bundle instances of the same product must merge independently, never
+  // combine into one row's quantity. Including bundleInstanceId here is
+  // the fix for a real bug: an earlier version of this key omitted it,
+  // which let a guest bundle's exploded component rows silently fold into
+  // an unrelated existing line's quantity (or, on no match, get re-inserted
+  // with bundleId/bundleInstanceId hard-coded null below) — dissolving the
+  // bundle grouping entirely, after which "Remove bundle" 404s because
+  // bundle.service.ts::removeBundleFromCart can no longer find any row
+  // carrying that instance id. A bundleInstanceId is unique per add-to-cart
+  // action, so a guest bundle component never actually matches an existing
+  // user-cart row via this key — it always takes the "insert new" branch
+  // below, which now also carries its bundle tag through correctly.
+  const lineKey = (productId: string, variantId: string | null, bundleInstanceId: string | null, packagingOptionId: string | null) =>
+    `${productId}:${variantId ?? ""}:${bundleInstanceId ?? ""}:${packagingOptionId ?? ""}`;
+  const userItemByKey = new Map(userItems.map((item) => [lineKey(item.productId, item.variantId, item.bundleInstanceId, item.packagingOptionId), item]));
   const customerGroup = await resolveCustomerGroupForUser(userId);
 
   for (const guestItem of guestItems) {
-    const existing = userItemByKey.get(lineKey(guestItem.productId, guestItem.variantId, guestItem.packagingOptionId));
+    const existing = userItemByKey.get(lineKey(guestItem.productId, guestItem.variantId, guestItem.bundleInstanceId, guestItem.packagingOptionId));
     const combinedQuantity = (existing?.quantity ?? 0) + guestItem.quantity;
 
     let cappedQuantity: number;
@@ -473,7 +483,12 @@ export async function mergeGuestCartIntoUser(userId: string, guestCookieValue: s
       const packaging = guestItem.packagingOptionId
         ? { packagingOptionId: guestItem.packagingOptionId, declaredAvailability: guestItem.packagingDeclaredAvailability ?? "Local", chargeSnapshot: guestItem.packagingChargeSnapshot?.toFixed(2) ?? "0.00" }
         : null;
-      await cartRepository.upsertCartItem(userCart.id, guestItem.productId, guestItem.variantId, cappedQuantity, unitPrice, null, packaging);
+      // Story 2 (Bundles) bug fix: this used to hard-code `null` here,
+      // which silently stripped bundleId/bundleInstanceId off every bundle
+      // component row that survived a guest→user cart merge — see the
+      // lineKey comment above for the full failure chain this caused.
+      const bundle = guestItem.bundleId && guestItem.bundleInstanceId ? { bundleId: guestItem.bundleId, bundleInstanceId: guestItem.bundleInstanceId } : null;
+      await cartRepository.upsertCartItem(userCart.id, guestItem.productId, guestItem.variantId, cappedQuantity, unitPrice, bundle, packaging);
     }
   }
 }

@@ -17,7 +17,7 @@ interface CartDrawerProps {
 }
 
 export function CartDrawer({ open, onClose }: CartDrawerProps) {
-  const { cart, updateQuantity, removeItem, isUpdatingItemId, updateQuantityError, isRemovingItemId, removeItemError, removeBundle, isRemovingBundleInstanceId } = useCart();
+  const { cart, updateQuantity, removeItem, isUpdatingItemId, updateQuantityError, isRemovingItemId, removeItemError, removeBundle, isRemovingBundleInstanceId, removeBundleError } = useCart();
   const [announcement, setAnnouncement] = useState("");
 
   function handleRemove(itemId: string, productName: string) {
@@ -51,6 +51,7 @@ export function CartDrawer({ open, onClose }: CartDrawerProps) {
                     name={group.bundleName}
                     onRemove={() => removeBundle(group.bundleInstanceId!)}
                     isRemoving={isRemovingBundleInstanceId === group.bundleInstanceId}
+                    error={removeBundleError?.bundleInstanceId === group.bundleInstanceId ? removeBundleError.message : null}
                   />
                 )}
                 {group.items.map((item) => (

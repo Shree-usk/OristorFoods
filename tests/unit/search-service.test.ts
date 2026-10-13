@@ -61,6 +61,23 @@ describe("searchCatalogue", () => {
     expect(result.products).toEqual([]);
   });
 
+  it("returns a matching variant-driven product with no StandardPrice, priced from its default in-stock variant — regression for a real bug found live on staging", async () => {
+    const product = await createProduct({
+      sku: "SEARCH-SVC-3",
+      slug: "search-svc-sprats",
+      name: "Curry Sprats",
+      status: "Published",
+    });
+    await prisma.productVariant.create({
+      data: { productId: product.id, sku: "SEARCH-SVC-3-50G", name: "50g", netWeightGrams: 50, price: "300.00", currency: "LKR", stockQuantity: 10, inStock: true, isActive: true },
+    });
+
+    const result = await searchCatalogue("curry");
+
+    expect(result.products).toHaveLength(1);
+    expect(result.products[0]).toMatchObject({ name: "Curry Sprats", price: 300, currency: "LKR" });
+  });
+
   it("returns recipes from a registered search provider", async () => {
     registerRecipeSearchProvider(async (query) => [
       { id: "rec1", label: `${query} recipe`, href: "/recipes/rec1", type: "Recipe" as const },

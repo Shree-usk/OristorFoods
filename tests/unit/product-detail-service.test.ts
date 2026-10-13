@@ -223,6 +223,33 @@ describe("listRelatedProducts", () => {
 
     expect(related).toEqual([]);
   });
+
+  it("includes a sibling that's variant-driven with no StandardPrice — regression for a real bug found live on staging", async () => {
+    const category = await createCategory({ name: "Spices", slug: "related-spices-variant" });
+    const self = await createProduct({
+      sku: "REL-3",
+      slug: "rel-3",
+      name: "Self",
+      status: "Published",
+      categories: { connect: [{ id: category.id }] },
+    });
+    const variantSibling = await createProduct({
+      sku: "REL-4",
+      slug: "rel-4",
+      name: "Variant Sibling",
+      status: "Published",
+      categories: { connect: [{ id: category.id }] },
+    });
+    await createStandardPrice({ product: { connect: { id: self.id } }, price: "100.00" });
+    await prisma.productVariant.create({
+      data: { productId: variantSibling.id, sku: "REL-4-100G", name: "100g", netWeightGrams: 100, price: "400.00", currency: "LKR", stockQuantity: 5, inStock: true, isActive: true },
+    });
+
+    const related = await listRelatedProducts({ productId: self.id, categoryIds: [category.id] });
+
+    expect(related.map((p) => p.id)).toEqual([variantSibling.id]);
+    expect(related[0]).toMatchObject({ price: 400, currency: "LKR" });
+  });
 });
 
 describe("getProductsForCompare", () => {

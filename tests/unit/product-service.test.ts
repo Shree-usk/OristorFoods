@@ -70,6 +70,21 @@ describe("listProducts", () => {
     expect(result.total).toBe(0);
   });
 
+  it("includes a variant-driven product with no StandardPrice, pricing it from its default in-stock variant — regression for a real bug found live on staging (two Published, in-stock variant products never appeared on /products at all)", async () => {
+    const product = await createProduct({ sku: "LP-VARIANT", slug: "lp-variant", name: "Variant Product", status: "Published" });
+    await prisma.productVariant.create({
+      data: { productId: product.id, sku: "LP-VARIANT-100G", name: "100g", netWeightGrams: 100, price: "500.00", currency: "LKR", stockQuantity: 0, inStock: false, isActive: true },
+    });
+    await prisma.productVariant.create({
+      data: { productId: product.id, sku: "LP-VARIANT-350G", name: "350g", netWeightGrams: 350, price: "900.00", promoPrice: "750.00", currency: "LKR", stockQuantity: 5, inStock: true, isActive: true },
+    });
+
+    const result = await listProducts({});
+
+    expect(result.items).toHaveLength(1);
+    expect(result.items[0]).toMatchObject({ name: "Variant Product", price: 750, currency: "LKR" });
+  });
+
   it("includes subcategory products when filtering by a parent category", async () => {
     const parent = await createCategory({ name: "Spices", slug: "svc-spices" });
     const child = await createCategory({

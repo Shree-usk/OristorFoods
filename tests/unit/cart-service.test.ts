@@ -444,6 +444,43 @@ describe("mergeGuestCartIntoUser", () => {
     expect(summary.items).toHaveLength(1);
     expect(summary.items[0]?.quantity).toBe(2);
   });
+
+  it("preserves a bundle's grouping (bundleId/bundleInstanceId) across the merge, so removeBundleFromCart still finds it afterward — regression for a real bug found live on staging", async () => {
+    const user = await makeUser();
+    const jar = await makeProduct();
+    const sachet = await makeProduct();
+    const bundle = await makeFixedBundle([{ product: jar, quantity: 1 }, { product: sachet, quantity: 2 }]);
+
+    const { newCookieValue } = await addBundleToCart(null, undefined, bundle.id, null);
+    await mergeGuestCartIntoUser(user.id, newCookieValue ?? undefined);
+
+    const rows = await prisma.cartItem.findMany({ where: { cartId: (await prisma.cart.findUniqueOrThrow({ where: { userId: user.id } })).id } });
+    expect(rows).toHaveLength(2);
+    expect(rows.every((row) => row.bundleId === bundle.id)).toBe(true);
+    const bundleInstanceId = rows[0]!.bundleInstanceId!;
+    expect(rows.every((row) => row.bundleInstanceId === bundleInstanceId)).toBe(true);
+
+    // The whole point of preserving the tag: removal-as-a-group still works post-merge.
+    await removeBundleFromCart(user.id, undefined, bundleInstanceId);
+    expect(await getCart(user.id, null)).toMatchObject({ items: [] });
+  });
+
+  it("two different bundle instances never silently merge quantities into each other during a guest→user merge", async () => {
+    const user = await makeUser();
+    const shared = await makeProduct();
+    const bundle = await makeFixedBundle([{ product: shared, quantity: 1 }]);
+    await addItem(user.id, null, shared.id, 1); // an unrelated plain line for the same product already in the user's cart
+    const { newCookieValue } = await addBundleToCart(null, undefined, bundle.id, null);
+
+    await mergeGuestCartIntoUser(user.id, newCookieValue ?? undefined);
+
+    const summary = await getCart(user.id, null);
+    expect(summary.items).toHaveLength(2); // the plain line and the bundle's own row, never combined
+    const plainLine = summary.items.find((item) => !item.bundleInstanceId);
+    const bundleLine = summary.items.find((item) => item.bundleInstanceId);
+    expect(plainLine?.quantity).toBe(1);
+    expect(bundleLine?.quantity).toBe(1);
+  });
 });
 
 describe("Bundles (Story 2)", () => {

@@ -223,6 +223,13 @@ export function findPublishedProductsForListing(filters: ProductListingFilters) 
     include: {
       brand: true,
       images: { where: { isPrimary: true }, take: 1 },
+      // A variant-driven product deliberately has no StandardPrice row
+      // (see product.service.ts's getProductDetail) — without its
+      // variants here too, product.service.ts's listing price resolution
+      // has nothing to fall back to and silently drops it from every
+      // listing. Real bug found live: a Published, in-stock,
+      // variant-driven product never appeared on /products at all.
+      variants: { where: { isActive: true }, select: { price: true, promoPrice: true, currency: true, inStock: true, stockQuantity: true } },
     },
     // Deterministic ordering matches listProducts's "newest" default sort
     // (see product.service.ts's sortCandidates) — without this, Postgres
@@ -248,6 +255,8 @@ export function findProductsByIdsWithFilters(
     include: {
       brand: true,
       images: { where: { isPrimary: true }, take: 1 },
+      // See findPublishedProductsForListing's identical comment above.
+      variants: { where: { isActive: true }, select: { price: true, promoPrice: true, currency: true, inStock: true, stockQuantity: true } },
     },
   });
 }
