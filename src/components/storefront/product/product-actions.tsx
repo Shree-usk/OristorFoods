@@ -4,7 +4,7 @@ import { Heart, ShoppingCart } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { CompareToggle } from "@/components/storefront/product/compare-toggle";
-import { useAddToCart } from "@/hooks/use-add-to-cart";
+import { useAddToCart, type PackagingSelectionArg } from "@/hooks/use-add-to-cart";
 import { useWishlist } from "@/hooks/use-wishlist";
 
 interface ProductActionsProps {
@@ -13,10 +13,14 @@ interface ProductActionsProps {
   variantId?: string | null;
   /** True when the product has variants but none is currently selected — blocks an ambiguous add. */
   variantRequired?: boolean;
+  /** Story 3 (Custom Packaging). Null = default packaging (no surcharge). */
+  packaging?: PackagingSelectionArg | null;
+  /** True when a packaging option is selected but its required acknowledgement checkbox isn't checked yet — blocks an uninformed add, mirroring variantRequired. */
+  packagingBlocked?: boolean;
 }
 
-export function ProductActions({ productId, inStock, variantId = null, variantRequired = false }: ProductActionsProps) {
-  const cart = useAddToCart(productId, variantId);
+export function ProductActions({ productId, inStock, variantId = null, variantRequired = false, packaging = null, packagingBlocked = false }: ProductActionsProps) {
+  const cart = useAddToCart(productId, variantId, packaging);
   const wishlist = useWishlist(productId);
 
   return (
@@ -25,7 +29,7 @@ export function ProductActions({ productId, inStock, variantId = null, variantRe
         <Button
           type="button"
           size="lg"
-          disabled={!inStock || !cart.isAvailable || cart.isAdding || variantRequired}
+          disabled={!inStock || !cart.isAvailable || cart.isAdding || variantRequired || packagingBlocked}
           onClick={() => cart.addToCart()}
         >
           <ShoppingCart /> {inStock ? "Add to Cart" : "Out of Stock"}

@@ -17,9 +17,11 @@ import {
   BundleLineLockedError,
   CartItemForbiddenError,
   CartItemNotFoundError,
+  PackagingMinimumQuantityError,
 } from "@/services/cart.errors";
 import { resolveDiscountForCart } from "@/services/discount.service";
 import type { DiscountableLine } from "@/services/discount.service";
+import { resolvePackagingForCartItems, resolvePackagingSelection, type PackagingSelectionInput } from "@/services/packaging.service";
 import { resolveCustomerGroupForUser, resolvePrice } from "@/services/pricing.service";
 import { requireAvailableVariant, resolveVariantPrice } from "@/services/product-variant.service";
 import { resolveActiveMultiplier } from "@/services/reward-campaign.service";
@@ -36,6 +38,9 @@ function toLineItem(
   priceChanged: boolean,
   campaignMultiplier: number,
   bundleInvalid: boolean = false,
+  packagingCharge: number = 0,
+  packagingInvalid: boolean = false,
+  packagingRequiresManualReview: boolean = false,
 ): CartLineItem {
   const primaryImage = item.product.images[0];
   // A variant line's availability/stock comes entirely from its own
@@ -45,7 +50,12 @@ function toLineItem(
   // its own: every component can be perfectly in-stock while the BUNDLE
   // DEFINITION itself was deactivated, scheduled out of window, or edited
   // to drop this component — see bundle.service.ts::resolveBundleInstancePrices.
-  const unavailable = bundleInvalid || (item.variant ? !item.variant.isActive || !item.variant.inStock : item.product.status !== "Published" || !item.product.inStock);
+  // packagingInvalid (Story 3) is the same idea for a deactivated/
+  // out-of-window/past-cutoff/MOQ-no-longer-met packaging selection.
+  const unavailable =
+    bundleInvalid ||
+    packagingInvalid ||
+    (item.variant ? !item.variant.isActive || !item.variant.inStock : item.product.status !== "Published" || !item.product.inStock);
   const availableQuantity = item.variant ? item.variant.stockQuantity : item.product.stockQuantity;
   const quantityCapped = item.quantity > availableQuantity;
   return {
@@ -57,13 +67,30 @@ function toLineItem(
     variantName: item.variant?.name ?? null,
     bundleInstanceId: item.bundleInstanceId,
     bundleName: item.bundle?.name ?? null,
+    // Story 3 (Custom Packaging). packagingMethodName is read live off the
+    // joined relation (mirrors bundleName) — never trusted from a stale
+    // snapshot. packagingCharge is a SEPARATE field from unitPrice (not
+    // folded in) so the UI can show "product + packaging" as a breakdown;
+    // lineTotal below is the one place they're actually summed.
+    packagingOptionId: item.packagingOptionId,
+    packagingMethodName: item.packagingOption?.packagingMethod.name ?? null,
+    packagingCharge,
+    packagingDeclaredAvailability: item.packagingDeclaredAvailability,
+    packagingRequiresManualReview,
+    packagingLeadTimeDays: item.packagingOption?.leadTimeDays ?? null,
+    packagingShelfLifeDays: item.packagingOption?.shelfLifeDays ?? null,
+    packagingShelfLifeText: item.packagingOption?.shelfLifeText ?? null,
+    packagingInstructions: item.packagingOption?.customerInstructions ?? null,
     imageSrc: primaryImage?.url ?? "",
     imageAlt: primaryImage?.altText ?? item.product.name,
     quantity: item.quantity,
     unitPrice: resolvedUnitPrice,
     currency,
-    lineTotal: Math.round(resolvedUnitPrice * item.quantity * 100) / 100,
+    lineTotal: Math.round((resolvedUnitPrice + packagingCharge) * item.quantity * 100) / 100,
     // STORY-049: campaignMultiplier is 1 with no active RewardCampaign — a no-op, same shape as every other resolved-once-per-cart-read factor here (price, discount).
+    // The packaging surcharge deliberately never earns points — an explicit
+    // choice, since the brief is silent on it and this avoids inventing a
+    // reward rule nobody asked for.
     rewardPointsEarned: Math.round(item.product.rewardPoints * item.quantity * campaignMultiplier),
     priceChanged,
     unavailable,
@@ -102,6 +129,11 @@ async function buildSummary(cart: Prisma.CartGetPayload<object>, items: CartItem
     rewardsRepository.getSetting(),
     resolveBundleInstancePrices(items, customerGroup),
   ]);
+  // Story 3 (Custom Packaging). Pure/synchronous — unlike bundle
+  // re-validation, a packaging option's eligibility depends only on its
+  // own already-joined row, so this needs no DB round-trip (see
+  // packaging.service.ts's own header comment).
+  const packagingResolution = resolvePackagingForCartItems(items);
   const lineItems: CartLineItem[] = [];
   const discountableLines: DiscountableLine[] = [];
   for (const item of items) {
@@ -140,7 +172,43 @@ async function buildSummary(cart: Prisma.CartGetPayload<object>, items: CartItem
     if (priceChanged) {
       await cartRepository.updateCartItemSnapshot(item.id, liveUnitPrice.toFixed(2));
     }
-    const line = toLineItem(item, liveUnitPrice, currency, priceChanged, campaignMultiplier, bundleInvalid);
+
+    // Story 3 (Custom Packaging). Gated on !item.bundleInstanceId per the
+    // "packaging never combines with a bundle's exploded rows" scope
+    // decision (resolvePackagingForCartItems already skips bundle rows).
+    // A charge change folds into the existing `priceChanged` flag rather
+    // than a second boolean — the UI only ever needs "something about this
+    // line's price moved, re-check."
+    let packagingInvalid = false;
+    let packagingCharge = 0;
+    let packagingRequiresManualReview = false;
+    let packagingChargeChanged = false;
+    if (item.packagingOptionId && !item.bundleInstanceId) {
+      const snapshotCharge = item.packagingChargeSnapshot?.toNumber() ?? 0;
+      if (packagingResolution.invalidItemIds.has(item.id)) {
+        packagingInvalid = true;
+        packagingCharge = snapshotCharge;
+      } else {
+        packagingCharge = packagingResolution.chargeByItemId.get(item.id) ?? snapshotCharge;
+        packagingRequiresManualReview = packagingResolution.requiresManualReviewByItemId.get(item.id) ?? false;
+        packagingChargeChanged = packagingCharge !== snapshotCharge;
+        if (packagingChargeChanged) {
+          await cartRepository.updateCartItemPackagingChargeSnapshot(item.id, packagingCharge.toFixed(2));
+        }
+      }
+    }
+
+    const line = toLineItem(
+      item,
+      liveUnitPrice,
+      currency,
+      priceChanged || packagingChargeChanged,
+      campaignMultiplier,
+      bundleInvalid,
+      packagingCharge,
+      packagingInvalid,
+      packagingRequiresManualReview,
+    );
     lineItems.push(line);
     discountableLines.push({ productId: item.productId, categoryIds: item.product.categories.map((category) => category.id), lineTotal: line.lineTotal });
   }
@@ -224,13 +292,15 @@ export async function addItem(
   productId: string,
   quantity: number,
   variantId: string | null = null,
+  packaging: PackagingSelectionInput | null = null,
 ): Promise<CartIdentityResult> {
   const identity = await resolveCartIdentity(userId, guestCookieValue ?? undefined);
-  // Must also match variantId — two different sizes of the same product
-  // are independent cart lines, never merged into one another's quantity.
+  // Must also match variantId AND packagingOptionId — two different sizes,
+  // or two different packaging choices, of the same product are
+  // independent cart lines, never merged into one another's quantity.
   const existingItem = await cartRepository
     .listCartItemsWithProduct(identity.cart.id)
-    .then((items) => items.find((i) => i.productId === productId && i.variantId === variantId));
+    .then((items) => items.find((i) => i.productId === productId && i.variantId === variantId && i.packagingOptionId === (packaging?.packagingOptionId ?? null)));
   const totalRequested = (existingItem?.quantity ?? 0) + quantity;
 
   let unitPrice: string;
@@ -244,7 +314,13 @@ export async function addItem(
     unitPrice = resolved?.price.toFixed(2) ?? "0.00";
   }
 
-  await cartRepository.upsertCartItem(identity.cart.id, productId, variantId, quantity, unitPrice);
+  let packagingForUpsert: { packagingOptionId: string; declaredAvailability: "Local" | "Export"; chargeSnapshot: string } | null = null;
+  if (packaging) {
+    const resolved = await resolvePackagingSelection(productId, variantId, totalRequested, packaging);
+    packagingForUpsert = { packagingOptionId: packaging.packagingOptionId, declaredAvailability: packaging.declaredAvailability, chargeSnapshot: resolved.chargeSnapshot.toFixed(2) };
+  }
+
+  await cartRepository.upsertCartItem(identity.cart.id, productId, variantId, quantity, unitPrice, null, packagingForUpsert);
 
   // Best-effort — never block the cart mutation on a tracking write. The
   // whole block (not just trackInteraction's own promise) is guarded:
@@ -279,6 +355,17 @@ export async function updateItemQuantity(
   // component independently would silently break the bundle's own
   // min/max and re-priced discount.
   if (item.bundleInstanceId) throw new BundleLineLockedError();
+  // Story 3 (Custom Packaging). Lowering below the pinned option's own
+  // minimum is rejected synchronously, the same way StockExceededError/
+  // ProductUnavailableError already block a mutation rather than letting
+  // it land and silently flip `unavailable` on the next read — gives the
+  // customer an immediate, actionable choice instead of a confusing
+  // surprise later. buildSummary's read-time `unavailable` fallback still
+  // exists as a defense-in-depth backstop (e.g. an admin raises the MOQ
+  // after the line was added).
+  if (item.packagingOption?.minQuantity != null && quantity < item.packagingOption.minQuantity) {
+    throw new PackagingMinimumQuantityError(item.packagingOption.minQuantity);
+  }
 
   if (item.variantId) {
     const variant = await requireAvailableVariant(item.variantId, quantity);
@@ -345,14 +432,17 @@ export async function mergeGuestCartIntoUser(userId: string, guestCookieValue: s
 
   const { cart: userCart } = await resolveCartIdentity(userId, undefined);
   const userItems = await cartRepository.listCartItemsWithProduct(userCart.id);
-  // Keyed by productId+variantId — two different sizes of the same
-  // product must merge independently, never combine into one row.
-  const lineKey = (productId: string, variantId: string | null) => `${productId}:${variantId ?? ""}`;
-  const userItemByKey = new Map(userItems.map((item) => [lineKey(item.productId, item.variantId), item]));
+  // Keyed by productId+variantId+packagingOptionId — two different sizes,
+  // or two different packaging choices, of the same product must merge
+  // independently, never combine into one row. (Bundle rows, keyed also by
+  // bundleInstanceId, are a pre-existing gap in this merge function not
+  // addressed by Story 2 or this story — out of scope here.)
+  const lineKey = (productId: string, variantId: string | null, packagingOptionId: string | null) => `${productId}:${variantId ?? ""}:${packagingOptionId ?? ""}`;
+  const userItemByKey = new Map(userItems.map((item) => [lineKey(item.productId, item.variantId, item.packagingOptionId), item]));
   const customerGroup = await resolveCustomerGroupForUser(userId);
 
   for (const guestItem of guestItems) {
-    const existing = userItemByKey.get(lineKey(guestItem.productId, guestItem.variantId));
+    const existing = userItemByKey.get(lineKey(guestItem.productId, guestItem.variantId, guestItem.packagingOptionId));
     const combinedQuantity = (existing?.quantity ?? 0) + guestItem.quantity;
 
     let cappedQuantity: number;
@@ -376,7 +466,14 @@ export async function mergeGuestCartIntoUser(userId: string, guestCookieValue: s
       await cartRepository.updateCartItemQuantity(existing.id, cappedQuantity);
       await cartRepository.updateCartItemSnapshot(existing.id, unitPrice);
     } else {
-      await cartRepository.upsertCartItem(userCart.id, guestItem.productId, guestItem.variantId, cappedQuantity, unitPrice);
+      // Packaging selection (if any) carries over as-is — the next
+      // buildSummary read re-validates/re-prices it live, same as every
+      // other cart read, so an eligibility change since the guest cart was
+      // created still surfaces correctly rather than needing a re-check here.
+      const packaging = guestItem.packagingOptionId
+        ? { packagingOptionId: guestItem.packagingOptionId, declaredAvailability: guestItem.packagingDeclaredAvailability ?? "Local", chargeSnapshot: guestItem.packagingChargeSnapshot?.toFixed(2) ?? "0.00" }
+        : null;
+      await cartRepository.upsertCartItem(userCart.id, guestItem.productId, guestItem.variantId, cappedQuantity, unitPrice, null, packaging);
     }
   }
 }

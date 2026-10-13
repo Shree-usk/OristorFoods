@@ -49,6 +49,9 @@ export interface OrderAdminDetailLineItem {
   productSku: string;
   variantName?: string | null;
   bundleName?: string | null;
+  packagingMethodName?: string | null;
+  packagingCharge?: number | null;
+  packagingRequiresManualReview?: boolean;
   unitPrice: number;
   quantity: number;
   lineTotal: number;

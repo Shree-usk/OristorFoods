@@ -62,6 +62,12 @@ interface CheckoutCartState {
     bundleId: string | null;
     bundleInstanceId: string | null;
     bundleName: string | null;
+    /** Story 3 (Custom Packaging). Null when no packaging option is selected — see packaging.service.ts. */
+    packagingOptionId: string | null;
+    packagingMethodName: string | null;
+    packagingCharge: number;
+    packagingDeclaredAvailability: "Local" | "Export" | null;
+    packagingRequiresManualReview: boolean;
   }>;
 }
 
@@ -114,6 +120,11 @@ export async function requireCheckoutableCart(userId: string | null, guestCookie
       bundleId: itemById.get(line.id)?.bundleId ?? null,
       bundleInstanceId: line.bundleInstanceId,
       bundleName: line.bundleName,
+      packagingOptionId: line.packagingOptionId,
+      packagingMethodName: line.packagingMethodName,
+      packagingCharge: line.packagingCharge,
+      packagingDeclaredAvailability: line.packagingDeclaredAvailability,
+      packagingRequiresManualReview: line.packagingRequiresManualReview,
     })),
   };
 }
@@ -256,6 +267,11 @@ export async function placeOrder(
   const discountLabel = discount.applied.length > 0 ? discount.applied.map((entry) => entry.label).join(", ") : null;
   const pointsRedemption = points.pointsToRedeem > 0 && userId ? { userId, points: points.pointsToRedeem } : null;
 
+  // Story 3 (Custom Packaging). Any line flagged for manual review (per its
+  // ProductPackagingOption config) sends the WHOLE order to PendingConfirmation
+  // instead of Confirmed — see order.repository.ts::createOrderWithStockDecrement.
+  const requiresManualReview = cart.lines.some((line) => line.packagingRequiresManualReview);
+
   const { order, replayed: wasReplay } = await createOrder({
     idempotencyKey: input.idempotencyKey,
     userId,
@@ -296,6 +312,11 @@ export async function placeOrder(
       bundleId: line.bundleId,
       bundleInstanceId: line.bundleInstanceId,
       bundleName: line.bundleName,
+      packagingOptionId: line.packagingOptionId,
+      packagingMethodName: line.packagingMethodName,
+      packagingCharge: line.packagingCharge.toFixed(2),
+      packagingDeclaredAvailability: line.packagingDeclaredAvailability,
+      packagingRequiresManualReview: line.packagingRequiresManualReview,
     })),
     // Story 2 (Bundles). Grouped from this same checkout-time cart.lines
     // snapshot — one entry per distinct bundle instance in the cart
@@ -306,6 +327,7 @@ export async function placeOrder(
     bundleInstances: await resolveBundleInstancesForOrder(cart.lines),
     cartId: cart.cartId,
     couponRedemption,
+    requiresManualReview,
   });
 
   if (userId && input.save) {
@@ -401,6 +423,9 @@ function toConfirmationSummary(order: Awaited<ReturnType<typeof getOrderForConfi
       variantName: item.variantName,
       bundleInstanceId: item.bundleInstanceId,
       bundleName: item.bundleName,
+      packagingMethodName: item.packagingMethodName,
+      packagingCharge: item.packagingCharge?.toNumber() ?? null,
+      packagingRequiresManualReview: item.packagingRequiresManualReview,
       unitPrice: item.unitPrice.toNumber(),
       quantity: item.quantity,
       lineTotal: item.lineTotal.toNumber(),

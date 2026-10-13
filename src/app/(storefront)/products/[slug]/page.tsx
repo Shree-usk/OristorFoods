@@ -135,6 +135,7 @@ export default async function ProductDetailPage({ params }: ProductDetailPagePro
               inStock={product.inStock}
               rewardPoints={product.rewardPoints}
               variants={product.variants}
+              packagingOptions={product.packagingOptions}
             />
           </div>
 

@@ -4,6 +4,7 @@ import * as collectionService from "@/services/collection.service";
 import { computeBundleDiscountedTotal } from "@/services/bundle-pricing.service";
 import * as pricingService from "@/services/pricing.service";
 import { resolveVariantPrice } from "@/services/product-variant.service";
+import * as packagingRepository from "@/repositories/packaging.repository";
 import * as productRepository from "@/repositories/product.repository";
 import * as seoRepository from "@/repositories/seo.repository";
 import {
@@ -310,6 +311,21 @@ export interface ProductDetailVariant {
   images: { url: string; altText: string | null }[];
 }
 
+/** Story 3 (Custom Packaging). Customer-eligible (both option + method Active) packaging options for this product — see packaging.repository.ts::findEligiblePackagingOptionsForProduct. */
+export interface ProductDetailPackagingOption {
+  id: string;
+  variantId: string | null;
+  packagingMethodName: string;
+  packagingMethodImage: string | null;
+  charge: number;
+  minQuantity: number | null;
+  availability: "Local" | "Export" | "Both";
+  leadTimeDays: number | null;
+  shelfLifeDays: number | null;
+  shelfLifeText: string | null;
+  customerInstructions: string | null;
+}
+
 export interface ProductDetail {
   id: string;
   sku: string;
@@ -335,6 +351,8 @@ export interface ProductDetail {
   bundle: ProductDetailBundle | null;
   /** Non-empty only for a variant-driven product — see getProductDetail for how price/currency below are then derived from the default-selected variant instead of the 5-tier pricing system. */
   variants: ProductDetailVariant[];
+  /** Story 3 (Custom Packaging). Variant-scoped filtering happens client-side — avoids a round-trip on every size switch. */
+  packagingOptions: ProductDetailPackagingOption[];
   price: number;
   originalPrice: number | null;
   currency: string;
@@ -472,12 +490,13 @@ export async function getProductDetail(
   const hasVariants = product.variants.length > 0;
   const hasBundle = product.bundle !== null;
 
-  const [resolvedPrice, reviewSummary, qaSummary, recipeSummary, seoMeta] = await Promise.all([
+  const [resolvedPrice, reviewSummary, qaSummary, recipeSummary, seoMeta, packagingOptions] = await Promise.all([
     hasVariants || hasBundle ? null : pricingService.resolvePrice({ productId: product.id, customerGroup: customerGroup ?? "Retail" }),
     getReviewSummary(product.id),
     getQaSummary(product.id),
     getRecipeSummary(product.id),
     seoRepository.findSeoMeta("Product", product.id),
+    packagingRepository.findEligiblePackagingOptionsForProduct(product.id),
   ]);
 
   if (!hasVariants && !hasBundle && !resolvedPrice) {
@@ -561,6 +580,19 @@ export async function getProductDetail(
       inStock: variant.inStock,
       stockQuantity: variant.stockQuantity,
       images: variant.images.map((image) => ({ url: image.url, altText: image.altText })),
+    })),
+    packagingOptions: packagingOptions.map((option) => ({
+      id: option.id,
+      variantId: option.variantId,
+      packagingMethodName: option.packagingMethod.name,
+      packagingMethodImage: option.packagingMethod.image,
+      charge: option.charge.toNumber(),
+      minQuantity: option.minQuantity,
+      availability: option.availability,
+      leadTimeDays: option.leadTimeDays,
+      shelfLifeDays: option.shelfLifeDays,
+      shelfLifeText: option.shelfLifeText,
+      customerInstructions: option.customerInstructions,
     })),
     price: hasVariants ? (variantPrice ?? 0) : hasBundle ? (bundleDetail.bundle?.discountedTotal ?? 0) : resolvedPrice!.price.toNumber(),
     originalPrice: hasVariants ? variantOriginalPrice : hasBundle ? bundleOriginalPrice : originalPrice,

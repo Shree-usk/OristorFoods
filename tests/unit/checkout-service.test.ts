@@ -88,6 +88,13 @@ const address: PlaceOrderInput["address"] = {
   city: "Colombo",
 };
 
+/** Story 3 (Custom Packaging). */
+async function makePackagingOption(productId: string, overrides: Record<string, unknown> = {}) {
+  sequence += 1;
+  const method = await prisma.packagingMethod.create({ data: { name: `Checkout Svc Packaging Method ${sequence}` } });
+  return prisma.productPackagingOption.create({ data: { productId, packagingMethodId: method.id, charge: "50.00", ...overrides } });
+}
+
 afterEach(async () => {
   await prisma.orderStatusHistory.deleteMany();
   await prisma.orderItem.deleteMany();
@@ -100,6 +107,8 @@ afterEach(async () => {
   await prisma.deliveryRate.deleteMany();
   await prisma.deliveryZone.deleteMany();
   await prisma.shippingSetting.deleteMany();
+  await prisma.productPackagingOption.deleteMany({ where: { packagingMethod: { name: { startsWith: "Checkout Svc Packaging Method " } } } });
+  await prisma.packagingMethod.deleteMany({ where: { name: { startsWith: "Checkout Svc Packaging Method " } } });
   await prisma.standardPrice.deleteMany();
   await prisma.productVariant.deleteMany({ where: { sku: { startsWith: "CHK-SVC-VARIANT-SKU-" } } });
   await prisma.product.deleteMany({ where: { sku: { startsWith: "CHK-SVC-SKU-" } } });
@@ -331,5 +340,60 @@ describe("placeOrder — variants", () => {
     await prisma.productVariant.update({ where: { id: variant.id }, data: { isActive: false } });
 
     await expect(createIntentForCart(null, cookie, "Colombo")).rejects.toBeInstanceOf(CartInvalidError);
+  });
+});
+
+describe("placeOrder — Custom Packaging (Story 3)", () => {
+  it("a packaging option invalidated between add and checkout is caught by the existing CartInvalidError gate, with no new gate code", async () => {
+    await makeZone();
+    const product = await makeProduct();
+    const option = await makePackagingOption(product.id);
+    const identity = await addItem(null, undefined, product.id, 1, null, { packagingOptionId: option.id, declaredAvailability: "Local" });
+    const cookie = identity.newCookieValue!;
+
+    await prisma.productPackagingOption.update({ where: { id: option.id }, data: { status: "Discontinued" } });
+
+    await expect(createIntentForCart(null, cookie, "Colombo")).rejects.toBeInstanceOf(CartInvalidError);
+  });
+
+  it("derives requiresManualReview from the cart and creates the order PendingConfirmation, with the packaging snapshot on the order item", async () => {
+    await makeZone();
+    const product = await makeProduct();
+    const option = await makePackagingOption(product.id, { requiresManualReview: true, availability: "Export" });
+    const identity = await addItem(null, undefined, product.id, 1, null, { packagingOptionId: option.id, declaredAvailability: "Export" });
+    const cookie = identity.newCookieValue!;
+    const intent = await createIntentForCart(null, cookie, "Colombo");
+    await confirmPayment(intent.providerReference, { outcome: "success" });
+
+    const result = await placeOrder(null, cookie, {
+      idempotencyKey: crypto.randomUUID(),
+      address,
+      guestEmail: "guest@test.com",
+      providerReference: intent.providerReference,
+    });
+
+    const order = await prisma.order.findUnique({ where: { orderNumber: result.orderNumber }, include: { items: true } });
+    expect(order?.status).toBe("PendingConfirmation");
+    expect(order?.items[0]).toMatchObject({ packagingRequiresManualReview: true, packagingDeclaredAvailability: "Export" });
+  });
+
+  it("a packaging line that does NOT require manual review still creates the order Confirmed", async () => {
+    await makeZone();
+    const product = await makeProduct();
+    const option = await makePackagingOption(product.id, { requiresManualReview: false });
+    const identity = await addItem(null, undefined, product.id, 1, null, { packagingOptionId: option.id, declaredAvailability: "Local" });
+    const cookie = identity.newCookieValue!;
+    const intent = await createIntentForCart(null, cookie, "Colombo");
+    await confirmPayment(intent.providerReference, { outcome: "success" });
+
+    const result = await placeOrder(null, cookie, {
+      idempotencyKey: crypto.randomUUID(),
+      address,
+      guestEmail: "guest@test.com",
+      providerReference: intent.providerReference,
+    });
+
+    const order = await prisma.order.findUnique({ where: { orderNumber: result.orderNumber } });
+    expect(order?.status).toBe("Confirmed");
   });
 });

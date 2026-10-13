@@ -17,6 +17,11 @@ const statusByCode: Record<ProductAdminErrorCode, number> = {
   bundle_not_found: 404,
   bundle_already_exists: 409,
   bundle_item_not_found: 404,
+  packaging_method_not_found: 404,
+  packaging_method_name_conflict: 409,
+  packaging_option_not_found: 404,
+  packaging_option_duplicate: 409,
+  packaging_option_variant_mismatch: 400,
 };
 
 /** Every /api/admin/products/* route handler's catch block goes through this. */

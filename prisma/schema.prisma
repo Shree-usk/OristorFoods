@@ -292,6 +292,8 @@ model Product {
   certifications    Certification[]
   bundle            ProductBundle?
   bundleComponentOf BundleItem[]
+  // Story 3 (Custom Packaging).
+  packagingOptions  ProductPackagingOption[]
   // STORY (Product Variants). Any product may have zero-or-more variants;
   // `variants.length > 0` is the sole signal that this product is sold
   // by size/variant rather than as a single SKU — once true, this
@@ -382,6 +384,9 @@ model ProductVariant {
   // Story 2 (Bundles). Reverse side of BundleItem.componentVariantId — a
   // variant pinned as an eligible bundle component.
   bundleComponentOf BundleItem[]
+  // Story 3 (Custom Packaging). Reverse side of
+  // ProductPackagingOption.variantId.
+  packagingOptionPins ProductPackagingOption[]
 
   @@index([productId])
   @@index([productId, isActive])
@@ -613,6 +618,103 @@ model BundleItem {
   @@index([bundleId])
   @@index([componentProductId])
   @@index([componentVariantId])
+}
+
+// Story 3 (Custom Travel/Export Packaging).
+
+enum PackagingAvailability {
+  // Admin eligibility config on a ProductPackagingOption.
+  Local
+  Export
+  Both
+}
+
+enum PackagingDeclaredAvailability {
+  // The customer's own self-declaration at packaging-selection time,
+  // stored on the cart line and snapshotted onto the order line.
+  // Deliberately no "Both" — the customer always declares one concrete
+  // context ("for home use locally" vs "I'm taking this abroad"). There is
+  // no existing way to know an order's destination country (Order has no
+  // country field at all, and this storefront only serves Sri Lankan
+  // city-based delivery), so this self-declaration — not an inferred
+  // shipping destination — is the real eligibility signal.
+  Local
+  Export
+}
+
+enum PackagingOptionStatus {
+  // The brief's "active, temporarily unavailable, or discontinued" — a
+  // dedicated 3-value enum, mirroring ProductStatus's own precedent for a
+  // real third lifecycle state, rather than forcing the 2-value
+  // ContentStatus shape Collection/ProductBundle use.
+  Active
+  TemporarilyUnavailable
+  Discontinued
+}
+
+// Global, thin reference data — mirrors Collection's shape minus slug/SEO.
+// Carries zero business-rule defaults (no charge, no lead time): every
+// actual rule lives on ProductPackagingOption, the per-(product, optional
+// variant) row — mirrors BundleItem carrying 100% of its own config.
+model PackagingMethod {
+  id          String        @id @default(cuid())
+  name        String        @unique
+  description String?
+  image       String?
+  status      ContentStatus @default(Active)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  options   ProductPackagingOption[]
+}
+
+// The real per-(product, optional-variant) business-rule row — mirrors
+// BundleItem's optional-variant-pin convention. Unlike BundleItem (whose
+// componentVariantId legitimately points at an arbitrary OTHER product's
+// variant), `variantId` here is always one of `productId`'s own variants —
+// enforced in packaging-admin.service.ts, not at the FK level.
+//
+// No @@unique on (productId, variantId, packagingMethodId): Postgres
+// treats NULL <> NULL for uniqueness, so a DB constraint would not
+// actually prevent two duplicate whole-product (variantId null) rows for
+// the same method — the same nullable-compound-unique gotcha
+// cart.repository.ts::upsertCartItem's own comment documents. Since this
+// is low-frequency admin data entry, not the cart's hot path, duplicate
+// prevention is an application-level check instead
+// (packaging-admin.service.ts::requireNoDuplicateOption).
+model ProductPackagingOption {
+  id                String          @id @default(cuid())
+  productId         String
+  product           Product         @relation(fields: [productId], references: [id], onDelete: Cascade)
+  variantId         String?
+  variant           ProductVariant? @relation(fields: [variantId], references: [id], onDelete: Cascade)
+  packagingMethodId String
+  packagingMethod   PackagingMethod @relation(fields: [packagingMethodId], references: [id], onDelete: Cascade)
+
+  charge               Decimal               @default(0) @db.Decimal(10, 2)
+  minQuantity          Int?
+  availability         PackagingAvailability @default(Both)
+  requiresManualReview Boolean               @default(false)
+  leadTimeDays         Int?
+  shelfLifeDays        Int?
+  shelfLifeText        String?
+  customerInstructions String?
+
+  availabilityStartDate DateTime?
+  availabilityEndDate   DateTime?
+  orderCutoffDate       DateTime?
+
+  status    PackagingOptionStatus @default(Active)
+  sortOrder Int                   @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  cartItems  CartItem[]
+  orderItems OrderItem[]
+
+  @@index([productId])
+  @@index([packagingMethodId])
 }
 
 enum CustomerGroup {
@@ -1440,12 +1542,24 @@ model CartItem {
   bundleId         String?
   bundle           ProductBundle? @relation(fields: [bundleId], references: [id], onDelete: Cascade)
   bundleInstanceId String?
+  // Story 3 (Custom Packaging). Null for a plain/default-packaging line.
+  // packagingChargeSnapshot is a SEPARATE column from unitPriceSnapshot
+  // (not folded in) so the UI can show "product LKR 480 + packaging
+  // LKR 150" as a breakdown rather than a silently-higher unit price, and
+  // so it can be live-re-read/re-snapshotted independently of product
+  // pricing (see cart.service.ts::buildSummary). onDelete: SetNull — a
+  // deleted packaging method must never delete the cart row, only revert
+  // it to "no packaging selected."
+  packagingOptionId             String?
+  packagingOption                ProductPackagingOption?        @relation(fields: [packagingOptionId], references: [id], onDelete: SetNull)
+  packagingDeclaredAvailability PackagingDeclaredAvailability?
+  packagingChargeSnapshot       Decimal?                        @db.Decimal(10, 2)
   quantity          Int
   unitPriceSnapshot Decimal         @db.Decimal(10, 2)
   createdAt         DateTime        @default(now())
   updatedAt         DateTime        @updatedAt
 
-  @@unique([cartId, productId, variantId, bundleInstanceId])
+  @@unique([cartId, productId, variantId, bundleInstanceId, packagingOptionId])
 }
 
 // --- Coupons & Promotions (STORY-029) ---
@@ -2029,6 +2143,18 @@ model OrderItem {
   bundle           ProductBundle? @relation(fields: [bundleId], references: [id], onDelete: SetNull)
   bundleInstanceId String?
   bundleName       String?
+  // Story 3 (Custom Packaging). Flat snapshots, same convention as
+  // bundleId/bundleName above. packagingRequiresManualReview is
+  // snapshotted (not inferred from order.status) so the admin order-detail
+  // view keeps showing "this order needed manual packaging review" as
+  // permanent context even once the order has moved on past
+  // PendingConfirmation.
+  packagingOptionId             String?
+  packagingOption                ProductPackagingOption?        @relation(fields: [packagingOptionId], references: [id], onDelete: SetNull)
+  packagingMethodName           String?
+  packagingCharge                Decimal?                        @db.Decimal(10, 2)
+  packagingDeclaredAvailability PackagingDeclaredAvailability?
+  packagingRequiresManualReview Boolean                          @default(false)
   unitPrice          Decimal         @db.Decimal(10, 2)
   quantity           Int
   lineTotal          Decimal         @db.Decimal(10, 2)

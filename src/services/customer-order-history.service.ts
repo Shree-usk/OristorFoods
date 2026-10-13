@@ -77,6 +77,10 @@ export interface OrderDetailLineItem {
   variantName?: string | null;
   /** Story 2 (Bundles). Shared by every row of one bundle instance — null for a plain line. */
   bundleName?: string | null;
+  /** Story 3 (Custom Packaging). Permanent snapshot — null when no packaging was selected. */
+  packagingMethodName?: string | null;
+  packagingCharge?: number | null;
+  packagingRequiresManualReview?: boolean;
   unitPrice: number;
   quantity: number;
   lineTotal: number;
@@ -157,6 +161,9 @@ export async function getOrderDetail(orderNumber: string, userId: string): Promi
       productSku: item.productSku,
       variantName: item.variantName,
       bundleName: item.bundleName,
+      packagingMethodName: item.packagingMethodName,
+      packagingCharge: item.packagingCharge?.toNumber() ?? null,
+      packagingRequiresManualReview: item.packagingRequiresManualReview,
       unitPrice: item.unitPrice.toNumber(),
       quantity: item.quantity,
       lineTotal: item.lineTotal.toNumber(),

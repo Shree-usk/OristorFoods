@@ -11,7 +11,11 @@ export type CartErrorCode =
   | "bundle_unavailable"
   | "bundle_stock_exceeded"
   | "bundle_selection_invalid"
-  | "bundle_line_locked";
+  | "bundle_line_locked"
+  | "packaging_unavailable"
+  | "packaging_minimum_quantity"
+  | "packaging_availability_mismatch"
+  | "packaging_selection_invalid";
 
 export class CartServiceError extends Error {
   readonly code: CartErrorCode;
@@ -72,5 +76,34 @@ export class BundleSelectionInvalidError extends CartServiceError {
 export class BundleLineLockedError extends CartServiceError {
   constructor() {
     super("bundle_line_locked", "This item is part of a bundle — remove or adjust the whole bundle instead.");
+  }
+}
+
+// --- Custom Packaging (Story 3) ---
+
+/** The selected packaging option is deactivated, discontinued, outside its availability window, or past its order cutoff. */
+export class PackagingUnavailableError extends CartServiceError {
+  constructor() {
+    super("packaging_unavailable", "This packaging option is no longer available");
+  }
+}
+
+export class PackagingMinimumQuantityError extends CartServiceError {
+  constructor(readonly minQuantity: number) {
+    super("packaging_minimum_quantity", `This packaging option requires a minimum quantity of ${minQuantity}`);
+  }
+}
+
+/** The customer's local/export self-declaration doesn't match the option's configured availability. */
+export class PackagingAvailabilityMismatchError extends CartServiceError {
+  constructor() {
+    super("packaging_availability_mismatch", "This packaging option isn't available for the selected local/export declaration");
+  }
+}
+
+/** The packaging option doesn't belong to this product, or (if variant-pinned) doesn't match the selected variant. */
+export class PackagingSelectionInvalidError extends CartServiceError {
+  constructor(message: string = "This packaging selection is invalid for this product") {
+    super("packaging_selection_invalid", message);
   }
 }

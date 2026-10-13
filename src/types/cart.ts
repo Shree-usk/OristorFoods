@@ -15,6 +15,16 @@ export interface CartLineItem {
   /** Shared by every row exploded from one "add bundle to cart" action — null for a plain line. See bundle.service.ts. */
   bundleInstanceId: string | null;
   bundleName: string | null;
+  /** Story 3 (Custom Packaging). Null for a plain/default-packaging line. packagingCharge is a SEPARATE amount from unitPrice, already folded into lineTotal — see cart.service.ts::toLineItem. */
+  packagingOptionId: string | null;
+  packagingMethodName: string | null;
+  packagingCharge: number;
+  packagingDeclaredAvailability: "Local" | "Export" | null;
+  packagingRequiresManualReview: boolean;
+  packagingLeadTimeDays: number | null;
+  packagingShelfLifeDays: number | null;
+  packagingShelfLifeText: string | null;
+  packagingInstructions: string | null;
   imageSrc: string;
   imageAlt: string;
   quantity: number;

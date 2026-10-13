@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { CartServiceError, type CartErrorCode } from "@/services/cart.errors";
-import { BundleStockExceededError, StockExceededError } from "@/services/cart.errors";
+import { BundleStockExceededError, PackagingMinimumQuantityError, StockExceededError } from "@/services/cart.errors";
 import { CouponMinOrderValueNotMetError, CouponServiceError, type CouponErrorCode } from "@/services/coupon.errors";
 import { RewardsInsufficientBalanceError, RewardsExceedsPerOrderCapError, RewardsServiceError, type RewardsErrorCode } from "@/services/rewards.errors";
 
@@ -14,6 +14,10 @@ const statusByCode: Record<CartErrorCode, number> = {
   bundle_stock_exceeded: 409,
   bundle_selection_invalid: 400,
   bundle_line_locked: 409,
+  packaging_unavailable: 409,
+  packaging_minimum_quantity: 409,
+  packaging_availability_mismatch: 409,
+  packaging_selection_invalid: 400,
 };
 
 const couponStatusByCode: Record<CouponErrorCode, number> = {
@@ -42,6 +46,9 @@ const rewardsStatusByCode: Record<RewardsErrorCode, number> = {
 export function cartErrorResponse(error: unknown) {
   if (error instanceof StockExceededError || error instanceof BundleStockExceededError) {
     return NextResponse.json({ error: error.message, availableQuantity: error.availableQuantity }, { status: 409 });
+  }
+  if (error instanceof PackagingMinimumQuantityError) {
+    return NextResponse.json({ error: error.message, minQuantity: error.minQuantity }, { status: 409 });
   }
   if (error instanceof CouponMinOrderValueNotMetError) {
     return NextResponse.json(

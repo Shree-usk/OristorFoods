@@ -85,6 +85,10 @@ export interface OrderConfirmationSummary {
     /** Story 2 (Bundles). Shared by every row of one bundle instance — null for a plain line. */
     bundleInstanceId: string | null;
     bundleName: string | null;
+    /** Story 3 (Custom Packaging). Permanent snapshot — null when no packaging was selected. */
+    packagingMethodName: string | null;
+    packagingCharge: number | null;
+    packagingRequiresManualReview: boolean;
     unitPrice: number;
     quantity: number;
     lineTotal: number;

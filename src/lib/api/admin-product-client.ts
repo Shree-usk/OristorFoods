@@ -386,3 +386,65 @@ export async function fetchBundlePreview(productId: string): Promise<{ standalon
   assertOk(response, "Failed to load bundle price preview");
   return response.json();
 }
+
+// --- Custom packaging (Story 3) ---
+
+export interface PackagingOptionFormInput {
+  packagingMethodId: string;
+  variantId?: string | null;
+  charge?: number;
+  minQuantity?: number | null;
+  availability?: "Local" | "Export" | "Both";
+  requiresManualReview?: boolean;
+  leadTimeDays?: number | null;
+  shelfLifeDays?: number | null;
+  shelfLifeText?: string | null;
+  customerInstructions?: string | null;
+  availabilityStartDate?: string | null;
+  availabilityEndDate?: string | null;
+  orderCutoffDate?: string | null;
+  status?: "Active" | "TemporarilyUnavailable" | "Discontinued";
+  sortOrder?: number;
+}
+
+export interface AdminPackagingOption extends Omit<PackagingOptionFormInput, "charge"> {
+  id: string;
+  productId: string;
+  // Prisma Decimal fields serialize to JSON as strings (Decimal's own
+  // toJSON()) — same gotcha product-variants-panel.tsx's price field
+  // already documents.
+  charge: string | number;
+  packagingMethod: { id: string; name: string };
+  variant: { id: string; name: string } | null;
+}
+
+export async function fetchPackagingOptionsForProduct(productId: string): Promise<AdminPackagingOption[]> {
+  const response = await fetch(`/api/admin/products/${productId}/packaging/options`);
+  assertOk(response, "Failed to load packaging options");
+  return response.json();
+}
+
+export async function createPackagingOption(productId: string, input: PackagingOptionFormInput) {
+  const response = await fetch(`/api/admin/products/${productId}/packaging/options`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  if (!response.ok) return readErrorOr(response, "Failed to add packaging option");
+  return response.json();
+}
+
+export async function updatePackagingOption(productId: string, optionId: string, input: PackagingOptionFormInput) {
+  const response = await fetch(`/api/admin/products/${productId}/packaging/options/${optionId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  if (!response.ok) return readErrorOr(response, "Failed to save packaging option");
+  return response.json();
+}
+
+export async function deletePackagingOption(productId: string, optionId: string) {
+  const response = await fetch(`/api/admin/products/${productId}/packaging/options/${optionId}`, { method: "DELETE" });
+  assertOk(response, "Failed to remove packaging option");
+}

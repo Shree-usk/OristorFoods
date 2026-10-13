@@ -9640,3 +9640,171 @@ copy> --to-schema=prisma/schema.prisma --script`) rather than
 `db push`-ed to the new schema by the time the diff was generated this
 story (confirmed: diffing from the live DB only works when the DB still
 reflects the PRE-change state).
+
+## 2026-10-13 — Story 3 of 5: Custom Travel/Export Packaging
+
+Third story of the Variants/Bundles/Custom Packaging epic (see the
+Story 1/2 entries above). No packaging/shelf-life/lead-time model
+existed anywhere before this story — a clean slate (STORY-009
+deliberately deferred it). Payment-method gating (the brief's
+acceptance scenarios 9–11) is explicitly out of scope here, deferred to
+Story 4.
+
+**Two scope decisions confirmed with the user before implementation:**
+1. **Local/export availability is customer self-declared** at
+   packaging-selection time, not derived from an address/country field
+   — this storefront's checkout address form has no country field at
+   all (it only serves Sri Lankan city-based delivery), and the brief's
+   "export" framing turns out to mean a *local* customer packing
+   product to carry abroad themselves, not international shipping. The
+   declaration is stored on the cart line
+   (`CartItem.packagingDeclaredAvailability`) and re-validated
+   server-side on every read against the option's own configured
+   `PackagingAvailability`.
+2. **A packaging selection flagged `requiresManualReview` creates the
+   order as `PendingConfirmation` instead of `Confirmed`.** This status
+   already existed in `OrderStatus` with its transition
+   (`PendingConfirmation → [Confirmed, Cancelled]`) already wired into
+   `order.service.ts`'s state machine and the admin order-detail view's
+   generic "next status" buttons (`order-admin.service.ts
+   ::nextLegalStatuses`) — but nothing had ever actually created an
+   order in that status before. This story is the first real exercise
+   of it, and needed **zero new admin UI code**: the "Mark as
+   Confirmed"/"Mark as Cancelled" buttons just started appearing once a
+   `PendingConfirmation` order existed to render them for.
+
+**Design, deliberately lighter than the Bundles precedent**:
+`PackagingMethod` (global reference data: name/description/image/
+status) carries zero business-rule defaults — every actual rule
+(charge, minimum quantity, availability, manual-review flag, lead
+time, shelf life, availability window, order cutoff, status) lives
+exclusively on `ProductPackagingOption`, the per-(product, optional-
+variant) row, mirroring how `BundleItem` carries 100% of its own
+config rather than deferring to a "default" on `ProductBundle`. Unlike
+a bundle instance (whose live validity depends on re-pricing every
+OTHER component in the same instance), a packaging option's eligibility
+depends only on its own already-joined row — so
+`packaging.service.ts::resolvePackagingForCartItems` is a **pure,
+synchronous, DB-free function**, not a batched-query equivalent of
+`bundle.service.ts::resolveBundleInstancePrices`. The packaging charge
+is a separate snapshot column (`CartItem.packagingChargeSnapshot` /
+`OrderItem.packagingCharge`), never folded into
+`unitPriceSnapshot`/`unitPrice` — so the UI can show "product LKR 480 +
+packaging LKR 150" as a breakdown, and so packaging re-validation never
+entangles with `resolvePrice`/`resolveVariantPrice`'s own re-snapshot
+logic. `unavailable` absorbs packaging invalidity (deactivated/
+out-of-window/past-cutoff/no-longer-meets-minimum-quantity) the same
+way it already absorbed `bundleInvalid` — no new checkout gate needed;
+`checkout.service.ts`'s existing `unavailable || quantityCapped` →
+`CartInvalidError` check catches a stale packaging selection for free.
+
+**Resolved tension — lowering quantity below a selected option's
+minimum**: `cart.service.ts::updateItemQuantity` throws a new,
+synchronous `PackagingMinimumQuantityError` the moment a customer tries
+to drop quantity below the pinned option's `minQuantity`, mirroring how
+`StockExceededError`/`ProductUnavailableError` already block a
+mutation synchronously rather than letting it land and silently flip
+`unavailable` on the next read. The read-time `unavailable` fallback in
+`buildSummary` still exists as a defense-in-depth backstop (e.g. an
+admin raises the minimum after the line was already added).
+
+**Known Postgres NULL semantics gotcha, documented on the schema
+model**: a `@@unique([productId, variantId, packagingMethodId])` on
+`ProductPackagingOption` would NOT actually prevent two duplicate
+whole-product (`variantId: null`) rows for the same method — Postgres
+treats `NULL <> NULL` for uniqueness purposes, the same gotcha
+`upsertCartItem`'s own comment already documents for `CartItem`. Since
+this is low-frequency admin data entry, not a cart hot path, the fix is
+an application-level guard (`packaging-admin.service.ts
+::requireNoDuplicateOption`, a `findFirst` check) instead of forcing a
+DB constraint to do something Postgres's null semantics don't support.
+`ProductPackagingOption` has deliberately no `@@unique` at all for this
+reason.
+
+**Packaging never combines with a bundle's exploded rows in this
+story** — neither the brief nor the per-line framing asks for "a bundle
+component with its own packaging choice." `cart.service.ts::toLineItem`'s
+packaging branch is explicitly gated on `!item.bundleInstanceId`
+(`resolvePackagingForCartItems` skips bundle rows outright). The schema
+columns exist on `CartItem`/`OrderItem` regardless, so a future story
+could wire this up without another migration — it's just unreachable
+via today's add-to-cart paths.
+
+**Cart/checkout/order wiring** (additive, same discipline as Stories
+1–2): `CartItem` gained `packagingOptionId`/`packagingDeclaredAvailability`/
+`packagingChargeSnapshot`; its unique index widened to
+`(cartId, productId, variantId, bundleInstanceId, packagingOptionId)` —
+the same "widen again" operation Story 2 already performed once on
+Story 1's original 3-column key, for the identical reason (two
+different packaging choices of the same product/variant must never
+merge into one row's quantity). `OrderItem` gained flat snapshots
+(`packagingOptionId`, `packagingMethodName`, `packagingCharge`,
+`packagingDeclaredAvailability`, `packagingRequiresManualReview`) —
+`packagingRequiresManualReview` is snapshotted rather than inferred
+from `order.status`, so the admin order-detail view keeps showing "this
+order needed manual packaging review" as permanent context even once
+the order has moved on to `Confirmed`/`Processing`/etc.
+`order.repository.ts::createOrderWithStockDecrement`'s two previously-
+hardcoded `status: "Confirmed"` writes (the Order row and its initial
+`OrderStatusHistory` entry) both became
+`input.requiresManualReview ? "PendingConfirmation" : "Confirmed"` —
+every pre-Story-3 caller omits the new field, so this evaluates to the
+literal string `"Confirmed"` for them, byte-for-byte unchanged
+(covered directly by `tests/unit/order-packaging-status.test.ts`'s
+regression case). **No changes to the stock-decrement loops anywhere**
+— packaging never touches stock, by design.
+
+**No new searchable component picker for the admin Packaging tab**
+(unlike Bundles' `bundle-component-picker.tsx`, needed because a bundle
+component can be any product in the whole catalog): a packaging
+option's optional variant pin is always one of *this same product's
+own* variants, already available to the editor the same way
+`product-variants-panel.tsx` already has them — two plain `<Select>`s
+(method, optional variant) inline in `product-packaging-panel.tsx` are
+sufficient. The panel otherwise mirrors `product-bundle-panel.tsx`'s
+shape (own `useQuery`, own `invalidateQueries`, plain async handlers
+with local error state) — no React-Compiler lint fix was needed here
+specifically because, unlike `ExistingBundlePanel`'s single persistent
+edit form synced from fetched data, this panel's per-row edit form is
+only ever populated by an explicit user action (`openAdd`/`openEdit`),
+never by an effect syncing a query result into local state.
+
+**Admin UI**: a new global `/admin/packaging-methods` screen
+(`admin-packaging-methods-view.tsx`, mirroring `Collection`'s list +
+Dialog + status-toggle shape minus slug/SEO) for the shared reference
+data, plus the new product-editor "Packaging" tab described above.
+`PackagingMethod` reuses the existing `Products` admin module/
+permission rather than a new `AdminModule` enum value — it's reference
+data for the Products area, not a separate feature surface.
+
+**Storefront UI**: `product.service.ts::getProductDetail` gained
+`ProductDetail.packagingOptions`, fetched via a new
+`packagingRepository.findEligiblePackagingOptionsForProduct` call
+alongside the existing `resolveBundleDetail` call — variant-scoped
+filtering happens client-side in the new `packaging-selector.tsx`
+(avoids a round-trip on every size switch). The selector renders
+nothing when the variant-filtered eligible list is empty, so a plain
+product's PDP is byte-for-byte unchanged. `product-purchase-panel.tsx`
+resets its packaging selection/acknowledgement state directly inside
+the variant-select click handler (a discrete user action), not via a
+`useEffect` watching `selectedVariantId` — the same "no effect/
+setState-sync" discipline Story 2's React-Compiler lint fix already
+established for this codebase, just applied proactively here instead
+of being caught as a build error. The PDP always adds a single unit at
+a time (no quantity selector exists there), so an option with
+`minQuantity > 1` is shown as a visible-but-disabled chip annotated
+"(min N)" rather than hidden — the same precedent `VariantSelector`
+already set for an out-of-stock size.
+
+**Deliberately not built this story**: any weight/shipping adjustment
+from a packaging choice — the brief explicitly disclaims promising
+weight savings without verified product-specific data, and
+`checkout.service.ts::requireCheckoutableCart`'s `totalWeightGrams`
+calculation is untouched.
+
+Migration: `20261013090000_add_custom_packaging` — purely additive
+(two new enums, two new models, nullable/optional columns on `CartItem`/
+`OrderItem`, no renames, no backfills needed), generated the same way
+as Story 2's migration (`migrate diff --from-schema=<git-show-HEAD-copy>
+--to-schema=prisma/schema.prisma --script`, diffing the git-HEAD schema
+snapshot against the working tree rather than `--from-config-datasource`).

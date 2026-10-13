@@ -87,6 +87,7 @@ export function ReviewStep({ cart }: { cart: CartSummary }) {
                   {item.productName}
                   {item.variantName && <span className="text-charcoal/70"> — {item.variantName}</span>} <span className="text-charcoal/70">× {item.quantity}</span>
                   {item.bundleName && <span className="ml-1 text-caption text-charcoal/60">(part of {item.bundleName})</span>}
+                  {item.packagingMethodName && <span className="ml-1 text-caption text-charcoal/60">+ {item.packagingMethodName} packaging</span>}
                 </span>
                 <span className="font-number">
                   {item.currency} {item.lineTotal.toFixed(2)}

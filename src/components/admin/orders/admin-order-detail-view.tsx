@@ -156,6 +156,12 @@ export function AdminOrderDetailView({ orderId }: { orderId: string }) {
                     {item.productName}
                     {item.variantName && <span className="text-charcoal/70"> — {item.variantName}</span>}
                     {item.bundleName && <span className="ml-1 text-caption text-charcoal/60">(part of {item.bundleName})</span>}
+                    {item.packagingMethodName && (
+                      <span className="ml-1 text-caption text-charcoal/60">
+                        + {item.packagingMethodName} packaging
+                        {item.packagingRequiresManualReview && " (manual review)"}
+                      </span>
+                    )}
                   </TableCell>
                   <TableCell>{item.productSku}</TableCell>
                   <TableCell>{item.quantity}</TableCell>
