@@ -41,6 +41,14 @@ const ingredientSchema = z.object({
   sortOrder: z.number().int().min(0).optional(),
 });
 
+const inspirationCardSchema = z.object({
+  imageUrl: mediaUrlSchema,
+  imageAlt: z.string().trim().max(200).optional().nullable(),
+  title: z.string().trim().min(1, "Title is required.").max(100),
+  description: z.string().trim().max(300).optional().nullable(),
+  sortOrder: z.number().int().min(0).optional(),
+});
+
 /** Create and update share one shape — every field group editable at once (AC). */
 export const productAdminSchema = z.object({
   name: z.string().trim().min(1, "Name is required.").max(200),
@@ -64,6 +72,7 @@ export const productAdminSchema = z.object({
   videos: z.array(videoSchema).optional(),
   nutrition: nutritionSchema,
   ingredients: z.array(ingredientSchema).optional(),
+  inspirationCards: z.array(inspirationCardSchema).max(6, "Up to 6 inspiration cards.").optional(),
   allergenIds: z.array(z.string().min(1)).optional(),
   certificationIds: z.array(z.string().min(1)).optional(),
 });

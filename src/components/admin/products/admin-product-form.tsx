@@ -76,6 +76,7 @@ const TAB_BY_FIELD: Record<string, (typeof TAB_ORDER)[number]> = {
   servingSuggestions: "nutrition",
   images: "media",
   videos: "media",
+  inspirationCards: "media",
   rewardPoints: "rewards",
   inStock: "rewards",
   stockQuantity: "rewards",
@@ -114,6 +115,7 @@ const EMPTY_VALUES: ProductAdminFormInput = {
     sodium: 0,
   },
   ingredients: [],
+  inspirationCards: [],
   allergenIds: [],
   certificationIds: [],
 };
@@ -124,7 +126,7 @@ export function AdminProductForm({ productId }: { productId?: string }) {
   const queryClient = useQueryClient();
   const [serverError, setServerError] = useState<string | null>(null);
   const [duplicateOpen, setDuplicateOpen] = useState(false);
-  const [pickerTarget, setPickerTarget] = useState<{ kind: "image" | "video"; index: number } | null>(null);
+  const [pickerTarget, setPickerTarget] = useState<{ kind: "image" | "video" | "inspirationCard"; index: number } | null>(null);
   // Controlled (not Tabs' own uncontrolled internal state) so it survives
   // opening AssetPickerDialog without reverting to the first tab —
   // uncontrolled state in a third-party component isn't reliably
@@ -231,6 +233,15 @@ export function AdminProductForm({ productId }: { productId?: string }) {
           }
         : EMPTY_VALUES.nutrition,
       ingredients: existingProduct.ingredients.map((ingredient: { name: string; isAllergen: boolean; sortOrder: number }) => ingredient),
+      inspirationCards: existingProduct.inspirationCards.map(
+        (card: { imageUrl: string; imageAlt: string | null; title: string; description: string | null; sortOrder: number }) => ({
+          imageUrl: card.imageUrl,
+          imageAlt: card.imageAlt ?? "",
+          title: card.title,
+          description: card.description ?? "",
+          sortOrder: card.sortOrder,
+        }),
+      ),
       allergenIds: existingProduct.allergens.map((allergen: { id: string }) => allergen.id),
       certificationIds: existingProduct.certifications.map((certification: { id: string }) => certification.id),
     });
@@ -239,6 +250,7 @@ export function AdminProductForm({ productId }: { productId?: string }) {
   const images = useFieldArray({ control, name: "images" });
   const videos = useFieldArray({ control, name: "videos" });
   const ingredients = useFieldArray({ control, name: "ingredients" });
+  const inspirationCards = useFieldArray({ control, name: "inspirationCards" });
 
   const categoryIds = watch("categoryIds") ?? [];
   const collectionIds = watch("collectionIds") ?? [];
@@ -642,6 +654,52 @@ export function AdminProductForm({ productId }: { productId?: string }) {
             </div>
           </div>
 
+          <div>
+            <div className="flex items-center justify-between">
+              <h2 className="text-h4 font-heading text-charcoal">Inspiration cards</h2>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() =>
+                  inspirationCards.append({ imageUrl: "", imageAlt: "", title: "", description: "", sortOrder: inspirationCards.fields.length })
+                }
+              >
+                Add inspiration card
+              </Button>
+            </div>
+            <p className="mt-1 text-caption text-charcoal/60">
+              Shown on the product page under &quot;A little inspiration for your table&quot;. Images display at roughly 80×100px — a
+              portrait-ish photo works best, but any shape will be cropped to fit.
+            </p>
+            <div className="mt-2 flex flex-col gap-2">
+              {inspirationCards.fields.map((field, index) => (
+                <div key={field.id} className="rounded-lg border border-input p-3">
+                  <div className="flex items-center gap-2">
+                    <Input {...register(`inspirationCards.${index}.imageUrl`)} placeholder="Image URL" className="flex-1" />
+                    <Input {...register(`inspirationCards.${index}.imageAlt`)} placeholder="Alt text" className="flex-1" />
+                    <Button type="button" size="sm" variant="outline" onClick={() => setPickerTarget({ kind: "inspirationCard", index })}>
+                      Browse Library
+                    </Button>
+                    <Button type="button" size="sm" variant="ghost" onClick={() => inspirationCards.remove(index)}>
+                      Remove
+                    </Button>
+                  </div>
+                  {errors.inspirationCards?.[index]?.imageUrl && (
+                    <p className="mt-1 text-caption text-destructive">{errors.inspirationCards[index]?.imageUrl?.message}</p>
+                  )}
+                  <div className="mt-2 flex items-center gap-2">
+                    <Input {...register(`inspirationCards.${index}.title`)} placeholder="Title" className="flex-1" />
+                  </div>
+                  {errors.inspirationCards?.[index]?.title && (
+                    <p className="mt-1 text-caption text-destructive">{errors.inspirationCards[index]?.title?.message}</p>
+                  )}
+                  <Textarea {...register(`inspirationCards.${index}.description`)} placeholder="Description (optional)" className="mt-2" rows={2} />
+                </div>
+              ))}
+            </div>
+          </div>
+
           <AssetPickerDialog
             open={pickerTarget !== null}
             onOpenChange={(open) => {
@@ -649,8 +707,13 @@ export function AdminProductForm({ productId }: { productId?: string }) {
             }}
             onSelect={(asset) => {
               if (!pickerTarget) return;
-              setValue(`${pickerTarget.kind}s.${pickerTarget.index}.url`, asset.url);
-              setValue(`${pickerTarget.kind}s.${pickerTarget.index}.altText`, asset.altText ?? "");
+              if (pickerTarget.kind === "inspirationCard") {
+                setValue(`inspirationCards.${pickerTarget.index}.imageUrl`, asset.url);
+                setValue(`inspirationCards.${pickerTarget.index}.imageAlt`, asset.altText ?? "");
+              } else {
+                setValue(`${pickerTarget.kind}s.${pickerTarget.index}.url`, asset.url);
+                setValue(`${pickerTarget.kind}s.${pickerTarget.index}.altText`, asset.altText ?? "");
+              }
               setPickerTarget(null);
             }}
           />

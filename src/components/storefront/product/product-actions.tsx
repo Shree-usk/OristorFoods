@@ -35,27 +35,30 @@ export function ProductActions({
 
   return (
     <div>
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-2">
         <Button
           type="button"
           size="lg"
+          className="flex-1 sm:flex-none"
           disabled={!inStock || !cart.isAvailable || cart.isAdding || variantRequired || packagingBlocked}
           onClick={() => cart.addToCart(quantity)}
         >
           <ShoppingCart /> {inStock ? "Add to Cart" : "Out of Stock"}
         </Button>
-        <Button
-          type="button"
-          variant="outline"
-          size="icon-lg"
-          disabled={!wishlist.isAvailable}
-          aria-pressed={wishlist.isWishlisted}
-          aria-label={wishlist.isWishlisted ? "Remove from wishlist" : "Add to wishlist"}
-          onClick={wishlist.toggle}
-        >
-          <Heart className={wishlist.isWishlisted ? "fill-current" : undefined} />
-        </Button>
-        <CompareToggle productId={productId} className="shrink-0" />
+        <div className="flex items-center gap-1 rounded-full border border-input p-1">
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            disabled={!wishlist.isAvailable}
+            aria-pressed={wishlist.isWishlisted}
+            aria-label={wishlist.isWishlisted ? "Remove from wishlist" : "Add to wishlist"}
+            onClick={wishlist.toggle}
+          >
+            <Heart className={wishlist.isWishlisted ? "fill-current" : undefined} />
+          </Button>
+          <CompareToggle productId={productId} className="shrink-0" />
+        </div>
       </div>
       {cart.error && (
         <p role="alert" className="mt-2 text-small text-destructive">
