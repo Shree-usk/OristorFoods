@@ -124,7 +124,7 @@ export function PackagingSelector({ options, selectedVariantId, currency, value,
                   <img src={option.packagingMethodImage} alt="" className="size-5 shrink-0 rounded object-cover" />
                 )}
                 <span>
-                  {option.packagingMethodName} (+{currency} {option.charge.toLocaleString()})
+                  {option.packagingMethodName}
                   {hasMinimum && <span className="ml-1.5">(min {option.minQuantity})</span>}
                 </span>
               </button>
@@ -135,6 +135,11 @@ export function PackagingSelector({ options, selectedVariantId, currency, value,
 
       {selectedOption && (
         <div className="mt-3 space-y-1 rounded-md border border-input bg-muted/40 p-3 text-small text-charcoal/80">
+          {selectedOption.charge > 0 && (
+            <p className="font-medium text-charcoal">
+              Packaging charge: +{currency} {selectedOption.charge.toLocaleString()}
+            </p>
+          )}
           {selectedOption.leadTimeDays !== null && <p>Lead time: {selectedOption.leadTimeDays} day(s)</p>}
           {selectedOption.shelfLifeText ? (
             <p>{selectedOption.shelfLifeText}</p>

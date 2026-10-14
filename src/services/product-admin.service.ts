@@ -64,6 +64,14 @@ export interface ProductIngredientInput {
   sortOrder?: number;
 }
 
+export interface ProductInspirationCardInput {
+  imageUrl: string;
+  imageAlt?: string | null;
+  title: string;
+  description?: string | null;
+  sortOrder?: number;
+}
+
 export interface ProductAdminInput {
   name: string;
   slug: string;
@@ -86,6 +94,7 @@ export interface ProductAdminInput {
   videos?: ProductVideoInput[];
   nutrition: ProductNutritionInput;
   ingredients?: ProductIngredientInput[];
+  inspirationCards?: ProductInspirationCardInput[];
   allergenIds?: string[];
   certificationIds?: string[];
 }
@@ -158,6 +167,16 @@ function toIngredientCreate(ingredient: ProductIngredientInput, index: number): 
   return { name: ingredient.name, isAllergen: ingredient.isAllergen ?? false, sortOrder: ingredient.sortOrder ?? index };
 }
 
+function toInspirationCardCreate(card: ProductInspirationCardInput, index: number): Prisma.ProductInspirationCardCreateWithoutProductInput {
+  return {
+    imageUrl: card.imageUrl,
+    imageAlt: card.imageAlt,
+    title: card.title,
+    description: card.description,
+    sortOrder: card.sortOrder ?? index,
+  };
+}
+
 function scalarFields(input: ProductAdminInput) {
   return {
     name: input.name,
@@ -221,6 +240,7 @@ export async function createProduct(adminUserId: string, input: ProductAdminInpu
     videos: input.videos?.length ? { create: input.videos.map(toVideoCreate) } : undefined,
     nutrition: { create: toNutritionCreate(input.nutrition) },
     ingredients: input.ingredients?.length ? { create: input.ingredients.map(toIngredientCreate) } : undefined,
+    inspirationCards: input.inspirationCards?.length ? { create: input.inspirationCards.map(toInspirationCardCreate) } : undefined,
     allergens: input.allergenIds?.length ? { connect: input.allergenIds.map((id) => ({ id })) } : undefined,
     certifications: input.certificationIds?.length ? { connect: input.certificationIds.map((id) => ({ id })) } : undefined,
     createdBy: { connect: { id: adminUserId } },
@@ -257,6 +277,7 @@ export async function updateProduct(adminUserId: string, id: string, input: Prod
     videos: { deleteMany: {}, create: (input.videos ?? []).map(toVideoCreate) },
     nutrition: { upsert: { create: toNutritionCreate(input.nutrition), update: toNutritionCreate(input.nutrition) } },
     ingredients: { deleteMany: {}, create: (input.ingredients ?? []).map(toIngredientCreate) },
+    inspirationCards: { deleteMany: {}, create: (input.inspirationCards ?? []).map(toInspirationCardCreate) },
     allergens: { set: (input.allergenIds ?? []).map((allergenId) => ({ id: allergenId })) },
     certifications: { set: (input.certificationIds ?? []).map((certificationId) => ({ id: certificationId })) },
     updatedBy: { connect: { id: adminUserId } },
@@ -332,6 +353,17 @@ export async function duplicateProduct(adminUserId: string, id: string, newSlug:
       : undefined,
     ingredients: source.ingredients.length
       ? { create: source.ingredients.map((ingredient) => ({ name: ingredient.name, isAllergen: ingredient.isAllergen, sortOrder: ingredient.sortOrder })) }
+      : undefined,
+    inspirationCards: source.inspirationCards.length
+      ? {
+          create: source.inspirationCards.map((card) => ({
+            imageUrl: card.imageUrl,
+            imageAlt: card.imageAlt,
+            title: card.title,
+            description: card.description,
+            sortOrder: card.sortOrder,
+          })),
+        }
       : undefined,
     allergens: source.allergens.length ? { connect: source.allergens.map((allergen) => ({ id: allergen.id })) } : undefined,
     certifications: source.certifications.length ? { connect: source.certifications.map((certification) => ({ id: certification.id })) } : undefined,

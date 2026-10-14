@@ -84,6 +84,9 @@ describe("getProductDetail", () => {
       sodium: "1.00",
     });
     await addProductIngredient({ product: { connect: { id: product.id } }, name: "Salt", sortOrder: 1 });
+    const inspirationCard = await prisma.productInspirationCard.create({
+      data: { product: { connect: { id: product.id } }, imageUrl: "/inspiration.webp", title: "Weeknight dinner", description: "Quick and easy.", sortOrder: 0 },
+    });
 
     const detail = await getProductDetail("pd-full");
 
@@ -95,6 +98,9 @@ describe("getProductDetail", () => {
     expect(detail?.servingSuggestions).toEqual(["Suggestion A"]);
     expect(detail?.nutrition?.servingSize).toBe("1 tsp");
     expect(detail?.ingredients).toEqual([{ name: "Salt", isAllergen: false }]);
+    expect(detail?.inspirationCards).toEqual([
+      { id: inspirationCard.id, imageUrl: "/inspiration.webp", imageAlt: null, title: "Weeknight dinner", description: "Quick and easy." },
+    ]);
   });
 
   it("exposes the standard price as originalPrice when a discount tier applies", async () => {
