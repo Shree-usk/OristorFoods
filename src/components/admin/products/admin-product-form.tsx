@@ -77,6 +77,7 @@ const TAB_BY_FIELD: Record<string, (typeof TAB_ORDER)[number]> = {
   images: "media",
   videos: "media",
   inspirationCards: "media",
+  featuredItems: "media",
   rewardPoints: "rewards",
   inStock: "rewards",
   stockQuantity: "rewards",
@@ -116,6 +117,7 @@ const EMPTY_VALUES: ProductAdminFormInput = {
   },
   ingredients: [],
   inspirationCards: [],
+  featuredItems: [],
   allergenIds: [],
   certificationIds: [],
 };
@@ -126,7 +128,7 @@ export function AdminProductForm({ productId }: { productId?: string }) {
   const queryClient = useQueryClient();
   const [serverError, setServerError] = useState<string | null>(null);
   const [duplicateOpen, setDuplicateOpen] = useState(false);
-  const [pickerTarget, setPickerTarget] = useState<{ kind: "image" | "video" | "inspirationCard"; index: number } | null>(null);
+  const [pickerTarget, setPickerTarget] = useState<{ kind: "image" | "video" | "inspirationCard" | "featuredItem"; index: number } | null>(null);
   // Controlled (not Tabs' own uncontrolled internal state) so it survives
   // opening AssetPickerDialog without reverting to the first tab —
   // uncontrolled state in a third-party component isn't reliably
@@ -242,6 +244,15 @@ export function AdminProductForm({ productId }: { productId?: string }) {
           sortOrder: card.sortOrder,
         }),
       ),
+      featuredItems: existingProduct.featuredItems.map(
+        (item: { imageUrl: string; imageAlt: string | null; title: string; description: string | null; sortOrder: number }) => ({
+          imageUrl: item.imageUrl,
+          imageAlt: item.imageAlt ?? "",
+          title: item.title,
+          description: item.description ?? "",
+          sortOrder: item.sortOrder,
+        }),
+      ),
       allergenIds: existingProduct.allergens.map((allergen: { id: string }) => allergen.id),
       certificationIds: existingProduct.certifications.map((certification: { id: string }) => certification.id),
     });
@@ -251,6 +262,7 @@ export function AdminProductForm({ productId }: { productId?: string }) {
   const videos = useFieldArray({ control, name: "videos" });
   const ingredients = useFieldArray({ control, name: "ingredients" });
   const inspirationCards = useFieldArray({ control, name: "inspirationCards" });
+  const featuredItems = useFieldArray({ control, name: "featuredItems" });
 
   const categoryIds = watch("categoryIds") ?? [];
   const collectionIds = watch("collectionIds") ?? [];
@@ -614,7 +626,26 @@ export function AdminProductForm({ productId }: { productId?: string }) {
                     <Controller
                       control={control}
                       name={`images.${index}.isPrimary`}
-                      render={({ field }) => <CheckboxOption label="Primary" checked={field.value ?? false} onCheckedChange={field.onChange} />}
+                      render={({ field }) => (
+                        <CheckboxOption
+                          label="Primary"
+                          checked={field.value ?? false}
+                          onCheckedChange={(checked) => {
+                            // Exclusive, not independent — only one image can
+                            // be "the" primary (it's what decides the PDP
+                            // gallery's default photo and the single thumbnail
+                            // used everywhere only one image fits, e.g. cart/
+                            // listing cards), so checking this one unchecks
+                            // every other row rather than allowing several.
+                            if (checked) {
+                              images.fields.forEach((_, otherIndex) => {
+                                if (otherIndex !== index) setValue(`images.${otherIndex}.isPrimary`, false);
+                              });
+                            }
+                            field.onChange(checked);
+                          }}
+                        />
+                      )}
                     />
                     <Button type="button" size="sm" variant="outline" onClick={() => setPickerTarget({ kind: "image", index })}>
                       Browse Library
@@ -700,6 +731,53 @@ export function AdminProductForm({ productId }: { productId?: string }) {
             </div>
           </div>
 
+          <div>
+            <div className="flex items-center justify-between">
+              <h2 className="text-h4 font-heading text-charcoal">Featured items</h2>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() =>
+                  featuredItems.append({ imageUrl: "", imageAlt: "", title: "", description: "", sortOrder: featuredItems.fields.length })
+                }
+              >
+                Add featured item
+              </Button>
+            </div>
+            <p className="mt-1 text-caption text-charcoal/60">
+              Shown on the product page as &quot;Items Featured in This Collection&quot;, just before &quot;Recipes Using This
+              Product&quot; — up to 4 per row. Images display at roughly 300×400px (3:4 portrait) — not linked to any real product,
+              just a photo, title, and description.
+            </p>
+            <div className="mt-2 flex flex-col gap-2">
+              {featuredItems.fields.map((field, index) => (
+                <div key={field.id} className="rounded-lg border border-input p-3">
+                  <div className="flex items-center gap-2">
+                    <Input {...register(`featuredItems.${index}.imageUrl`)} placeholder="Image URL" className="flex-1" />
+                    <Input {...register(`featuredItems.${index}.imageAlt`)} placeholder="Alt text" className="flex-1" />
+                    <Button type="button" size="sm" variant="outline" onClick={() => setPickerTarget({ kind: "featuredItem", index })}>
+                      Browse Library
+                    </Button>
+                    <Button type="button" size="sm" variant="ghost" onClick={() => featuredItems.remove(index)}>
+                      Remove
+                    </Button>
+                  </div>
+                  {errors.featuredItems?.[index]?.imageUrl && (
+                    <p className="mt-1 text-caption text-destructive">{errors.featuredItems[index]?.imageUrl?.message}</p>
+                  )}
+                  <div className="mt-2 flex items-center gap-2">
+                    <Input {...register(`featuredItems.${index}.title`)} placeholder="Title" className="flex-1" />
+                  </div>
+                  {errors.featuredItems?.[index]?.title && (
+                    <p className="mt-1 text-caption text-destructive">{errors.featuredItems[index]?.title?.message}</p>
+                  )}
+                  <Textarea {...register(`featuredItems.${index}.description`)} placeholder="Description (optional)" className="mt-2" rows={2} />
+                </div>
+              ))}
+            </div>
+          </div>
+
           <AssetPickerDialog
             open={pickerTarget !== null}
             onOpenChange={(open) => {
@@ -710,6 +788,9 @@ export function AdminProductForm({ productId }: { productId?: string }) {
               if (pickerTarget.kind === "inspirationCard") {
                 setValue(`inspirationCards.${pickerTarget.index}.imageUrl`, asset.url);
                 setValue(`inspirationCards.${pickerTarget.index}.imageAlt`, asset.altText ?? "");
+              } else if (pickerTarget.kind === "featuredItem") {
+                setValue(`featuredItems.${pickerTarget.index}.imageUrl`, asset.url);
+                setValue(`featuredItems.${pickerTarget.index}.imageAlt`, asset.altText ?? "");
               } else {
                 setValue(`${pickerTarget.kind}s.${pickerTarget.index}.url`, asset.url);
                 setValue(`${pickerTarget.kind}s.${pickerTarget.index}.altText`, asset.altText ?? "");

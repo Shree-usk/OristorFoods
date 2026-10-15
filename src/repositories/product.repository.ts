@@ -57,6 +57,7 @@ export function findProductDetailBySlug(slug: string) {
       nutrition: true,
       ingredients: { orderBy: { sortOrder: "asc" } },
       inspirationCards: { orderBy: { sortOrder: "asc" } },
+      featuredItems: { orderBy: { sortOrder: "asc" } },
       allergens: true,
       certifications: true,
       bundle: {
@@ -313,6 +314,7 @@ const adminDetailInclude = {
   nutrition: true,
   ingredients: { orderBy: { sortOrder: "asc" } },
   inspirationCards: { orderBy: { sortOrder: "asc" } },
+  featuredItems: { orderBy: { sortOrder: "asc" } },
   allergens: true,
   certifications: true,
   bundle: { include: { items: { include: { componentProduct: true, componentVariant: true }, orderBy: { sortOrder: "asc" } }, images: { orderBy: [{ isPrimary: "desc" }, { sortOrder: "asc" }] } } },

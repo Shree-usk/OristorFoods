@@ -6,6 +6,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { PackagingSelector, type PackagingSelectionValue } from "@/components/storefront/product/packaging-selector";
 import { ProductActions } from "@/components/storefront/product/product-actions";
+import { useVariantSelection } from "@/components/storefront/product/variant-selection-context";
 import { VariantSelector } from "@/components/storefront/product/variant-selector";
 import type { ProductDetailPackagingOption, ProductDetailVariant } from "@/services/product.service";
 
@@ -21,11 +22,6 @@ interface ProductPurchasePanelProps {
   packagingOptions: ProductDetailPackagingOption[];
 }
 
-function defaultVariantId(variants: ProductDetailVariant[]): string | null {
-  const firstAvailable = variants.find((variant) => variant.inStock && variant.stockQuantity > 0);
-  return (firstAvailable ?? variants[0])?.id ?? null;
-}
-
 /**
  * Owns the one piece of client state a variant-driven PDP needs: which
  * size is selected. Price, stock message, and Add to Cart all live here
@@ -36,7 +32,7 @@ function defaultVariantId(variants: ProductDetailVariant[]): string | null {
  * block when the product has zero variants.
  */
 export function ProductPurchasePanel({ productId, price, originalPrice, currency, inStock, rewardPoints, shortDescription, variants, packagingOptions }: ProductPurchasePanelProps) {
-  const [selectedVariantId, setSelectedVariantId] = useState<string | null>(() => defaultVariantId(variants));
+  const { selectedVariantId, setSelectedVariantId } = useVariantSelection();
   const selectedVariant = variants.find((variant) => variant.id === selectedVariantId) ?? null;
 
   // Story 3 (Custom Packaging). Reset directly in the variant-change

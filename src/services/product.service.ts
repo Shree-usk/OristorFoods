@@ -309,6 +309,13 @@ export interface ProductDetailInspirationCard {
   title: string;
   description: string | null;
 }
+export interface ProductDetailFeaturedItem {
+  id: string;
+  imageUrl: string;
+  imageAlt: string | null;
+  title: string;
+  description: string | null;
+}
 export interface ProductDetailBundleItem {
   bundleItemId: string;
   productId: string;
@@ -386,6 +393,7 @@ export interface ProductDetail {
   nutrition: ProductDetailNutrition | null;
   ingredients: ProductDetailIngredient[];
   inspirationCards: ProductDetailInspirationCard[];
+  featuredItems: ProductDetailFeaturedItem[];
   allergenNames: string[];
   certificationNames: string[];
   /** Richer than allergenNames/certificationNames above (name + icon/badge image) — for the PDP's own badge display; compare-view.tsx uses the plain name arrays instead, so those are left as-is rather than reshaped. */
@@ -613,6 +621,13 @@ export async function getProductDetail(
       imageAlt: card.imageAlt,
       title: card.title,
       description: card.description,
+    })),
+    featuredItems: product.featuredItems.map((item) => ({
+      id: item.id,
+      imageUrl: item.imageUrl,
+      imageAlt: item.imageAlt,
+      title: item.title,
+      description: item.description,
     })),
     allergenNames: product.allergens.map((allergen) => allergen.name),
     certificationNames: product.certifications.map((certification) => certification.name),

@@ -211,6 +211,23 @@ describe("addItem — variants", () => {
     expect(largeLine).toMatchObject({ quantity: 1, unitPrice: 80, variantName: "350g" });
   });
 
+  it("uses a variant's own image when it has one, falling back to the product's image otherwise", async () => {
+    const user = await makeUser();
+    const product = await makeProduct();
+    const withOwnImage = await makeVariant(product.id, { name: "200g" });
+    const withoutOwnImage = await makeVariant(product.id, { name: "350g" });
+    await prisma.productVariantImage.create({ data: { variantId: withOwnImage.id, url: "/variant-200g.webp", altText: "200g pack", isPrimary: true } });
+
+    await addItem(user.id, null, product.id, 1, withOwnImage.id);
+    await addItem(user.id, null, product.id, 1, withoutOwnImage.id);
+    const summary = await getCart(user.id, null);
+
+    const withImageLine = summary.items.find((item) => item.variantId === withOwnImage.id);
+    const withoutImageLine = summary.items.find((item) => item.variantId === withoutOwnImage.id);
+    expect(withImageLine).toMatchObject({ imageSrc: "/variant-200g.webp", imageAlt: "200g pack" });
+    expect(withoutImageLine).toMatchObject({ imageSrc: "/images/products/export/curry-powder.webp" });
+  });
+
   it("adding the same variant twice combines quantity into one line, not two", async () => {
     const user = await makeUser();
     const product = await makeProduct();

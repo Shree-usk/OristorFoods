@@ -289,6 +289,7 @@ model Product {
   nutrition         ProductNutrition?
   ingredients       ProductIngredient[]
   inspirationCards  ProductInspirationCard[]
+  featuredItems     ProductFeaturedItem[]
   allergens         Allergen[]
   certifications    Certification[]
   bundle            ProductBundle?
@@ -456,6 +457,27 @@ model ProductImage {
 // from the plain-text servingSuggestions field: this is an image+title+
 // description triple, displayed as a small card grid.
 model ProductInspirationCard {
+  id          String   @id @default(cuid())
+  productId   String
+  product     Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  imageUrl    String
+  imageAlt    String?
+  title       String
+  description String?
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([productId])
+}
+
+// PDP — "Items Featured in This Collection" section, shown just before
+// "Recipes Using This Product". Deliberately not wired to a real Product
+// or the real Collection model (per explicit scope) — same plain
+// image+title+description shape as ProductInspirationCard, kept as its
+// own model since the two sections serve different purposes/positions
+// on the page even though their data shape matches.
+model ProductFeaturedItem {
   id          String   @id @default(cuid())
   productId   String
   product     Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
