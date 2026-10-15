@@ -74,6 +74,39 @@ export default async function ProductDetailPage({ params }: ProductDetailPagePro
     getFeaturedProducts({ excludeProductId: product.id, customerGroup }),
   ]);
 
+  // Long description ("About this product"), Ingredients, Certifications/
+  // Allergens, and the share icons — rendered once here and placed twice
+  // below (desktop: left column under the gallery; mobile: original spot
+  // in the right column), toggled with hidden/lg:hidden rather than kept
+  // as separate markup. The short description moved into
+  // ProductPurchasePanel instead (between "In stock" and the size
+  // selector), so it's no longer part of this block.
+  const extrasBlock = (
+    <>
+      {product.story && (
+        <div className="mt-6">
+          <h2 className="text-h4 font-heading text-charcoal">About this product</h2>
+          <p className="mt-2 text-body text-charcoal">{product.story}</p>
+        </div>
+      )}
+
+      {product.ingredients.length > 0 && (
+        <div className="mt-6">
+          <h2 className="text-h4 font-heading text-charcoal">Ingredients</h2>
+          <div className="mt-2">
+            <IngredientsList ingredients={product.ingredients} />
+          </div>
+        </div>
+      )}
+
+      <CertificationBadges allergens={product.allergens} certifications={product.certifications} />
+
+      <div className="mt-6">
+        <ShareButtons url={pageUrl} title={product.name} />
+      </div>
+    </>
+  );
+
   return (
     <Section>
       {product.jsonLdOverride ? (
@@ -114,8 +147,29 @@ export default async function ProductDetailPage({ params }: ProductDetailPagePro
         ]}
       />
 
+      {/*
+        Two independent column cells (not a single multi-row grid) — CSS
+        Grid shares row-track heights across every column, so a flat grid
+        with per-item row-start numbers made the right column's rows snap
+        to the left column's (much taller) image row instead of stacking
+        on their own. Each column below is one grid cell that lays out its
+        own children independently, exactly like before this change.
+
+        "About this product", Ingredients, Certifications/Allergens, and
+        the share icons render TWICE — once inside the left column
+        (desktop only, filling the dead space under the image) and once
+        in their original spot inside the right column (mobile only, so
+        phones keep today's order with Add to Cart straight after the
+        image, unchanged). Both copies come from the same `extrasBlock`
+        JSX value, toggled with hidden/lg:hidden rather than duplicated
+        markup — a standard responsive pattern already used for this
+        site's mobile nav (header.tsx/mobile-nav.tsx) and filter drawer.
+      */}
       <div className="mt-6 grid grid-cols-1 gap-10 lg:grid-cols-2">
-        <ProductGallery images={product.images} videos={product.videos} productName={product.name} />
+        <div>
+          <ProductGallery images={product.images} videos={product.videos} productName={product.name} />
+          <div className="hidden lg:block">{extrasBlock}</div>
+        </div>
 
         <div>
           <h1 className="text-h1 font-heading text-charcoal">{product.name}</h1>
@@ -141,6 +195,7 @@ export default async function ProductDetailPage({ params }: ProductDetailPagePro
               currency={product.currency}
               inStock={product.inStock}
               rewardPoints={product.rewardPoints}
+              shortDescription={product.shortDescription}
               variants={product.variants}
               packagingOptions={product.packagingOptions}
             />
@@ -152,20 +207,9 @@ export default async function ProductDetailPage({ params }: ProductDetailPagePro
             </div>
           )}
 
-          <div className="mt-6 space-y-2">
-            {(product.shortDescription || product.story) && (
-              <Collapsible defaultOpen={false}>
-                <CollapsibleTrigger className="group/about-trigger flex w-full items-center justify-between rounded-lg border border-charcoal/10 px-4 py-3 text-left">
-                  <h2 className="text-h4 font-heading text-charcoal">About this product</h2>
-                  <ChevronDownIcon className="size-5 text-charcoal/60 transition duration-200 group-data-panel-open/about-trigger:rotate-180" aria-hidden="true" />
-                </CollapsibleTrigger>
-                <CollapsibleContent className="px-4 pb-3">
-                  {product.shortDescription && <p className="text-body text-charcoal">{product.shortDescription}</p>}
-                  {product.story && <p className="mt-2 text-body text-charcoal">{product.story}</p>}
-                </CollapsibleContent>
-              </Collapsible>
-            )}
+          <div className="lg:hidden">{extrasBlock}</div>
 
+          <div className="mt-6 space-y-2">
             {product.servingSuggestions.length > 0 && (
               <Collapsible defaultOpen={false}>
                 <CollapsibleTrigger className="group/serving-trigger flex w-full items-center justify-between rounded-lg border border-charcoal/10 px-4 py-3 text-left">
@@ -196,21 +240,6 @@ export default async function ProductDetailPage({ params }: ProductDetailPagePro
               <NutritionDisclosure nutrition={product.nutrition} />
             </div>
           )}
-
-          {product.ingredients.length > 0 && (
-            <div className="mt-6">
-              <h2 className="text-h4 font-heading text-charcoal">Ingredients</h2>
-              <div className="mt-2">
-                <IngredientsList ingredients={product.ingredients} />
-              </div>
-            </div>
-          )}
-
-          <CertificationBadges allergens={product.allergens} certifications={product.certifications} />
-
-          <div className="mt-6">
-            <ShareButtons url={pageUrl} title={product.name} />
-          </div>
         </div>
       </div>
 
