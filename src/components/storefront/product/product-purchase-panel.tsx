@@ -16,6 +16,7 @@ interface ProductPurchasePanelProps {
   currency: string;
   inStock: boolean;
   rewardPoints: number;
+  shortDescription: string | null;
   variants: ProductDetailVariant[];
   packagingOptions: ProductDetailPackagingOption[];
 }
@@ -34,7 +35,7 @@ function defaultVariantId(variants: ProductDetailVariant[]): string | null {
  * is selected" requirement. Renders identically to the old static PDP
  * block when the product has zero variants.
  */
-export function ProductPurchasePanel({ productId, price, originalPrice, currency, inStock, rewardPoints, variants, packagingOptions }: ProductPurchasePanelProps) {
+export function ProductPurchasePanel({ productId, price, originalPrice, currency, inStock, rewardPoints, shortDescription, variants, packagingOptions }: ProductPurchasePanelProps) {
   const [selectedVariantId, setSelectedVariantId] = useState<string | null>(() => defaultVariantId(variants));
   const selectedVariant = variants.find((variant) => variant.id === selectedVariantId) ?? null;
 
@@ -92,6 +93,8 @@ export function ProductPurchasePanel({ productId, price, originalPrice, currency
       </div>
       <p className="mt-1 text-caption text-charcoal/70">Earn {rewardPoints} reward points with this purchase</p>
       <p className="mt-1 text-small text-charcoal/70">{displayInStock ? "In stock" : "Currently out of stock"}</p>
+
+      {shortDescription && <p className="mt-3 text-body text-charcoal">{shortDescription}</p>}
 
       <VariantSelector variants={variants} selectedVariantId={selectedVariantId} onSelect={handleSelectVariant} />
 
