@@ -15,7 +15,7 @@ const withProduct = {
       categories: { select: { id: true } },
     },
   },
-  variant: true,
+  variant: { include: { images: { orderBy: [{ isPrimary: "desc" }, { sortOrder: "asc" }], take: 1 } } },
   // Story 2 (Bundles). Just the bundle's own display name — full
   // definition re-validation reads bundle.repository.ts's own richer
   // include separately (bundle.service.ts::resolveBundleInstancePrices),

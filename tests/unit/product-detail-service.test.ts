@@ -87,6 +87,9 @@ describe("getProductDetail", () => {
     const inspirationCard = await prisma.productInspirationCard.create({
       data: { product: { connect: { id: product.id } }, imageUrl: "/inspiration.webp", title: "Weeknight dinner", description: "Quick and easy.", sortOrder: 0 },
     });
+    const featuredItem = await prisma.productFeaturedItem.create({
+      data: { product: { connect: { id: product.id } }, imageUrl: "/featured.webp", title: "Sweet Basil", description: "Fresh and fragrant.", sortOrder: 0 },
+    });
 
     const detail = await getProductDetail("pd-full");
 
@@ -100,6 +103,9 @@ describe("getProductDetail", () => {
     expect(detail?.ingredients).toEqual([{ name: "Salt", isAllergen: false }]);
     expect(detail?.inspirationCards).toEqual([
       { id: inspirationCard.id, imageUrl: "/inspiration.webp", imageAlt: null, title: "Weeknight dinner", description: "Quick and easy." },
+    ]);
+    expect(detail?.featuredItems).toEqual([
+      { id: featuredItem.id, imageUrl: "/featured.webp", imageAlt: null, title: "Sweet Basil", description: "Fresh and fragrant." },
     ]);
   });
 

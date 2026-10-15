@@ -5,7 +5,8 @@ import Image from "next/image";
 import { Play } from "lucide-react";
 
 import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog";
-import type { ProductDetailImage, ProductDetailVideo } from "@/services/product.service";
+import { useVariantSelection } from "@/components/storefront/product/variant-selection-context";
+import type { ProductDetailImage, ProductDetailVariant, ProductDetailVideo } from "@/services/product.service";
 
 interface GallerySlide {
   type: "image" | "video";
@@ -16,13 +17,33 @@ interface GallerySlide {
 interface ProductGalleryProps {
   images: ProductDetailImage[];
   videos?: ProductDetailVideo[];
+  variants?: ProductDetailVariant[];
   productName: string;
 }
 
-export function ProductGallery({ images, videos = [], productName }: ProductGalleryProps) {
+export function ProductGallery({ images, videos = [], variants = [], productName }: ProductGalleryProps) {
+  const { selectedVariantId } = useVariantSelection();
+  const selectedVariant = variants.find((variant) => variant.id === selectedVariantId) ?? null;
+  // A variant with its own dedicated photos replaces the product's base
+  // images entirely while it's selected — falls back to the product's own
+  // images for a variant with none set. Videos stay product-level either
+  // way (no per-variant video model).
+  const variantImages = selectedVariant?.images ?? [];
+  const activeImages = variantImages.length > 0 ? variantImages : images;
+
   const [activeIndex, setActiveIndex] = useState(0);
+  // Reset to the first slide whenever the selected variant changes — adjusting
+  // state during render rather than in a useEffect, per this codebase's
+  // no-effect/setState-sync discipline (see product-purchase-panel.tsx's own
+  // variant-change comment for the same pattern).
+  const [lastVariantId, setLastVariantId] = useState(selectedVariantId);
+  if (selectedVariantId !== lastVariantId) {
+    setLastVariantId(selectedVariantId);
+    setActiveIndex(0);
+  }
+
   const slides: GallerySlide[] = [
-    ...images.map((image) => ({ type: "image" as const, url: image.url, altText: image.altText })),
+    ...activeImages.map((image) => ({ type: "image" as const, url: image.url, altText: image.altText ?? productName })),
     ...videos.map((video) => ({ type: "video" as const, url: video.url, altText: video.altText })),
   ];
   const gallery: GallerySlide[] =

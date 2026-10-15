@@ -10,12 +10,14 @@ import { BundleDisplay } from "@/components/storefront/product/bundle-display";
 import { CertificationBadges } from "@/components/storefront/product/certification-badges";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { RelatedRecipesBlock } from "@/components/storefront/food-academy/related-recipes-block";
+import { FeaturedItems } from "@/components/storefront/product/featured-items";
 import { FeaturedProductsRail } from "@/components/storefront/product/featured-products-rail";
 import { IngredientsList } from "@/components/storefront/product/ingredients-list";
 import { InspirationCards } from "@/components/storefront/product/inspiration-cards";
 import { NutritionDisclosure } from "@/components/storefront/product/nutrition-disclosure";
 import { ProductGallery } from "@/components/storefront/product/product-gallery";
 import { ProductPurchasePanel } from "@/components/storefront/product/product-purchase-panel";
+import { VariantSelectionProvider } from "@/components/storefront/product/variant-selection-context";
 import { JsonLdScript } from "@/components/storefront/product/json-ld-script";
 import { ProductJsonLd } from "@/components/storefront/product/product-json-ld";
 import { RecentlyViewed, TrackRecentlyViewed } from "@/components/storefront/product/recently-viewed";
@@ -165,82 +167,88 @@ export default async function ProductDetailPage({ params }: ProductDetailPagePro
         markup — a standard responsive pattern already used for this
         site's mobile nav (header.tsx/mobile-nav.tsx) and filter drawer.
       */}
-      <div className="mt-6 grid grid-cols-1 gap-10 lg:grid-cols-2">
-        <div>
-          <ProductGallery images={product.images} videos={product.videos} productName={product.name} />
-          <div className="hidden lg:block">{extrasBlock}</div>
-        </div>
-
-        <div>
-          <h1 className="text-h1 font-heading text-charcoal">{product.name}</h1>
-          {product.reviewSummary && product.reviewSummary.reviewCount > 0 ? (
-            <a href="#reviews-heading" className="mt-2 flex items-center gap-2 text-small text-charcoal/70 hover:text-charcoal">
-              <StarRating rating={product.reviewSummary.averageRating} />
-              <span>
-                {formatRating(product.reviewSummary.averageRating)} ({product.reviewSummary.reviewCount}{" "}
-                {product.reviewSummary.reviewCount === 1 ? "review" : "reviews"})
-              </span>
-            </a>
-          ) : (
-            <a href="#reviews-heading" className="mt-2 flex items-center gap-2 text-small text-charcoal/70 hover:text-charcoal">
-              <StarRating rating={0} />
-              <span>No reviews yet — be the first to review</span>
-            </a>
-          )}
-          <div className="mt-2">
-            <ProductPurchasePanel
-              productId={product.id}
-              price={product.price}
-              originalPrice={product.originalPrice}
-              currency={product.currency}
-              inStock={product.inStock}
-              rewardPoints={product.rewardPoints}
-              shortDescription={product.shortDescription}
-              variants={product.variants}
-              packagingOptions={product.packagingOptions}
-            />
+      <VariantSelectionProvider variants={product.variants}>
+        <div className="mt-6 grid grid-cols-1 gap-10 lg:grid-cols-2">
+          <div>
+            <ProductGallery images={product.images} videos={product.videos} variants={product.variants} productName={product.name} />
+            <div className="hidden lg:block">{extrasBlock}</div>
           </div>
 
-          {product.bundle && (
-            <div className="mt-6">
-              <BundleDisplay bundle={product.bundle} items={product.bundleItems} />
+          <div>
+            <h1 className="text-h1 font-heading text-charcoal">{product.name}</h1>
+            {product.reviewSummary && product.reviewSummary.reviewCount > 0 ? (
+              <a href="#reviews-heading" className="mt-2 flex items-center gap-2 text-small text-charcoal/70 hover:text-charcoal">
+                <StarRating rating={product.reviewSummary.averageRating} />
+                <span>
+                  {formatRating(product.reviewSummary.averageRating)} ({product.reviewSummary.reviewCount}{" "}
+                  {product.reviewSummary.reviewCount === 1 ? "review" : "reviews"})
+                </span>
+              </a>
+            ) : (
+              <a href="#reviews-heading" className="mt-2 flex items-center gap-2 text-small text-charcoal/70 hover:text-charcoal">
+                <StarRating rating={0} />
+                <span>No reviews yet — be the first to review</span>
+              </a>
+            )}
+            <div className="mt-2">
+              <ProductPurchasePanel
+                productId={product.id}
+                price={product.price}
+                originalPrice={product.originalPrice}
+                currency={product.currency}
+                inStock={product.inStock}
+                rewardPoints={product.rewardPoints}
+                shortDescription={product.shortDescription}
+                variants={product.variants}
+                packagingOptions={product.packagingOptions}
+              />
             </div>
-          )}
 
-          <div className="lg:hidden">{extrasBlock}</div>
-
-          <div className="mt-6 space-y-2">
-            {product.servingSuggestions.length > 0 && (
-              <Collapsible defaultOpen={false}>
-                <CollapsibleTrigger className="group/serving-trigger flex w-full items-center justify-between rounded-lg border border-charcoal/10 px-4 py-3 text-left">
-                  <h2 className="text-h4 font-heading text-charcoal">Serving Suggestions</h2>
-                  <ChevronDownIcon className="size-5 text-charcoal/60 transition duration-200 group-data-panel-open/serving-trigger:rotate-180" aria-hidden="true" />
-                </CollapsibleTrigger>
-                <CollapsibleContent className="px-4 pb-3">
-                  <BulletList heading="Serving Suggestions" items={product.servingSuggestions} headingLevel="h2" hideHeading />
-                </CollapsibleContent>
-              </Collapsible>
+            {product.bundle && (
+              <div className="mt-6">
+                <BundleDisplay bundle={product.bundle} items={product.bundleItems} />
+              </div>
             )}
 
-            {product.benefits.length > 0 && (
-              <Collapsible defaultOpen={false}>
-                <CollapsibleTrigger className="group/benefits-trigger flex w-full items-center justify-between rounded-lg border border-charcoal/10 px-4 py-3 text-left">
-                  <h2 className="text-h4 font-heading text-charcoal">Benefits</h2>
-                  <ChevronDownIcon className="size-5 text-charcoal/60 transition duration-200 group-data-panel-open/benefits-trigger:rotate-180" aria-hidden="true" />
-                </CollapsibleTrigger>
-                <CollapsibleContent className="px-4 pb-3">
-                  <BulletList heading="Benefits" items={product.benefits} headingLevel="h2" hideHeading />
-                </CollapsibleContent>
-              </Collapsible>
+            <div className="lg:hidden">{extrasBlock}</div>
+
+            <div className="mt-6 space-y-2">
+              {product.servingSuggestions.length > 0 && (
+                <Collapsible defaultOpen={false}>
+                  <CollapsibleTrigger className="group/serving-trigger flex w-full items-center justify-between rounded-lg border border-charcoal/10 px-4 py-3 text-left">
+                    <h2 className="text-h4 font-heading text-charcoal">Serving Suggestions</h2>
+                    <ChevronDownIcon className="size-5 text-charcoal/60 transition duration-200 group-data-panel-open/serving-trigger:rotate-180" aria-hidden="true" />
+                  </CollapsibleTrigger>
+                  <CollapsibleContent className="px-4 pb-3">
+                    <BulletList heading="Serving Suggestions" items={product.servingSuggestions} headingLevel="h2" hideHeading />
+                  </CollapsibleContent>
+                </Collapsible>
+              )}
+
+              {product.benefits.length > 0 && (
+                <Collapsible defaultOpen={false}>
+                  <CollapsibleTrigger className="group/benefits-trigger flex w-full items-center justify-between rounded-lg border border-charcoal/10 px-4 py-3 text-left">
+                    <h2 className="text-h4 font-heading text-charcoal">Benefits</h2>
+                    <ChevronDownIcon className="size-5 text-charcoal/60 transition duration-200 group-data-panel-open/benefits-trigger:rotate-180" aria-hidden="true" />
+                  </CollapsibleTrigger>
+                  <CollapsibleContent className="px-4 pb-3">
+                    <BulletList heading="Benefits" items={product.benefits} headingLevel="h2" hideHeading />
+                  </CollapsibleContent>
+                </Collapsible>
+              )}
+            </div>
+
+            {product.nutrition && (
+              <div className="mt-6">
+                <NutritionDisclosure nutrition={product.nutrition} />
+              </div>
             )}
           </div>
-
-          {product.nutrition && (
-            <div className="mt-6">
-              <NutritionDisclosure nutrition={product.nutrition} />
-            </div>
-          )}
         </div>
+      </VariantSelectionProvider>
+
+      <div className="mt-12">
+        <FeaturedItems items={product.featuredItems} />
       </div>
 
       <RelatedRecipesBlock

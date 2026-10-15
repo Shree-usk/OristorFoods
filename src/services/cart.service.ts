@@ -42,7 +42,10 @@ function toLineItem(
   packagingInvalid: boolean = false,
   packagingRequiresManualReview: boolean = false,
 ): CartLineItem {
-  const primaryImage = item.product.images[0];
+  // A variant's own dedicated photo (ProductVariantImage) wins over the
+  // parent product's photo when the selected variant has one — falls back
+  // to the product's own primary image for a variant with none set.
+  const primaryImage = item.variant?.images[0] ?? item.product.images[0];
   // A variant line's availability/stock comes entirely from its own
   // ProductVariant row, never the parent Product — see Product Variants
   // story's design decision (parent stock/status is inert once variants exist).
