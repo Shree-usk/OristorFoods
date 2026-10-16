@@ -64,7 +64,18 @@ export default async function CategoryPage({ params, searchParams }: CategoryPag
   return (
     <Section>
       <ItemListJsonLd items={result.items} />
-      <h1 className="text-h1 font-heading text-charcoal">{category.name}</h1>
+      <div className="grid grid-cols-1 items-center gap-8 lg:grid-cols-4">
+        <div className="lg:col-span-3">
+          <h1 className="text-h1 font-heading text-charcoal">{category.name}</h1>
+          {category.description && <p className="mt-4 max-w-2xl text-body text-charcoal/80">{category.description}</p>}
+        </div>
+        {category.image && (
+          <div className="lg:col-span-1">
+            {/* eslint-disable-next-line @next/next/no-img-element -- admin-typed/Media-Library URL, arbitrary domain, not worth configuring next/image's remote-pattern allowlist for */}
+            <img src={category.image} alt={category.name} className="aspect-square w-full rounded-lg object-cover" />
+          </div>
+        )}
+      </div>
       <div className="mt-8">
         <ProductGrid
           scope={{ category: categorySlug }}
