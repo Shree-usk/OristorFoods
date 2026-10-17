@@ -72,13 +72,15 @@ export function RecipeListing({ initialData, facets }: RecipeListingProps) {
 
   return (
     <div className="flex flex-col gap-6">
-      <RecipeSearchBox
-        value={searchInput}
-        onChange={(q) => {
-          setSearchInput(q);
-          void setParams({ q: q === "" ? null : q, page: null }, { history: "replace" });
-        }}
-      />
+      <div className="flex justify-center">
+        <RecipeSearchBox
+          value={searchInput}
+          onChange={(q) => {
+            setSearchInput(q);
+            void setParams({ q: q === "" ? null : q, page: null }, { history: "replace" });
+          }}
+        />
+      </div>
       <RecipeCategoryChips
         categories={facets.categories}
         selected={params.category}

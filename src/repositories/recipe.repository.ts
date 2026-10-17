@@ -183,7 +183,20 @@ export const recipeDetailSelect = {
       quantity: true,
       unit: true,
       displayText: true,
-      product: { select: { id: true, slug: true, name: true } },
+      // Widened beyond id/slug/name (STORY-018's original shape) so the
+      // detail page can show a thumbnail + Add to Cart inline per
+      // ingredient and build the "Featured in this Recipe" section from
+      // the same already-loaded rows, without a second product query.
+      product: {
+        select: {
+          id: true,
+          slug: true,
+          name: true,
+          inStock: true,
+          images: { where: { isPrimary: true }, take: 1, select: { url: true, altText: true } },
+          standardPrices: { orderBy: { createdAt: "desc" }, take: 1, select: { price: true, currency: true } },
+        },
+      },
     },
   },
   steps: {

@@ -36,6 +36,16 @@ export interface RecipeFacets {
   dietaryTags: RecipeFacetOption[];
 }
 
+export interface RecipeIngredientProduct {
+  id: string;
+  slug: string;
+  name: string;
+  inStock: boolean;
+  imageUrl: string | null;
+  imageAlt: string | null;
+  price: { amount: number; currency: string } | null;
+}
+
 export interface RecipeIngredientItem {
   id: string;
   /** null when the ingredient has no scalable amount ("Salt, to taste"). */
@@ -43,7 +53,7 @@ export interface RecipeIngredientItem {
   unit: string | null;
   displayText: string;
   /** null when this ingredient has no matching Oristor product. */
-  product: { id: string; slug: string; name: string } | null;
+  product: RecipeIngredientProduct | null;
 }
 
 export interface RecipeStepItem {
@@ -93,4 +103,6 @@ export interface RecipeDetail {
   publishedAt: string | null;
   relatedRecipes: RecipeCard[];
   video: { url: string; provider: "Youtube" | "Vimeo" | "SelfHosted"; durationSeconds: number | null; captionsUrl: string | null } | null;
+  /** Distinct real products referenced by this recipe's ingredients, in ingredient order — "Featured in this Recipe". Empty when no ingredient links to a product. */
+  featuredProducts: RecipeIngredientProduct[];
 }

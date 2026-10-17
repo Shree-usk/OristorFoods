@@ -2,7 +2,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { prisma } from "@/lib/db";
-import { createProduct } from "@/repositories/product.repository";
+import { createStandardPrice } from "@/repositories/pricing.repository";
+import { addProductImage, createProduct } from "@/repositories/product.repository";
 import { findPublishedRecipeBySlug } from "@/repositories/recipe.repository";
 import { getRecipeSummary, resetProductDetailExtensionsForTesting } from "@/services/product-detail-extensions";
 import {
@@ -366,6 +367,40 @@ describe("getRecipeBySlug", () => {
       fiber: 5,
       sodium: 600,
     });
+  });
+
+  it("includes each ingredient's product image/price/stock, and dedupes featuredProducts when two ingredients share a product", async () => {
+    const category = await makeCategory();
+    const curryPowder = await createProduct({ sku: "SKU-FEAT-1", slug: "curry-powder-feat", name: "Curry Powder", inStock: true });
+    await addProductImage({ product: { connect: { id: curryPowder.id } }, url: "/images/products/export/curry-powder.webp", isPrimary: true, sortOrder: 0 });
+    await createStandardPrice({ product: { connect: { id: curryPowder.id } }, price: "450.00", currency: "LKR" });
+    const salt = await createProduct({ sku: "SKU-FEAT-2", slug: "salt-feat", name: "Salt", inStock: false });
+
+    await makeRecipe(category.id, {
+      slug: "featured-products-recipe",
+      ingredients: [
+        { productId: curryPowder.id, quantity: 2, unit: "tbsp", displayText: "Curry Powder", sortOrder: 1 },
+        // Same product referenced twice (e.g. once for the marinade, once for the gravy) — must only appear once in featuredProducts.
+        { productId: curryPowder.id, quantity: 1, unit: "tsp", displayText: "Curry Powder (for garnish)", sortOrder: 2 },
+        { productId: salt.id, displayText: "Salt, to taste", sortOrder: 3 },
+        { displayText: "Water", sortOrder: 4 },
+      ],
+    });
+
+    const result = await getRecipeBySlug("featured-products-recipe");
+
+    expect(result?.ingredients[0]?.product).toMatchObject({
+      id: curryPowder.id,
+      slug: "curry-powder-feat",
+      inStock: true,
+      imageUrl: "/images/products/export/curry-powder.webp",
+      price: { amount: 450, currency: "LKR" },
+    });
+    expect(result?.ingredients[2]?.product).toMatchObject({ id: salt.id, inStock: false, imageUrl: null, price: null });
+    expect(result?.ingredients[3]?.product).toBeNull();
+
+    // Deduped to 2 distinct products, in first-seen (ingredient) order, even though curry powder appears twice.
+    expect(result?.featuredProducts.map((p) => p.id)).toEqual([curryPowder.id, salt.id]);
   });
 });
 

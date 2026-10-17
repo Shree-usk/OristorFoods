@@ -38,6 +38,7 @@ function makeMinimalRecipe(overrides: Partial<RecipeDetail> = {}): RecipeDetail 
     publishedAt: null,
     relatedRecipes: [],
     video: null,
+    featuredProducts: [],
     ...overrides,
   };
 }

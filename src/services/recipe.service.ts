@@ -5,7 +5,7 @@ import type { RecipeCardRow, RecipeDetailRow } from "@/repositories/recipe.repos
 import * as seoRepository from "@/repositories/seo.repository";
 import { registerRecipeSummaryProvider, type RecipePreview } from "@/services/product-detail-extensions";
 import { registerRecipeSearchProvider, type SearchSuggestionItem } from "@/services/search-extensions";
-import type { RecipeCard, RecipeDetail, RecipeFacets, RecipeIngredientItem, RecipeListResult, RecipeStepItem } from "@/types/recipe";
+import type { RecipeCard, RecipeDetail, RecipeFacets, RecipeIngredientItem, RecipeIngredientProduct, RecipeListResult, RecipeStepItem } from "@/types/recipe";
 import type { RecipeListingQuery } from "@/validation/recipe-listing.schema";
 
 function recipeHref(slug: string) {
@@ -110,14 +110,40 @@ export async function getRecipeSuggestionsByIds(ids: string[], limit: number): P
   return rows.map(toRecipeSuggestionItem);
 }
 
+function toIngredientProduct(product: NonNullable<RecipeDetailRow["ingredients"][number]["product"]>): RecipeIngredientProduct {
+  const image = product.images[0] ?? null;
+  const price = product.standardPrices[0] ?? null;
+  return {
+    id: product.id,
+    slug: product.slug,
+    name: product.name,
+    inStock: product.inStock,
+    imageUrl: image?.url ?? null,
+    imageAlt: image?.altText ?? null,
+    price: price ? { amount: price.price.toNumber(), currency: price.currency } : null,
+  };
+}
+
 function toIngredientItem(row: RecipeDetailRow["ingredients"][number]): RecipeIngredientItem {
   return {
     id: row.id,
     quantity: row.quantity === null ? null : row.quantity.toNumber(),
     unit: row.unit,
     displayText: row.displayText,
-    product: row.product,
+    product: row.product ? toIngredientProduct(row.product) : null,
   };
+}
+
+/** Distinct products referenced by this recipe's ingredients, in first-seen (ingredient) order — "Featured in this Recipe". */
+function toFeaturedProducts(row: RecipeDetailRow): RecipeIngredientProduct[] {
+  const seen = new Set<string>();
+  const products: RecipeIngredientProduct[] = [];
+  for (const ingredient of row.ingredients) {
+    if (!ingredient.product || seen.has(ingredient.product.id)) continue;
+    seen.add(ingredient.product.id);
+    products.push(toIngredientProduct(ingredient.product));
+  }
+  return products;
 }
 
 function toStepItem(row: RecipeDetailRow["steps"][number]): RecipeStepItem {
@@ -188,6 +214,7 @@ export function toRecipeDetail(
       row.videoUrl === null || row.videoProvider === null
         ? null
         : { url: row.videoUrl, provider: row.videoProvider, durationSeconds: row.videoDurationSeconds, captionsUrl: row.captionsUrl },
+    featuredProducts: toFeaturedProducts(row),
   };
 }
 
