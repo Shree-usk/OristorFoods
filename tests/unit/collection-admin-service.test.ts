@@ -201,3 +201,24 @@ describe("collection.service — storefront featured list", () => {
     expect(ids).not.toContain(expired.id);
   });
 });
+
+describe("collection.service — Export & Wholesale fields", () => {
+  it("default to off/0 on create, so an existing collection never silently appears on the export page", async () => {
+    const admin = await makeFullAccessAdmin();
+    const collection = await createCollectionAdmin(admin.id, { name: "Export Fields Default", slug: slug("export-fields-default") });
+    expect(collection.showOnExportPage).toBe(false);
+    expect(collection.isExportFeatured).toBe(false);
+    expect(collection.exportDisplayOrder).toBe(0);
+  });
+
+  it("round-trip through update", async () => {
+    const admin = await makeFullAccessAdmin();
+    const collection = await createCollectionAdmin(admin.id, { name: "Export Fields Update", slug: slug("export-fields-update") });
+
+    const updated = await updateCollectionAdmin(admin.id, collection.id, { showOnExportPage: true, isExportFeatured: true, exportDisplayOrder: 7 });
+
+    expect(updated.showOnExportPage).toBe(true);
+    expect(updated.isExportFeatured).toBe(true);
+    expect(updated.exportDisplayOrder).toBe(7);
+  });
+});

@@ -214,6 +214,14 @@ model Collection {
   startDate   DateTime?
   endDate     DateTime?
 
+  // Export & Wholesale catalogue. Collection is shared, general-purpose
+  // merchandising data (e.g. seasonal homepage promos) — showOnExportPage
+  // defaults false so existing/future collections never silently appear
+  // on the B2B export page without a deliberate admin opt-in.
+  showOnExportPage   Boolean @default(false)
+  isExportFeatured   Boolean @default(false)
+  exportDisplayOrder Int     @default(0)
+
   metaTitle       String?
   metaDescription String?
   canonicalUrl    String?
@@ -265,6 +273,17 @@ model Product {
   weightGrams        Int?
   benefits           String[]      @default([])
   servingSuggestions String[]      @default([])
+
+  // Export & Wholesale catalogue (extends STORY-058's /export page).
+  // Deliberately separate from isFeatured above (that's the PDP's own
+  // "Featured Products" rail) — a product can be featured on one surface
+  // without the other. Visibility is an orthogonal flag, not a second
+  // workflow: the export catalogue query always hardcodes `status:
+  // "Published" AND isExportEnabled: true`, never a caller-supplied value.
+  isExportEnabled    Boolean       @default(false)
+  exportDescription  String?       @db.VarChar(2000)
+  isExportFeatured   Boolean       @default(false)
+  exportDisplayOrder Int           @default(0)
 
   brandId String?
   brand   Brand?  @relation(fields: [brandId], references: [id], onDelete: SetNull)
@@ -326,9 +345,14 @@ model Product {
   recommendationEvents RecommendationEvent[]
   // STORY-061.
   embedding            ProductEmbedding?
+  // Export & Wholesale catalogue — a buyer's structured product selection,
+  // attached when they submit via the catalogue (empty for the plain
+  // existing enquiry form, which only ever set productsOfInterest text).
+  exportEnquiries      ExportEnquiry[]
 
   @@index([status])
   @@index([status, inStock])
+  @@index([status, isExportEnabled])
   @@index([brandId])
 }
 
@@ -3699,9 +3723,13 @@ enum ExportEnquiryStatus {
 
 // Submitted anonymously via the public /export storefront form — no
 // User relation at submission time. productsOfInterest/volumeEstimate
-// are free-text, not a Product relation: the AC's "filterable by ...
+// stay free-text for the plain enquiry form (the AC's "filterable by ...
 // product interest" is satisfied by a contains search, same shape as
-// other free-text admin filters in this codebase (e.g. AuditLog.targetId).
+// other free-text admin filters in this codebase e.g. AuditLog.targetId).
+// `products` below is a SEPARATE, additive structured selection — set
+// only when a buyer submits via the catalogue's "Start an enquiry with
+// selected products" flow; empty for the plain form, so this stays
+// fully backward-compatible with every enquiry submitted before it existed.
 model ExportEnquiry {
   id                 String              @id @default(cuid())
   companyName        String
@@ -3717,12 +3745,29 @@ model ExportEnquiry {
   assignedTo         AdminUser?          @relation("ExportEnquiryAssignee", fields: [assignedToId], references: [id], onDelete: SetNull)
   notes              ExportEnquiryNote[]
   distributorAccount DistributorAccount?
+  products           Product[]
   createdAt          DateTime            @default(now())
   updatedAt          DateTime            @updatedAt
 
   @@index([status])
   @@index([country])
   @@index([assignedToId])
+}
+
+// Export & Wholesale catalogue settings — a single configuration row
+// (same `id @default("global")` singleton convention as CompanySetting).
+// Deliberately does NOT duplicate CompanySetting's logo/address/phone/
+// email — those are read live from CompanySetting at render/PDF time.
+model ExportCatalogueSetting {
+  id          String   @id @default("global")
+  title       String?
+  introText   String?  @db.VarChar(2000)
+  showPricing Boolean  @default(false)
+  // Small, unstructured "which fields appear in the buyer PDF" checkbox
+  // set — same Json? justification CompanySetting.socialLinks already
+  // uses for similarly-shaped, low-cardinality config.
+  pdfFields   Json?
+  updatedAt   DateTime @updatedAt
 }
 
 // Strictly internal — never visible to the enquirer (AC). A reply sent

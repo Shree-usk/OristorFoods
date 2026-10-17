@@ -12,10 +12,15 @@ export interface CreateExportEnquiryInput {
   productsOfInterest: string;
   volumeEstimate?: string | null;
   message: string;
+  /** Export & Wholesale catalogue's structured product selection — empty/omitted for the plain enquiry form. */
+  productIds?: string[];
 }
 
 export function create(input: CreateExportEnquiryInput) {
-  return prisma.exportEnquiry.create({ data: input });
+  const { productIds, ...rest } = input;
+  return prisma.exportEnquiry.create({
+    data: { ...rest, products: productIds?.length ? { connect: productIds.map((id) => ({ id })) } : undefined },
+  });
 }
 
 export interface ExportEnquiryFilters {
@@ -46,7 +51,11 @@ export async function listForAdmin(filters: ExportEnquiryFilters, page: number) 
   const [rows, total] = await Promise.all([
     prisma.exportEnquiry.findMany({
       where,
-      include: { assignedTo: { select: { id: true, name: true, email: true } }, distributorAccount: { select: { id: true } } },
+      include: {
+        assignedTo: { select: { id: true, name: true, email: true } },
+        distributorAccount: { select: { id: true } },
+        products: { select: { id: true, name: true, sku: true } },
+      },
       orderBy: { createdAt: "desc" },
       skip: (page - 1) * PAGE_SIZE,
       take: PAGE_SIZE,
@@ -63,6 +72,7 @@ export function findById(id: string) {
       assignedTo: { select: { id: true, name: true, email: true } },
       distributorAccount: { select: { id: true } },
       notes: { include: { author: { select: { id: true, name: true, email: true } } }, orderBy: { createdAt: "desc" } },
+      products: { select: { id: true, name: true, sku: true, slug: true, images: { where: { isPrimary: true }, take: 1 } } },
     },
   });
 }
@@ -87,6 +97,21 @@ export interface StatusCounts {
 export async function countsByStatus(): Promise<StatusCounts[]> {
   const grouped = await prisma.exportEnquiry.groupBy({ by: ["status"], _count: { _all: true } });
   return grouped.map((row) => ({ status: row.status, count: row._count._all }));
+}
+
+const MAX_EXPORT_ROWS = 10_000;
+
+/** CSV export (admin-export.service.ts::exportEnquiriesCsv) — same filters as listForAdmin, no pagination, capped like audit-log.repository.ts's own listForExport. */
+export function listForExport(filters: ExportEnquiryFilters) {
+  return prisma.exportEnquiry.findMany({
+    where: whereFromFilters(filters),
+    include: {
+      assignedTo: { select: { name: true } },
+      products: { select: { name: true, sku: true } },
+    },
+    orderBy: { createdAt: "desc" },
+    take: MAX_EXPORT_ROWS,
+  });
 }
 
 export function countWonSince(since: Date) {

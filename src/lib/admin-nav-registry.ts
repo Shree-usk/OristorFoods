@@ -66,6 +66,8 @@ export const ADMIN_NAV_GROUPS: AdminNavGroup[] = [
       { label: "Delivery zones", href: "/admin/delivery-zones", module: "DeliveryZones", action: "View" },
       { label: "Rewards & referrals", href: "/admin/rewards-referrals", module: "RewardsReferrals", action: "View" },
       { label: "Export portal", href: "/admin/export", module: "ExportPortal", action: "View" },
+      { label: "Export catalogue", href: "/admin/export/catalogue", module: "ExportPortal", action: "View" },
+      { label: "Export catalogue settings", href: "/admin/export/settings", module: "ExportPortal", action: "Edit" },
       { label: "Export distributor accounts", href: "/admin/export/distributor-accounts", module: "ExportPortal", action: "View" },
     ],
   },

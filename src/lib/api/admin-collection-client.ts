@@ -17,6 +17,9 @@ export interface AdminCollection {
   metaDescription: string | null;
   canonicalUrl: string | null;
   ogImage: string | null;
+  showOnExportPage: boolean;
+  isExportFeatured: boolean;
+  exportDisplayOrder: number;
   products: { id: string; name: string }[];
 }
 

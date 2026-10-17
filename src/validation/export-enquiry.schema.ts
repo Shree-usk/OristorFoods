@@ -9,6 +9,8 @@ export const submitExportEnquirySchema = z.object({
   productsOfInterest: z.string().trim().min(1, "Let us know which products you're interested in.").max(500),
   volumeEstimate: z.string().trim().max(200).optional(),
   message: z.string().trim().min(1, "Message is required.").max(4000),
+  /** Export & Wholesale catalogue's structured product selection — optional, empty for the plain form. */
+  productIds: z.array(z.string().trim().min(1)).max(50).optional(),
 });
 export type SubmitExportEnquiryInput = z.infer<typeof submitExportEnquirySchema>;
 

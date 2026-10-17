@@ -97,6 +97,22 @@ export function AdminExportEnquiryDetailView({ id }: { id: string }) {
               <dt className="inline font-medium">Products of interest: </dt>
               <dd className="inline">{enquiry.productsOfInterest}</dd>
             </div>
+            {enquiry.products.length > 0 && (
+              <div>
+                <dt className="font-medium">Selected products (catalogue):</dt>
+                <dd className="mt-1 flex flex-wrap gap-2">
+                  {enquiry.products.map((product) => (
+                    <span key={product.id} className="inline-flex items-center gap-2 rounded-full border border-border bg-muted/40 px-2 py-1 text-caption text-charcoal">
+                      {product.images[0] ? (
+                        // eslint-disable-next-line @next/next/no-img-element -- admin thumbnail only, not a storefront image
+                        <img src={product.images[0].url} alt={product.images[0].altText ?? product.name} className="size-5 rounded object-cover" />
+                      ) : null}
+                      {product.name} <span className="text-charcoal/50">({product.sku})</span>
+                    </span>
+                  ))}
+                </dd>
+              </div>
+            )}
             {enquiry.volumeEstimate && (
               <div>
                 <dt className="inline font-medium">Volume estimate: </dt>

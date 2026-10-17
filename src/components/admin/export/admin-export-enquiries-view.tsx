@@ -34,13 +34,26 @@ export function AdminExportEnquiriesView() {
 
   const totalPages = data ? Math.max(1, Math.ceil(data.total / data.pageSize)) : 1;
 
+  function exportCsvHref(): string {
+    const params = new URLSearchParams();
+    for (const [key, value] of Object.entries(filters)) {
+      if (key !== "page" && value !== undefined && value !== "") params.set(key, String(value));
+    }
+    return `/api/admin/export/enquiries/export?${params.toString()}`;
+  }
+
   return (
     <div>
       <div className="flex items-center justify-between">
         <h1 className="text-h2 font-heading text-charcoal">Export Enquiries</h1>
-        <Button type="button" variant="outline" nativeButton={false} render={<Link href="/admin/export/distributor-accounts" />}>
-          Distributor Accounts
-        </Button>
+        <div className="flex gap-2">
+          <Button type="button" variant="outline" nativeButton={false} render={<a href={exportCsvHref()} />}>
+            Export CSV
+          </Button>
+          <Button type="button" variant="outline" nativeButton={false} render={<Link href="/admin/export/distributor-accounts" />}>
+            Distributor Accounts
+          </Button>
+        </div>
       </div>
 
       <div className="mt-4 flex flex-wrap items-end gap-3">

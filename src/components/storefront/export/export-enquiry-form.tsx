@@ -2,13 +2,14 @@
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation } from "@tanstack/react-query";
-import { CircleAlert, CircleCheck } from "lucide-react";
+import { CircleAlert, CircleCheck, X } from "lucide-react";
 import { useForm } from "react-hook-form";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { useExportCatalogueSelectionStore } from "@/lib/stores/export-catalogue-selection-store";
 import { submitExportEnquirySchema, type SubmitExportEnquiryInput } from "@/validation/export-enquiry.schema";
 
 async function postEnquiry(input: SubmitExportEnquiryInput) {
@@ -27,6 +28,10 @@ async function postEnquiry(input: SubmitExportEnquiryInput) {
 
 /** STORY-058. Same RHF + Zod + useMutation shape as newsletter-form.tsx. */
 export function ExportEnquiryForm() {
+  const selectedProducts = useExportCatalogueSelectionStore((state) => state.items);
+  const removeSelected = useExportCatalogueSelectionStore((state) => state.remove);
+  const clearSelected = useExportCatalogueSelectionStore((state) => state.clear);
+
   const {
     register,
     handleSubmit,
@@ -39,11 +44,35 @@ export function ExportEnquiryForm() {
   const mutation = useMutation({ mutationFn: postEnquiry });
 
   const onSubmit = handleSubmit((data) => {
-    mutation.mutate(data, { onSuccess: () => reset() });
+    const productIds = selectedProducts.map((product) => product.id);
+    mutation.mutate(
+      { ...data, productIds: productIds.length > 0 ? productIds : undefined },
+      {
+        onSuccess: () => {
+          reset();
+          clearSelected();
+        },
+      },
+    );
   });
 
   return (
     <form onSubmit={onSubmit} noValidate className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+      {selectedProducts.length > 0 && (
+        <div className="sm:col-span-2">
+          <Label>Selected products ({selectedProducts.length})</Label>
+          <div className="mt-2 flex flex-wrap gap-2">
+            {selectedProducts.map((product) => (
+              <span key={product.id} className="inline-flex items-center gap-1 rounded-full bg-charcoal/5 px-3 py-1 text-xs text-charcoal/80">
+                {product.name}
+                <button type="button" onClick={() => removeSelected(product.id)} aria-label={`Remove ${product.name} from selection`} className="text-charcoal/50 hover:text-charcoal">
+                  <X className="size-3" aria-hidden="true" />
+                </button>
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
       <div>
         <Label htmlFor="export-company">Company name</Label>
         <Input id="export-company" autoComplete="organization" aria-invalid={errors.companyName ? true : undefined} {...register("companyName")} />

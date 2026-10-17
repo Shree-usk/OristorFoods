@@ -8,6 +8,7 @@ interface CheckboxOptionProps {
   label: string;
   checked: boolean;
   onCheckedChange: (checked: boolean) => void;
+  disabled?: boolean;
 }
 
 /**
@@ -17,11 +18,11 @@ interface CheckboxOptionProps {
  * accessible name (axe aria-toggle-field-name). The <label> wrapper stays so
  * clicking the text still toggles the checkbox.
  */
-export function CheckboxOption({ label, checked, onCheckedChange }: CheckboxOptionProps) {
+export function CheckboxOption({ label, checked, onCheckedChange, disabled }: CheckboxOptionProps) {
   const labelId = useId();
   return (
     <label className="flex items-center gap-2 text-small text-charcoal">
-      <Checkbox checked={checked} onCheckedChange={onCheckedChange} aria-labelledby={labelId} />
+      <Checkbox checked={checked} onCheckedChange={onCheckedChange} disabled={disabled} aria-labelledby={labelId} />
       <span id={labelId}>{label}</span>
     </label>
   );
