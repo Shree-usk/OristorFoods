@@ -36,6 +36,9 @@ const EMPTY_FORM: CollectionAdminInput = {
   metaDescription: "",
   canonicalUrl: "",
   ogImage: "",
+  showOnExportPage: false,
+  isExportFeatured: false,
+  exportDisplayOrder: 0,
   productIds: [],
 };
 
@@ -76,6 +79,9 @@ export function AdminCollectionsView() {
       metaDescription: collection.metaDescription ?? "",
       canonicalUrl: collection.canonicalUrl ?? "",
       ogImage: collection.ogImage ?? "",
+      showOnExportPage: collection.showOnExportPage,
+      isExportFeatured: collection.isExportFeatured,
+      exportDisplayOrder: collection.exportDisplayOrder,
       productIds: collection.products.map((product) => product.id),
     });
     setEditing(collection);
@@ -236,6 +242,34 @@ export function AdminCollectionsView() {
             </p>
             <div className="pt-1">
               <StatusToggle value={form.status} onChange={(status) => setForm((prev) => ({ ...prev, status }))} />
+            </div>
+
+            <h3 className="mt-2 text-small font-medium text-charcoal">Export & Wholesale (optional)</h3>
+            <div className="pt-1">
+              <CheckboxOption
+                label="Show on Export & Wholesale page"
+                checked={form.showOnExportPage ?? false}
+                onCheckedChange={(checked) => setForm((prev) => ({ ...prev, showOnExportPage: checked }))}
+              />
+              <p className="mt-1 text-caption text-charcoal/60">Off by default — a seasonal/homepage collection never silently appears on the B2B export page.</p>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="pt-6">
+                <CheckboxOption
+                  label="Featured on export page"
+                  checked={form.isExportFeatured ?? false}
+                  onCheckedChange={(checked) => setForm((prev) => ({ ...prev, isExportFeatured: checked }))}
+                />
+              </div>
+              <div>
+                <Label htmlFor="collection-export-order">Export display order</Label>
+                <Input
+                  id="collection-export-order"
+                  type="number"
+                  value={form.exportDisplayOrder ?? 0}
+                  onChange={(event) => setForm((prev) => ({ ...prev, exportDisplayOrder: event.target.value === "" ? 0 : Number(event.target.value) }))}
+                />
+              </div>
             </div>
 
             <h3 className="mt-2 text-small font-medium text-charcoal">SEO (optional)</h3>

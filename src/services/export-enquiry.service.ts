@@ -3,6 +3,7 @@ import { randomBytes } from "node:crypto";
 import bcrypt from "bcryptjs";
 
 import type { ExportEnquiryStatus } from "@/generated/prisma/client";
+import { toCsv } from "@/lib/csv";
 import { checkRateLimit } from "@/lib/rate-limit";
 import * as adminUserRepository from "@/repositories/admin-user.repository";
 import * as auditLogRepository from "@/repositories/audit-log.repository";
@@ -150,6 +151,33 @@ export async function convertToDistributorAccount(adminUserId: string, id: strin
 
   await writeAuditLog({ actorId: adminUserId, action: "export_enquiry_converted", module: "ExportPortal", targetType: "ExportEnquiry", targetId: id, metadata: { distributorAccountId: result.account.id, userId: result.userId } });
   return result.account;
+}
+
+/**
+ * Spec §9.7: "export enquiry data only for authorized users" — gated on
+ * the Export action specifically (distinct from View/Edit), same
+ * AdminAction audit-log-admin.service.ts's own CSV export already uses.
+ */
+export async function exportEnquiriesCsv(adminUserId: string, filters: ExportEnquiryFilters): Promise<string> {
+  await requirePermission(adminUserId, "ExportPortal", "Export");
+  const rows = await exportEnquiryRepository.listForExport(filters);
+
+  const header = ["Company", "Contact", "Email", "Phone", "Country", "Products of interest", "Selected products", "Volume estimate", "Status", "Assigned to", "Submitted"];
+  const lines = rows.map((row) => [
+    row.companyName,
+    row.contactName,
+    row.contactEmail,
+    row.contactPhone ?? "",
+    row.country,
+    row.productsOfInterest,
+    row.products.map((product) => `${product.name} (${product.sku})`).join("; "),
+    row.volumeEstimate ?? "",
+    row.status,
+    row.assignedTo?.name ?? "",
+    row.createdAt.toISOString(),
+  ]);
+
+  return toCsv(header, lines);
 }
 
 export async function listDistributorAccounts(adminUserId: string) {

@@ -64,6 +64,23 @@ export function listFeaturedCollections(limit: number, date: Date = new Date()) 
   });
 }
 
+/** Export & Wholesale page — only collections an admin has both activated and opted into the export page, inside their active window (same rule as listActiveCollections/listFeaturedCollections). Separate from listFeaturedCollections: the homepage and export page are different audiences with independent opt-ins. */
+export function listCollectionsForExportPage(date: Date = new Date()) {
+  return prisma.collection.findMany({
+    where: {
+      status: "Active",
+      showOnExportPage: true,
+      OR: [
+        { startDate: null, endDate: null },
+        { startDate: { lte: date }, endDate: { gte: date } },
+        { startDate: { lte: date }, endDate: null },
+        { startDate: null, endDate: { gte: date } },
+      ],
+    },
+    orderBy: [{ isExportFeatured: "desc" }, { exportDisplayOrder: "asc" }, { name: "asc" }],
+  });
+}
+
 export function getCollectionProducts(collectionId: string) {
   return prisma.product.findMany({
     where: { collections: { some: { id: collectionId } } },

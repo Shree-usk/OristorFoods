@@ -12,6 +12,11 @@ export const collectionAdminSchema = z.object({
   description: z.string().trim().max(2000).optional().nullable(),
   image: optionalMediaUrlSchema,
   status: statusEnum.optional(),
+  // Export & Wholesale page — defaults false so existing/seasonal
+  // collections (e.g. a homepage promo) don't silently appear there.
+  showOnExportPage: z.boolean().optional(),
+  isExportFeatured: z.boolean().optional(),
+  exportDisplayOrder: z.number().int().min(0).optional(),
   // Plain strings, not z.coerce.date() — a date <input> sends "" for a
   // cleared field, which z.coerce.date() would reject as Invalid Date
   // rather than treat as "no date." Parsed in collection.service.ts

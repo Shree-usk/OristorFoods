@@ -89,6 +89,10 @@ export interface ProductAdminInput {
   story?: string | null;
   productType?: ProductType;
   isFeatured?: boolean;
+  isExportEnabled?: boolean;
+  exportDescription?: string | null;
+  isExportFeatured?: boolean;
+  exportDisplayOrder?: number;
   brandId?: string | null;
   categoryIds: string[];
   collectionIds?: string[];
@@ -212,6 +216,10 @@ function scalarFields(input: ProductAdminInput) {
     story: input.story ?? null,
     productType: input.productType ?? "Standard",
     isFeatured: input.isFeatured ?? false,
+    isExportEnabled: input.isExportEnabled ?? false,
+    exportDescription: input.exportDescription ?? null,
+    isExportFeatured: input.isExportFeatured ?? false,
+    exportDisplayOrder: input.exportDisplayOrder ?? 0,
     benefits: input.benefits ?? [],
     servingSuggestions: input.servingSuggestions ?? [],
     rewardPoints: input.rewardPoints ?? 0,

@@ -67,6 +67,12 @@ export const productAdminSchema = z.object({
   story: z.string().trim().max(5000).optional().nullable(),
   productType: productTypeEnum.optional(),
   isFeatured: z.boolean().optional(),
+  // Export & Wholesale catalogue — deliberately separate from isFeatured
+  // above (that's the PDP's own "Featured Products" rail).
+  isExportEnabled: z.boolean().optional(),
+  exportDescription: z.string().trim().max(2000).optional().nullable(),
+  isExportFeatured: z.boolean().optional(),
+  exportDisplayOrder: z.number().int().min(0).optional(),
   brandId: z.string().trim().min(1).optional().nullable(),
   categoryIds: z.array(z.string().min(1)).min(1, "Select at least one category."),
   collectionIds: z.array(z.string().min(1)).optional(),

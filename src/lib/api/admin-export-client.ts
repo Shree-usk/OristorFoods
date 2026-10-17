@@ -14,6 +14,12 @@ export interface ExportEnquiryAssignee {
   email: string;
 }
 
+export interface ExportEnquirySelectedProduct {
+  id: string;
+  name: string;
+  sku: string;
+}
+
 export interface ExportEnquiryListItem {
   id: string;
   companyName: string;
@@ -27,6 +33,8 @@ export interface ExportEnquiryListItem {
   status: ExportEnquiryStatusValue;
   assignedTo: ExportEnquiryAssignee | null;
   distributorAccount: { id: string } | null;
+  /** Export & Wholesale catalogue's structured product selection — empty for enquiries submitted via the plain form. */
+  products: ExportEnquirySelectedProduct[];
   createdAt: string;
   updatedAt: string;
 }
@@ -38,8 +46,14 @@ export interface ExportEnquiryNote {
   createdAt: string;
 }
 
-export interface ExportEnquiryDetail extends ExportEnquiryListItem {
+export interface ExportEnquiryDetailProduct extends ExportEnquirySelectedProduct {
+  slug: string;
+  images: { url: string; altText: string | null }[];
+}
+
+export interface ExportEnquiryDetail extends Omit<ExportEnquiryListItem, "products"> {
   notes: ExportEnquiryNote[];
+  products: ExportEnquiryDetailProduct[];
 }
 
 export interface ExportEnquiryFilters {

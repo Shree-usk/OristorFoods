@@ -18,6 +18,7 @@ import {
   addNote,
   assignEnquiry,
   convertToDistributorAccount,
+  exportEnquiriesCsv,
   getEnquiryActivity,
   listAssignableAdmins,
   listDistributorAccounts,
@@ -31,7 +32,15 @@ import { PermissionDeniedError } from "@/services/permission.errors";
 
 const EMAIL_DOMAIN = "@export-enquiry-svc-test.test";
 const ROLE_KEY_PREFIX = "export-enquiry-svc-test-role-";
+const SKU_PREFIX = "EXPORT-ENQUIRY-SVC-TEST-";
 let sequence = 0;
+
+async function makeProduct() {
+  sequence += 1;
+  return prisma.product.create({
+    data: { sku: `${SKU_PREFIX}${sequence}`, slug: `export-enquiry-svc-test-${sequence}`, name: `Export Enquiry Test Product ${sequence}`, status: "Published", isExportEnabled: true },
+  });
+}
 
 async function makeAdmin(grants: { module: AdminModule; action: AdminAction }[]) {
   sequence += 1;
@@ -75,6 +84,7 @@ afterEach(async () => {
   await prisma.user.deleteMany({ where: { email: { endsWith: EMAIL_DOMAIN } } });
   await prisma.exportEnquiryNote.deleteMany({ where: { enquiry: { contactEmail: { endsWith: EMAIL_DOMAIN } } } });
   await prisma.exportEnquiry.deleteMany({ where: { contactEmail: { endsWith: EMAIL_DOMAIN } } });
+  await prisma.product.deleteMany({ where: { sku: { startsWith: SKU_PREFIX } } });
   await prisma.adminUser.deleteMany({ where: { email: { endsWith: EMAIL_DOMAIN } } });
   await prisma.rolePermission.deleteMany({ where: { role: { key: { startsWith: ROLE_KEY_PREFIX } } } });
   await prisma.role.deleteMany({ where: { key: { startsWith: ROLE_KEY_PREFIX } } });
@@ -108,6 +118,74 @@ describe("export-enquiry.service — submitEnquiry (public)", () => {
     expect(fourth).toBeUndefined();
     const count = await prisma.exportEnquiry.count({ where: { contactEmail: email } });
     expect(count).toBe(3);
+  });
+});
+
+describe("export-enquiry.service — submitEnquiry productIds (Export & Wholesale catalogue selection)", () => {
+  it("persists the selected catalogue products as the products relation", async () => {
+    const email = nextEmail("withproducts");
+    const product1 = await makeProduct();
+    const product2 = await makeProduct();
+
+    const enquiry = await submitEnquiry({
+      companyName: "Catalogue Buyer Co",
+      contactName: "Cat Buyer",
+      contactEmail: email,
+      country: "Canada",
+      productsOfInterest: "Spices",
+      message: "Interested in these specific products.",
+      productIds: [product1.id, product2.id],
+    });
+
+    const withProducts = await prisma.exportEnquiry.findUnique({ where: { id: enquiry!.id }, include: { products: true } });
+    expect(withProducts?.products.map((p) => p.id).sort()).toEqual([product1.id, product2.id].sort());
+  });
+
+  it("still succeeds when productIds is omitted — fully backward-compatible with the plain enquiry form", async () => {
+    const email = nextEmail("noproducts");
+    const enquiry = await submitEnquiry({
+      companyName: "Plain Form Co",
+      contactName: "Plain Buyer",
+      contactEmail: email,
+      country: "France",
+      productsOfInterest: "Anything",
+      message: "No structured selection.",
+    });
+
+    const withProducts = await prisma.exportEnquiry.findUnique({ where: { id: enquiry!.id }, include: { products: true } });
+    expect(withProducts?.products).toEqual([]);
+  });
+});
+
+describe("export-enquiry.service — exportEnquiriesCsv (spec: export enquiry data only for authorized users)", () => {
+  it("rejects an admin without ExportPortal:Export, even one with View and Edit", async () => {
+    const editor = await makeAdmin([
+      { module: "ExportPortal", action: "View" },
+      { module: "ExportPortal", action: "Edit" },
+    ]);
+    await expect(exportEnquiriesCsv(editor.id, {})).rejects.toBeInstanceOf(PermissionDeniedError);
+  });
+
+  it("returns a CSV with the expected header and the enquiry's selected catalogue products", async () => {
+    const admin = await makeAdmin([{ module: "ExportPortal", action: "Export" }]);
+    const product = await makeProduct();
+    await prisma.exportEnquiry.create({
+      data: {
+        companyName: "CSV Export Co With Products",
+        contactName: "CSV Buyer",
+        contactEmail: nextEmail("csvbuyer"),
+        country: "Japan",
+        productsOfInterest: "Spices",
+        message: "m",
+        products: { connect: [{ id: product.id }] },
+      },
+    });
+
+    const csv = await exportEnquiriesCsv(admin.id, {});
+
+    expect(csv.split("\n")[0]).toBe("Company,Contact,Email,Phone,Country,Products of interest,Selected products,Volume estimate,Status,Assigned to,Submitted");
+    expect(csv).toContain("CSV Export Co With Products");
+    expect(csv).toContain(product.name);
   });
 });
 

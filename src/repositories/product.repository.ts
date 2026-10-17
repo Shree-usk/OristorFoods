@@ -275,6 +275,91 @@ export function findFeaturedProductIds(excludeProductId: string, limit: number) 
     .then((rows) => rows.map((row) => row.id));
 }
 
+export interface ExportCatalogueProductFilters {
+  search?: string;
+  collectionSlug?: string;
+}
+
+export interface ExportCatalogueProductRow {
+  id: string;
+  sku: string;
+  slug: string;
+  name: string;
+  shortDescription: string | null;
+  exportDescription: string | null;
+  weightGrams: number | null;
+  isExportFeatured: boolean;
+  collections: { id: string; name: string; slug: string }[];
+  images: { url: string; altText: string | null }[];
+}
+
+// The export catalogue's own query — deliberately not a filter on
+// findPublishedProductsForListing/buildProductListingWhere, which join
+// retail pricing (pricingService) and silently drop any product with no
+// resolvable price. Export visibility must never depend on retail price.
+function buildExportCatalogueWhere(filters: ExportCatalogueProductFilters): Prisma.ProductWhereInput {
+  return {
+    status: "Published",
+    isExportEnabled: true,
+    ...(filters.collectionSlug ? { collections: { some: { slug: filters.collectionSlug } } } : {}),
+    ...(filters.search
+      ? {
+          OR: [
+            { name: { contains: escapeLikePattern(filters.search), mode: "insensitive" as const } },
+            { sku: { contains: escapeLikePattern(filters.search), mode: "insensitive" as const } },
+          ],
+        }
+      : {}),
+  };
+}
+
+export async function findExportCatalogueProducts(
+  filters: ExportCatalogueProductFilters,
+  page: number,
+  pageSize: number,
+): Promise<{ items: ExportCatalogueProductRow[]; total: number }> {
+  const where = buildExportCatalogueWhere(filters);
+  const [items, total] = await Promise.all([
+    prisma.product.findMany({
+      where,
+      orderBy: [{ isExportFeatured: "desc" }, { exportDisplayOrder: "asc" }, { name: "asc" }],
+      skip: (page - 1) * pageSize,
+      take: pageSize,
+      select: {
+        id: true,
+        sku: true,
+        slug: true,
+        name: true,
+        shortDescription: true,
+        exportDescription: true,
+        weightGrams: true,
+        isExportFeatured: true,
+        collections: { select: { id: true, name: true, slug: true } },
+        images: { where: { isPrimary: true }, take: 1, select: { url: true, altText: true } },
+      },
+    }),
+    prisma.product.count({ where }),
+  ]);
+  return { items, total };
+}
+
+/** Explicit id list for PDF generation (both the public and admin-staff routes) — same hardcoded visibility rule as the catalogue listing above, never caller-supplied, so a stale/tampered id in a buyer's selection is silently excluded rather than leaking an unpublished product. */
+export function findExportCatalogueProductsByIds(ids: string[]) {
+  if (ids.length === 0) return Promise.resolve([]);
+  return prisma.product.findMany({
+    where: { id: { in: ids }, status: "Published", isExportEnabled: true },
+    select: {
+      id: true,
+      sku: true,
+      name: true,
+      shortDescription: true,
+      exportDescription: true,
+      weightGrams: true,
+      images: { where: { isPrimary: true }, take: 1, select: { url: true, altText: true } },
+    },
+  });
+}
+
 export function findProductsForCompareByIds(ids: string[]) {
   if (ids.length === 0) return Promise.resolve([]);
   return prisma.product.findMany({
@@ -439,6 +524,76 @@ export async function listProductsForAdmin(
     prisma.product.count({ where }),
   ]);
   return { items, total };
+}
+
+// --- Export catalogue admin management (Phase 6) ---
+// Deliberately separate from AdminProductListFilters/buildAdminListWhere
+// above: this screen lists every status (a Draft product can still be
+// export-enabled ahead of its retail launch) and has no stock-level
+// filter, so a parallel where-builder is clearer than overloading the
+// retail list's filter shape with export-only concerns.
+
+export interface ExportCatalogueAdminListFilters {
+  search?: string;
+  status?: ProductStatus;
+}
+
+export interface ExportCatalogueAdminListRow {
+  id: string;
+  sku: string;
+  name: string;
+  status: ProductStatus;
+  isExportEnabled: boolean;
+  isExportFeatured: boolean;
+  exportDisplayOrder: number;
+  images: { url: string; altText: string | null }[];
+}
+
+function buildExportCatalogueAdminWhere(filters: ExportCatalogueAdminListFilters): Prisma.ProductWhereInput {
+  return {
+    ...(filters.status ? { status: filters.status } : {}),
+    ...(filters.search
+      ? {
+          OR: [
+            { name: { contains: escapeLikePattern(filters.search), mode: "insensitive" as const } },
+            { sku: { contains: escapeLikePattern(filters.search), mode: "insensitive" as const } },
+          ],
+        }
+      : {}),
+  };
+}
+
+export async function listProductsForExportCatalogueAdmin(
+  filters: ExportCatalogueAdminListFilters,
+  page: number,
+  pageSize: number,
+): Promise<{ items: ExportCatalogueAdminListRow[]; total: number }> {
+  const where = buildExportCatalogueAdminWhere(filters);
+  const [items, total] = await Promise.all([
+    prisma.product.findMany({
+      where,
+      orderBy: [{ isExportEnabled: "desc" }, { updatedAt: "desc" }, { id: "asc" }],
+      skip: (page - 1) * pageSize,
+      take: pageSize,
+      select: {
+        id: true,
+        sku: true,
+        name: true,
+        status: true,
+        isExportEnabled: true,
+        isExportFeatured: true,
+        exportDisplayOrder: true,
+        images: { where: { isPrimary: true }, take: 1, select: { url: true, altText: true } },
+      },
+    }),
+    prisma.product.count({ where }),
+  ]);
+  return { items, total };
+}
+
+/** Enable/disable export visibility in bulk — never touches any other field, never the retail product's own status. */
+export function bulkSetExportVisibility(ids: string[], isExportEnabled: boolean) {
+  return prisma.product.updateMany({ where: { id: { in: ids } }, data: { isExportEnabled } });
 }
 
 /** Reads the full detail row a duplicate copies from — product-admin.service.ts decides what to carry over (never pricing). */

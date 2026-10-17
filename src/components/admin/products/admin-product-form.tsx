@@ -40,12 +40,13 @@ const NEXT_STATUSES: Record<string, string[]> = {
 
 const PRODUCT_TYPES = ["Standard", "Bundle", "GiftPack", "Seasonal", "LimitedEdition"] as const;
 
-const TAB_ORDER = ["general", "nutrition", "media", "rewards"] as const;
+const TAB_ORDER = ["general", "nutrition", "media", "rewards", "export"] as const;
 const TAB_LABELS: Record<(typeof TAB_ORDER)[number], string> = {
   general: "General",
   nutrition: "Nutrition & Ingredients",
   media: "Media",
   rewards: "Rewards & Stock",
+  export: "Export & Wholesale",
 };
 /**
  * Every top-level productAdminSchema key that has a UI field, mapped to the
@@ -82,6 +83,10 @@ const TAB_BY_FIELD: Record<string, (typeof TAB_ORDER)[number]> = {
   inStock: "rewards",
   stockQuantity: "rewards",
   weightGrams: "rewards",
+  isExportEnabled: "export",
+  exportDescription: "export",
+  isExportFeatured: "export",
+  exportDisplayOrder: "export",
 };
 
 const EMPTY_VALUES: ProductAdminFormInput = {
@@ -93,6 +98,10 @@ const EMPTY_VALUES: ProductAdminFormInput = {
   story: "",
   productType: "Standard",
   isFeatured: false,
+  isExportEnabled: false,
+  exportDescription: "",
+  isExportFeatured: false,
+  exportDisplayOrder: 0,
   brandId: undefined,
   categoryIds: [],
   collectionIds: [],
@@ -199,6 +208,10 @@ export function AdminProductForm({ productId }: { productId?: string }) {
       story: existingProduct.story ?? "",
       productType: existingProduct.productType,
       isFeatured: existingProduct.isFeatured,
+      isExportEnabled: existingProduct.isExportEnabled,
+      exportDescription: existingProduct.exportDescription ?? "",
+      isExportFeatured: existingProduct.isExportFeatured,
+      exportDisplayOrder: existingProduct.exportDisplayOrder,
       brandId: existingProduct.brand?.id,
       categoryIds: existingProduct.categories.map((c: { id: string }) => c.id),
       collectionIds: existingProduct.collections.map((c: { id: string }) => c.id),
@@ -379,6 +392,7 @@ export function AdminProductForm({ productId }: { productId?: string }) {
           <TabsTrigger value="media">Media</TabsTrigger>
           <TabsTrigger value="seo">SEO</TabsTrigger>
           <TabsTrigger value="rewards">Rewards &amp; Stock</TabsTrigger>
+          <TabsTrigger value="export">Export &amp; Wholesale</TabsTrigger>
         </TabsList>
 
         <TabsContent value="general" className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -828,6 +842,39 @@ export function AdminProductForm({ productId }: { productId?: string }) {
               name="inStock"
               render={({ field }) => <CheckboxOption label="In stock" checked={field.value ?? true} onCheckedChange={field.onChange} />}
             />
+          </div>
+        </TabsContent>
+
+        <TabsContent value="export" className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div className="sm:col-span-2 pt-1">
+            <Controller
+              control={control}
+              name="isExportEnabled"
+              render={({ field }) => <CheckboxOption label="Enable for Export & Wholesale catalogue" checked={field.value ?? false} onCheckedChange={field.onChange} />}
+            />
+            <p className="mt-1 text-caption text-charcoal/60">
+              Shows this product on the public /export catalogue — never affects its retail visibility on /products.
+            </p>
+          </div>
+          <div className="sm:col-span-2">
+            <Label htmlFor="product-export-description">Export description (optional)</Label>
+            <Textarea id="product-export-description" rows={4} {...register("exportDescription")} />
+            <p className="mt-1 text-caption text-charcoal/60">
+              Shown on the export catalogue and in the generated PDF instead of the retail short description, when set.
+            </p>
+          </div>
+          <div className="pt-6">
+            <Controller
+              control={control}
+              name="isExportFeatured"
+              render={({ field }) => <CheckboxOption label="Featured on export catalogue" checked={field.value ?? false} onCheckedChange={field.onChange} />}
+            />
+            <p className="mt-1 text-caption text-charcoal/60">Distinct from the general &quot;Featured product&quot; flag above.</p>
+          </div>
+          <div>
+            <Label htmlFor="product-export-order">Export display order</Label>
+            <Input id="product-export-order" type="number" {...register("exportDisplayOrder", { setValueAs: (value) => (value === "" ? 0 : Number(value)) })} />
+            <p className="mt-1 text-caption text-charcoal/60">Lower numbers appear first among featured export products.</p>
           </div>
         </TabsContent>
       </Tabs>
