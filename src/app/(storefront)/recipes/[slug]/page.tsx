@@ -6,8 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Breadcrumbs } from "@/components/storefront/layout/breadcrumbs";
 import { Section } from "@/components/storefront/layout/section";
 import { RecipeAssistantEntryPoint } from "@/components/storefront/ai/recipe-assistant-entry-point";
-import { ChefNotes } from "@/components/storefront/recipes/chef-notes";
-import { MethodSteps } from "@/components/storefront/recipes/method-steps";
+import { FeaturedRecipeProducts } from "@/components/storefront/recipes/featured-recipe-products";
 import { RecipeBookmarkButton } from "@/components/storefront/recipes/recipe-bookmark-button";
 import { RecipeDetailView } from "@/components/storefront/recipes/recipe-detail-view";
 import { RecipeHero } from "@/components/storefront/recipes/recipe-hero";
@@ -148,16 +147,8 @@ export default async function RecipeDetailPage({ params }: RecipeDetailPageProps
       <div className="mt-10">
         <RecipeDetailView recipe={recipe} pageUrl={pageUrl} />
       </div>
-      <div className="mt-10 grid grid-cols-1 gap-10 lg:grid-cols-3">
-        <div className="lg:col-span-2">
-          <h2 className="text-h3 font-heading text-charcoal">Method</h2>
-          <div className="mt-3">
-            <MethodSteps steps={recipe.steps} />
-          </div>
-          <div className="mt-8">
-            <ChefNotes notes={recipe.chefNotes} />
-          </div>
-        </div>
+      <div className="mt-10">
+        <FeaturedRecipeProducts products={recipe.featuredProducts} />
       </div>
       <div className="mt-10">
         <RecipeReviewsSection recipeSlug={recipe.slug} initialReviewPage={initialReviewPage} />

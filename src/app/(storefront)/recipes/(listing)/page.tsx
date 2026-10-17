@@ -27,13 +27,13 @@ export default async function RecipesPage({ searchParams }: RecipesPageProps) {
   return (
     <Section>
       <ItemListJsonLd items={result.recipes.map((recipe) => ({ href: recipe.href, name: recipe.title }))} />
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h1 className="text-h1 font-heading text-charcoal">Recipe Centre</h1>
-          <p className="mt-2 max-w-2xl text-body text-charcoal/80">
-            Authentic Sri Lankan dishes, from weeknight curries to festival sweets, made with Oristor spices and pantry staples.
-          </p>
-        </div>
+      <div className="mx-auto max-w-2xl text-center">
+        <h1 className="text-h1 font-heading text-charcoal">Recipe Centre</h1>
+        <p className="mx-auto mt-2 max-w-2xl text-body text-charcoal/80">
+          Authentic Sri Lankan dishes, from weeknight curries to festival sweets, made with Oristor spices and pantry staples.
+        </p>
+      </div>
+      <div className="mt-6 flex justify-center">
         <RecipeAssistantTrigger dietaryTagOptions={facets.dietaryTags} categoryOptions={facets.categories} />
       </div>
       <div className="mt-8">
