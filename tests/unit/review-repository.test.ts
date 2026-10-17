@@ -9,7 +9,9 @@ import {
   findRatingSummary,
   findReviewById,
   findReviewByProductAndUser,
+  listFeaturedReviews,
   listPublishedReviews,
+  setFeatured,
   updateOwnPendingReviewContent,
   updateStatusAndRecalculate,
 } from "@/repositories/review.repository";
@@ -214,5 +216,33 @@ describe("updateStatusAndRecalculate", () => {
     await updateStatusAndRecalculate(pending.id, product.id, "Pending", { status: "Approved" }, false);
 
     expect(await findRatingSummary(product.id)).toMatchObject({ reviewCount: 1, count5: 1 });
+  });
+});
+
+describe("listFeaturedReviews", () => {
+  it("only returns reviews that are both Published and featured, newest first, capped at the limit", async () => {
+    const product = await makeProduct();
+    const notFeatured = await makePublishedReview(product.id, 5, new Date("2026-01-01"));
+    const olderFeatured = await makePublishedReview(product.id, 4, new Date("2026-01-02"));
+    const newerFeatured = await makePublishedReview(product.id, 5, new Date("2026-01-03"));
+    const featuredButPending = await makeReview(product.id, 3);
+
+    await setFeatured(olderFeatured.id, true);
+    await setFeatured(newerFeatured.id, true);
+    await setFeatured(featuredButPending.id, true);
+    await setFeatured(notFeatured.id, false);
+
+    const featured = await listFeaturedReviews(10);
+    expect(featured.map((review) => review.id)).toEqual([newerFeatured.id, olderFeatured.id]);
+  });
+
+  it("respects the limit", async () => {
+    const product = await makeProduct();
+    for (let i = 0; i < 3; i += 1) {
+      const review = await makePublishedReview(product.id, 5, new Date(2026, 0, i + 1));
+      await setFeatured(review.id, true);
+    }
+
+    expect(await listFeaturedReviews(2)).toHaveLength(2);
   });
 });

@@ -13,9 +13,9 @@ import { WhyChooseOristor } from "@/components/storefront/home/why-choose-oristo
 import { getFeaturedCategoriesForStorefront } from "@/services/category.service";
 import { getFeaturedCollectionsForStorefront } from "@/services/collection.service";
 import { getRecentPostsForStorefront } from "@/services/instagram.service";
-import type { CategoryCardData, CollectionCardData, InstagramPostData } from "@/types/home";
+import { getFeaturedReviewsForStorefront } from "@/services/review.service";
+import type { CategoryCardData, CollectionCardData, InstagramPostData, ReviewData } from "@/types/home";
 import {
-  customerReviews,
   exportSolutions,
   featuredCategories,
   foodAcademyTeaser,
@@ -88,6 +88,19 @@ export async function HomepageSections({ layout }: { layout: HomepageLayoutDetai
         }))
       : productCollections;
 
+  const hasCustomerReviewsSection = visibleSections.some((section) => section.type === "CustomerReviews");
+  const featuredReviews = hasCustomerReviewsSection ? await getFeaturedReviewsForStorefront(6) : [];
+  // No fixture fallback here, unlike Instagram above — the old fallback was
+  // fabricated testimonials attributed to invented people, which is worse
+  // than an empty section. Nothing renders until an admin features at
+  // least one real, published review.
+  const resolvedReviews: ReviewData[] = featuredReviews.map((review) => ({
+    id: review.id,
+    authorName: review.authorName,
+    rating: review.rating,
+    quote: review.body,
+  }));
+
   return (
     <>
       {visibleSections.map((section) => {
@@ -141,7 +154,8 @@ export async function HomepageSections({ layout }: { layout: HomepageLayoutDetai
               />
             );
           case "CustomerReviews":
-            return <CustomerReviews key={section.id} reviews={customerReviews} titleOverride={section.titleOverride} />;
+            if (resolvedReviews.length === 0) return null;
+            return <CustomerReviews key={section.id} reviews={resolvedReviews} titleOverride={section.titleOverride} />;
           case "ExportSolutions":
             return (
               <ExportSolutions

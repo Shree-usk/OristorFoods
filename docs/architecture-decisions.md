@@ -10158,3 +10158,32 @@ always re-seed and never assume "db push succeeded" means "data survived."
 on the VPS; no commit/branch/PR created — all changes sit uncommitted on
 `master` pending the user's explicit go-ahead, per this session's
 established per-step confirmation convention).
+
+## 2026-10-10 — Homepage "What Our Customers Say" cut over to real reviews
+
+Found while reviewing the homepage after the Instagram fix above: the
+"What Our Customers Say" section was rendering 3 fully fabricated
+testimonials from `home-fixtures.ts` (`customerReviews` — invented names,
+invented quotes), presented as genuine customer feedback. Worse than the
+Instagram case (real old photos) — this was never-real content. Already
+flagged as a known gap in `docs/blueprint.md`'s own text ("Customer
+Reviews homepage section never wired to curated/featured reviews").
+
+The real review system (submission, moderation, an admin-togglable
+`featured` flag) already existed end-to-end and needed no new schema —
+just one missing cross-product query:
+`review.repository.ts::listFeaturedReviews(limit)` (`status: Published
+AND featured: true`, newest first) and
+`review.service.ts::getFeaturedReviewsForStorefront(limit)` (no
+permission gate, same as `instagram.service.ts::getRecentPostsForStorefront`
+— public storefront data).
+
+**Deliberately no fixture fallback**, unlike Instagram's gallery: when
+nothing is featured yet, `HomepageSections`' `CustomerReviews` case now
+returns `null` instead of a section — an empty homepage is more honest
+than fake quotes attributed to invented people. An admin makes it appear
+by publishing a real review and toggling Featured in `/admin/reviews`.
+`home-fixtures.ts`'s `customerReviews` export is untouched and still used
+by `(storefront)/page.tsx`'s own no-published-layout fallback branch
+(same light-touch-scope reasoning as every other section there) — only
+the CMS-driven `HomepageSections` path was cut over.
