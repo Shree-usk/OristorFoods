@@ -1,5 +1,7 @@
 "use client";
 
+import Image from "next/image";
+
 import { cn } from "@/lib/utils";
 import type { ProductDetailVariant } from "@/services/product.service";
 
@@ -26,6 +28,7 @@ export function VariantSelector({ variants, selectedVariantId, onSelect }: Varia
         {variants.map((variant) => {
           const unavailable = !variant.inStock || variant.stockQuantity <= 0;
           const selected = variant.id === selectedVariantId;
+          const image = variant.images[0];
           return (
             <button
               key={variant.id}
@@ -34,11 +37,18 @@ export function VariantSelector({ variants, selectedVariantId, onSelect }: Varia
               aria-pressed={selected}
               onClick={() => onSelect(variant.id)}
               className={cn(
-                "rounded-md border px-3 py-2 text-small transition-colors",
+                "flex items-center gap-2 rounded-md border px-3 py-2 text-small transition-colors",
                 selected ? "border-chilli bg-chilli/10 text-chilli" : "border-input text-charcoal hover:border-charcoal/40",
                 unavailable && "cursor-not-allowed border-input bg-muted text-charcoal/40 hover:border-input",
               )}
             >
+              {image ? (
+                <Image src={image.url} alt="" width={24} height={24} className="size-6 shrink-0 rounded object-contain" />
+              ) : (
+                <span className="flex size-6 shrink-0 items-center justify-center rounded bg-beige text-[10px] text-charcoal/40" aria-hidden="true">
+                  —
+                </span>
+              )}
               {variant.name}
               {unavailable && <span className="ml-1.5">(unavailable)</span>}
             </button>
