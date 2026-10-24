@@ -42,22 +42,25 @@ export function ProductGallery({ images, videos = [], variants = [], productName
     setActiveIndex(0);
   }
 
-  const slides: GallerySlide[] = [
+  const gallery: GallerySlide[] = [
     ...activeImages.map((image) => ({ type: "image" as const, url: image.url, altText: image.altText ?? productName })),
     ...videos.map((video) => ({ type: "video" as const, url: video.url, altText: video.altText })),
   ];
-  const gallery: GallerySlide[] =
-    slides.length > 0 ? slides : [{ type: "image", url: "", altText: productName }];
-  const active = gallery[activeIndex];
+  // No images and no video — genuinely nothing to show, not an error state to
+  // force through next/image with an empty src (which renders broken).
+  const active = gallery[activeIndex] ?? null;
 
   return (
     <div>
       <Dialog>
         <DialogTrigger
           className="relative block aspect-square w-full overflow-hidden rounded-lg bg-cream"
-          aria-label={`Zoom in on ${active.altText}`}
+          aria-label={active ? `Zoom in on ${active.altText}` : `${productName}: no image available`}
+          disabled={active === null}
         >
-          {active.type === "video" ? (
+          {active === null ? (
+            <div className="flex size-full items-center justify-center text-small text-charcoal/40">No image available</div>
+          ) : active.type === "video" ? (
             <video src={active.url} className="size-full object-contain p-6" muted playsInline />
           ) : (
             <Image
@@ -69,15 +72,17 @@ export function ProductGallery({ images, videos = [], variants = [], productName
             />
           )}
         </DialogTrigger>
-        <DialogContent aria-label={`${productName} media, enlarged`}>
-          {active.type === "video" ? (
-            <video src={active.url} className="max-h-[80vh] w-full" controls autoPlay />
-          ) : (
-            <div className="relative aspect-square w-full">
-              <Image src={active.url} alt={active.altText} fill sizes="90vw" className="object-contain" />
-            </div>
-          )}
-        </DialogContent>
+        {active !== null && (
+          <DialogContent aria-label={`${productName} media, enlarged`}>
+            {active.type === "video" ? (
+              <video src={active.url} className="max-h-[80vh] w-full" controls autoPlay />
+            ) : (
+              <div className="relative aspect-square w-full">
+                <Image src={active.url} alt={active.altText} fill sizes="90vw" className="object-contain" />
+              </div>
+            )}
+          </DialogContent>
+        )}
       </Dialog>
       {gallery.length > 1 && (
         <div className="mt-3 flex gap-2">

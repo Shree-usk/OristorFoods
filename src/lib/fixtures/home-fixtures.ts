@@ -180,7 +180,7 @@ export const exportSolutions: TeaserSectionData = {
   headline: "Partner with Oristor for Global Distribution",
   description:
     "From single-origin sourcing to bulk export packaging, we work with distributors, importers, and retailers worldwide.",
-  ctaLabel: "Explore Export Solutions",
+  ctaLabel: "Explore Export Catalogue",
   ctaHref: "/export",
   imageSrc: "/images/products/export/Kithul-Jaggery-500g.png",
   imageAlt: "Oristor Kithul jaggery export packaging",

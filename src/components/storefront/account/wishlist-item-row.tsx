@@ -6,6 +6,7 @@ import { ShoppingCart, Trash2 } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { ImagePlaceholder } from "@/components/storefront/product/image-placeholder";
 import { useAddToCart } from "@/hooks/use-add-to-cart";
 import type { ProductListItem } from "@/types/product";
 
@@ -19,7 +20,7 @@ export function WishlistItemRow({ item, onRemove }: { item: ProductListItem; onR
   return (
     <li className="flex items-center gap-4 border-b border-border py-4 last:border-none">
       <Link href={item.href} className="relative size-20 shrink-0 overflow-hidden rounded-lg bg-cream">
-        <Image src={item.imageSrc} alt={item.imageAlt} fill sizes="80px" className="object-contain p-2" />
+        {item.imageSrc ? <Image src={item.imageSrc} alt={item.imageAlt} fill sizes="80px" className="object-contain p-2" /> : <ImagePlaceholder size="sm" />}
       </Link>
       <div className="flex-1">
         <Link href={item.href} className="font-medium text-charcoal hover:underline">

@@ -97,7 +97,7 @@ function toLineItem(
     packagingRatePerGram: item.packagingOption?.ratePerGram?.toNumber() ?? null,
     packagingNetWeightGrams,
     packagingMinimumChargeApplied,
-    imageSrc: primaryImage?.url ?? "",
+    imageSrc: primaryImage?.url ?? null,
     imageAlt: primaryImage?.altText ?? item.product.name,
     quantity: item.quantity,
     unitPrice: resolvedUnitPrice,

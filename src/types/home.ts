@@ -32,13 +32,16 @@ export interface CategoryCardData {
   href: string;
   imageSrc: ImageSource;
   imageAlt: string;
+  /** Admin-entered Category.description — optional since the fixture fallback and some real categories leave it unset. */
+  description?: string | null;
 }
 
 export interface ProductCardData {
   id: string;
   name: string;
   href: string;
-  imageSrc: ImageSource;
+  /** Null when the product has no image — render a placeholder, never an empty src. */
+  imageSrc: ImageSource | null;
   imageAlt: string;
   /** Smallest-unit-free decimal amount, e.g. 1250 for "Rs. 1,250.00". */
   price: number;

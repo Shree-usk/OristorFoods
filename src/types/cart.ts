@@ -31,7 +31,8 @@ export interface CartLineItem {
   /** This line's own attributed net weight in grams — present only for a valid PerGram selection. */
   packagingNetWeightGrams: number | null;
   packagingMinimumChargeApplied: boolean;
-  imageSrc: string;
+  /** Null when the product/variant has no image — render a placeholder, never an empty src. */
+  imageSrc: string | null;
   imageAlt: string;
   quantity: number;
   unitPrice: number;

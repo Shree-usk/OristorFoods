@@ -9,9 +9,9 @@ export function WhyChooseOristor({ features, titleOverride }: { features: WhyCho
       <div className="mt-8 grid grid-cols-1 gap-8 sm:grid-cols-2 lg:grid-cols-4">
         {features.map((feature, index) => (
           <ScrollReveal key={feature.id} delay={index * 0.05}>
-            <div className="flex items-start gap-4 sm:flex-col sm:items-start sm:gap-3">
-              <div className="flex size-12 shrink-0 items-center justify-center rounded-full bg-gold/20 text-gold">
-                <feature.icon className="size-6" aria-hidden="true" />
+            <div className="flex items-start gap-4 border-t border-charcoal/15 pt-5 sm:flex-col sm:items-start sm:gap-3">
+              <div className="flex size-14 shrink-0 items-center justify-center rounded-full bg-gold/20 text-gold">
+                <feature.icon className="size-7" aria-hidden="true" />
               </div>
               <div>
                 <p className="text-h4 font-heading text-charcoal">{feature.title}</p>

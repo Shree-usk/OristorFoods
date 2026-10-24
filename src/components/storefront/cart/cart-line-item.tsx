@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Minus, Plus, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { ImagePlaceholder } from "@/components/storefront/product/image-placeholder";
 import type { CartLineItem } from "@/types/cart";
 
 interface CartLineItemRowProps {
@@ -26,7 +27,7 @@ export function CartLineItemRow({ item, onQuantityChange, onRemove, isMutating =
   return (
     <div className="flex gap-4 border-b border-input py-4" aria-describedby={hasNotice ? noticeId : undefined}>
       <div className="relative size-20 shrink-0">
-        <Image src={item.imageSrc} alt={item.imageAlt} fill sizes="80px" className="rounded-lg object-cover" />
+        {item.imageSrc ? <Image src={item.imageSrc} alt={item.imageAlt} fill sizes="80px" className="rounded-lg object-cover" /> : <ImagePlaceholder size="sm" />}
       </div>
       <div className="flex-1">
         <Link href={`/products/${item.productSlug}`} className="text-body font-medium text-charcoal hover:underline">
