@@ -32,6 +32,8 @@ export interface CategoryCardData {
   href: string;
   imageSrc: ImageSource;
   imageAlt: string;
+  /** Admin-entered Category.description — optional since the fixture fallback and some real categories leave it unset. */
+  description?: string | null;
 }
 
 export interface ProductCardData {
