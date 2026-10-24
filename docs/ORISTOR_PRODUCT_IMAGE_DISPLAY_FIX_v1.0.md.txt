@@ -1,0 +1,12 @@
+Additional Requirement: Fix Missing Product Thumbnail Images
+Issue: Product images are not visible in the product selection area
+Required changes:
+1.	Display each product's existing image beside its name in the product selection area.
+2.	Use the actual product images already stored in the website's product catalogue or media library. Do not create substitute images or change existing product images.
+3.	Show the product name, available variant/net weight (e.g., 200g or 350g), and selection control clearly.
+4.	When a customer selects a variant, use that variant's net weight to calculate the total eligible weight and packaging charge.
+5.	Handle missing or broken image URLs gracefully, using a consistent placeholder rather than a blank image area.
+6.	Check image paths, API responses, database fields, and frontend rendering to identify the actual cause of the missing images. Fix the root cause rather than hiding the issue.
+7.	Ensure images load correctly on desktop and mobile, with appropriate sizing and aspect ratios.
+8.	Test the product selection area with multiple products and variants, including products with missing images.
+Important: Preserve existing product images, labels, product data, and the current website design. Implement the fix on a feature branch, run the relevant tests, and open a pull request. Do not deploy to production without approval.

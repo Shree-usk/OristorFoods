@@ -1,0 +1,79 @@
+
+ORISTOR — Weight-Based Custom Packaging Pricing
+Reference product page: https://staging.oristor.com/products/oristor-seafood-chile-paste
+Implement weight-based pricing for the existing custom packaging feature in Project Cinnamon.
+Objective
+For eligible products, customers can select a custom packaging method, such as foil pouch or vacuum packaging. The packaging charge must be calculated from the total net product weight selected for that packaging method, multiplied by an administrator-configured rate per gram.
+Formula:
+Packaging charge = total eligible net weight in grams × configured rate per gram
+1. Inspect the existing implementation
+Inspect the current product variant model, variant net-weight fields, product purchase panel, cart, custom packaging options, export checkout flow, order snapshots, and Admin Console packaging configuration.
+Reuse the existing implementation. Do not introduce duplicate packaging models or modify unrelated checkout functionality.
+Use the Seafood Chili Paste product page as the reference for the customer-facing variant and packaging selection experience.
+2. Admin Console configuration
+Extend the existing packaging configuration to support these pricing methods:
+•	Fixed charge, if already supported.
+•	Per-gram charge.
+For per-gram pricing, administrators must be able to configure:
+•	Packaging method.
+•	Rate per gram.
+•	Currency, consistent with the existing store pricing model.
+•	Eligible products and variants.
+•	Optional minimum order weight.
+•	Optional minimum packaging charge.
+•	Availability status.
+Allow separate rates for foil packaging, vacuum packaging and other configured packaging methods.
+Validate rates and configuration on the server. Do not hard-code the example rate into application logic.
+3. Customer-facing product and cart behaviour
+On eligible product pages:
+•	Display the available packaging methods.
+•	When the customer selects a per-gram packaging method, calculate the total net weight using the selected variant and quantity.
+•	Show the configured rate per gram and the calculated packaging charge.
+•	Update the calculation when the variant, quantity or packaging method changes.
+•	Preserve the packaging selection when the product is added to the cart.
+For multiple selected variants, calculate:
+Total weight = sum of (variant net weight × selected quantity)
+Then calculate the packaging charge using the configured rate for the selected packaging method.
+For example, two 200 g units and one 350 g unit produce a total net weight of 750 g. At a hypothetical rate of LKR 0.50/g, the packaging charge is LKR 375.
+The example is illustrative only. The actual rate must come from the Admin Console.
+4. Cart and checkout
+•	Show the selected packaging method, eligible net weight, rate and packaging charge in the cart and checkout.
+•	Update the charge when quantities change.
+•	Do not apply packaging charges to products that are not assigned to that packaging method.
+•	If different products use different packaging methods, calculate each method separately.
+•	Ensure the final order total includes the packaging charge exactly once.
+•	Preserve the existing card and bank-transfer restrictions for custom-packaging orders.
+•	Continue to enforce payment restrictions on the server.
+5. Calculation and rounding
+•	Use the authoritative net weight stored for each sellable variant.
+•	Do not use shipping weight, jar weight or gross weight unless the existing business model explicitly defines those as the billable packaging weight.
+•	Calculate the total weight and charge on the server before order creation.
+•	Use appropriate decimal or integer arithmetic to avoid floating-point currency errors.
+•	Apply the store's established currency rounding rules.
+•	Validate the selected packaging method, eligible variants, quantities and configured rate at checkout.
+6. Order snapshot
+Persist the following information with the order or relevant order line:
+•	Packaging method.
+•	Selected variant and quantity.
+•	Total eligible net weight in grams.
+•	Rate per gram at purchase time.
+•	Final packaging charge.
+•	Any applicable minimum charge.
+•	The currency used.
+Historical orders must retain the rate and calculated charge even if an administrator changes the packaging configuration later.
+7. Testing
+Test these scenarios:
+1.	One 200 g unit.
+2.	Multiple units of the same variant.
+3.	Multiple variants with different net weights.
+4.	Different packaging methods with different rates.
+5.	A product that is not eligible for custom packaging.
+6.	Quantity changes in the product page and cart.
+7.	Minimum weight or minimum charge, if configured.
+8.	Server-side rejection of manipulated rates or invalid packaging selections.
+9.	Correct order snapshot and final order total.
+10.	Existing standard checkout and payment restrictions remain unchanged.
+Use test data and staging only. Do not process real payments.
+8. Delivery
+Implement the change on a feature branch, run the relevant tests and build, and open a PR.
+Do not modify production oristor.com. Do not deploy to staging until the PR is approved. Report the changed files, migration requirements, test results and any configuration required in the Admin Console

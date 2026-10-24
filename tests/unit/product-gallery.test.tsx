@@ -73,4 +73,12 @@ describe("ProductGallery", () => {
     expect(screen.getByAltText("Variant photo")).toBeInTheDocument();
     expect(screen.queryByAltText("Primary")).not.toBeInTheDocument();
   });
+
+  it("shows a graceful placeholder instead of a broken image when there are no images or video", () => {
+    renderGallery({ images: [], productName: "Curry Powder" });
+
+    expect(screen.getByText("No image available")).toBeInTheDocument();
+    expect(screen.queryByRole("img")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /no image available/i })).toBeDisabled();
+  });
 });
