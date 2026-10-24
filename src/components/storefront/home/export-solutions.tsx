@@ -1,6 +1,6 @@
 import type { TeaserSectionData } from "@/types/home";
-import { TeaserSection } from "./teaser-section";
+import { ExportBanner } from "./export-banner";
 
 export function ExportSolutions({ data }: { data: TeaserSectionData }) {
-  return <TeaserSection data={data} reverse className="bg-beige" />;
+  return <ExportBanner data={data} />;
 }

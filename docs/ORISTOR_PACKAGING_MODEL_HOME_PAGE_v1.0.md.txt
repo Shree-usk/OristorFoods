@@ -1,0 +1,11 @@
+Review the attached ORISTOR homepage HTML concept and compare it with the current homepage on staging.oristor.com.
+Use the concept as UI direction, not as a replacement implementation. Adapt the existing Next.js components, Tailwind styles, CMS content and admin-controlled settings wherever possible.
+Priorities:
+1.	Improve category card hierarchy and spacing.
+2.	Make product discovery and shopping actions clearer.
+3.	Refine the “Why Choose ORISTOR?” section.
+4.	Add a prominent link to the existing export catalogue.
+5.	Ensure responsive desktop, tablet and mobile layouts.
+6.	Preserve the ORISTOR brand colours, existing product images and labels, navigation, SEO, accessibility and existing functionality.
+Do not hard-code content that is already admin-managed. Do not replace real product imagery with the prototype's sample symbols. Implement on a feature branch, test, and open a PR. Do not deploy to production.
+

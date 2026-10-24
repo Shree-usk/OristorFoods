@@ -68,6 +68,7 @@ export async function HomepageSections({ layout }: { layout: HomepageLayoutDetai
           href: `/products/category/${category.slug}`,
           imageSrc: category.image!,
           imageAlt: category.name,
+          description: category.description,
         }))
       : featuredCategories;
 
