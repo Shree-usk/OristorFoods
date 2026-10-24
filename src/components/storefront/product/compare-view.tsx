@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 import { Button, buttonVariants } from "@/components/ui/button";
+import { ImagePlaceholder } from "@/components/storefront/product/image-placeholder";
 import { useMediaQuery } from "@/hooks/use-media-query";
 import { useCompareStore } from "@/lib/stores/compare-store";
 import type { CompareItem } from "@/services/product.service";
@@ -102,7 +103,7 @@ export function CompareView({ items: initialItems }: { items: CompareItem[] }) {
                     </Button>
                     <Link href={`/products/${item.slug}`} className="block">
                       <div className="relative aspect-square size-24 overflow-hidden rounded-lg bg-cream">
-                        <Image src={item.imageSrc} alt={item.imageAlt} fill sizes="96px" className="object-contain p-2" />
+                        {item.imageSrc ? <Image src={item.imageSrc} alt={item.imageAlt} fill sizes="96px" className="object-contain p-2" /> : <ImagePlaceholder size="sm" />}
                       </div>
                       <p className="mt-2 font-medium text-charcoal">{item.name}</p>
                     </Link>
@@ -131,7 +132,7 @@ export function CompareView({ items: initialItems }: { items: CompareItem[] }) {
               <div className="flex items-start justify-between">
                 <Link href={`/products/${item.slug}`} className="flex items-center gap-3">
                   <div className="relative size-16 shrink-0 overflow-hidden rounded-lg bg-cream">
-                    <Image src={item.imageSrc} alt={item.imageAlt} fill sizes="64px" className="object-contain p-2" />
+                    {item.imageSrc ? <Image src={item.imageSrc} alt={item.imageAlt} fill sizes="64px" className="object-contain p-2" /> : <ImagePlaceholder size="sm" />}
                   </div>
                   <p className="font-medium text-charcoal">{item.name}</p>
                 </Link>

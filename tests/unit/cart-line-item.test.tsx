@@ -104,4 +104,9 @@ describe("CartLineItemRow", () => {
     render(<CartLineItemRow item={baseItem} onQuantityChange={vi.fn()} onRemove={vi.fn()} error="Only 1 left in stock" />);
     expect(screen.getByText("Only 1 left in stock")).toBeInTheDocument();
   });
+
+  it("shows a placeholder instead of a broken image when imageSrc is null", () => {
+    render(<CartLineItemRow item={{ ...baseItem, imageSrc: null }} onQuantityChange={vi.fn()} onRemove={vi.fn()} />);
+    expect(screen.queryByRole("img")).not.toBeInTheDocument();
+  });
 });

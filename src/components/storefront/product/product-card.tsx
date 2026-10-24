@@ -7,6 +7,7 @@ import { Heart, Star } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { CompareToggle } from "@/components/storefront/product/compare-toggle";
+import { ImagePlaceholder } from "@/components/storefront/product/image-placeholder";
 import { useWishlist } from "@/hooks/use-wishlist";
 import type { ProductListItem } from "@/types/product";
 
@@ -41,17 +42,21 @@ export function ProductCard({ product }: { product: ProductListItem }) {
         >
           <Heart className={wishlist.isWishlisted ? "fill-current" : undefined} />
         </Button>
-        <Image
-          src={product.imageSrc}
-          alt={product.imageAlt}
-          fill
-          sizes="(min-width: 1024px) 20vw, (min-width: 640px) 30vw, 45vw"
-          className={
-            product.inStock
-              ? "object-contain p-4 transition-transform duration-300 group-hover:scale-105"
-              : "object-contain p-4 opacity-50"
-          }
-        />
+        {product.imageSrc ? (
+          <Image
+            src={product.imageSrc}
+            alt={product.imageAlt}
+            fill
+            sizes="(min-width: 1024px) 20vw, (min-width: 640px) 30vw, 45vw"
+            className={
+              product.inStock
+                ? "object-contain p-4 transition-transform duration-300 group-hover:scale-105"
+                : "object-contain p-4 opacity-50"
+            }
+          />
+        ) : (
+          <ImagePlaceholder />
+        )}
         {!product.inStock && (
           <Badge variant="secondary" className="absolute bottom-2 left-2 z-10">
             Out of stock

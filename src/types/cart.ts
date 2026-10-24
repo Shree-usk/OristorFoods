@@ -25,7 +25,8 @@ export interface CartLineItem {
   packagingShelfLifeDays: number | null;
   packagingShelfLifeText: string | null;
   packagingInstructions: string | null;
-  imageSrc: string;
+  /** Null when the product/variant has no image — render a placeholder, never an empty src. */
+  imageSrc: string | null;
   imageAlt: string;
   quantity: number;
   unitPrice: number;

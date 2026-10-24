@@ -8,7 +8,7 @@ export const recentlyViewedItemSchema = z.object({
   id: z.string(),
   name: z.string(),
   href: z.string(),
-  imageSrc: z.string(),
+  imageSrc: z.string().nullable(),
   imageAlt: z.string(),
   price: z.number(),
   currency: z.string(),
