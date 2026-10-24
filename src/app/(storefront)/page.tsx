@@ -15,7 +15,6 @@ import { RewardsClubTeaser } from "@/components/storefront/home/rewards-club-tea
 import { WhyChooseOristor } from "@/components/storefront/home/why-choose-oristor";
 import {
   customerReviews,
-  exportSolutions,
   featuredCategories,
   foodAcademyTeaser,
   heroBanner,
@@ -89,7 +88,7 @@ export default async function Home() {
       <ProductCollections collections={productCollections} />
       <FoodAcademyTeaser data={foodAcademyTeaser} />
       <CustomerReviews reviews={customerReviews} />
-      <ExportSolutions data={exportSolutions} />
+      <ExportSolutions />
       <RewardsClubTeaser data={rewardsClubTeaser} />
       <InstagramGallery posts={instagramPosts} />
       {recipeAssistant}

@@ -3806,6 +3806,39 @@ model ExportCatalogueSetting {
   updatedAt   DateTime @updatedAt
 }
 
+// Homepage Export Hero section — a single configuration row (same
+// `id @default("global")` singleton convention as CompanySetting/
+// ExportCatalogueSetting). Every field is nullable; the storefront falls
+// back to real, on-brand default copy for anything unset, so the live
+// section never renders broken or blank before an admin configures it —
+// see export-hero.service.ts::getExportHeroForStorefront.
+model ExportHeroSetting {
+  id                 String  @id @default("global")
+  backgroundImageUrl String?
+  backgroundImageAlt String?
+  eyebrow            String?
+  /**
+   * Wrap one word/phrase in **double asterisks** to render it highlighted — parsed at render time by parseHighlightedHeadline, never rich text.
+   */
+  headline           String?
+  description        String? @db.VarChar(500)
+  primaryCtaLabel    String?
+  primaryCtaHref     String?
+  secondaryCtaLabel  String?
+  secondaryCtaHref   String?
+  /**
+   * {label, description}[] — the short stat line under the CTAs. Same Json? justification CompanySetting.socialLinks already uses for similarly-shaped, low-cardinality config.
+   */
+  statLine           Json?
+  badgeEyebrow       String?
+  badgeHeadline      String?
+  badgeDescription   String? @db.VarChar(300)
+  badgeCtaLabel      String?
+  badgeCtaHref       String?
+
+  updatedAt DateTime @updatedAt
+}
+
 // Strictly internal — never visible to the enquirer (AC). A reply sent
 // to the enquirer is tracked via writeAuditLog instead, not here; see
 // docs/architecture-decisions.md's STORY-058 entry.

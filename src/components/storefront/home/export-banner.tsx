@@ -25,8 +25,12 @@ export function ExportBanner({ data }: { data: TeaserSectionData }) {
             <h2 className="mt-2 text-h2 font-heading text-cream">{data.headline}</h2>
             <p className="mt-4 max-w-xl text-body text-cream/80">{data.description}</p>
           </div>
+          {/* variant="outline" defaults to bg-background (light) — on this
+              dark card that left cream text on a near-white button,
+              effectively invisible. bg-transparent overrides it so the
+              button reads as a true cream outline against the charcoal card. */}
           <Button
-            className="w-full shrink-0 border-cream text-cream hover:bg-cream/10 sm:w-auto"
+            className="w-full shrink-0 border-cream bg-transparent text-cream hover:bg-cream/10 sm:w-auto"
             variant="outline"
             nativeButton={false}
             render={<Link href={data.ctaHref} />}

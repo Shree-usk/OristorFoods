@@ -83,10 +83,11 @@ export interface WhyChooseFeatureData {
 }
 
 /**
- * Shared shape for the three marketing "teaser" sections (Food Academy,
- * Export Solutions, Rewards Club) — structurally identical (headline,
- * description, CTA, image), so one type/component pattern covers all
- * three instead of three near-duplicate ones.
+ * Shared shape for the marketing "teaser" sections that still use the
+ * plain image+text layout (Food Academy, Rewards Club) — structurally
+ * identical (headline, description, CTA, image), so one type/component
+ * pattern covers both instead of two near-duplicate ones. Export Solutions
+ * moved to the richer, admin-controllable ExportHeroData shape below.
  */
 export interface TeaserSectionData {
   eyebrow: string;
@@ -96,4 +97,26 @@ export interface TeaserSectionData {
   ctaHref: string;
   imageSrc: ImageSource;
   imageAlt: string;
+}
+
+/**
+ * Homepage "Export Solutions" hero — admin-controllable via
+ * ExportHeroSetting (a global singleton, same convention as CompanySetting
+ * /ExportCatalogueSetting). `headline` may contain one `**highlighted**`
+ * span, parsed at render time by parseHighlightedHeadline — never rich
+ * text. `badge` and `statLine` are optional: the component omits them
+ * entirely rather than rendering an empty card/row when unset.
+ */
+export interface ExportHeroData {
+  backgroundImageUrl: string | null;
+  backgroundImageAlt: string | null;
+  eyebrow: string | null;
+  headline: string | null;
+  description: string | null;
+  primaryCtaLabel: string | null;
+  primaryCtaHref: string | null;
+  secondaryCtaLabel: string | null;
+  secondaryCtaHref: string | null;
+  statLine: { label: string; description: string }[] | null;
+  badge: { eyebrow: string; headline: string; description: string; ctaLabel: string; ctaHref: string } | null;
 }
