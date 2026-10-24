@@ -83,6 +83,11 @@ export interface OrderDetailLineItem {
   packagingRequiresManualReview?: boolean;
   /** Export fulfilment flow. Permanent snapshot of the "special conditions" the admin set on this packaging option. */
   packagingInstructions?: string | null;
+  /** Weight-based packaging pricing (Story 3b). Null unless this line's packaging was PerGram. */
+  packagingChargeType?: "Fixed" | "PerGram" | null;
+  packagingRatePerGram?: number | null;
+  packagingNetWeightGrams?: number | null;
+  packagingMinimumChargeApplied?: boolean;
   unitPrice: number;
   quantity: number;
   lineTotal: number;
@@ -176,6 +181,10 @@ export async function getOrderDetail(orderNumber: string, userId: string): Promi
       packagingCharge: item.packagingCharge?.toNumber() ?? null,
       packagingRequiresManualReview: item.packagingRequiresManualReview,
       packagingInstructions: item.packagingInstructions,
+      packagingChargeType: item.packagingChargeType,
+      packagingRatePerGram: item.packagingRatePerGram?.toNumber() ?? null,
+      packagingNetWeightGrams: item.packagingNetWeightGrams,
+      packagingMinimumChargeApplied: item.packagingMinimumChargeApplied,
       unitPrice: item.unitPrice.toNumber(),
       quantity: item.quantity,
       lineTotal: item.lineTotal.toNumber(),

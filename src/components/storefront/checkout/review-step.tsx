@@ -106,7 +106,13 @@ export function ReviewStep({ cart }: { cart: CartSummary }) {
                   {item.productName}
                   {item.variantName && <span className="text-charcoal/70"> — {item.variantName}</span>} <span className="text-charcoal/70">× {item.quantity}</span>
                   {item.bundleName && <span className="ml-1 text-caption text-charcoal/60">(part of {item.bundleName})</span>}
-                  {item.packagingMethodName && <span className="ml-1 text-caption text-charcoal/60">+ {item.packagingMethodName} packaging</span>}
+                  {item.packagingMethodName && (
+                    <span className="ml-1 text-caption text-charcoal/60">
+                      + {item.packagingMethodName} packaging
+                      {item.packagingChargeType === "PerGram" &&
+                        ` (${item.packagingNetWeightGrams ?? 0}g × ${item.currency} ${(item.packagingRatePerGram ?? 0).toFixed(4)}/g${item.packagingMinimumChargeApplied ? ", minimum charge applied" : ""})`}
+                    </span>
+                  )}
                   {item.packagingInstructions && <PackagingInstructionsList text={item.packagingInstructions} className="mt-1 text-caption text-chilli" />}
                 </span>
                 <span className="font-number">

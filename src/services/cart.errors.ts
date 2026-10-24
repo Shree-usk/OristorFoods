@@ -14,6 +14,7 @@ export type CartErrorCode =
   | "bundle_line_locked"
   | "packaging_unavailable"
   | "packaging_minimum_quantity"
+  | "packaging_minimum_weight"
   | "packaging_availability_mismatch"
   | "packaging_selection_invalid";
 
@@ -91,6 +92,13 @@ export class PackagingUnavailableError extends CartServiceError {
 export class PackagingMinimumQuantityError extends CartServiceError {
   constructor(readonly minQuantity: number) {
     super("packaging_minimum_quantity", `This packaging option requires a minimum quantity of ${minQuantity}`);
+  }
+}
+
+/** Weight-based packaging (Story 3b). The aggregate net weight across every cart line sharing this option falls short of its configured minimum order weight. */
+export class PackagingMinimumWeightError extends CartServiceError {
+  constructor(readonly minOrderWeightGrams: number) {
+    super("packaging_minimum_weight", `This packaging option requires a minimum order weight of ${minOrderWeightGrams}g`);
   }
 }
 

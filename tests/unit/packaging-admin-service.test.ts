@@ -19,8 +19,10 @@ import {
   PackagingMethodNotFoundError,
   PackagingOptionDuplicateError,
   PackagingOptionNotFoundError,
+  PackagingOptionRequiresVariantsError,
   PackagingOptionVariantMismatchError,
 } from "@/services/product-admin.errors";
+import { productPackagingOptionAdminSchema } from "@/validation/packaging-admin.schema";
 
 const EMAIL_DOMAIN = "@packaging-admin-svc-test.test";
 const ROLE_KEY_PREFIX = "packaging-admin-svc-test-role-";
@@ -197,5 +199,53 @@ describe("packaging-admin.service — ProductPackagingOption", () => {
 
     const options = await listPackagingOptionsForProduct(admin.id, product.id);
     expect(options).toHaveLength(1);
+  });
+});
+
+describe("packaging-admin.service — weight-based (PerGram) pricing (Story 3b)", () => {
+  it("creates a PerGram option with a positive rate", async () => {
+    const admin = await makeFullAccessAdmin();
+    const product = await makeProduct();
+    await makeVariant(product.id);
+    const method = await makeMethod(admin.id);
+
+    const option = await createPackagingOption(admin.id, product.id, { packagingMethodId: method.id, chargeType: "PerGram", ratePerGram: 0.5 });
+    expect(option.chargeType).toBe("PerGram");
+    expect(option.ratePerGram?.toString()).toBe("0.5");
+  });
+
+  it("rejects PerGram on a product with no variants", async () => {
+    const admin = await makeFullAccessAdmin();
+    const product = await makeProduct();
+    const method = await makeMethod(admin.id);
+
+    await expect(createPackagingOption(admin.id, product.id, { packagingMethodId: method.id, chargeType: "PerGram", ratePerGram: 0.5 })).rejects.toBeInstanceOf(
+      PackagingOptionRequiresVariantsError,
+    );
+  });
+
+  it("rejects PerGram without a positive rate at the validation layer", () => {
+    const parsed = productPackagingOptionAdminSchema.safeParse({ packagingMethodId: "method-1", chargeType: "PerGram" });
+    expect(parsed.success).toBe(false);
+  });
+
+  it("nulls out the inactive mode's fields when switching an option from PerGram back to Fixed", async () => {
+    const admin = await makeFullAccessAdmin();
+    const product = await makeProduct();
+    await makeVariant(product.id);
+    const method = await makeMethod(admin.id);
+    const option = await createPackagingOption(admin.id, product.id, {
+      packagingMethodId: method.id,
+      chargeType: "PerGram",
+      ratePerGram: 0.5,
+      minOrderWeightGrams: 1000,
+      minPackagingCharge: 100,
+    });
+
+    const updated = await updatePackagingOption(admin.id, product.id, option.id, { packagingMethodId: method.id, chargeType: "Fixed", charge: 150 });
+    expect(updated.chargeType).toBe("Fixed");
+    expect(updated.ratePerGram).toBeNull();
+    expect(updated.minOrderWeightGrams).toBeNull();
+    expect(updated.minPackagingCharge).toBeNull();
   });
 });

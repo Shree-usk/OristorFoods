@@ -63,6 +63,14 @@ export function ProductPurchasePanel({ productId, price, originalPrice, currency
     if (option?.minQuantity && option.minQuantity > 1) {
       setQuantity((current) => Math.max(current, option.minQuantity!));
     }
+    // Story 3b (weight-based pricing). Same auto-bump idea as minQuantity
+    // above, expressed in weight: a PerGram option's minimum order weight
+    // is satisfied by bumping quantity up to the smallest amount that
+    // clears it for the currently selected variant's own net weight.
+    if (option?.chargeType === "PerGram" && option.minOrderWeightGrams && selectedVariant) {
+      const minQuantityForWeight = Math.ceil(option.minOrderWeightGrams / selectedVariant.netWeightGrams);
+      setQuantity((current) => Math.max(current, minQuantityForWeight));
+    }
   }
 
   const selectedPackagingOption = packagingSelection?.optionId ? packagingOptions.find((option) => option.id === packagingSelection.optionId) ?? null : null;
@@ -97,6 +105,8 @@ export function ProductPurchasePanel({ productId, price, originalPrice, currency
       <PackagingSelector
         options={packagingOptions}
         selectedVariantId={selectedVariantId}
+        selectedVariantNetWeightGrams={selectedVariant?.netWeightGrams ?? null}
+        quantity={quantity}
         currency={displayCurrency}
         value={packagingSelection}
         onChange={handlePackagingChange}

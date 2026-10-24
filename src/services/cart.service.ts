@@ -38,9 +38,11 @@ function toLineItem(
   priceChanged: boolean,
   campaignMultiplier: number,
   bundleInvalid: boolean = false,
-  packagingCharge: number = 0,
+  packagingChargeTotal: number = 0,
   packagingInvalid: boolean = false,
   packagingRequiresManualReview: boolean = false,
+  packagingNetWeightGrams: number | null = null,
+  packagingMinimumChargeApplied: boolean = false,
 ): CartLineItem {
   // A variant's own dedicated photo (ProductVariantImage) wins over the
   // parent product's photo when the selected variant has one — falls back
@@ -72,24 +74,35 @@ function toLineItem(
     bundleName: item.bundle?.name ?? null,
     // Story 3 (Custom Packaging). packagingMethodName is read live off the
     // joined relation (mirrors bundleName) — never trusted from a stale
-    // snapshot. packagingCharge is a SEPARATE field from unitPrice (not
-    // folded in) so the UI can show "product + packaging" as a breakdown;
-    // lineTotal below is the one place they're actually summed.
+    // snapshot. packagingChargeTotal is this line's already-final
+    // packaging TOTAL (quantity/weight already folded in by
+    // packaging.service.ts — never a per-unit rate, see its own header
+    // comment), a SEPARATE amount from unitPrice*quantity so the UI can
+    // show "product + packaging" as a breakdown; lineTotal below is the
+    // one place they're actually summed.
     packagingOptionId: item.packagingOptionId,
     packagingMethodName: item.packagingOption?.packagingMethod.name ?? null,
-    packagingCharge,
+    packagingCharge: packagingChargeTotal,
     packagingDeclaredAvailability: item.packagingDeclaredAvailability,
     packagingRequiresManualReview,
     packagingLeadTimeDays: item.packagingOption?.leadTimeDays ?? null,
     packagingShelfLifeDays: item.packagingOption?.shelfLifeDays ?? null,
     packagingShelfLifeText: item.packagingOption?.shelfLifeText ?? null,
     packagingInstructions: item.packagingOption?.customerInstructions ?? null,
+    // Story 3b (weight-based packaging pricing). chargeType/ratePerGram are
+    // read live off the joined option (never stale) — only netWeightGrams
+    // and minimumChargeApplied need packaging.service.ts's resolution,
+    // since they depend on this line's position within its cart-wide group.
+    packagingChargeType: item.packagingOption?.chargeType ?? null,
+    packagingRatePerGram: item.packagingOption?.ratePerGram?.toNumber() ?? null,
+    packagingNetWeightGrams,
+    packagingMinimumChargeApplied,
     imageSrc: primaryImage?.url ?? "",
     imageAlt: primaryImage?.altText ?? item.product.name,
     quantity: item.quantity,
     unitPrice: resolvedUnitPrice,
     currency,
-    lineTotal: Math.round((resolvedUnitPrice + packagingCharge) * item.quantity * 100) / 100,
+    lineTotal: Math.round((resolvedUnitPrice * item.quantity + packagingChargeTotal) * 100) / 100,
     // STORY-049: campaignMultiplier is 1 with no active RewardCampaign — a no-op, same shape as every other resolved-once-per-cart-read factor here (price, discount).
     // The packaging surcharge deliberately never earns points — an explicit
     // choice, since the brief is silent on it and this avoids inventing a
@@ -211,6 +224,8 @@ async function buildSummary(cart: Prisma.CartGetPayload<object>, items: CartItem
       packagingCharge,
       packagingInvalid,
       packagingRequiresManualReview,
+      packagingResolution.netWeightGramsByItemId.get(item.id) ?? null,
+      packagingResolution.minimumChargeAppliedByItemId.get(item.id) ?? false,
     );
     lineItems.push(line);
     discountableLines.push({ productId: item.productId, categoryIds: item.product.categories.map((category) => category.id), lineTotal: line.lineTotal });
@@ -298,17 +313,17 @@ export async function addItem(
   packaging: PackagingSelectionInput | null = null,
 ): Promise<CartIdentityResult> {
   const identity = await resolveCartIdentity(userId, guestCookieValue ?? undefined);
+  const cartItems = await cartRepository.listCartItemsWithProduct(identity.cart.id);
   // Must also match variantId AND packagingOptionId — two different sizes,
   // or two different packaging choices, of the same product are
   // independent cart lines, never merged into one another's quantity.
-  const existingItem = await cartRepository
-    .listCartItemsWithProduct(identity.cart.id)
-    .then((items) => items.find((i) => i.productId === productId && i.variantId === variantId && i.packagingOptionId === (packaging?.packagingOptionId ?? null)));
+  const existingItem = cartItems.find((i) => i.productId === productId && i.variantId === variantId && i.packagingOptionId === (packaging?.packagingOptionId ?? null));
   const totalRequested = (existingItem?.quantity ?? 0) + quantity;
 
   let unitPrice: string;
+  let variant: Awaited<ReturnType<typeof requireAvailableVariant>> | null = null;
   if (variantId) {
-    const variant = await requireAvailableVariant(variantId, totalRequested);
+    variant = await requireAvailableVariant(variantId, totalRequested);
     unitPrice = resolveVariantPrice(variant).price.toFixed(2);
   } else {
     await requireAvailableProduct(productId, totalRequested);
@@ -319,7 +334,16 @@ export async function addItem(
 
   let packagingForUpsert: { packagingOptionId: string; declaredAvailability: "Local" | "Export"; chargeSnapshot: string } | null = null;
   if (packaging) {
-    const resolved = await resolvePackagingSelection(productId, variantId, totalRequested, packaging);
+    // Story 3b (weight-based pricing). Sum the weight of every OTHER cart
+    // line already sharing this same packagingOptionId (excluding the
+    // line this add is merging into, if any — its own weight is already
+    // represented by `totalRequested` x this variant's netWeightGrams) so
+    // the minimum-order-weight check in resolvePackagingSelection is
+    // aggregate-aware, not just this one line's own weight.
+    const siblingWeightGrams = cartItems
+      .filter((i) => i.id !== existingItem?.id && i.packagingOptionId === packaging.packagingOptionId)
+      .reduce((sum, i) => sum + (i.variant?.netWeightGrams ?? 0) * i.quantity, 0);
+    const resolved = await resolvePackagingSelection(productId, variant ? { id: variant.id, netWeightGrams: variant.netWeightGrams } : null, totalRequested, packaging, siblingWeightGrams);
     packagingForUpsert = { packagingOptionId: packaging.packagingOptionId, declaredAvailability: packaging.declaredAvailability, chargeSnapshot: resolved.chargeSnapshot.toFixed(2) };
   }
 

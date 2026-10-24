@@ -128,6 +128,11 @@ export interface OrderConfirmationSummary {
     packagingRequiresManualReview: boolean;
     /** Export fulfilment flow. Permanent snapshot of the "special conditions" the admin set on this packaging option. */
     packagingInstructions: string | null;
+    /** Weight-based packaging pricing (Story 3b). Null unless this line's packaging was PerGram. */
+    packagingChargeType: "Fixed" | "PerGram" | null;
+    packagingRatePerGram: number | null;
+    packagingNetWeightGrams: number | null;
+    packagingMinimumChargeApplied: boolean;
     unitPrice: number;
     quantity: number;
     lineTotal: number;

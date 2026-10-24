@@ -27,12 +27,20 @@ export type PackagingMethodAdminFormInput = z.infer<typeof packagingMethodAdminS
 
 const packagingAvailabilityEnum = z.enum(["Local", "Export", "Both"]);
 const packagingOptionStatusEnum = z.enum(["Active", "TemporarilyUnavailable", "Discontinued"]);
+const packagingChargeTypeEnum = z.enum(["Fixed", "PerGram"]);
 
 export const productPackagingOptionAdminSchema = z
   .object({
     packagingMethodId: z.string().min(1, "Select a packaging method."),
     variantId: z.string().min(1).optional().nullable(),
+    chargeType: packagingChargeTypeEnum.optional(),
     charge: z.number().nonnegative().optional(),
+    // Weight-based pricing (Story 3b). Only meaningful when chargeType is
+    // PerGram — the .refine() below requires ratePerGram in that case;
+    // minOrderWeightGrams/minPackagingCharge stay optional either way.
+    ratePerGram: z.number().positive().optional().nullable(),
+    minOrderWeightGrams: z.number().int().positive().optional().nullable(),
+    minPackagingCharge: z.number().nonnegative().optional().nullable(),
     minQuantity: z.number().int().positive().optional().nullable(),
     availability: packagingAvailabilityEnum.optional(),
     requiresManualReview: z.boolean().optional(),
@@ -50,6 +58,10 @@ export const productPackagingOptionAdminSchema = z
   .refine((data) => !data.availabilityStartDate || !data.availabilityEndDate || data.availabilityEndDate > data.availabilityStartDate, {
     message: "availabilityEndDate must be after availabilityStartDate",
     path: ["availabilityEndDate"],
+  })
+  .refine((data) => data.chargeType !== "PerGram" || (data.ratePerGram != null && data.ratePerGram > 0), {
+    message: "Rate per gram is required and must be greater than zero for per-gram packaging.",
+    path: ["ratePerGram"],
   });
 
 export type ProductPackagingOptionAdminFormInput = z.infer<typeof productPackagingOptionAdminSchema>;

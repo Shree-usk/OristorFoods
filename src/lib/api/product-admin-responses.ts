@@ -22,6 +22,7 @@ const statusByCode: Record<ProductAdminErrorCode, number> = {
   packaging_option_not_found: 404,
   packaging_option_duplicate: 409,
   packaging_option_variant_mismatch: 400,
+  packaging_option_requires_variants: 400,
 };
 
 /** Every /api/admin/products/* route handler's catch block goes through this. */

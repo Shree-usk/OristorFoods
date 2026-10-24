@@ -392,7 +392,12 @@ export async function fetchBundlePreview(productId: string): Promise<{ standalon
 export interface PackagingOptionFormInput {
   packagingMethodId: string;
   variantId?: string | null;
+  chargeType?: "Fixed" | "PerGram";
   charge?: number;
+  // Weight-based pricing (Story 3b) — only meaningful when chargeType is "PerGram".
+  ratePerGram?: number | null;
+  minOrderWeightGrams?: number | null;
+  minPackagingCharge?: number | null;
   minQuantity?: number | null;
   availability?: "Local" | "Export" | "Both";
   requiresManualReview?: boolean;
@@ -408,13 +413,15 @@ export interface PackagingOptionFormInput {
   sortOrder?: number;
 }
 
-export interface AdminPackagingOption extends Omit<PackagingOptionFormInput, "charge"> {
+export interface AdminPackagingOption extends Omit<PackagingOptionFormInput, "charge" | "ratePerGram" | "minPackagingCharge"> {
   id: string;
   productId: string;
   // Prisma Decimal fields serialize to JSON as strings (Decimal's own
   // toJSON()) — same gotcha product-variants-panel.tsx's price field
   // already documents.
   charge: string | number;
+  ratePerGram: string | number | null;
+  minPackagingCharge: string | number | null;
   packagingMethod: { id: string; name: string };
   variant: { id: string; name: string } | null;
 }

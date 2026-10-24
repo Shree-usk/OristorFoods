@@ -15,7 +15,7 @@ export interface CartLineItem {
   /** Shared by every row exploded from one "add bundle to cart" action — null for a plain line. See bundle.service.ts. */
   bundleInstanceId: string | null;
   bundleName: string | null;
-  /** Story 3 (Custom Packaging). Null for a plain/default-packaging line. packagingCharge is a SEPARATE amount from unitPrice, already folded into lineTotal — see cart.service.ts::toLineItem. */
+  /** Story 3 (Custom Packaging). Null for a plain/default-packaging line. packagingCharge is this line's already-final packaging TOTAL (not a per-unit rate — see cart.service.ts::toLineItem), already folded into lineTotal. */
   packagingOptionId: string | null;
   packagingMethodName: string | null;
   packagingCharge: number;
@@ -25,6 +25,12 @@ export interface CartLineItem {
   packagingShelfLifeDays: number | null;
   packagingShelfLifeText: string | null;
   packagingInstructions: string | null;
+  /** Story 3b (weight-based packaging pricing). Null unless the selected option is PerGram. */
+  packagingChargeType: "Fixed" | "PerGram" | null;
+  packagingRatePerGram: number | null;
+  /** This line's own attributed net weight in grams — present only for a valid PerGram selection. */
+  packagingNetWeightGrams: number | null;
+  packagingMinimumChargeApplied: boolean;
   imageSrc: string;
   imageAlt: string;
   quantity: number;
