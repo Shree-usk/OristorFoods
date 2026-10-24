@@ -35,10 +35,20 @@ const STATUS_LABELS: Record<(typeof STATUS_OPTIONS)[number], string> = {
   Discontinued: "Discontinued",
 };
 
+const CHARGE_TYPE_OPTIONS = ["Fixed", "PerGram"] as const;
+const CHARGE_TYPE_LABELS: Record<(typeof CHARGE_TYPE_OPTIONS)[number], string> = {
+  Fixed: "Fixed charge",
+  PerGram: "Per-gram rate",
+};
+
 const EMPTY_ITEM_FORM: PackagingOptionFormInput = {
   packagingMethodId: "",
   variantId: null,
+  chargeType: "Fixed",
   charge: 0,
+  ratePerGram: null,
+  minOrderWeightGrams: null,
+  minPackagingCharge: null,
   minQuantity: null,
   availability: "Both",
   requiresManualReview: false,
@@ -62,7 +72,11 @@ function toItemForm(option: AdminPackagingOption): PackagingOptionFormInput {
   return {
     packagingMethodId: option.packagingMethod.id,
     variantId: option.variant?.id ?? null,
+    chargeType: option.chargeType ?? "Fixed",
     charge: option.charge !== undefined && option.charge !== null ? Number(option.charge) : 0,
+    ratePerGram: option.ratePerGram !== undefined && option.ratePerGram !== null ? Number(option.ratePerGram) : null,
+    minOrderWeightGrams: option.minOrderWeightGrams ?? null,
+    minPackagingCharge: option.minPackagingCharge !== undefined && option.minPackagingCharge !== null ? Number(option.minPackagingCharge) : null,
     minQuantity: option.minQuantity ?? null,
     availability: option.availability ?? "Both",
     requiresManualReview: option.requiresManualReview ?? false,
@@ -182,8 +196,13 @@ export function ProductPackagingPanel({ productId }: { productId: string }) {
                   {option.status !== "Active" && <span className="ml-2 text-caption text-destructive">({STATUS_LABELS[option.status ?? "Active"]})</span>}
                 </p>
                 <p className="text-caption text-charcoal/60">
-                  +{Number(option.charge ?? 0).toFixed(2)} · {AVAILABILITY_LABELS[option.availability ?? "Both"]}
-                  {option.minQuantity ? ` · min ${option.minQuantity}` : ""}
+                  {option.chargeType === "PerGram"
+                    ? `${Number(option.ratePerGram ?? 0).toFixed(4)}/g`
+                    : `+${Number(option.charge ?? 0).toFixed(2)}`}{" "}
+                  · {AVAILABILITY_LABELS[option.availability ?? "Both"]}
+                  {option.chargeType === "PerGram" && option.minOrderWeightGrams ? ` · min ${option.minOrderWeightGrams}g` : ""}
+                  {option.chargeType === "PerGram" && option.minPackagingCharge ? ` · min charge ${Number(option.minPackagingCharge).toFixed(2)}` : ""}
+                  {option.minQuantity ? ` · min qty ${option.minQuantity}` : ""}
                   {option.requiresManualReview ? " · manual review" : ""}
                 </p>
               </div>
@@ -238,15 +257,22 @@ export function ProductPackagingPanel({ productId }: { productId: string }) {
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <Label htmlFor="packaging-option-charge">Charge</Label>
-              <Input
-                id="packaging-option-charge"
-                type="number"
-                step="0.01"
-                min={0}
-                value={itemForm.charge ?? 0}
-                onChange={(event) => setItemForm((prev) => (prev ? { ...prev, charge: Number(event.target.value) } : prev))}
-              />
+              <Label htmlFor="packaging-option-charge-type">Pricing</Label>
+              <Select
+                value={itemForm.chargeType ?? "Fixed"}
+                onValueChange={(value) => setItemForm((prev) => (prev ? { ...prev, chargeType: (value ?? "Fixed") as PackagingOptionFormInput["chargeType"] } : prev))}
+              >
+                <SelectTrigger id="packaging-option-charge-type">
+                  <SelectValue>{(selected: string | null) => CHARGE_TYPE_LABELS[(selected ?? "Fixed") as (typeof CHARGE_TYPE_OPTIONS)[number]]}</SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  {CHARGE_TYPE_OPTIONS.map((value) => (
+                    <SelectItem key={value} value={value}>
+                      {CHARGE_TYPE_LABELS[value]}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div>
               <Label htmlFor="packaging-option-min-quantity">Minimum quantity (optional)</Label>
@@ -259,6 +285,55 @@ export function ProductPackagingPanel({ productId }: { productId: string }) {
               />
             </div>
           </div>
+
+          {(itemForm.chargeType ?? "Fixed") === "Fixed" ? (
+            <div>
+              <Label htmlFor="packaging-option-charge">Charge</Label>
+              <Input
+                id="packaging-option-charge"
+                type="number"
+                step="0.01"
+                min={0}
+                value={itemForm.charge ?? 0}
+                onChange={(event) => setItemForm((prev) => (prev ? { ...prev, charge: Number(event.target.value) } : prev))}
+              />
+            </div>
+          ) : (
+            <div className="grid grid-cols-3 gap-3">
+              <div>
+                <Label htmlFor="packaging-option-rate-per-gram">Rate per gram (LKR)</Label>
+                <Input
+                  id="packaging-option-rate-per-gram"
+                  type="number"
+                  step="0.0001"
+                  min={0}
+                  value={itemForm.ratePerGram ?? ""}
+                  onChange={(event) => setItemForm((prev) => (prev ? { ...prev, ratePerGram: event.target.value ? Number(event.target.value) : null } : prev))}
+                />
+              </div>
+              <div>
+                <Label htmlFor="packaging-option-min-weight">Minimum order weight (g, optional)</Label>
+                <Input
+                  id="packaging-option-min-weight"
+                  type="number"
+                  min={0}
+                  value={itemForm.minOrderWeightGrams ?? ""}
+                  onChange={(event) => setItemForm((prev) => (prev ? { ...prev, minOrderWeightGrams: event.target.value ? Number(event.target.value) : null } : prev))}
+                />
+              </div>
+              <div>
+                <Label htmlFor="packaging-option-min-charge">Minimum packaging charge (optional)</Label>
+                <Input
+                  id="packaging-option-min-charge"
+                  type="number"
+                  step="0.01"
+                  min={0}
+                  value={itemForm.minPackagingCharge ?? ""}
+                  onChange={(event) => setItemForm((prev) => (prev ? { ...prev, minPackagingCharge: event.target.value ? Number(event.target.value) : null } : prev))}
+                />
+              </div>
+            </div>
+          )}
 
           <div className="grid grid-cols-2 gap-3">
             <div>

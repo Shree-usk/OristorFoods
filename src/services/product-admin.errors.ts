@@ -15,7 +15,8 @@ export type ProductAdminErrorCode =
   | "packaging_method_name_conflict"
   | "packaging_option_not_found"
   | "packaging_option_duplicate"
-  | "packaging_option_variant_mismatch";
+  | "packaging_option_variant_mismatch"
+  | "packaging_option_requires_variants";
 
 export class ProductAdminError extends Error {
   constructor(
@@ -128,5 +129,12 @@ export class PackagingOptionDuplicateError extends ProductAdminError {
 export class PackagingOptionVariantMismatchError extends ProductAdminError {
   constructor() {
     super("packaging_option_variant_mismatch", "The selected variant does not belong to this product.");
+  }
+}
+
+/** Weight-based packaging (Story 3b). A PerGram charge needs an authoritative per-unit net weight, which only exists on a ProductVariant — a variant-less product has no such signal (Product.weightGrams is a different, unrelated, delivery-zone-only field). */
+export class PackagingOptionRequiresVariantsError extends ProductAdminError {
+  constructor() {
+    super("packaging_option_requires_variants", "Per-gram packaging requires this product to have at least one variant.");
   }
 }

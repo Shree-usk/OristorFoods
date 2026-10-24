@@ -76,6 +76,11 @@ interface CheckoutCartState {
     packagingRequiresManualReview: boolean;
     /** Export fulfilment flow. Snapshot of ProductPackagingOption.customerInstructions — shown at checkout Review, not just the PDP. */
     packagingInstructions: string | null;
+    /** Weight-based packaging pricing (Story 3b). Null unless this line's selected option is PerGram. */
+    packagingChargeType: "Fixed" | "PerGram" | null;
+    packagingRatePerGram: number | null;
+    packagingNetWeightGrams: number | null;
+    packagingMinimumChargeApplied: boolean;
   }>;
 }
 
@@ -134,6 +139,10 @@ export async function requireCheckoutableCart(userId: string | null, guestCookie
       packagingDeclaredAvailability: line.packagingDeclaredAvailability,
       packagingRequiresManualReview: line.packagingRequiresManualReview,
       packagingInstructions: line.packagingInstructions,
+      packagingChargeType: line.packagingChargeType,
+      packagingRatePerGram: line.packagingRatePerGram,
+      packagingNetWeightGrams: line.packagingNetWeightGrams,
+      packagingMinimumChargeApplied: line.packagingMinimumChargeApplied,
     })),
   };
 }
@@ -480,6 +489,10 @@ export async function placeOrder(
       packagingDeclaredAvailability: line.packagingDeclaredAvailability,
       packagingRequiresManualReview: line.packagingRequiresManualReview,
       packagingInstructions: line.packagingInstructions,
+      packagingChargeType: line.packagingChargeType,
+      packagingRatePerGram: line.packagingRatePerGram != null ? line.packagingRatePerGram.toFixed(4) : null,
+      packagingNetWeightGrams: line.packagingNetWeightGrams,
+      packagingMinimumChargeApplied: line.packagingMinimumChargeApplied,
     })),
     // Story 2 (Bundles). Grouped from this same checkout-time cart.lines
     // snapshot — one entry per distinct bundle instance in the cart
@@ -596,6 +609,10 @@ function toConfirmationSummary(order: Awaited<ReturnType<typeof getOrderForConfi
       packagingCharge: item.packagingCharge?.toNumber() ?? null,
       packagingRequiresManualReview: item.packagingRequiresManualReview,
       packagingInstructions: item.packagingInstructions,
+      packagingChargeType: item.packagingChargeType,
+      packagingRatePerGram: item.packagingRatePerGram?.toNumber() ?? null,
+      packagingNetWeightGrams: item.packagingNetWeightGrams,
+      packagingMinimumChargeApplied: item.packagingMinimumChargeApplied,
       unitPrice: item.unitPrice.toNumber(),
       quantity: item.quantity,
       lineTotal: item.lineTotal.toNumber(),

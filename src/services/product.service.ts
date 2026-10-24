@@ -365,7 +365,14 @@ export interface ProductDetailPackagingOption {
   variantId: string | null;
   packagingMethodName: string;
   packagingMethodImage: string | null;
+  chargeType: "Fixed" | "PerGram";
   charge: number;
+  /** PerGram only — LKR per gram. Null under Fixed. */
+  ratePerGram: number | null;
+  /** PerGram only — minimum aggregate net weight (grams) required across every cart line sharing this option. Null under Fixed. */
+  minOrderWeightGrams: number | null;
+  /** PerGram only — floors the computed (weight x rate) charge. Null under Fixed. */
+  minPackagingCharge: number | null;
   minQuantity: number | null;
   availability: "Local" | "Export" | "Both";
   leadTimeDays: number | null;
@@ -653,7 +660,11 @@ export async function getProductDetail(
       variantId: option.variantId,
       packagingMethodName: option.packagingMethod.name,
       packagingMethodImage: option.packagingMethod.image,
+      chargeType: option.chargeType,
       charge: option.charge.toNumber(),
+      ratePerGram: option.ratePerGram?.toNumber() ?? null,
+      minOrderWeightGrams: option.minOrderWeightGrams,
+      minPackagingCharge: option.minPackagingCharge?.toNumber() ?? null,
       minQuantity: option.minQuantity,
       availability: option.availability,
       leadTimeDays: option.leadTimeDays,

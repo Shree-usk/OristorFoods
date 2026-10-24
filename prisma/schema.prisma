@@ -280,10 +280,10 @@ model Product {
   // without the other. Visibility is an orthogonal flag, not a second
   // workflow: the export catalogue query always hardcodes `status:
   // "Published" AND isExportEnabled: true`, never a caller-supplied value.
-  isExportEnabled    Boolean       @default(false)
-  exportDescription  String?       @db.VarChar(2000)
-  isExportFeatured   Boolean       @default(false)
-  exportDisplayOrder Int           @default(0)
+  isExportEnabled    Boolean @default(false)
+  exportDescription  String? @db.VarChar(2000)
+  isExportFeatured   Boolean @default(false)
+  exportDisplayOrder Int     @default(0)
 
   brandId String?
   brand   Brand?  @relation(fields: [brandId], references: [id], onDelete: SetNull)
@@ -405,11 +405,11 @@ model ProductVariant {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  cartItems  CartItem[]
-  orderItems OrderItem[]
+  cartItems           CartItem[]
+  orderItems          OrderItem[]
   // Story 2 (Bundles). Reverse side of BundleItem.componentVariantId — a
   // variant pinned as an eligible bundle component.
-  bundleComponentOf BundleItem[]
+  bundleComponentOf   BundleItem[]
   // Story 3 (Custom Packaging). Reverse side of
   // ProductPackagingOption.variantId.
   packagingOptionPins ProductPackagingOption[]
@@ -601,27 +601,27 @@ enum BundleStockMode {
 // old `priceOverride` column (RENAME COLUMN in the migration, not drop+add
 // — safe since nothing read or wrote it before this story).
 model ProductBundle {
-  id        String     @id @default(cuid())
-  productId String     @unique
-  product   Product    @relation(fields: [productId], references: [id], onDelete: Cascade)
-  bundleType BundleType @default(Fixed)
+  id          String        @id @default(cuid())
+  productId   String        @unique
+  product     Product       @relation(fields: [productId], references: [id], onDelete: Cascade)
+  bundleType  BundleType    @default(Fixed)
   name        String
   description String?
   status      ContentStatus @default(Active)
   // Admin-visible "Scheduled" is DERIVED (status === Active && startDate in
   // the future), never a stored third status — same precedent as
   // Collection's "Always on" vs seasonal-window display.
-  startDate DateTime?
-  endDate   DateTime?
+  startDate   DateTime?
+  endDate     DateTime?
 
   // 3-way XOR (see bundleAdminSchema's .refine) — exactly one of these is
   // set when discountType is set; discountType null means "no discount,
   // priced as the sum of its components" (still a valid Fixed/Selectable
   // bundle, just not a deal).
   discountType BundleDiscountType?
-  fixedPrice   Decimal? @db.Decimal(10, 2)
-  percentOff   Decimal? @db.Decimal(5, 2)
-  amountOff    Decimal? @db.Decimal(10, 2)
+  fixedPrice   Decimal?            @db.Decimal(10, 2)
+  percentOff   Decimal?            @db.Decimal(5, 2)
+  amountOff    Decimal?            @db.Decimal(10, 2)
 
   // Total units the customer must/may pick across every eligible
   // BundleItem — null for Fixed (locked set, nothing to pick).
@@ -671,7 +671,7 @@ model BundleItem {
   componentVariantId String?
   componentVariant   ProductVariant? @relation(fields: [componentVariantId], references: [id])
 
-  quantity Int @default(1)
+  quantity    Int     @default(1)
   // Fixed: always true, quantity is locked, no customer choice. Selectable/
   // MixAndMatch: false — this row is an eligible option the customer may
   // or may not pick, within its own min/max and the bundle's own min/max.
@@ -717,6 +717,16 @@ enum PackagingOptionStatus {
   Discontinued
 }
 
+enum PackagingChargeType {
+  // Discriminates which of ProductPackagingOption's two pricing shapes is
+  // active: Fixed uses `charge` alone (today's only mode); PerGram uses
+  // `ratePerGram` x the authoritative net weight of every cart line sharing
+  // this option (ProductVariant.netWeightGrams — never Product.weightGrams,
+  // a different, delivery-zone-only field). See packaging.service.ts.
+  Fixed
+  PerGram
+}
+
 // Global, thin reference data — mirrors Collection's shape minus slug/SEO.
 // Carries zero business-rule defaults (no charge, no lead time): every
 // actual rule lives on ProductPackagingOption, the per-(product, optional
@@ -728,8 +738,8 @@ model PackagingMethod {
   image       String?
   status      ContentStatus @default(Active)
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt DateTime                 @default(now())
+  updatedAt DateTime                 @updatedAt
   options   ProductPackagingOption[]
 }
 
@@ -757,6 +767,22 @@ model ProductPackagingOption {
   packagingMethod   PackagingMethod @relation(fields: [packagingMethodId], references: [id], onDelete: Cascade)
 
   charge               Decimal               @default(0) @db.Decimal(10, 2)
+  /**
+   * Fixed/PerGram discriminator — see PackagingChargeType. `charge` only applies under Fixed.
+   */
+  chargeType           PackagingChargeType   @default(Fixed)
+  /**
+   * PerGram only. LKR per gram — 4dp so e.g. 0.5000/g survives the weight multiply before final currency rounding. Null under Fixed.
+   */
+  ratePerGram          Decimal?              @db.Decimal(10, 4)
+  /**
+   * PerGram only. Minimum aggregate net weight (across every cart line sharing this option) required for the selection to be valid. Null under Fixed.
+   */
+  minOrderWeightGrams  Int?
+  /**
+   * PerGram only. Floors the computed (weight x rate) charge for the whole group sharing this option. Null under Fixed.
+   */
+  minPackagingCharge   Decimal?              @db.Decimal(10, 2)
   minQuantity          Int?
   availability         PackagingAvailability @default(Both)
   requiresManualReview Boolean               @default(false)
@@ -764,7 +790,9 @@ model ProductPackagingOption {
   shelfLifeDays        Int?
   shelfLifeText        String?
   customerInstructions String?
-  /** Checkbox label on the PDP acknowledgement gate — falls back to a generic default when unset. */
+  /**
+   * Checkbox label on the PDP acknowledgement gate — falls back to a generic default when unset.
+   */
   acknowledgementText  String?
 
   availabilityStartDate DateTime?
@@ -1589,16 +1617,16 @@ model Cart {
 }
 
 model CartItem {
-  id                String          @id @default(cuid())
-  cartId            String
-  cart              Cart            @relation(fields: [cartId], references: [id], onDelete: Cascade)
-  productId         String
-  product           Product         @relation(fields: [productId], references: [id], onDelete: Cascade)
+  id                            String                         @id @default(cuid())
+  cartId                        String
+  cart                          Cart                           @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  productId                     String
+  product                       Product                        @relation(fields: [productId], references: [id], onDelete: Cascade)
   // Nullable: null means "this product, unvarianted" — every row that
   // exists today keeps this null. Non-null lets the same product appear
   // as multiple independent cart lines, one per selected size.
-  variantId         String?
-  variant           ProductVariant? @relation(fields: [variantId], references: [id], onDelete: Cascade)
+  variantId                     String?
+  variant                       ProductVariant?                @relation(fields: [variantId], references: [id], onDelete: Cascade)
   // Story 2 (Bundles). Null for a plain line. Set together: bundleId
   // identifies which bundle definition this row belongs to;
   // bundleInstanceId is an opaque tag (not an FK) shared by every row
@@ -1606,9 +1634,9 @@ model CartItem {
   // bundle.service.ts::addBundleToCart. Needed in the unique index below
   // so two different bundle instances that happen to share a component
   // product/variant never merge into each other's quantity.
-  bundleId         String?
-  bundle           ProductBundle? @relation(fields: [bundleId], references: [id], onDelete: Cascade)
-  bundleInstanceId String?
+  bundleId                      String?
+  bundle                        ProductBundle?                 @relation(fields: [bundleId], references: [id], onDelete: Cascade)
+  bundleInstanceId              String?
   // Story 3 (Custom Packaging). Null for a plain/default-packaging line.
   // packagingChargeSnapshot is a SEPARATE column from unitPriceSnapshot
   // (not folded in) so the UI can show "product LKR 480 + packaging
@@ -1618,13 +1646,13 @@ model CartItem {
   // deleted packaging method must never delete the cart row, only revert
   // it to "no packaging selected."
   packagingOptionId             String?
-  packagingOption                ProductPackagingOption?        @relation(fields: [packagingOptionId], references: [id], onDelete: SetNull)
+  packagingOption               ProductPackagingOption?        @relation(fields: [packagingOptionId], references: [id], onDelete: SetNull)
   packagingDeclaredAvailability PackagingDeclaredAvailability?
-  packagingChargeSnapshot       Decimal?                        @db.Decimal(10, 2)
-  quantity          Int
-  unitPriceSnapshot Decimal         @db.Decimal(10, 2)
-  createdAt         DateTime        @default(now())
-  updatedAt         DateTime        @updatedAt
+  packagingChargeSnapshot       Decimal?                       @db.Decimal(10, 2)
+  quantity                      Int
+  unitPriceSnapshot             Decimal                        @db.Decimal(10, 2)
+  createdAt                     DateTime                       @default(now())
+  updatedAt                     DateTime                       @updatedAt
 
   @@unique([cartId, productId, variantId, bundleInstanceId, packagingOptionId])
 }
@@ -2232,27 +2260,27 @@ model Order {
 }
 
 model OrderItem {
-  id                 String          @id @default(cuid())
-  orderId            String
-  order              Order           @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  productId          String?
-  product            Product?        @relation(fields: [productId], references: [id], onDelete: SetNull)
-  variantId          String?
-  variant            ProductVariant? @relation(fields: [variantId], references: [id], onDelete: SetNull)
+  id                            String                         @id @default(cuid())
+  orderId                       String
+  order                         Order                          @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId                     String?
+  product                       Product?                       @relation(fields: [productId], references: [id], onDelete: SetNull)
+  variantId                     String?
+  variant                       ProductVariant?                @relation(fields: [variantId], references: [id], onDelete: SetNull)
   // Snapshots at time of purchase — never rely on live product data.
-  productName        String
-  productSku         String
-  variantName        String?
-  variantSku         String?
+  productName                   String
+  productSku                    String
+  variantName                   String?
+  variantSku                    String?
   // Story 2 (Bundles). Flat snapshots, same convention as
   // productName/variantName above — an order's bundle grouping must
   // survive independently of whether the bundle definition is later
   // edited or deleted (SetNull, matching productId/variantId's own
   // pattern).
-  bundleId         String?
-  bundle           ProductBundle? @relation(fields: [bundleId], references: [id], onDelete: SetNull)
-  bundleInstanceId String?
-  bundleName       String?
+  bundleId                      String?
+  bundle                        ProductBundle?                 @relation(fields: [bundleId], references: [id], onDelete: SetNull)
+  bundleInstanceId              String?
+  bundleName                    String?
   // Story 3 (Custom Packaging). Flat snapshots, same convention as
   // bundleId/bundleName above. packagingRequiresManualReview is
   // snapshotted (not inferred from order.status) so the admin order-detail
@@ -2260,20 +2288,28 @@ model OrderItem {
   // permanent context even once the order has moved on past
   // PendingConfirmation.
   packagingOptionId             String?
-  packagingOption                ProductPackagingOption?        @relation(fields: [packagingOptionId], references: [id], onDelete: SetNull)
+  packagingOption               ProductPackagingOption?        @relation(fields: [packagingOptionId], references: [id], onDelete: SetNull)
   packagingMethodName           String?
-  packagingCharge                Decimal?                        @db.Decimal(10, 2)
+  packagingCharge               Decimal?                       @db.Decimal(10, 2)
   packagingDeclaredAvailability PackagingDeclaredAvailability?
-  packagingRequiresManualReview Boolean                          @default(false)
+  packagingRequiresManualReview Boolean                        @default(false)
   // Snapshot of ProductPackagingOption.customerInstructions — the "special
   // conditions" text (e.g. advance-payment-only, non-returnable, minimum
   // preparation days) admins enter per option, carried onto the order the
   // same way every other packaging field already is.
   packagingInstructions         String?
-  unitPrice          Decimal         @db.Decimal(10, 2)
-  quantity           Int
-  lineTotal          Decimal         @db.Decimal(10, 2)
-  rewardPointsEarned Int             @default(0)
+  // Weight-based packaging pricing. Null for a Fixed-charge line (or no
+  // packaging at all) — mirrors packagingMethodName/packagingCharge's own
+  // nullable-snapshot convention. Historical orders keep their own rate and
+  // weight even if the ProductPackagingOption is later edited or deleted.
+  packagingChargeType           PackagingChargeType?
+  packagingRatePerGram          Decimal?                       @db.Decimal(10, 4)
+  packagingNetWeightGrams       Int?
+  packagingMinimumChargeApplied Boolean                        @default(false)
+  unitPrice                     Decimal                        @db.Decimal(10, 2)
+  quantity                      Int
+  lineTotal                     Decimal                        @db.Decimal(10, 2)
+  rewardPointsEarned            Int                            @default(0)
 }
 
 model OrderStatusHistory {
@@ -3506,9 +3542,9 @@ model CompanySetting {
   // from `address` above (the general business address) since this is
   // specifically "where a customer picks up an order," which could
   // differ from the registered business address.
-  pickupLocationName    String?
-  pickupLocationAddress String?
-  pickupLocationMapUrl  String?
+  pickupLocationName     String?
+  pickupLocationAddress  String?
+  pickupLocationMapUrl   String?
   updatedAt              DateTime @updatedAt
 }
 
@@ -3613,11 +3649,11 @@ model TaxRateRule {
 // 10), so this lists configured methods generically rather than
 // hardcoding one gateway's shape.
 model PaymentMethodSetting {
-  id        String         @id @default(cuid())
-  key       String         @unique
-  label     String
-  enabled   Boolean        @default(true)
-  sortOrder Int            @default(0)
+  id                         String         @id @default(cuid())
+  key                        String         @unique
+  label                      String
+  enabled                    Boolean        @default(true)
+  sortOrder                  Int            @default(0)
   // Story 4 (Payment Restriction). Optional tag connecting a row to real
   // checkout logic — a row with no `method` stays purely decorative, same
   // as every row before this story. `allowedForRestrictedOrders` is the
@@ -3626,8 +3662,8 @@ model PaymentMethodSetting {
   // this project's "manageable through the Admin Console" principle.
   method                     PaymentMethod? @unique
   allowedForRestrictedOrders Boolean        @default(false)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt                  DateTime       @default(now())
+  updatedAt                  DateTime       @updatedAt
 }
 
 // Export fulfilment flow. Admin-entered bank accounts shown to every

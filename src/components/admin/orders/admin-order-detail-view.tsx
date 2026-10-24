@@ -166,6 +166,8 @@ export function AdminOrderDetailView({ orderId }: { orderId: string }) {
                     {item.packagingMethodName && (
                       <span className="ml-1 text-caption text-charcoal/60">
                         + {item.packagingMethodName} packaging
+                        {item.packagingChargeType === "PerGram" &&
+                          ` (${item.packagingNetWeightGrams ?? 0}g × ${(item.packagingRatePerGram ?? 0).toFixed(4)}/g${item.packagingMinimumChargeApplied ? ", minimum charge applied" : ""})`}
                         {item.packagingRequiresManualReview && " (manual review)"}
                       </span>
                     )}

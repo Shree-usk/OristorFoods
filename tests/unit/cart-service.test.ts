@@ -13,6 +13,7 @@ import {
   CartItemNotFoundError,
   PackagingAvailabilityMismatchError,
   PackagingMinimumQuantityError,
+  PackagingMinimumWeightError,
   ProductUnavailableError,
   StockExceededError,
 } from "@/services/cart.errors";
@@ -577,7 +578,9 @@ describe("Custom Packaging (Story 3)", () => {
     const summary = await getCart(user.id, null);
 
     expect(summary.items).toHaveLength(1);
-    expect(summary.items[0]).toMatchObject({ unitPrice: 25, packagingCharge: 15, quantity: 2, lineTotal: 80 });
+    // packagingCharge is this line's already-final packaging TOTAL (charge x
+    // quantity), not a per-unit rate — see cart.service.ts::toLineItem.
+    expect(summary.items[0]).toMatchObject({ unitPrice: 25, packagingCharge: 30, quantity: 2, lineTotal: 80 });
     expect(summary.subtotal).toBe(80);
   });
 
@@ -644,5 +647,143 @@ describe("Custom Packaging (Story 3)", () => {
 
     const summary = await getCart(user.id, null);
     expect(summary.items).toHaveLength(2);
+  });
+});
+
+describe("Weight-based packaging (Story 3b)", () => {
+  it("charges weight x rate for a single variant/quantity", async () => {
+    const user = await makeUser();
+    const product = await makeProduct();
+    const variant = await makeVariant(product.id, { netWeightGrams: 200 });
+    const option = await makePackagingOption(product.id, { chargeType: "PerGram", charge: "0", ratePerGram: "0.50" });
+
+    await addItem(user.id, null, product.id, 1, variant.id, { packagingOptionId: option.id, declaredAvailability: "Local" });
+    const summary = await getCart(user.id, null);
+
+    // 200g x 1 x LKR 0.50/g = LKR 100.
+    expect(summary.items[0]).toMatchObject({ packagingCharge: 100, packagingChargeType: "PerGram", packagingNetWeightGrams: 200 });
+  });
+
+  it("scales the charge with quantity for the same variant", async () => {
+    const user = await makeUser();
+    const product = await makeProduct();
+    const variant = await makeVariant(product.id, { netWeightGrams: 200 });
+    const option = await makePackagingOption(product.id, { chargeType: "PerGram", charge: "0", ratePerGram: "0.50" });
+
+    await addItem(user.id, null, product.id, 3, variant.id, { packagingOptionId: option.id, declaredAvailability: "Local" });
+    const summary = await getCart(user.id, null);
+
+    // 200g x 3 x LKR 0.50/g = LKR 300.
+    expect(summary.items[0]).toMatchObject({ packagingCharge: 300, packagingNetWeightGrams: 600 });
+  });
+
+  it("aggregates weight across different variants sharing one whole-product option into a single charge, split proportionally", async () => {
+    const user = await makeUser();
+    const product = await makeProduct();
+    const variant200 = await makeVariant(product.id, { netWeightGrams: 200, name: "200g" });
+    const variant350 = await makeVariant(product.id, { netWeightGrams: 350, name: "350g" });
+    // variantId: null (whole-product) so both variants share the same option row.
+    const option = await makePackagingOption(product.id, { chargeType: "PerGram", charge: "0", ratePerGram: "0.50" });
+
+    // The doc's own worked example: two 200g units + one 350g unit = 750g.
+    await addItem(user.id, null, product.id, 2, variant200.id, { packagingOptionId: option.id, declaredAvailability: "Local" });
+    await addItem(user.id, null, product.id, 1, variant350.id, { packagingOptionId: option.id, declaredAvailability: "Local" });
+
+    const summary = await getCart(user.id, null);
+    expect(summary.items).toHaveLength(2);
+    const totalPackagingCharge = summary.items.reduce((sum, item) => sum + item.packagingCharge, 0);
+    // 750g x LKR 0.50/g = LKR 375, allocated across both lines exactly once.
+    expect(totalPackagingCharge).toBeCloseTo(375, 2);
+    // Each variant's own unitPrice defaults to LKR 30 (makeVariant) x quantity, plus the 375 packaging charge.
+    expect(summary.subtotal).toBeCloseTo(30 * 2 + 30 * 1 + 375, 2);
+  });
+
+  it("different products with their own PerGram options are priced independently, never mixed into one group", async () => {
+    const user = await makeUser();
+    const productA = await makeProduct();
+    const variantA = await makeVariant(productA.id, { netWeightGrams: 200 });
+    const optionA = await makePackagingOption(productA.id, { chargeType: "PerGram", charge: "0", ratePerGram: "0.50" });
+
+    const productB = await makeProduct();
+    const variantB = await makeVariant(productB.id, { netWeightGrams: 500 });
+    const optionB = await makePackagingOption(productB.id, { chargeType: "PerGram", charge: "0", ratePerGram: "1.00" });
+
+    await addItem(user.id, null, productA.id, 1, variantA.id, { packagingOptionId: optionA.id, declaredAvailability: "Local" });
+    await addItem(user.id, null, productB.id, 1, variantB.id, { packagingOptionId: optionB.id, declaredAvailability: "Local" });
+
+    const summary = await getCart(user.id, null);
+    const lineA = summary.items.find((item) => item.productId === productA.id);
+    const lineB = summary.items.find((item) => item.productId === productB.id);
+    expect(lineA?.packagingCharge).toBeCloseTo(100, 2); // 200g x 0.50
+    expect(lineB?.packagingCharge).toBeCloseTo(500, 2); // 500g x 1.00
+  });
+
+  it("a non-eligible product (no packaging option configured) never carries a packaging charge", async () => {
+    const user = await makeUser();
+    const product = await makeProduct();
+    const variant = await makeVariant(product.id, { netWeightGrams: 200 });
+
+    await addItem(user.id, null, product.id, 2, variant.id);
+    const summary = await getCart(user.id, null);
+
+    expect(summary.items[0]).toMatchObject({ packagingOptionId: null, packagingCharge: 0, packagingChargeType: null });
+  });
+
+  it("rejects adding below the option's minimum order weight", async () => {
+    const user = await makeUser();
+    const product = await makeProduct();
+    const variant = await makeVariant(product.id, { netWeightGrams: 200 });
+    const option = await makePackagingOption(product.id, { chargeType: "PerGram", charge: "0", ratePerGram: "0.50", minOrderWeightGrams: 1000 });
+
+    await expect(addItem(user.id, null, product.id, 1, variant.id, { packagingOptionId: option.id, declaredAvailability: "Local" })).rejects.toBeInstanceOf(PackagingMinimumWeightError);
+  });
+
+  it("accepts an add that only clears the minimum order weight in combination with an existing sibling line", async () => {
+    const user = await makeUser();
+    const product = await makeProduct();
+    const variant900 = await makeVariant(product.id, { netWeightGrams: 900, name: "900g" });
+    const variant200 = await makeVariant(product.id, { netWeightGrams: 200, name: "200g" });
+    const option = await makePackagingOption(product.id, { chargeType: "PerGram", charge: "0", ratePerGram: "0.50", minOrderWeightGrams: 1000 });
+
+    // 2 x 900g = 1800g clears the 1000g floor on its own.
+    await addItem(user.id, null, product.id, 2, variant900.id, { packagingOptionId: option.id, declaredAvailability: "Local" });
+    // A lone 200g add would fail the 1000g floor by itself, but it clears it
+    // in combination with the 1800g already in the cart under the same option.
+    await expect(
+      addItem(user.id, null, product.id, 1, variant200.id, { packagingOptionId: option.id, declaredAvailability: "Local" }),
+    ).resolves.toBeDefined();
+
+    const summary = await getCart(user.id, null);
+    expect(summary.items.every((item) => !item.unavailable)).toBe(true);
+  });
+
+  it("floors the charge at the configured minimum packaging charge", async () => {
+    const user = await makeUser();
+    const product = await makeProduct();
+    const variant = await makeVariant(product.id, { netWeightGrams: 100 });
+    const option = await makePackagingOption(product.id, { chargeType: "PerGram", charge: "0", ratePerGram: "0.50", minPackagingCharge: "100.00" });
+
+    await addItem(user.id, null, product.id, 1, variant.id, { packagingOptionId: option.id, declaredAvailability: "Local" });
+    const summary = await getCart(user.id, null);
+
+    // Raw charge (100g x 0.50 = 50) is below the 100.00 minimum, so the floor applies.
+    expect(summary.items[0]).toMatchObject({ packagingCharge: 100, packagingMinimumChargeApplied: true });
+  });
+
+  it("recomputes the charge when quantity changes", async () => {
+    const user = await makeUser();
+    const product = await makeProduct();
+    const variant = await makeVariant(product.id, { netWeightGrams: 200 });
+    const option = await makePackagingOption(product.id, { chargeType: "PerGram", charge: "0", ratePerGram: "0.50" });
+
+    await addItem(user.id, null, product.id, 1, variant.id, { packagingOptionId: option.id, declaredAvailability: "Local" });
+    const before = await getCart(user.id, null);
+    const itemId = before.items[0]!.id;
+
+    await updateItemQuantity(user.id, null, itemId, 4);
+    const after = await getCart(user.id, null);
+
+    // 200g x 4 x LKR 0.50/g = LKR 400.
+    expect(after.items[0]).toMatchObject({ packagingCharge: 400, packagingNetWeightGrams: 800 });
   });
 });

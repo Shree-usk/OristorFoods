@@ -19,11 +19,21 @@ export interface PackagingSelectionValue {
 interface PackagingSelectorProps {
   options: ProductDetailPackagingOption[];
   selectedVariantId: string | null;
+  /** Weight-based pricing (Story 3b). The selected variant's own net weight — null for a plain/unvarianted product (PerGram options never apply there). */
+  selectedVariantNetWeightGrams: number | null;
+  /** Current quantity stepper value — drives the live PerGram calculation, recomputed on every change. */
+  quantity: number;
   currency: string;
   value: PackagingSelectionValue | null;
   onChange: (value: PackagingSelectionValue | null) => void;
   acknowledged: boolean;
   onAcknowledgedChange: (checked: boolean) => void;
+}
+
+/** Pure client-side preview of the server's own packaging.service.ts::calculatePerGramCharge — the server always recomputes authoritatively at add-to-cart/checkout time; this is display-only. */
+function previewPerGramCharge(netWeightGrams: number, quantity: number, option: ProductDetailPackagingOption): number {
+  const raw = netWeightGrams * quantity * (option.ratePerGram ?? 0);
+  return option.minPackagingCharge != null ? Math.max(raw, option.minPackagingCharge) : raw;
 }
 
 /** "Both" accepts either declaration; Local/Export must match it exactly. */
@@ -45,7 +55,17 @@ function isAvailabilityCompatible(optionAvailability: ProductDetailPackagingOpti
  * let the customer add more" requirement. The "(min N)" annotation stays
  * as a hint either way.
  */
-export function PackagingSelector({ options, selectedVariantId, currency, value, onChange, acknowledged, onAcknowledgedChange }: PackagingSelectorProps) {
+export function PackagingSelector({
+  options,
+  selectedVariantId,
+  selectedVariantNetWeightGrams,
+  quantity,
+  currency,
+  value,
+  onChange,
+  acknowledged,
+  onAcknowledgedChange,
+}: PackagingSelectorProps) {
   const eligible = options.filter((option) => option.variantId === null || option.variantId === selectedVariantId);
   if (eligible.length === 0) return null;
 
@@ -107,6 +127,7 @@ export function PackagingSelector({ options, selectedVariantId, currency, value,
           </button>
           {optionsForDeclaration.map((option) => {
             const hasMinimum = option.minQuantity != null && option.minQuantity > 1;
+            const hasWeightMinimum = option.chargeType === "PerGram" && option.minOrderWeightGrams != null;
             const selected = value?.optionId === option.id;
             return (
               <button
@@ -125,7 +146,13 @@ export function PackagingSelector({ options, selectedVariantId, currency, value,
                 )}
                 <span>
                   {option.packagingMethodName}
+                  {option.chargeType === "PerGram" && (
+                    <span className="ml-1.5 text-charcoal/60">
+                      ({currency} {Number(option.ratePerGram ?? 0).toFixed(4)}/g)
+                    </span>
+                  )}
                   {hasMinimum && <span className="ml-1.5">(min {option.minQuantity})</span>}
+                  {hasWeightMinimum && <span className="ml-1.5">(min {option.minOrderWeightGrams}g)</span>}
                 </span>
               </button>
             );
@@ -135,10 +162,35 @@ export function PackagingSelector({ options, selectedVariantId, currency, value,
 
       {selectedOption && (
         <div className="mt-3 space-y-1 rounded-md border border-input bg-muted/40 p-3 text-small text-charcoal/80">
-          {selectedOption.charge > 0 && (
-            <p className="font-medium text-charcoal">
-              Packaging charge: +{currency} {selectedOption.charge.toLocaleString()}
-            </p>
+          {selectedOption.chargeType === "PerGram" ? (
+            selectedVariantNetWeightGrams != null ? (
+              (() => {
+                const eligibleWeightGrams = selectedVariantNetWeightGrams * quantity;
+                const belowMinimumWeight = selectedOption.minOrderWeightGrams != null && eligibleWeightGrams < selectedOption.minOrderWeightGrams;
+                return (
+                  <>
+                    <p>
+                      Rate: {currency} {Number(selectedOption.ratePerGram ?? 0).toFixed(4)}/g · Eligible weight: {eligibleWeightGrams.toLocaleString()}g
+                    </p>
+                    {belowMinimumWeight ? (
+                      <p className="font-medium text-destructive">
+                        This packaging requires a minimum order weight of {selectedOption.minOrderWeightGrams}g — increase the quantity to continue.
+                      </p>
+                    ) : (
+                      <p className="font-medium text-charcoal">
+                        Packaging charge: +{currency} {previewPerGramCharge(selectedVariantNetWeightGrams, quantity, selectedOption).toLocaleString()}
+                      </p>
+                    )}
+                  </>
+                );
+              })()
+            ) : null
+          ) : (
+            selectedOption.charge > 0 && (
+              <p className="font-medium text-charcoal">
+                Packaging charge: +{currency} {selectedOption.charge.toLocaleString()}
+              </p>
+            )
           )}
           {selectedOption.leadTimeDays !== null && <p>Lead time: {selectedOption.leadTimeDays} day(s)</p>}
           {selectedOption.shelfLifeText ? (

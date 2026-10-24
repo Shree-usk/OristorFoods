@@ -436,6 +436,49 @@ describe("placeOrder — Custom Packaging (Story 3)", () => {
   });
 });
 
+describe("placeOrder — Weight-based packaging (Story 3b)", () => {
+  it("persists the per-gram snapshot (charge type, rate, net weight) on the order item, with the charge counted exactly once in grandTotal", async () => {
+    await makeZone();
+    const product = await makeProduct();
+    const variant = await makeVariant(product.id, { netWeightGrams: 200 });
+    const option = await makePackagingOption(product.id, { chargeType: "PerGram", charge: "0", ratePerGram: "0.50" });
+    const identity = await addItem(null, undefined, product.id, 2, variant.id, { packagingOptionId: option.id, declaredAvailability: "Local" });
+    const cookie = identity.newCookieValue!;
+    const intent = await createIntentForCart(null, cookie, "Colombo", "Card");
+    await confirmPayment(intent.providerReference, { outcome: "success" });
+
+    const result = await placeOrder(null, cookie, {
+      idempotencyKey: crypto.randomUUID(),
+      address,
+      guestEmail: "guest@test.com",
+      providerReference: intent.providerReference,
+      paymentMethod: "Card",
+    });
+
+    const order = await prisma.order.findUnique({ where: { orderNumber: result.orderNumber }, include: { items: true } });
+    const item = order!.items[0]!;
+    // 200g x 2 x LKR 0.50/g = LKR 200.
+    expect(item.packagingChargeType).toBe("PerGram");
+    expect(Number(item.packagingRatePerGram)).toBeCloseTo(0.5, 4);
+    expect(item.packagingNetWeightGrams).toBe(400);
+    expect(item.packagingMinimumChargeApplied).toBe(false);
+    expect(Number(item.packagingCharge)).toBeCloseTo(200, 2);
+    // variant unit price (1000) x quantity (2) + delivery (350) + packaging (200) — packaging counted once.
+    expect(order!.grandTotal.toNumber()).toBeCloseTo(1000 * 2 + 350 + 200, 2);
+  });
+
+  it("a PerGram-packaged order is still restricted to Card/BankTransfer, same as a Fixed-charge one", async () => {
+    await makeZone();
+    const product = await makeProduct();
+    const variant = await makeVariant(product.id, { netWeightGrams: 200 });
+    const option = await makePackagingOption(product.id, { chargeType: "PerGram", charge: "0", ratePerGram: "0.50" });
+    const identity = await addItem(null, undefined, product.id, 1, variant.id, { packagingOptionId: option.id, declaredAvailability: "Local" });
+    const cookie = identity.newCookieValue!;
+
+    await expect(createIntentForCart(null, cookie, "Colombo", "CashOnDelivery")).rejects.toBeInstanceOf(PaymentMethodNotAllowedError);
+  });
+});
+
 describe("Export Fulfilment Flow", () => {
   const traveler = { travelerName: "Jane Traveler", travelerCountry: "Australia", travelerPhone: "+94771234567" };
 

@@ -55,6 +55,10 @@ export interface OrderAdminDetailLineItem {
   packagingCharge?: number | null;
   packagingRequiresManualReview?: boolean;
   packagingInstructions?: string | null;
+  packagingChargeType?: "Fixed" | "PerGram" | null;
+  packagingRatePerGram?: number | null;
+  packagingNetWeightGrams?: number | null;
+  packagingMinimumChargeApplied?: boolean;
   unitPrice: number;
   quantity: number;
   lineTotal: number;

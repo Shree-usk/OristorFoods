@@ -1,6 +1,14 @@
 import { describe, expect, it } from "vitest";
 
-import { isAvailabilityCompatible, packagingSelectionValidity, type PackagingOptionForValidity } from "@/services/packaging.service";
+import { Prisma } from "@/generated/prisma/client";
+import {
+  allocateGroupCharge,
+  calculatePerGramCharge,
+  isAvailabilityCompatible,
+  packagingSelectionValidity,
+  packagingWeightGroupValidity,
+  type PackagingOptionForValidity,
+} from "@/services/packaging.service";
 
 const NOW = new Date("2026-06-01T00:00:00Z");
 
@@ -95,5 +103,83 @@ describe("packagingSelectionValidity", () => {
     // availability reports "unavailable" — status is the earliest gate.
     const option = baseOption({ status: "Discontinued", availability: "Export", minQuantity: 5 });
     expect(packagingSelectionValidity(option, 1, "Local", NOW)).toEqual({ valid: false, reason: "unavailable" });
+  });
+});
+
+// Story 3b — weight-based ("per-gram") packaging pricing.
+
+describe("packagingWeightGroupValidity", () => {
+  it("accepts when there is no configured minimum", () => {
+    expect(packagingWeightGroupValidity(1, null)).toEqual({ valid: true });
+  });
+
+  it("rejects a group weight below the configured minimum", () => {
+    expect(packagingWeightGroupValidity(500, 1000)).toEqual({ valid: false, reason: "minimum_weight" });
+  });
+
+  it("accepts a group weight at or above the configured minimum", () => {
+    expect(packagingWeightGroupValidity(1000, 1000)).toEqual({ valid: true });
+    expect(packagingWeightGroupValidity(1500, 1000)).toEqual({ valid: true });
+  });
+});
+
+describe("calculatePerGramCharge", () => {
+  it("multiplies weight by rate, rounded to currency precision", () => {
+    // The doc's own worked example: 750g at LKR 0.50/g = LKR 375.
+    const result = calculatePerGramCharge(750, new Prisma.Decimal("0.50"), null);
+    expect(result.rawCharge.toFixed(2)).toBe("375.00");
+    expect(result.finalCharge.toFixed(2)).toBe("375.00");
+    expect(result.minimumChargeApplied).toBe(false);
+  });
+
+  it("floors the charge at the configured minimum packaging charge", () => {
+    const result = calculatePerGramCharge(100, new Prisma.Decimal("0.50"), new Prisma.Decimal("100.00"));
+    expect(result.rawCharge.toFixed(2)).toBe("50.00");
+    expect(result.finalCharge.toFixed(2)).toBe("100.00");
+    expect(result.minimumChargeApplied).toBe(true);
+  });
+
+  it("never applies a minimum that's already cleared", () => {
+    const result = calculatePerGramCharge(1000, new Prisma.Decimal("0.50"), new Prisma.Decimal("100.00"));
+    expect(result.finalCharge.toFixed(2)).toBe("500.00");
+    expect(result.minimumChargeApplied).toBe(false);
+  });
+});
+
+describe("allocateGroupCharge", () => {
+  it("splits a group's charge across members proportional to weight, summing to exactly the final charge", () => {
+    // Doc's example: two 200g units + one 350g unit = 750g @ LKR 0.50/g = LKR 375.
+    const members = [
+      { itemId: "item-a", weightGrams: 400 }, // two 200g units
+      { itemId: "item-b", weightGrams: 350 }, // one 350g unit
+    ];
+    const shares = allocateGroupCharge(members, new Prisma.Decimal("375.00"), 750);
+    const total = (shares.get("item-a") ?? 0) + (shares.get("item-b") ?? 0);
+    expect(total).toBeCloseTo(375, 2);
+    // Proportional: item-a carries 400/750 of the weight.
+    expect(shares.get("item-a")).toBeCloseTo(200, 2);
+    expect(shares.get("item-b")).toBeCloseTo(175, 2);
+  });
+
+  it("always sums to exactly the final charge even when the proportional split doesn't divide evenly in cents", () => {
+    const members = [
+      { itemId: "item-a", weightGrams: 1 },
+      { itemId: "item-b", weightGrams: 1 },
+      { itemId: "item-c", weightGrams: 1 },
+    ];
+    const shares = allocateGroupCharge(members, new Prisma.Decimal("10.00"), 3);
+    const total = [...shares.values()].reduce((sum, value) => sum + value, 0);
+    expect(total).toBeCloseTo(10, 2);
+  });
+
+  it("is deterministic across repeated calls for the same group", () => {
+    const members = [
+      { itemId: "item-b", weightGrams: 1 },
+      { itemId: "item-a", weightGrams: 1 },
+      { itemId: "item-c", weightGrams: 1 },
+    ];
+    const first = allocateGroupCharge(members, new Prisma.Decimal("10.00"), 3);
+    const second = allocateGroupCharge([...members].reverse(), new Prisma.Decimal("10.00"), 3);
+    expect([...first.entries()].sort()).toEqual([...second.entries()].sort());
   });
 });

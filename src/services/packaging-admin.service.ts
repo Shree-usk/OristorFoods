@@ -7,8 +7,10 @@ import {
   PackagingMethodNotFoundError,
   PackagingOptionDuplicateError,
   PackagingOptionNotFoundError,
+  PackagingOptionRequiresVariantsError,
   PackagingOptionVariantMismatchError,
 } from "@/services/product-admin.errors";
+import type { PackagingChargeType } from "@/generated/prisma/client";
 import type { PackagingMethodAdminFormInput, ProductPackagingOptionAdminFormInput } from "@/validation/packaging-admin.schema";
 
 /**
@@ -78,9 +80,29 @@ async function requireNoDuplicateOption(productId: string, variantId: string | n
   if (duplicate) throw new PackagingOptionDuplicateError();
 }
 
+/**
+ * Weight-based packaging (Story 3b). A variant's netWeightGrams is the
+ * only authoritative per-unit weight signal in this codebase — a
+ * variant-less product has none, so PerGram is rejected server-side
+ * rather than silently computed off an unrelated/wrong field.
+ */
+async function requireProductHasVariantsForPerGram(productId: string, chargeType: PackagingChargeType | undefined) {
+  if (chargeType !== "PerGram") return;
+  const variants = await productVariantRepository.findVariantsByProductId(productId);
+  if (variants.length === 0) throw new PackagingOptionRequiresVariantsError();
+}
+
 function toOptionData(input: ProductPackagingOptionAdminFormInput) {
+  const chargeType = input.chargeType ?? "Fixed";
   return {
+    chargeType,
     charge: input.charge ?? 0,
+    // Null out the inactive mode's fields on every write so switching an
+    // option between Fixed and PerGram never leaves stale config from the
+    // previous mode lying around for a future bug to accidentally read.
+    ratePerGram: chargeType === "PerGram" ? input.ratePerGram ?? null : null,
+    minOrderWeightGrams: chargeType === "PerGram" ? input.minOrderWeightGrams ?? null : null,
+    minPackagingCharge: chargeType === "PerGram" ? input.minPackagingCharge ?? null : null,
     minQuantity: input.minQuantity ?? null,
     availability: input.availability ?? "Both",
     requiresManualReview: input.requiresManualReview ?? false,
@@ -101,6 +123,7 @@ export async function createPackagingOption(adminUserId: string, productId: stri
   await requirePermission(adminUserId, "Products", "Edit");
   await requireVariantBelongsToProduct(productId, input.variantId);
   await requireNoDuplicateOption(productId, input.variantId, input.packagingMethodId);
+  await requireProductHasVariantsForPerGram(productId, input.chargeType);
 
   const option = await packagingRepository.createPackagingOption({
     product: { connect: { id: productId } },
@@ -123,6 +146,7 @@ export async function updatePackagingOption(adminUserId: string, productId: stri
   await requirePackagingOptionForProduct(productId, optionId);
   await requireVariantBelongsToProduct(productId, input.variantId);
   await requireNoDuplicateOption(productId, input.variantId, input.packagingMethodId, optionId);
+  await requireProductHasVariantsForPerGram(productId, input.chargeType);
 
   const option = await packagingRepository.updatePackagingOption(optionId, {
     variant: input.variantId ? { connect: { id: input.variantId } } : { disconnect: true },

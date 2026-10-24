@@ -37,6 +37,26 @@ export function CartLineItemRow({ item, onQuantityChange, onRemove, isMutating =
         <p className="mt-1 text-small text-charcoal/70">
           {item.currency} {item.unitPrice.toFixed(2)} each
         </p>
+        {item.packagingMethodName && (
+          <p className="mt-1 text-caption text-charcoal/60">
+            + {item.packagingMethodName} packaging
+            {item.packagingChargeType === "PerGram" ? (
+              <>
+                {" "}
+                ({item.packagingNetWeightGrams ?? 0}g × {item.currency} {(item.packagingRatePerGram ?? 0).toFixed(4)}/g = {item.currency}{" "}
+                {item.packagingCharge.toFixed(2)}
+                {item.packagingMinimumChargeApplied && " · minimum charge applied"})
+              </>
+            ) : (
+              item.packagingCharge > 0 && (
+                <>
+                  {" "}
+                  (+{item.currency} {item.packagingCharge.toFixed(2)})
+                </>
+              )
+            )}
+          </p>
+        )}
 
         <div className="mt-2 flex items-center gap-2">
           <Button

@@ -32,6 +32,11 @@ export interface OrderLineInput {
   packagingRequiresManualReview?: boolean;
   /** Export fulfilment flow. Snapshot of ProductPackagingOption.customerInstructions — null for a line with no packaging selected, or one whose option left it unset. */
   packagingInstructions?: string | null;
+  /** Weight-based packaging pricing (Story 3b). Flat snapshots — null unless this line's packaging was PerGram. */
+  packagingChargeType?: "Fixed" | "PerGram" | null;
+  packagingRatePerGram?: string | null;
+  packagingNetWeightGrams?: number | null;
+  packagingMinimumChargeApplied?: boolean;
 }
 
 /** Story 2 (Bundles). One entry per distinct bundle instance in the order — only OwnStock ones trigger the bundle-level decrement/restock step below. */
@@ -193,6 +198,10 @@ export function createOrderWithStockDecrement(input: CreateOrderInput) {
             packagingDeclaredAvailability: line.packagingDeclaredAvailability,
             packagingRequiresManualReview: line.packagingRequiresManualReview ?? false,
             packagingInstructions: line.packagingInstructions,
+            packagingChargeType: line.packagingChargeType,
+            packagingRatePerGram: line.packagingRatePerGram,
+            packagingNetWeightGrams: line.packagingNetWeightGrams,
+            packagingMinimumChargeApplied: line.packagingMinimumChargeApplied ?? false,
             unitPrice: line.unitPrice,
             quantity: line.quantity,
             lineTotal: line.lineTotal,
