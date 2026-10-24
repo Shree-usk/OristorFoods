@@ -3,6 +3,7 @@ import Link from "next/link";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { DashboardEmptyState } from "@/components/storefront/account/dashboard-empty-state";
+import { ImagePlaceholder } from "@/components/storefront/product/image-placeholder";
 import { getSavedItemsForDashboard } from "@/services/customer-dashboard.service";
 
 /** STORY-033. Async Server Component — see recent-orders-card.tsx's header comment for why each widget fetches independently. */
@@ -23,7 +24,7 @@ export async function SavedItemsCard({ userId }: { userId: string }) {
               <div className="flex -space-x-3">
                 {preview.map((item) => (
                   <div key={item.id} className="relative size-12 overflow-hidden rounded-full border-2 border-card bg-cream">
-                    <Image src={item.imageSrc} alt={item.imageAlt} fill sizes="48px" className="object-cover" />
+                    {item.imageSrc ? <Image src={item.imageSrc} alt={item.imageAlt} fill sizes="48px" className="object-cover" /> : <ImagePlaceholder size="sm" />}
                   </div>
                 ))}
               </div>

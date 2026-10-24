@@ -132,7 +132,7 @@ export default async function ProductDetailPage({ params }: ProductDetailPagePro
           id: product.id,
           name: product.name,
           href: `/products/${product.slug}`,
-          imageSrc: product.images[0]?.url ?? "",
+          imageSrc: product.images[0]?.url ?? null,
           imageAlt: product.images[0]?.altText ?? product.name,
           price: product.price,
           currency: product.currency,

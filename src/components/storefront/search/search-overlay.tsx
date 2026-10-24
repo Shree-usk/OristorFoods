@@ -134,13 +134,14 @@ function toSuggestionItem(product: {
   id: string;
   name: string;
   href: string;
-  imageSrc: ImageSource;
+  imageSrc: ImageSource | null;
 }): SearchSuggestionItem {
   // ProductListItem.imageSrc is ImageSource (StaticImageData | string) since
   // it's shared with statically-imported homepage fixtures; real catalogue
   // products always resolve to a URL string, but narrow defensively here
-  // since SearchSuggestionItem.imageSrc is string-only.
-  const imageSrc = typeof product.imageSrc === "string" ? product.imageSrc : product.imageSrc.src;
+  // since SearchSuggestionItem.imageSrc is string-only. Null (no product
+  // image) collapses to undefined the same way an empty string already did.
+  const imageSrc = product.imageSrc === null ? null : typeof product.imageSrc === "string" ? product.imageSrc : product.imageSrc.src;
   return {
     id: product.id,
     label: product.name,

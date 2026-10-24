@@ -96,6 +96,13 @@ describe("ProductCard", () => {
     expect(prevented).toBe(true);
   });
 
+  it("shows the 'No image available' placeholder instead of a broken image when imageSrc is null", () => {
+    renderCard({ ...baseProduct, imageSrc: null });
+
+    expect(screen.getByText("No image available")).toBeInTheDocument();
+    expect(screen.queryByRole("img")).not.toBeInTheDocument();
+  });
+
   it("shows an inline message and does not add a 5th product when the tray is full", async () => {
     useCompareStore.setState({ items: ["a", "b", "c", "d"] });
     renderCard();

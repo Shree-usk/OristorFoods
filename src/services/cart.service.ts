@@ -84,7 +84,7 @@ function toLineItem(
     packagingShelfLifeDays: item.packagingOption?.shelfLifeDays ?? null,
     packagingShelfLifeText: item.packagingOption?.shelfLifeText ?? null,
     packagingInstructions: item.packagingOption?.customerInstructions ?? null,
-    imageSrc: primaryImage?.url ?? "",
+    imageSrc: primaryImage?.url ?? null,
     imageAlt: primaryImage?.altText ?? item.product.name,
     quantity: item.quantity,
     unitPrice: resolvedUnitPrice,

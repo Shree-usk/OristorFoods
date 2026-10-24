@@ -6,6 +6,7 @@ import { Star } from "lucide-react";
 import { ScrollReveal } from "@/components/motion";
 import { Badge } from "@/components/ui/badge";
 import { Section } from "@/components/storefront/layout/section";
+import { ImagePlaceholder } from "@/components/storefront/product/image-placeholder";
 import { auth } from "@/lib/auth";
 import { getSessionId } from "@/lib/recommendation-session";
 import { resolveCustomerGroupForUser } from "@/services/pricing.service";
@@ -54,13 +55,17 @@ export async function BestSellingProducts({ titleOverride }: { titleOverride?: s
                 {product.badge && (
                   <Badge className="absolute top-2 left-2 z-10">{product.badge}</Badge>
                 )}
-                <Image
-                  src={product.imageSrc}
-                  alt={product.imageAlt}
-                  fill
-                  sizes="(min-width: 1024px) 20vw, (min-width: 640px) 30vw, 45vw"
-                  className="object-contain p-4 transition-transform duration-300 group-hover:scale-105"
-                />
+                {product.imageSrc ? (
+                  <Image
+                    src={product.imageSrc}
+                    alt={product.imageAlt}
+                    fill
+                    sizes="(min-width: 1024px) 20vw, (min-width: 640px) 30vw, 45vw"
+                    className="object-contain p-4 transition-transform duration-300 group-hover:scale-105"
+                  />
+                ) : (
+                  <ImagePlaceholder />
+                )}
               </div>
               <p className="mt-3 text-small font-medium text-charcoal">{product.name}</p>
               {product.rating && (

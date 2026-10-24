@@ -209,7 +209,7 @@ export function toProductListItem(
     id: product.id,
     name: product.name,
     href: `/products/${product.slug}`,
-    imageSrc: primaryImage?.url ?? "",
+    imageSrc: primaryImage?.url ?? null,
     imageAlt: primaryImage?.altText ?? product.name,
     price,
     currency,
@@ -425,7 +425,8 @@ export interface CompareItem {
   id: string;
   slug: string;
   name: string;
-  imageSrc: string;
+  /** Null when the product has no image — render a placeholder, never an empty src. */
+  imageSrc: string | null;
   imageAlt: string;
   brandName: string | null;
   price: number;
@@ -717,7 +718,7 @@ export async function getProductsForCompare(productIds: string[], customerGroup?
       id: candidate.id,
       slug: candidate.slug,
       name: candidate.name,
-      imageSrc: primaryImage?.url ?? "",
+      imageSrc: primaryImage?.url ?? null,
       imageAlt: primaryImage?.altText ?? candidate.name,
       brandName: candidate.brand?.name ?? null,
       price: resolved.price.toNumber(),

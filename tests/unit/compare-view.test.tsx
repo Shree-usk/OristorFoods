@@ -89,4 +89,12 @@ describe("CompareView", () => {
     await waitFor(() => expect(screen.queryByText("Curry Powder")).not.toBeInTheDocument());
     expect(useCompareStore.getState().items).toEqual(["p2"]);
   });
+
+  it("shows a placeholder instead of a broken image when a product has no image", () => {
+    renderView([itemA, { ...itemB, imageSrc: null }]);
+
+    // itemA's own real image renders; itemB's imageless slot renders the
+    // icon-only placeholder instead of a broken <img>.
+    expect(screen.getAllByRole("img")).toHaveLength(1);
+  });
 });
