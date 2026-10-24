@@ -23,7 +23,7 @@ describe("searchCatalogue", () => {
     expect(result).toEqual({ query: "", products: [], recipes: [], page: 1, pageSize: 12, hasNextPage: false });
   });
 
-  it("returns matching, priced products", async () => {
+  it("returns matching, priced products, with imageSrc null for a product with no image", async () => {
     const product = await createProduct({
       sku: "SEARCH-SVC-1",
       slug: "search-svc-curry",
@@ -34,18 +34,37 @@ describe("searchCatalogue", () => {
 
     const result = await searchCatalogue("curry");
 
+    // imageSrc is null, never "" — a missing image is a real, typed
+    // absence (ProductCardData.imageSrc: ImageSource | null), not an
+    // empty string that would render next/image as broken. See
+    // toProductListItem in product.service.ts.
     expect(result.products).toEqual([
       {
         id: product.id,
         name: "Roasted Curry Powder",
         href: "/products/search-svc-curry",
-        imageSrc: "",
+        imageSrc: null,
         imageAlt: "Roasted Curry Powder",
         price: 450,
         currency: "LKR",
         inStock: true,
       },
     ]);
+  });
+
+  it("returns the product's own primary image URL as imageSrc when one is set", async () => {
+    const product = await createProduct({
+      sku: "SEARCH-SVC-1-IMG",
+      slug: "search-svc-curry-with-image",
+      name: "Curry Powder With Photo",
+      status: "Published",
+      images: { create: [{ url: "/images/products/curry-powder.webp", altText: "Curry Powder jar", sortOrder: 0, isPrimary: true }] },
+    });
+    await createStandardPrice({ product: { connect: { id: product.id } }, price: "450.00" });
+
+    const result = await searchCatalogue("curry");
+
+    expect(result.products[0]).toMatchObject({ imageSrc: "/images/products/curry-powder.webp", imageAlt: "Curry Powder jar" });
   });
 
   it("omits a matching product with no configured price", async () => {
