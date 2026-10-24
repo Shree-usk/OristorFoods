@@ -24,12 +24,15 @@ interface ProductGalleryProps {
 export function ProductGallery({ images, videos = [], variants = [], productName }: ProductGalleryProps) {
   const { selectedVariantId } = useVariantSelection();
   const selectedVariant = variants.find((variant) => variant.id === selectedVariantId) ?? null;
-  // A variant with its own dedicated photos replaces the product's base
-  // images entirely while it's selected — falls back to the product's own
-  // images for a variant with none set. Videos stay product-level either
+  // A variant's own photo(s) are pinned first, followed by the rest of the
+  // product's general gallery (deduped by url) — a variant with none set
+  // just shows the product's own images. Previously the variant images
+  // replaced the gallery entirely, hiding every other product photo
+  // whenever any variant had one set. Videos stay product-level either
   // way (no per-variant video model).
   const variantImages = selectedVariant?.images ?? [];
-  const activeImages = variantImages.length > 0 ? variantImages : images;
+  const variantImageUrls = new Set(variantImages.map((image) => image.url));
+  const activeImages = [...variantImages, ...images.filter((image) => !variantImageUrls.has(image.url))];
 
   const [activeIndex, setActiveIndex] = useState(0);
   // Reset to the first slide whenever the selected variant changes — adjusting
