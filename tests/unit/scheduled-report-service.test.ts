@@ -1,5 +1,21 @@
 // @vitest-environment node
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+
+const { mockEmailSend } = vi.hoisted(() => ({ mockEmailSend: vi.fn().mockResolvedValue({ status: "sent" }) }));
+
+// processDueScheduledReports sends a real email per due report via
+// notification.service.ts's sendTransactionalEmail. Without SMTP_HOST
+// configured, EmailProvider falls back to auto-provisioning an Ethereal
+// sandbox inbox over the network — a real outbound call that hangs well
+// past this test's own 40s timeout in a sandboxed CI runner with no
+// egress. Mirrors contact-enquiry-service.test.ts/export-enquiry-service.test.ts's
+// exact mocking shape.
+vi.mock("@/services/notification/email.provider", () => ({
+  EmailProvider: class {
+    name = "mock-email-for-test";
+    send = mockEmailSend;
+  },
+}));
 
 import type { AdminAction, AdminModule } from "@/generated/prisma/client";
 import { prisma } from "@/lib/db";
