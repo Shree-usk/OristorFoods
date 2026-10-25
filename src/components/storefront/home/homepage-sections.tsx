@@ -16,7 +16,6 @@ import { getRecentPostsForStorefront } from "@/services/instagram.service";
 import { getFeaturedReviewsForStorefront } from "@/services/review.service";
 import type { CategoryCardData, CollectionCardData, InstagramPostData, ReviewData } from "@/types/home";
 import {
-  exportSolutions,
   featuredCategories,
   foodAcademyTeaser,
   instagramPosts,
@@ -158,12 +157,10 @@ export async function HomepageSections({ layout }: { layout: HomepageLayoutDetai
             if (resolvedReviews.length === 0) return null;
             return <CustomerReviews key={section.id} reviews={resolvedReviews} titleOverride={section.titleOverride} />;
           case "ExportSolutions":
-            return (
-              <ExportSolutions
-                key={section.id}
-                data={{ ...exportSolutions, headline: section.titleOverride || exportSolutions.headline, description: section.descriptionOverride || exportSolutions.description }}
-              />
-            );
+            // No titleOverride/descriptionOverride splice here — superseded
+            // by the real ExportHeroSetting model, same as HeroBanner's
+            // case above.
+            return <ExportSolutions key={section.id} />;
           case "RewardsClub":
             return (
               <RewardsClubTeaser

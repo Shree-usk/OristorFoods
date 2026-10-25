@@ -3,6 +3,7 @@ import { Award, Leaf, ShieldCheck, Users } from "lucide-react";
 import type {
   CategoryCardData,
   CollectionCardData,
+  ExportHeroData,
   HeroBannerData,
   InstagramPostData,
   ReviewData,
@@ -175,15 +176,38 @@ export const foodAcademyTeaser: TeaserSectionData = {
   imageAlt: "Oristor turmeric powder",
 };
 
-export const exportSolutions: TeaserSectionData = {
-  eyebrow: "Export Solutions",
-  headline: "Partner with Oristor for Global Distribution",
+/**
+ * Default content for the homepage Export Hero (ExportHeroSetting) — the
+ * fallback for any individual field an admin hasn't configured yet, see
+ * export-hero.service.ts::getExportHeroForStorefront. `backgroundImageUrl`
+ * deliberately defaults to null (a solid charcoal background, no image) —
+ * better to show no image than to guess at a "striking lifestyle photo"
+ * from the existing product-on-white catalogue shots; the real photo is
+ * meant to be uploaded by an admin via the Media Library.
+ */
+export const exportHeroDefaults: ExportHeroData = {
+  backgroundImageUrl: null,
+  backgroundImageAlt: null,
+  eyebrow: "Oristor Export Solutions",
+  headline: "Bring the Taste of **Sri Lanka** to Your Market.",
   description:
-    "From single-origin sourcing to bulk export packaging, we work with distributors, importers, and retailers worldwide.",
-  ctaLabel: "Explore Export Catalogue",
-  ctaHref: "/export",
-  imageSrc: "/images/products/export/Kithul-Jaggery-500g.png",
-  imageAlt: "Oristor Kithul jaggery export packaging",
+    "Authentic Sri Lankan condiments and food products for distributors, importers and retail partners. Discover our range and explore opportunities to grow together.",
+  primaryCtaLabel: "Explore Export Catalogue",
+  primaryCtaHref: "/export",
+  secondaryCtaLabel: "Become a Distribution Partner",
+  secondaryCtaHref: "/export#enquiry",
+  statLine: [
+    { label: "Authentic Sri Lankan Range", description: "Distinctive local flavours" },
+    { label: "Retail & Bulk Formats", description: "Options for market needs" },
+    { label: "Export Enquiries", description: "Connect with our team" },
+  ],
+  badge: {
+    eyebrow: "For Global Partners",
+    headline: "From Sri Lanka. Ready for the world.",
+    description: "Explore our export collection and start a conversation about your market requirements.",
+    ctaLabel: "View Export Collection",
+    ctaHref: "/export",
+  },
 };
 
 export const rewardsClubTeaser: TeaserSectionData = {

@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { CheckboxOption } from "@/components/storefront/listing/checkbox-option";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { VersionHistoryPanel } from "@/components/admin/cms/version-history-panel";
+import { ExportHeroEditor } from "@/components/admin/homepage-builder/export-hero-editor";
 import { HeroBannerEditor } from "@/components/admin/homepage-builder/hero-banner-editor";
 import { SectionEditor } from "@/components/admin/homepage-builder/section-editor";
 import { SECTION_TYPE_LABELS, SECTION_TYPE_ORDER } from "@/components/admin/homepage-builder/section-labels";
@@ -188,7 +189,10 @@ export function HomepageBuilderCanvas({ layoutId }: HomepageBuilderCanvasProps) 
           onChanged={invalidate}
         />
       )}
-      {editingSection && editingSection.type !== "HeroBanner" && (
+      {editingSection && editingSection.type === "ExportSolutions" && (
+        <ExportHeroEditor open={editingSectionId !== null} onOpenChange={(open) => !open && setEditingSectionId(null)} onChanged={invalidate} />
+      )}
+      {editingSection && editingSection.type !== "HeroBanner" && editingSection.type !== "ExportSolutions" && (
         <SectionEditor
           layoutId={layoutId}
           section={editingSection}

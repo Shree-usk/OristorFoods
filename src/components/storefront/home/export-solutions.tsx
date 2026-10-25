@@ -1,6 +1,7 @@
-import type { TeaserSectionData } from "@/types/home";
-import { ExportBanner } from "./export-banner";
+import { ExportHero } from "@/components/storefront/home/export-hero";
+import { getExportHeroForStorefront } from "@/services/export-hero.service";
 
-export function ExportSolutions({ data }: { data: TeaserSectionData }) {
-  return <ExportBanner data={data} />;
+export async function ExportSolutions() {
+  const data = await getExportHeroForStorefront();
+  return <ExportHero data={data} />;
 }

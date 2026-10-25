@@ -3,7 +3,17 @@ import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
 import { ExportBanner } from "@/components/storefront/home/export-banner";
-import { exportSolutions } from "@/lib/fixtures/home-fixtures";
+import type { TeaserSectionData } from "@/types/home";
+
+const exportSolutions: TeaserSectionData = {
+  eyebrow: "Export Solutions",
+  headline: "Partner with Oristor for Global Distribution",
+  description: "From single-origin sourcing to bulk export packaging, we work with distributors, importers, and retailers worldwide.",
+  ctaLabel: "Explore Export Catalogue",
+  ctaHref: "/export",
+  imageSrc: "/images/products/export/Kithul-Jaggery-500g.png",
+  imageAlt: "Oristor Kithul jaggery export packaging",
+};
 
 describe("ExportBanner", () => {
   it("renders the eyebrow, headline, description, and a CTA linking to the export catalogue", () => {
