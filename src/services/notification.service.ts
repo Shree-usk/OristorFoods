@@ -301,7 +301,13 @@ export const notificationsConsumer: OrderEventConsumer = {
  */
 export async function sendTransactionalEmail(recipient: string, subject: string, body: string): Promise<void> {
   const provider = getProviderForChannel("Email");
-  await provider.send(recipient, subject, body);
+  const result = await provider.send(recipient, subject, body);
+  // This path bypasses NotificationLog (see the doc comment above), so a
+  // failed send would otherwise be completely invisible — the caller
+  // (e.g. password reset) still returns success to the client either way.
+  if (result.status === "failed") {
+    console.error(`[notification:email] transactional send to ${recipient} failed: ${result.error}`);
+  }
 }
 
 export function getPreferenceForUser(userId: string) {

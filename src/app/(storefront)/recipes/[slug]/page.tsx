@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Clock, Users } from "lucide-react";
 import { notFound } from "next/navigation";
+import { connection } from "next/server";
 import { cache } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Breadcrumbs } from "@/components/storefront/layout/breadcrumbs";
@@ -46,6 +47,13 @@ export async function generateMetadata({ params }: RecipeDetailPageProps): Promi
 }
 
 export default async function RecipeDetailPage({ params }: RecipeDetailPageProps) {
+  // Forces this route dynamic, same as (storefront)/page.tsx's and
+  // (storefront)/about/page.tsx's own precedent — without it, `next build`
+  // statically prerenders this page once, so an admin's edit (including a
+  // quantity change) never reaches the live page until the next redeploy,
+  // and getRecipeBySlug's view-count increment would only ever run once.
+  await connection();
+
   const { slug } = await params;
   const recipe = await getCachedRecipe(slug);
   if (!recipe) notFound();

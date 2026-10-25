@@ -16,7 +16,7 @@ vi.mock("@/services/notification/email.provider", () => ({
 }));
 
 import { getOrCreateReferralCode } from "@/services/referral.service";
-import { sendNotification } from "@/services/notification.service";
+import { sendNotification, sendTransactionalEmail } from "@/services/notification.service";
 
 const EMAIL_PREFIX = "ntf-svc-";
 let sequence = 0;
@@ -184,6 +184,29 @@ describe("sendNotification — failure isolation", () => {
     expect(mockEmailSend).not.toHaveBeenCalled();
     const log = await prisma.notificationLog.findFirstOrThrow({ where: { userId: user.id, templateKey: "test.inactive" } });
     expect(log.status).toBe("Failed");
+  });
+});
+
+describe("sendTransactionalEmail — bypasses NotificationLog, but a failure must not go silent", () => {
+  it("logs an error when the provider reports a failed send, and still resolves (never throws to the caller)", async () => {
+    mockEmailSend.mockResolvedValue({ status: "failed", error: "connection refused" });
+    const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    await expect(sendTransactionalEmail("someone@test.com", "Reset your password", "body")).resolves.toBeUndefined();
+
+    expect(consoleErrorSpy).toHaveBeenCalledWith(expect.stringContaining("someone@test.com"));
+    expect(consoleErrorSpy).toHaveBeenCalledWith(expect.stringContaining("connection refused"));
+    consoleErrorSpy.mockRestore();
+  });
+
+  it("does not log anything when the send succeeds", async () => {
+    mockEmailSend.mockResolvedValue({ status: "sent", providerReference: "ref-1" });
+    const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    await sendTransactionalEmail("someone@test.com", "Reset your password", "body");
+
+    expect(consoleErrorSpy).not.toHaveBeenCalled();
+    consoleErrorSpy.mockRestore();
   });
 });
 
