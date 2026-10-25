@@ -40,7 +40,11 @@ export function ExportHero({ data }: { data: ExportHeroData }) {
   const statLine = data.statLine ?? [];
 
   return (
-    <section className="relative isolate overflow-hidden bg-charcoal">
+    // Insets the banner ~3/4" (4.5rem) from the viewport edge on each side at
+    // desktop width for a contained, rounded-card look instead of true
+    // full-bleed — scaled down to a smaller gutter on mobile so it doesn't
+    // eat a third of a phone screen.
+    <section className="relative isolate mx-4 overflow-hidden rounded-2xl bg-charcoal sm:mx-8 lg:mx-18">
       {data.backgroundImageUrl && (
         <Image
           src={data.backgroundImageUrl}
