@@ -1,0 +1,366 @@
+STORY: Product Page Promotion Selection System — ORISTOR Project Cinnamon
+
+1. Objective
+
+Develop a reusable, premium promotional offer selection component for eligible ORISTOR product detail pages.
+
+Customers should be able to purchase the main product at its regular price or choose from multiple eligible promotional offers, including:
+
+Option A— Fixed Product Bundle: The main product combined with a predefined set of complementary products at a discounted bundle price.
+
+Option B — Leader Product Bundle: The main or leader product combined with configured complementary products. Support fixed combinations and customer-selectable combinations where existing business rules permit.
+
+Option C — Free Gift / Free Issue: The customer purchases the qualifying main product and receives a configured promotional gift, such as pasta or noodles, subject to eligibility, stock and campaign rules.
+
+Option D — Qty Bundling: If the customer purchases the qualifying main product more and receives a configured promotional Discount/gift, such as pasta or noodles, subject to eligibility, stock and campaign rules.
+
+These four options are promotion types, not compulsory offers. The system must display only the offers that are active and applicable to the current product (Admin Configurable)
+
+2. Critical Instructions — Read Before Implementation
+
+Inspect the existing codebase, product detail page, admin panel, promotion/discount logic, cart, checkout, inventory and database schema before proposing changes.
+
+Reuse existing functionality and architectural patterns wherever possible.
+
+Do not hard-code product names, product combinations, prices, discounts, gift values, offer terms or CTA labels. These must come from the existing product, promotion and CMS/admin data.
+
+Do not overwrite, rewrite or reset existing admin-managed content.
+
+Do not introduce a separate promotion engine or duplicate existing business logic if a suitable implementation already exists.
+
+Do not break existing product pricing, product variants, inventory, cart, checkout, coupons, delivery calculations, order processing or payment functionality.
+
+Do not assume the three promotion types already exist. Audit the existing implementation first and identify what is available and what is missing.
+
+Keep the UI responsive, mobile-first, accessible and consistent with ORISTOR's premium Sri Lankan brand identity.
+
+Work on the development/staging environment and current feature branch only. Do not deploy to production or modify the live site without explicit approval.
+
+3. Customer Experience
+
+A. Main Product
+
+Keep the existing product detail page structure and main product purchase functionality.
+
+Display the existing:
+
+Product name and images
+
+Product description and specifications
+
+Current price and applicable variants
+
+Quantity selector
+
+Existing add-to-cart CTA and other configured content
+
+Do not replace or duplicate the existing main product purchase controls unnecessarily.
+
+B. Promotion Selection Component
+
+Introduce a reusable section titled using the existing admin-managed heading, if available.
+
+The component should display the normal purchase option and all active, eligible promotions associated with the current product.
+
+Each promotional card should clearly communicate:
+
+Promotion title and description
+
+Included products and quantities
+
+Original combined price and promotional price, where applicable (If possible Saving Amount Star batch)
+
+Savings amount or percentage, where valid
+
+Free-gift product and quantity, where applicable (at current we do not have options to have these non tradable stocks) 
+
+Minimum purchase conditions and other eligibility rules
+
+Promotion validity, if configured and relevant
+
+Existing admin-managed CTA label
+
+Customers should be able to identify the offer they have selected.
+
+Use a clean, premium design with clear visual hierarchy, restrained ORISTOR red accents, warm neutral backgrounds, consistent product imagery and touch-friendly mobile controls.
+
+Do not make all offers equally prominent if the design becomes cluttered. Use compact cards or expandable details where appropriate.
+
+C. Offer Selection Behaviour
+
+By default, treat the main product purchase and each promotional offer as mutually exclusive choices.
+
+Selecting the normal purchase option purchases the main product without a promotional bundle or gift.
+
+Selecting Option A selects the configured fixed bundle.
+
+Selecting Option B selects the configured leader-product bundle and any permitted product choices.
+
+Selecting Option C selects the qualifying free-gift offer.
+
+The customer should be able to change their selection before adding the items to the cart.
+
+When an offer is selected:
+
+Clearly highlight the selected card.
+
+Update the displayed price and included-product summary.
+
+Show any applicable savings or gift information.
+
+Ensure the cart receives the correct products, quantities and prices.
+
+Prevent duplicate addition of the main product when the selected bundle already includes it.
+
+Do not allow offers to stack unless the promotion rules explicitly permit stacking.
+
+If no promotions are eligible, display the existing product page normally without an empty promotional section.
+
+If only one promotion is eligible, display that offer without creating an unnecessarily complicated selection interface.
+
+4. Promotion Types and Business Rules
+
+Option A — Fixed Product Bundle  (Visible size Image needed to display) 
+
+The admin defines the complete product combination and bundle pricing.
+
+The customer cannot remove required products from the fixed bundle unless the existing promotion configuration explicitly allows it.
+
+Validate the availability of all included products before purchase.
+
+Option B — Leader Product Bundle (Visible size Image needed to display)
+
+The main product acts as the lead product for a complementary combination.
+
+Where supported by the admin configuration, allow:
+
+Predefined complementary products
+
+Customer selection from an approved product list
+
+Configured quantities
+
+Fixed bundle prices or configured discount rules
+
+Do not implement arbitrary product selection or discounts without defined business rules.
+
+Option C — Free Gift / Free Issue (Visible size Image needed to display)
+
+The admin specifies the qualifying purchase and gift conditions.
+
+Support the existing or approved rules for:
+
+Qualifying products
+
+Minimum quantity or spend, if applicable
+
+Gift product and quantity
+
+Gift stock availability
+
+Campaign dates and redemption limits
+
+Whether the gift is automatically included or requires customer selection
+
+Whether the offer can be combined with other promotions
+
+A free gift must have a zero promotional charge in the order calculation while preserving the correct product identity, inventory deduction, tax treatment and reporting required by the existing system.
+
+Do not assume a gift has a zero cost to the business. Inventory valuation and accounting treatment must remain consistent with existing rules.
+
+Option D — Qty Bundling  (Visible size Image needed to display)
+
+You can decide this features
+
+5. Admin Panel Requirements
+
+First audit the existing admin panel and data model.
+
+If promotion management already exists, extend it rather than creating duplicate functionality.
+
+If required functionality is missing, propose and implement a suitable configuration model for authorised administrators to manage:
+
+Promotion name and type
+
+Eligible main products
+
+Included products and quantities
+
+Fixed or selectable product combinations
+
+Bundle price or discount method
+
+Gift product and quantity
+
+Eligibility conditions
+
+Campaign start and end dates
+
+Active/inactive status
+
+Stock and redemption limits, where supported
+
+Promotion stacking and exclusivity rules
+
+Display priority
+
+Admin-managed headings, descriptions, images and CTA labels, where the current CMS architecture supports these fields
+
+The admin must be able to activate or deactivate a promotion without code changes.
+
+Do not migrate or alter production data. Any proposed database migration must be documented, reviewed and tested in staging first.
+
+6. Pricing, Cart and Checkout Integrity
+
+The server must validate promotion eligibility and calculate the final payable price. Do not trust client-submitted prices, discounts, gift eligibility or product quantities.
+
+Ensure that:
+
+The main product and bundle products are correctly represented in the cart.
+
+Promotional prices are recalculated server-side.
+
+Gift eligibility is revalidated at checkout.
+
+Inventory is checked and decremented using the existing stock-management process.
+
+Expired, inactive or exhausted offers cannot be purchased.
+
+Cart updates and quantity changes trigger appropriate recalculation.
+
+Removing or changing a qualifying product removes or recalculates its dependent offer.
+
+The order record preserves the promotion applied and its included products.
+
+Taxes, shipping and payment calculations follow existing business rules.
+
+Existing coupons and discounts follow explicit stacking/exclusivity rules.
+
+Avoid double-counting the main product, discounts or gifts.
+
+7. Mobile and Accessibility Requirements
+
+The implementation must work on mobile, tablet and desktop.
+
+On mobile:
+
+Stack promotion cards vertically.
+
+Keep prices and savings readable.
+
+Use large, accessible selection controls.
+
+Avoid horizontal overflow.
+
+Ensure the primary purchase CTA remains easy to reach.
+
+Do not allow the promotion section to overwhelm the main product information.
+
+Provide keyboard-accessible selection, visible focus states, accessible labels and suitable colour contrast.
+
+8. Testing Requirements
+
+Add or update tests for:
+
+Main product purchase without a promotion.
+
+Eligible fixed bundle selection and pricing.
+
+Leader-product bundle selection and pricing.
+
+Free-gift eligibility and zero promotional charge.
+
+Switching between offers.
+
+Prevention of unintended offer stacking.
+
+Expired, disabled and ineligible promotions.
+
+Insufficient gift or bundle stock.
+
+Price tampering and invalid client requests.
+
+Cart quantity changes and removal of qualifying products.
+
+Checkout recalculation and order persistence.
+
+Mobile layout and accessibility.
+
+Regression tests for existing product, cart and checkout flows.
+
+Use the repository's existing test framework and conventions.
+
+9. Implementation Workflow
+
+Work in the following order:
+
+Phase 1 — Audit
+
+Inspect the relevant product page, admin, promotion, cart, checkout and database code.
+
+Identify existing reusable components and business logic.
+
+Report gaps, risks and proposed changes before making structural changes.
+
+Phase 2 — UI prototype
+
+Implement the reusable promotion-selection UI using existing data and components.
+
+Verify the responsive layout and existing content management behaviour.
+
+Phase 3 — Business logic
+
+Integrate promotion eligibility, pricing, cart and checkout using the existing architecture.
+
+Make only the minimum necessary database changes.
+
+Phase 4 — Testing
+
+Run the relevant automated tests and existing regression checks.
+
+Fix any issues introduced by the implementation.
+
+Test realistic scenarios using staging data.
+
+Phase 5 — Review
+Provide a concise report of:
+
+Files changed
+
+Components and services reused
+
+Any database migrations
+
+Admin configuration changes
+
+Tests executed and results
+
+Known limitations or outstanding decisions
+
+Staging URL or verification steps, where available
+
+Do not deploy to production.
+
+10. Acceptance Criteria
+
+The story is complete when:
+
+Eligible product pages can display multiple active promotional options.
+
+Customers can choose the normal purchase or one eligible offer.
+
+Each offer is configured through the admin system rather than hard-coded.
+
+Product combinations, pricing, discounts and gifts are validated by the server.
+
+Cart and checkout totals remain correct.
+
+Existing product content, labels and purchase functionality are preserved.
+
+The UI works across desktop and mobile.
+
+Relevant automated tests pass.
+
+The changes are available for staging review and production deployment remains subject to approval.
+
+Final instruction: Inspect the existing implementation first. Do not begin by creating a new database schema or rewriting product pages. Identify the smallest safe implementation that achieves the requirements, then proceed in controlled stages.

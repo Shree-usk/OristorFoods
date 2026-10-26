@@ -471,11 +471,27 @@ type ProductDetailBundleRow = NonNullable<Awaited<ReturnType<typeof productRepos
  * which bundle-display.tsx drives live via the public preview endpoint
  * instead of this static field.
  */
+/**
+ * The repository's `bundle` include has no `where` clause (a product has
+ * at most one bundle row, active or not), so this status/date-window check
+ * is the only thing standing between a Draft/Inactive/not-yet-started/
+ * expired bundle and it rendering live on the PDP — required by the
+ * Promotion Selector spec's "only active, eligible promotions" and
+ * "expired, inactive... offers cannot be purchased" rules.
+ */
+function isBundleEligibleNow(bundle: NonNullable<ProductDetailBundleRow>): boolean {
+  if (bundle.status !== "Active") return false;
+  const now = new Date();
+  if (bundle.startDate && bundle.startDate > now) return false;
+  if (bundle.endDate && bundle.endDate < now) return false;
+  return true;
+}
+
 async function resolveBundleDetail(
   bundle: ProductDetailBundleRow,
   customerGroup: CustomerGroup,
 ): Promise<{ items: ProductDetailBundleItem[]; bundle: ProductDetailBundle | null }> {
-  if (!bundle) return { items: [], bundle: null };
+  if (!bundle || !isBundleEligibleNow(bundle)) return { items: [], bundle: null };
 
   const items: ProductDetailBundleItem[] = [];
   for (const item of bundle.items) {
@@ -548,10 +564,16 @@ export async function getProductDetail(
   // 404'd (the base-price gate below rejected it before bundle data was
   // ever consulted).
   const hasVariants = product.variants.length > 0;
-  const hasBundle = product.bundle !== null;
+  // Raw row presence isn't enough — a bundle that's Draft/Inactive or
+  // outside its scheduled window (see isBundleEligibleNow) must not keep
+  // the product's own StandardPrice unreachable, or the product silently
+  // renders at a LKR 0 price once that bundle lapses. Checked once here
+  // (resolveBundleDetail below re-derives the same thing for its own
+  // return value — cheap, pure, not worth threading through).
+  const hasEligibleBundle = product.bundle !== null && isBundleEligibleNow(product.bundle);
 
   const [resolvedPrice, reviewSummary, qaSummary, recipeSummary, seoMeta, packagingOptions] = await Promise.all([
-    hasVariants || hasBundle ? null : pricingService.resolvePrice({ productId: product.id, customerGroup: customerGroup ?? "Retail" }),
+    hasVariants || hasEligibleBundle ? null : pricingService.resolvePrice({ productId: product.id, customerGroup: customerGroup ?? "Retail" }),
     getReviewSummary(product.id),
     getQaSummary(product.id),
     getRecipeSummary(product.id),
@@ -559,7 +581,7 @@ export async function getProductDetail(
     packagingRepository.findEligiblePackagingOptionsForProduct(product.id),
   ]);
 
-  if (!hasVariants && !hasBundle && !resolvedPrice) {
+  if (!hasVariants && !hasEligibleBundle && !resolvedPrice) {
     // Renders identically to a genuinely-missing product (notFound()) from
     // the outside, so this is the only signal an admin/dev gets that the
     // product exists and is Published but has no resolvable price.
@@ -673,9 +695,9 @@ export async function getProductDetail(
       customerInstructions: option.customerInstructions,
       acknowledgementText: option.acknowledgementText,
     })),
-    price: hasVariants ? (variantPrice ?? 0) : hasBundle ? (bundleDetail.bundle?.discountedTotal ?? 0) : resolvedPrice!.price.toNumber(),
-    originalPrice: hasVariants ? variantOriginalPrice : hasBundle ? bundleOriginalPrice : originalPrice,
-    currency: hasVariants ? (defaultVariant?.currency ?? "LKR") : hasBundle ? (bundleDetail.bundle?.currency ?? "LKR") : resolvedPrice!.currency,
+    price: hasVariants ? (variantPrice ?? 0) : hasEligibleBundle ? (bundleDetail.bundle?.discountedTotal ?? 0) : resolvedPrice!.price.toNumber(),
+    originalPrice: hasVariants ? variantOriginalPrice : hasEligibleBundle ? bundleOriginalPrice : originalPrice,
+    currency: hasVariants ? (defaultVariant?.currency ?? "LKR") : hasEligibleBundle ? (bundleDetail.bundle?.currency ?? "LKR") : resolvedPrice!.currency,
     categoryPath,
     categoryIds,
     reviewSummary,

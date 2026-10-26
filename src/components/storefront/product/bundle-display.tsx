@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useEffect, useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -25,28 +26,26 @@ interface PreviewResult {
  * public preview endpoint on every change (debounced) rather than purely
  * client-side math — the server is always the source of truth for price.
  */
-function BundleEyebrow() {
-  return (
-    <span className="inline-flex items-center rounded-full bg-gold-light px-3 py-1 text-caption font-medium uppercase tracking-wide text-charcoal/70">
-      Meal Bundle
-    </span>
-  );
-}
-
 export function BundleDisplay({ bundle, items }: BundleDisplayProps) {
   const { addBundleToCart, isAdding, error } = useAddBundleToCart(bundle.id);
 
   if (bundle.bundleType === "Fixed") {
     return (
       <div className="rounded-lg border border-input p-4">
-        <BundleEyebrow />
-        <h2 className="mt-1 text-h4 font-heading text-charcoal">{bundle.name}</h2>
+        <h2 className="text-h4 font-heading text-charcoal">{bundle.name}</h2>
         {bundle.description && <p className="mt-1 text-small text-charcoal/70">{bundle.description}</p>}
-        <ul className="mt-3 space-y-1 text-small text-charcoal">
+        <ul className="mt-3 space-y-2 text-small text-charcoal">
           {items.filter((item) => item.isRequired).map((item) => (
-            <li key={item.bundleItemId}>
-              {item.quantity} x {item.name}
-              {!item.inStock && <span className="ml-1 text-destructive">(out of stock)</span>}
+            <li key={item.bundleItemId} className="flex items-center gap-2">
+              {item.imageSrc ? (
+                <Image src={item.imageSrc} alt="" width={32} height={32} className="size-8 shrink-0 rounded bg-cream object-contain" />
+              ) : (
+                <span className="size-8 shrink-0 rounded bg-beige" aria-hidden="true" />
+              )}
+              <span>
+                {item.quantity} x {item.name}
+                {!item.inStock && <span className="ml-1 text-destructive">(out of stock)</span>}
+              </span>
             </li>
           ))}
         </ul>
@@ -122,8 +121,7 @@ function SelectableBundleDisplay({
 
   return (
     <div className="rounded-lg border border-input p-4">
-      <BundleEyebrow />
-      <h2 className="mt-1 text-h4 font-heading text-charcoal">{bundle.name}</h2>
+      <h2 className="text-h4 font-heading text-charcoal">{bundle.name}</h2>
       {bundle.description && <p className="mt-1 text-small text-charcoal/70">{bundle.description}</p>}
 
       <div className="mt-3 flex flex-col gap-2">
@@ -132,11 +130,18 @@ function SelectableBundleDisplay({
           const max = item.maxQuantity ?? undefined;
           return (
             <div key={item.bundleItemId} className="flex items-center justify-between gap-3 rounded-md border border-input px-3 py-2">
-              <div>
-                <p className="text-small font-medium text-charcoal">{item.name}</p>
-                <p className="text-caption text-charcoal/60">
-                  {item.price.toLocaleString()} each{!item.inStock && " · out of stock"}
-                </p>
+              <div className="flex items-center gap-2">
+                {item.imageSrc ? (
+                  <Image src={item.imageSrc} alt="" width={40} height={40} className="size-10 shrink-0 rounded bg-cream object-contain" />
+                ) : (
+                  <span className="size-10 shrink-0 rounded bg-beige" aria-hidden="true" />
+                )}
+                <div>
+                  <p className="text-small font-medium text-charcoal">{item.name}</p>
+                  <p className="text-caption text-charcoal/60">
+                    {item.price.toLocaleString()} each{!item.inStock && " · out of stock"}
+                  </p>
+                </div>
               </div>
               <div className="flex items-center gap-2">
                 <Button type="button" size="icon-sm" variant="outline" disabled={quantity <= 0 || !item.inStock} onClick={() => setQuantity(item.bundleItemId, quantity - 1)}>

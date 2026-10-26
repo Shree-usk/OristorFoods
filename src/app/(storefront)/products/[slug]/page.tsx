@@ -6,7 +6,6 @@ import { cache } from "react";
 import { Breadcrumbs } from "@/components/storefront/layout/breadcrumbs";
 import { Section } from "@/components/storefront/layout/section";
 import { BulletList } from "@/components/storefront/product/bullet-list";
-import { BundleDisplay } from "@/components/storefront/product/bundle-display";
 import { CertificationBadges } from "@/components/storefront/product/certification-badges";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { RelatedRecipesBlock } from "@/components/storefront/food-academy/related-recipes-block";
@@ -16,7 +15,7 @@ import { IngredientsList } from "@/components/storefront/product/ingredients-lis
 import { InspirationCards } from "@/components/storefront/product/inspiration-cards";
 import { NutritionDisclosure } from "@/components/storefront/product/nutrition-disclosure";
 import { ProductGallery } from "@/components/storefront/product/product-gallery";
-import { ProductPurchasePanel } from "@/components/storefront/product/product-purchase-panel";
+import { PromotionSelector } from "@/components/storefront/product/promotion-selector";
 import { VariantSelectionProvider } from "@/components/storefront/product/variant-selection-context";
 import { JsonLdScript } from "@/components/storefront/product/json-ld-script";
 import { ProductJsonLd } from "@/components/storefront/product/product-json-ld";
@@ -191,8 +190,10 @@ export default async function ProductDetailPage({ params }: ProductDetailPagePro
               </a>
             )}
             <div className="mt-2">
-              <ProductPurchasePanel
+              <PromotionSelector
                 productId={product.id}
+                productName={product.name}
+                productImageSrc={product.images[0]?.url ?? null}
                 price={product.price}
                 originalPrice={product.originalPrice}
                 currency={product.currency}
@@ -201,14 +202,10 @@ export default async function ProductDetailPage({ params }: ProductDetailPagePro
                 shortDescription={product.shortDescription}
                 variants={product.variants}
                 packagingOptions={product.packagingOptions}
+                bundle={product.bundle}
+                bundleItems={product.bundleItems}
               />
             </div>
-
-            {product.bundle && (
-              <div className="mt-6">
-                <BundleDisplay bundle={product.bundle} items={product.bundleItems} />
-              </div>
-            )}
 
             <div className="lg:hidden">{extrasBlock}</div>
 

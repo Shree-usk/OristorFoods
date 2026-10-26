@@ -10187,3 +10187,104 @@ by publishing a real review and toggling Featured in `/admin/reviews`.
 by `(storefront)/page.tsx`'s own no-published-layout fallback branch
 (same light-touch-scope reasoning as every other section there) — only
 the CMS-driven `HomepageSections` path was cut over.
+
+## 2026-10-26 — Project Cinnamon Phase 2: PDP Promotion Selector prototype
+
+Requirements doc: `docs/Bundle-Product-new-requirments.txt` ("Project
+Cinnamon" — a product-page promotion-selection system with four
+promotion types: Fixed Bundle, Leader Bundle, Free Gift, Qty Bundling).
+Phase 1's audit found Options A (Fixed Bundle) and B (Leader/Selectable
+Bundle) already fully built end-to-end from the earlier "Variants/
+Bundles/Custom Packaging" epic; Option C (Free Gift) has zero existing
+infrastructure; Option D is half-built (the `VolumeDiscountTier`
+quantity-discount half exists, the gift half doesn't). This entry covers
+Phase 2: a UI prototype surfacing only A/B, explicitly NOT Phase 3+
+(no free-gift work, no promotion-rule changes).
+
+**New component**: `src/components/storefront/product/promotion-selector.tsx`
+wraps `ProductPurchasePanel` and `BundleDisplay` (both reused unmodified)
+behind a single mutually-exclusive choice — "{product} only" vs. the
+product's one eligible bundle, shown as pressable cards (image, price,
+struck-through original, a "Save X" badge) with only the selected
+option's full controls (and its one Add-to-Cart button) expanded below.
+Selecting a card only changes local UI state; nothing is added to the
+cart until the customer presses that option's own Add to Cart/"Add
+bundle to cart" button — verified live (clicking a card does not call
+either add-to-cart hook; only the explicit button does). Wired into
+`(storefront)/products/[slug]/page.tsx` in place of the two previously
+always-both-visible blocks.
+
+**Promotion stacking is an explicit, deliberate non-change — requires
+separate business approval before anything touches it.** This phase did
+not modify `cart.service.ts`, `discountableLines`, `discount.service.ts`,
+`coupon-admin.service.ts`, `promotion.service.ts`, or
+`prisma/schema.prisma` (confirmed via `git diff --stat` against this
+branch — zero lines touched in any of them). Today a bundle's discount is
+baked into the cart line's `unitPriceSnapshot` before the coupon/
+promotion pool evaluates `discountableLines`, so a coupon can currently
+apply on top of an already bundle-discounted line — bundles and coupons
+stack unconditionally, with no exclusivity toggle anywhere. If stacking
+is to be restricted, the two places to change are `cart.service.ts`'s
+`discountableLines` construction and/or a new field on `ProductBundle`
+analogous to `Coupon.stackable` — neither should change without an
+explicit decision, since it alters live pricing/discount behavior for
+every existing bundle.
+
+**Bundle scope unchanged**: `ProductBundle.productId` stays a `@unique`
+1:1 relation to its host product — no migration, no reusable
+cross-product promotion template. The selector's "at most one bundle per
+product" assumption matches this exactly; it was a deliberate choice,
+not an oversight.
+
+**PDP heading/CTA**: confirmed `bundle.name`/`bundle.description` are
+real admin data (via the existing bundle admin panel) and are reused
+as-is for the heading/description — no new CMS field added. "Add bundle
+to cart" remains a hardcoded string (explicitly deferred, not fixed,
+pending approval for a CTA-label field). Removed one piece of text that
+genuinely was hardcoded with no backing data at all — a "Meal Bundle"
+eyebrow label in `bundle-display.tsx` that never came from any admin
+field — confirmed via repo-wide search that nothing else referenced it.
+
+**Two backend fixes in `product.service.ts`, both found necessary for
+this prototype to be correct** (not scope creep — a mutually-exclusive
+selector is actively misleading if it can offer an expired/inactive
+bundle as live, or silently mis-price the regular option):
+1. `resolveBundleDetail` never checked `ProductBundle.status`/
+   `startDate`/`endDate` — the repository's `bundle` include has no
+   `where` clause, so a Draft/Inactive bundle, or one outside its
+   scheduled window, would still render as a purchasable PDP offer. Added
+   `isBundleEligibleNow()`.
+2. That fix surfaced a real latent bug: `getProductDetail`'s `hasBundle`
+   flag (and the price/originalPrice/currency fallback built on it) used
+   the bundle row's raw presence, not its eligibility — so once any
+   bundle ever existed for a product (even one later deactivated), the
+   product's own `StandardPrice` became permanently unreachable and the
+   page would silently show **LKR 0** the moment that bundle lapsed.
+   Renamed the gate to `hasEligibleBundle` and moved the eligibility
+   check before the `resolvedPrice` fetch, so an ineligible bundle now
+   correctly falls back to the product's own price.
+
+**Tests**: `tests/unit/promotion-selector.test.tsx` (9 cases — default
+selection, mutual exclusivity in both directions never showing two
+Add-to-Cart controls at once, savings badge shown/hidden, out-of-stock
+bundle disabled, cart-drawer confirmation) and 4 new cases in
+`tests/unit/product-detail-service.test.ts` (Inactive bundle omitted +
+price falls back correctly, not-yet-started bundle omitted, expired
+bundle omitted, Active-and-in-window bundle included). 50/50 passing
+across every touched/adjacent suite, `tsc`/`lint` clean. Manually
+verified live against the seed's real "Curry Lover's Gift Set" bundle
+(LKR 1,200 vs. LKR 1,580 standalone, "Save LKR 380"): selecting the
+bundle card and adding it to cart produced the correct two exploded
+component lines in the cart drawer at the existing proportional-discount
+prices — the pre-existing bundle-to-cart pipeline is unmodified and
+intact.
+
+**Known limitation**: mobile/narrow-viewport layout was verified by code
+review (the cards use a `flex-col` stack and `flex-wrap` price row, never
+a row layout needing a breakpoint) rather than an actual narrow-viewport
+screenshot — this session's browser tooling could not reliably resize the
+viewport for a capture.
+
+Stops here per the story's own phasing — no free-gift (Option C)
+infrastructure, no promotion-rule/stacking changes, nothing deployed
+beyond the local dev/staging branch.
