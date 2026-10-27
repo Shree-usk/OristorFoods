@@ -203,6 +203,81 @@ describe("getProductDetail", () => {
     expect(detail?.price).toBe(100);
     expect(detail?.currency).toBe("LKR");
   });
+
+  it("omits an Inactive bundle from the PDP, instead of displaying it as a live, purchasable offer", async () => {
+    const component = await createProduct({ sku: "PD-COMP-INACTIVE", slug: "pd-component-inactive", name: "Component", status: "Published" });
+    await createStandardPrice({ product: { connect: { id: component.id } }, price: "50.00" });
+    const hostProduct = await createProduct({ sku: "PD-HOST-INACTIVE", slug: "pd-host-inactive-bundle", name: "Host", status: "Published" });
+    await createStandardPrice({ product: { connect: { id: hostProduct.id } }, price: "300.00" });
+    const bundle = await createBundle({ product: { connect: { id: hostProduct.id } }, bundleType: "Fixed", name: "Draft Bundle", status: "Inactive" });
+    await createBundleItem({ bundle: { connect: { id: bundle.id } }, componentProduct: { connect: { id: component.id } }, quantity: 1 });
+
+    const detail = await getProductDetail("pd-host-inactive-bundle");
+
+    expect(detail?.bundle).toBeNull();
+    expect(detail?.bundleItems).toEqual([]);
+    // Falls back to the host product's own StandardPrice, not the
+    // ineligible bundle's total and not a silent LKR 0.
+    expect(detail?.price).toBe(300);
+  });
+
+  it("omits a bundle scheduled to start in the future", async () => {
+    const component = await createProduct({ sku: "PD-COMP-FUTURE", slug: "pd-component-future", name: "Component", status: "Published" });
+    await createStandardPrice({ product: { connect: { id: component.id } }, price: "50.00" });
+    const hostProduct = await createProduct({ sku: "PD-HOST-FUTURE", slug: "pd-host-future-bundle", name: "Host", status: "Published" });
+    await createStandardPrice({ product: { connect: { id: hostProduct.id } }, price: "300.00" });
+    const bundle = await createBundle({
+      product: { connect: { id: hostProduct.id } },
+      bundleType: "Fixed",
+      name: "Upcoming Bundle",
+      startDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+    });
+    await createBundleItem({ bundle: { connect: { id: bundle.id } }, componentProduct: { connect: { id: component.id } }, quantity: 1 });
+
+    const detail = await getProductDetail("pd-host-future-bundle");
+
+    expect(detail?.bundle).toBeNull();
+    expect(detail?.price).toBe(300);
+  });
+
+  it("omits a bundle whose end date has already passed", async () => {
+    const component = await createProduct({ sku: "PD-COMP-EXPIRED", slug: "pd-component-expired", name: "Component", status: "Published" });
+    await createStandardPrice({ product: { connect: { id: component.id } }, price: "50.00" });
+    const hostProduct = await createProduct({ sku: "PD-HOST-EXPIRED", slug: "pd-host-expired-bundle", name: "Host", status: "Published" });
+    await createStandardPrice({ product: { connect: { id: hostProduct.id } }, price: "300.00" });
+    const bundle = await createBundle({
+      product: { connect: { id: hostProduct.id } },
+      bundleType: "Fixed",
+      name: "Past Bundle",
+      endDate: new Date(Date.now() - 24 * 60 * 60 * 1000),
+    });
+    await createBundleItem({ bundle: { connect: { id: bundle.id } }, componentProduct: { connect: { id: component.id } }, quantity: 1 });
+
+    const detail = await getProductDetail("pd-host-expired-bundle");
+
+    expect(detail?.bundle).toBeNull();
+    expect(detail?.price).toBe(300);
+  });
+
+  it("includes an Active bundle that is inside its scheduled start/end window", async () => {
+    const component = await createProduct({ sku: "PD-COMP-WINDOW", slug: "pd-component-window", name: "Component", status: "Published" });
+    await createStandardPrice({ product: { connect: { id: component.id } }, price: "50.00" });
+    const hostProduct = await createProduct({ sku: "PD-HOST-WINDOW", slug: "pd-host-window-bundle", name: "Host", status: "Published" });
+    await createStandardPrice({ product: { connect: { id: hostProduct.id } }, price: "300.00" });
+    const bundle = await createBundle({
+      product: { connect: { id: hostProduct.id } },
+      bundleType: "Fixed",
+      name: "Live Bundle",
+      startDate: new Date(Date.now() - 24 * 60 * 60 * 1000),
+      endDate: new Date(Date.now() + 24 * 60 * 60 * 1000),
+    });
+    await createBundleItem({ bundle: { connect: { id: bundle.id } }, componentProduct: { connect: { id: component.id } }, quantity: 1 });
+
+    const detail = await getProductDetail("pd-host-window-bundle");
+
+    expect(detail?.bundle).not.toBeNull();
+    expect(detail?.bundle?.name).toBe("Live Bundle");
+  });
 });
 
 describe("listRelatedProducts", () => {
