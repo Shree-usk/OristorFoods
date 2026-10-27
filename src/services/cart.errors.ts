@@ -12,6 +12,11 @@ export type CartErrorCode =
   | "bundle_stock_exceeded"
   | "bundle_selection_invalid"
   | "bundle_line_locked"
+  | "gift_offer_unavailable"
+  | "gift_offer_ineligible"
+  | "gift_offer_stock_exceeded"
+  | "gift_offer_redemption_limit_exceeded"
+  | "gift_line_locked"
   | "packaging_unavailable"
   | "packaging_minimum_quantity"
   | "packaging_minimum_weight"
@@ -77,6 +82,43 @@ export class BundleSelectionInvalidError extends CartServiceError {
 export class BundleLineLockedError extends CartServiceError {
   constructor() {
     super("bundle_line_locked", "This item is part of a bundle — remove or adjust the whole bundle instead.");
+  }
+}
+
+// --- Free Gift (Story 5) ---
+
+/** The gift offer is Draft/Inactive, outside its scheduled window, or has been deactivated since it was added to the cart. */
+export class GiftOfferUnavailableError extends CartServiceError {
+  constructor() {
+    super("gift_offer_unavailable", "This free gift offer is no longer available");
+  }
+}
+
+/** The qualifying product's minQuantity/minSpend condition isn't met by the cart's current contents. */
+export class GiftOfferIneligibleError extends CartServiceError {
+  constructor(message: string = "You haven't met the conditions for this free gift yet") {
+    super("gift_offer_ineligible", message);
+  }
+}
+
+/** The gift offer's own dedicated stock pool (giftStockLimit) is exhausted — independent of the gift product's own sellable stock. */
+export class GiftOfferStockExceededError extends CartServiceError {
+  constructor() {
+    super("gift_offer_stock_exceeded", "This free gift is no longer available — all redemptions have been claimed");
+  }
+}
+
+/** redemptionLimitGlobal or redemptionLimitPerCustomer has already been reached. */
+export class GiftOfferRedemptionLimitExceededError extends CartServiceError {
+  constructor() {
+    super("gift_offer_redemption_limit_exceeded", "This free gift's redemption limit has already been reached");
+  }
+}
+
+/** A gift line's quantity/removal is fixed by its offer — mirrors BundleLineLockedError above. Resizing or removing it directly would let a customer claim more than giftQuantity units for free; use gift-offer.service.ts::removeGiftFromCart instead. */
+export class GiftLineLockedError extends CartServiceError {
+  constructor() {
+    super("gift_line_locked", "This is a free gift item — remove it instead of changing its quantity.");
   }
 }
 

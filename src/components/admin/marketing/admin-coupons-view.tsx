@@ -2,9 +2,10 @@
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { AdminCouponsPanel } from "@/components/admin/marketing/admin-coupons-panel";
+import { AdminGiftOffersPanel } from "@/components/admin/marketing/admin-gift-offers-panel";
 import { AdminPromotionsPanel } from "@/components/admin/marketing/admin-promotions-panel";
 
-/** STORY-050b. Coupon & Promotion management — reads/writes the same models STORY-029 defines and discount.service.ts already reads live at checkout. */
+/** STORY-050b. Coupon & Promotion management — reads/writes the same models STORY-029 defines and discount.service.ts already reads live at checkout. Gift Offers (Project Cinnamon Option C) added as a third tab beside Coupons/Promotions — same campaign-entity shape, reads/writes GiftOffer. */
 export function AdminCouponsView() {
   return (
     <div>
@@ -15,6 +16,7 @@ export function AdminCouponsView() {
         <TabsList>
           <TabsTrigger value="coupons">Coupons</TabsTrigger>
           <TabsTrigger value="promotions">Promotions</TabsTrigger>
+          <TabsTrigger value="gift-offers">Gift Offers</TabsTrigger>
         </TabsList>
 
         <TabsContent value="coupons">
@@ -22,6 +24,9 @@ export function AdminCouponsView() {
         </TabsContent>
         <TabsContent value="promotions">
           <AdminPromotionsPanel />
+        </TabsContent>
+        <TabsContent value="gift-offers">
+          <AdminGiftOffersPanel />
         </TabsContent>
       </Tabs>
     </div>

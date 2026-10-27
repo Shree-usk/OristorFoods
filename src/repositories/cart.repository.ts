@@ -21,6 +21,10 @@ const withProduct = {
   // include separately (bundle.service.ts::resolveBundleInstancePrices),
   // never this one.
   bundle: { select: { name: true } },
+  // Story 5 (Free Gift). Same shallow-name-only convention as `bundle`
+  // above — full definition re-validation reads gift-offer.repository.ts's
+  // own richer include separately (gift-offer.service.ts::resolveGiftLinePrices).
+  giftOffer: { select: { name: true } },
   // Story 3 (Custom Packaging). The full row (+ its method) — unlike a
   // bundle instance, a packaging option's eligibility depends only on its
   // own fields, so packaging.service.ts::resolvePackagingForCartItems
@@ -74,6 +78,12 @@ export function findCartItemById(id: string) {
  * happen to share a component product/variant from merging into each
  * other's quantity. Omitted (both null) for a plain line, matching every
  * row that existed before bundles shipped.
+ *
+ * `gift` (Story 5) follows the identical discriminator pattern as
+ * `bundle` — giftInstanceId is unique per "add gift to cart" action, and
+ * is part of the lookup below for the same reason bundleInstanceId is: a
+ * $0 gift line for product X must never collide with/merge into a paid
+ * line for that same product X.
  */
 export async function upsertCartItem(
   cartId: string,
@@ -83,6 +93,7 @@ export async function upsertCartItem(
   unitPriceSnapshot: string,
   bundle: { bundleId: string; bundleInstanceId: string } | null = null,
   packaging: { packagingOptionId: string; declaredAvailability: "Local" | "Export"; chargeSnapshot: string } | null = null,
+  gift: { giftOfferId: string; giftInstanceId: string } | null = null,
 ) {
   // findFirst, not findUnique: Prisma's generated compound-unique input
   // for a compound key with nullable members types them as non-nullable
@@ -90,7 +101,14 @@ export async function upsertCartItem(
   // so a plain `where` filter is used instead — still a single-row
   // lookup backed by the same unique index at the DB level.
   const existing = await prisma.cartItem.findFirst({
-    where: { cartId, productId, variantId, bundleInstanceId: bundle?.bundleInstanceId ?? null, packagingOptionId: packaging?.packagingOptionId ?? null },
+    where: {
+      cartId,
+      productId,
+      variantId,
+      bundleInstanceId: bundle?.bundleInstanceId ?? null,
+      packagingOptionId: packaging?.packagingOptionId ?? null,
+      giftInstanceId: gift?.giftInstanceId ?? null,
+    },
   });
   if (existing) {
     return prisma.cartItem.update({
@@ -110,6 +128,8 @@ export async function upsertCartItem(
       packagingOptionId: packaging?.packagingOptionId ?? null,
       packagingDeclaredAvailability: packaging?.declaredAvailability ?? null,
       packagingChargeSnapshot: packaging?.chargeSnapshot ?? null,
+      giftOfferId: gift?.giftOfferId ?? null,
+      giftInstanceId: gift?.giftInstanceId ?? null,
     },
   });
 }
@@ -121,6 +141,15 @@ export function listBundleInstanceItems(cartId: string, bundleInstanceId: string
 
 export async function deleteBundleInstance(cartId: string, bundleInstanceId: string): Promise<void> {
   await prisma.cartItem.deleteMany({ where: { cartId, bundleInstanceId } });
+}
+
+/** The single row of one gift instance — mirrors listBundleInstanceItems, used to validate ownership before removal. */
+export function listGiftInstanceItems(cartId: string, giftInstanceId: string) {
+  return prisma.cartItem.findMany({ where: { cartId, giftInstanceId } });
+}
+
+export async function deleteGiftInstance(cartId: string, giftInstanceId: string): Promise<void> {
+  await prisma.cartItem.deleteMany({ where: { cartId, giftInstanceId } });
 }
 
 export function updateCartItemQuantity(id: string, quantity: number) {

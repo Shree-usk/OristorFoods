@@ -37,6 +37,12 @@ export const addBundleToCartSchema = z.object({
 
 export type AddBundleToCartInput = z.infer<typeof addBundleToCartSchema>;
 
+export const addGiftToCartSchema = z.object({
+  giftOfferId: z.string().min(1),
+});
+
+export type AddGiftToCartInput = z.infer<typeof addGiftToCartSchema>;
+
 export const bundlePreviewSchema = z.object({
   selections: z.array(bundleSelectionSchema).min(1, "Select at least one item."),
 });

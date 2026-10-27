@@ -11,12 +11,14 @@ import {
   BundleLineLockedError,
   CartItemForbiddenError,
   CartItemNotFoundError,
+  GiftLineLockedError,
   PackagingAvailabilityMismatchError,
   PackagingMinimumQuantityError,
   PackagingMinimumWeightError,
   ProductUnavailableError,
   StockExceededError,
 } from "@/services/cart.errors";
+import { addGiftToCart, removeGiftFromCart } from "@/services/gift-offer.service";
 import {
   addItem,
   getCart,
@@ -76,6 +78,8 @@ async function makePackagingOption(productId: string, overrides: Record<string, 
 afterEach(async () => {
   await prisma.cartItem.deleteMany();
   await prisma.cart.deleteMany();
+  await prisma.giftOfferRedemption.deleteMany();
+  await prisma.giftOffer.deleteMany();
   await prisma.bundleItem.deleteMany();
   await prisma.productBundle.deleteMany();
   await prisma.productPackagingOption.deleteMany({ where: { packagingMethod: { name: { startsWith: "Cart Svc Packaging Method " } } } });
@@ -101,6 +105,23 @@ async function makeFixedBundle(components: { product: { id: string }; quantity: 
     await createBundleItem({ bundle: { connect: { id: bundle.id } }, componentProduct: { connect: { id: component.product.id } }, quantity: component.quantity });
   }
   return bundle;
+}
+
+/** Story 5 (Free Gift). */
+async function makeGiftOffer(
+  qualifyingProduct: { id: string },
+  giftProduct: { id: string },
+  overrides: Record<string, unknown> = {},
+) {
+  sequence += 1;
+  return prisma.giftOffer.create({
+    data: {
+      product: { connect: { id: qualifyingProduct.id } },
+      name: `Cart Svc Gift Offer ${sequence}`,
+      giftProduct: { connect: { id: giftProduct.id } },
+      ...overrides,
+    },
+  });
 }
 
 describe("resolveCartIdentity", () => {
@@ -499,6 +520,27 @@ describe("mergeGuestCartIntoUser", () => {
     expect(plainLine?.quantity).toBe(1);
     expect(bundleLine?.quantity).toBe(1);
   });
+
+  it("preserves a gift line's giftOfferId/giftInstanceId and $0 price across a guest→user merge — same bug class as the bundle merge above (Landmine 3)", async () => {
+    const user = await makeUser();
+    const qualifying = await makeProduct();
+    const gift = await makeProduct();
+    const offer = await makeGiftOffer(qualifying, gift);
+
+    const { newCookieValue } = await addGiftToCart(null, undefined, offer.id);
+    await mergeGuestCartIntoUser(user.id, newCookieValue ?? undefined);
+
+    const cart = await prisma.cart.findUniqueOrThrow({ where: { userId: user.id } });
+    const rows = await prisma.cartItem.findMany({ where: { cartId: cart.id } });
+    const giftRow = rows.find((row) => row.productId === gift.id);
+    expect(giftRow?.giftOfferId).toBe(offer.id);
+    expect(giftRow?.giftInstanceId).not.toBeNull();
+    expect(giftRow?.unitPriceSnapshot.toString()).toBe("0");
+
+    // The whole point of preserving the tag: removal-as-a-group still works post-merge.
+    await removeGiftFromCart(user.id, undefined, giftRow!.giftInstanceId!);
+    expect(await prisma.cartItem.findMany({ where: { giftInstanceId: giftRow!.giftInstanceId! } })).toHaveLength(0);
+  });
 });
 
 describe("Bundles (Story 2)", () => {
@@ -565,6 +607,198 @@ describe("Bundles (Story 2)", () => {
 
     const summary = await getCart(null, newCookieValue);
     expect(summary.items.every((item) => item.unavailable)).toBe(true);
+  });
+});
+
+describe("Gift Offers (Story 5)", () => {
+  it("adding a gift whose underlying product already has a paid line in the cart creates a second, independent row (Landmine 2)", async () => {
+    const qualifying = await makeProduct();
+    const gift = await makeProduct();
+    const offer = await makeGiftOffer(qualifying, gift);
+
+    const { newCookieValue: afterPaid } = await addItem(null, undefined, gift.id, 1);
+    await addGiftToCart(null, afterPaid ?? undefined, offer.id);
+
+    const summary = await getCart(null, afterPaid ?? undefined);
+    const giftProductLines = summary.items.filter((item) => item.productId === gift.id);
+    expect(giftProductLines).toHaveLength(2);
+    const paidLine = giftProductLines.find((item) => !item.giftOfferId);
+    const giftLine = giftProductLines.find((item) => item.giftOfferId);
+    expect(paidLine?.quantity).toBe(1);
+    expect(paidLine?.unitPrice).toBe(25);
+    expect(giftLine?.unitPrice).toBe(0);
+  });
+
+  it("a gift line's price stays pinned at 0 across repeated cart reads even after the gift product's live price changes (Landmine 1)", async () => {
+    const qualifying = await makeProduct();
+    const gift = await makeProduct();
+    const offer = await makeGiftOffer(qualifying, gift);
+
+    const { newCookieValue } = await addGiftToCart(null, undefined, offer.id);
+
+    await prisma.standardPrice.create({ data: { productId: gift.id, price: "999.00" } });
+
+    const firstRead = await getCart(null, newCookieValue ?? undefined);
+    const secondRead = await getCart(null, newCookieValue ?? undefined);
+    const giftLineFirst = firstRead.items.find((item) => item.giftOfferId === offer.id);
+    const giftLineSecond = secondRead.items.find((item) => item.giftOfferId === offer.id);
+    expect(giftLineFirst).toMatchObject({ unitPrice: 0, priceChanged: false, lineTotal: 0 });
+    expect(giftLineSecond).toMatchObject({ unitPrice: 0, priceChanged: false, lineTotal: 0 });
+  });
+
+  it("rewardPointsEarned is 0 for a gift line even though the gift product itself carries rewardPoints", async () => {
+    const qualifying = await makeProduct();
+    const gift = await makeProduct({ rewardPoints: 10 });
+    const offer = await makeGiftOffer(qualifying, gift, { giftQuantity: 2 });
+
+    const { newCookieValue } = await addGiftToCart(null, undefined, offer.id);
+    const summary = await getCart(null, newCookieValue ?? undefined);
+
+    const giftLine = summary.items.find((item) => item.giftOfferId === offer.id);
+    expect(giftLine?.quantity).toBe(2);
+    expect(giftLine?.rewardPointsEarned).toBe(0);
+  });
+
+  it("backfills the qualifying product's own line at quantity 1 when it wasn't already in the cart", async () => {
+    const qualifying = await makeProduct();
+    const gift = await makeProduct();
+    const offer = await makeGiftOffer(qualifying, gift);
+
+    const { newCookieValue } = await addGiftToCart(null, undefined, offer.id);
+    const summary = await getCart(null, newCookieValue ?? undefined);
+
+    const qualifyingLine = summary.items.find((item) => item.productId === qualifying.id && !item.giftOfferId);
+    expect(qualifyingLine?.quantity).toBe(1);
+  });
+
+  it("does not add a second qualifying line when the qualifying product is already in the cart", async () => {
+    const qualifying = await makeProduct();
+    const gift = await makeProduct();
+    const offer = await makeGiftOffer(qualifying, gift);
+
+    const { newCookieValue } = await addItem(null, undefined, qualifying.id, 3);
+    await addGiftToCart(null, newCookieValue ?? undefined, offer.id);
+    const summary = await getCart(null, newCookieValue ?? undefined);
+
+    const qualifyingLines = summary.items.filter((item) => item.productId === qualifying.id && !item.giftOfferId);
+    expect(qualifyingLines).toHaveLength(1);
+    expect(qualifyingLines[0]?.quantity).toBe(3);
+  });
+
+  it("rejects adding a gift below its minQuantity threshold", async () => {
+    const qualifying = await makeProduct();
+    const gift = await makeProduct();
+    const offer = await makeGiftOffer(qualifying, gift, { minQuantity: 3 });
+
+    await expect(addGiftToCart(null, undefined, offer.id)).rejects.toThrow();
+  });
+
+  it("rejects adding a gift below its minSpend threshold", async () => {
+    const qualifying = await makeProduct(); // standard price 25.00 via makeProduct
+    const gift = await makeProduct();
+    const offer = await makeGiftOffer(qualifying, gift, { minSpend: "100.00" });
+
+    const { newCookieValue } = await addItem(null, undefined, qualifying.id, 1); // spend = 25, below 100
+    await expect(addGiftToCart(null, newCookieValue ?? undefined, offer.id)).rejects.toThrow();
+  });
+
+  it("rejects adding a gift once giftStockLimit's unit pool is exhausted", async () => {
+    const qualifying = await makeProduct();
+    const gift = await makeProduct();
+    const offer = await makeGiftOffer(qualifying, gift, { giftStockLimit: 1, giftQuantity: 1 });
+
+    // Simulate one prior redemption directly — exercising the real checkout
+    // flow here would be redundant with checkout-service.test.ts.
+    const priorOrder = await prisma.order.create({
+      data: {
+        orderNumber: `GIFT-STOCK-ORDER-${offer.id}`,
+        idempotencyKey: `idem-gift-stock-${offer.id}`,
+        status: "Confirmed",
+        subtotal: "0.00",
+        deliveryCharge: "0.00",
+        grandTotal: "0.00",
+        deliveryZoneName: "Western",
+        shipRecipientName: "Test Customer",
+        shipPhone: "+94 77 123 4567",
+        shipLine1: "10 Test Lane",
+        shipCity: "Colombo",
+      },
+    });
+    await prisma.giftOfferRedemption.create({ data: { giftOfferId: offer.id, orderId: priorOrder.id } });
+
+    await expect(addGiftToCart(null, undefined, offer.id)).rejects.toThrow();
+
+    await prisma.giftOfferRedemption.deleteMany({ where: { giftOfferId: offer.id } });
+    await prisma.order.delete({ where: { id: priorOrder.id } });
+  });
+
+  it("rejects adding a gift whose underlying gift product is out of stock", async () => {
+    const qualifying = await makeProduct();
+    const gift = await makeProduct({ inStock: false });
+    const offer = await makeGiftOffer(qualifying, gift);
+
+    await expect(addGiftToCart(null, undefined, offer.id)).rejects.toThrow();
+  });
+
+  it("flags a gift line unavailable on a later read once the qualifying product's quantity drops below minQuantity (Landmine-adjacent revalidation)", async () => {
+    const qualifying = await makeProduct();
+    const gift = await makeProduct();
+    const offer = await makeGiftOffer(qualifying, gift, { minQuantity: 2 });
+
+    const { newCookieValue } = await addItem(null, undefined, qualifying.id, 2);
+    await addGiftToCart(null, newCookieValue ?? undefined, offer.id);
+
+    const summary = await getCart(null, newCookieValue ?? undefined);
+    const qualifyingLine = summary.items.find((item) => item.productId === qualifying.id && !item.giftOfferId)!;
+    await updateItemQuantity(null, newCookieValue ?? undefined, qualifyingLine.id, 1);
+
+    const revalidated = await getCart(null, newCookieValue ?? undefined);
+    const giftLine = revalidated.items.find((item) => item.giftOfferId === offer.id);
+    expect(giftLine?.unavailable).toBe(true);
+  });
+
+  it("removeGiftFromCart deletes only the gift row, leaving the qualifying line untouched", async () => {
+    const qualifying = await makeProduct();
+    const gift = await makeProduct();
+    const offer = await makeGiftOffer(qualifying, gift);
+
+    const { newCookieValue } = await addGiftToCart(null, undefined, offer.id);
+    const rows = await prisma.cartItem.findMany({ where: { giftOfferId: offer.id } });
+    const giftInstanceId = rows[0]!.giftInstanceId!;
+
+    await removeGiftFromCart(null, newCookieValue ?? undefined, giftInstanceId);
+    const summary = await getCart(null, newCookieValue ?? undefined);
+
+    expect(summary.items.some((item) => item.giftOfferId)).toBe(false);
+    expect(summary.items.some((item) => item.productId === qualifying.id)).toBe(true);
+  });
+
+  it("a gift line's quantity/remove can't be changed through the generic cart endpoints — resizing it directly would let a customer claim more free units than giftQuantity entitles them to (found live via browser walkthrough: the cart drawer renders a gift row with the same generic +/- and X controls as any other line)", async () => {
+    const qualifying = await makeProduct();
+    const gift = await makeProduct();
+    const offer = await makeGiftOffer(qualifying, gift, { giftQuantity: 1 });
+    const { newCookieValue } = await addGiftToCart(null, undefined, offer.id);
+    const row = await prisma.cartItem.findFirstOrThrow({ where: { giftOfferId: offer.id } });
+
+    await expect(updateItemQuantity(null, newCookieValue ?? undefined, row.id, 5)).rejects.toBeInstanceOf(GiftLineLockedError);
+    await expect(removeItem(null, newCookieValue ?? undefined, row.id)).rejects.toBeInstanceOf(GiftLineLockedError);
+
+    // The qualifying line is a perfectly normal, unlocked cart line — only the $0 gift row itself is locked.
+    const qualifyingRow = await prisma.cartItem.findFirstOrThrow({ where: { productId: qualifying.id, giftOfferId: null } });
+    await expect(updateItemQuantity(null, newCookieValue ?? undefined, qualifyingRow.id, 2)).resolves.not.toThrow();
+  });
+
+  it("a cart read flags a gift line unavailable once the offer is deactivated, without throwing or removing it", async () => {
+    const qualifying = await makeProduct();
+    const gift = await makeProduct();
+    const offer = await makeGiftOffer(qualifying, gift);
+    const { newCookieValue } = await addGiftToCart(null, undefined, offer.id);
+
+    await prisma.giftOffer.update({ where: { id: offer.id }, data: { status: "Inactive" } });
+
+    const summary = await getCart(null, newCookieValue ?? undefined);
+    const giftLine = summary.items.find((item) => item.giftOfferId === offer.id);
+    expect(giftLine?.unavailable).toBe(true);
   });
 });
 

@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/db";
 import { createRedemption } from "@/repositories/coupon.repository";
+import { createRedemption as createGiftOfferRedemption } from "@/repositories/gift-offer.repository";
 import { createRedeemedTransaction } from "@/repositories/rewards.repository";
 import { ConcurrentTransitionError, InsufficientStockError } from "@/services/order.errors";
 import type { FulfilmentMethod, OrderStatus, PaymentMethod, Prisma } from "@/generated/prisma/client";
@@ -24,6 +25,10 @@ export interface OrderLineInput {
   bundleId?: string | null;
   bundleInstanceId?: string | null;
   bundleName?: string | null;
+  /** Story 5 (Free Gift). Flat snapshots, same convention as bundleId/bundleName — null for a plain line. isGiftLine is explicit, not inferred from unitPrice. */
+  giftOfferId?: string | null;
+  giftOfferName?: string | null;
+  isGiftLine?: boolean;
   /** Story 3 (Custom Packaging). Flat snapshots — null for a line with no packaging selected. */
   packagingOptionId?: string | null;
   packagingMethodName?: string | null;
@@ -86,6 +91,8 @@ export interface CreateOrderInput {
   cartId: string;
   /** Present only when a coupon (not just a promotion) contributed to the discount — promotions aren't redemption-tracked, only coupons are. */
   couponRedemption: { couponId: string; discountAmount: string } | null;
+  /** Story 5 (Free Gift). One entry per distinct gift offer in the order — always at most one, since PromotionSelector only lets a customer choose one promotion option per checkout. */
+  giftOfferRedemption?: { giftOfferId: string } | null;
   /** Present only when the customer redeemed points at this order's checkout. userId is required here (redemption is authenticated-only). */
   pointsRedemption: { userId: string; points: number } | null;
   /** Story 3 (Custom Packaging). True when any line's packaging option requires manual review — the order is created PendingConfirmation instead of Confirmed. Omitted/false for every pre-packaging caller, which still produces "Confirmed" byte-for-byte. */
@@ -192,6 +199,9 @@ export function createOrderWithStockDecrement(input: CreateOrderInput) {
             bundleId: line.bundleId,
             bundleInstanceId: line.bundleInstanceId,
             bundleName: line.bundleName,
+            giftOfferId: line.giftOfferId,
+            giftOfferName: line.giftOfferName,
+            isGiftLine: line.isGiftLine ?? false,
             packagingOptionId: line.packagingOptionId,
             packagingMethodName: line.packagingMethodName,
             packagingCharge: line.packagingCharge,
@@ -229,6 +239,15 @@ export function createOrderWithStockDecrement(input: CreateOrderInput) {
         guestEmail: input.guestEmail,
         orderId: order.id,
         discountAmount: input.couponRedemption.discountAmount,
+      });
+    }
+
+    if (input.giftOfferRedemption) {
+      await createGiftOfferRedemption(tx, {
+        giftOfferId: input.giftOfferRedemption.giftOfferId,
+        userId: input.userId,
+        guestEmail: input.guestEmail,
+        orderId: order.id,
       });
     }
 

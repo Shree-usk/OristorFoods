@@ -158,6 +158,48 @@ describe("analytics.service — products & recipes", () => {
     expect(report.topProducts[0]?.revenue).toBe(1000);
   });
 
+  it("excludes gift lines (isGiftLine: true) from a product's reported units-sold, even though their quantity isn't zero — Story 5 (Free Gift)", async () => {
+    const admin = await makeFullAccessAdmin();
+    const product = await makeProduct();
+    await makeOrder(null, [{ product, quantity: 10, unitPrice: "100.00" }]);
+
+    sequence += 1;
+    await prisma.order.create({
+      data: {
+        orderNumber: `${ORDER_PREFIX}${sequence}`,
+        idempotencyKey: `idem-${ORDER_PREFIX}${sequence}`,
+        status: "Confirmed",
+        subtotal: "0.00",
+        deliveryCharge: "0.00",
+        grandTotal: "0.00",
+        deliveryZoneName: "Western",
+        shipRecipientName: "Test Customer",
+        shipPhone: "+94 77 123 4567",
+        shipLine1: "10 Test Lane",
+        shipCity: "Colombo",
+        items: {
+          create: [
+            {
+              productId: product.id,
+              productName: product.name,
+              productSku: product.sku,
+              unitPrice: "0.00",
+              quantity: 5,
+              lineTotal: "0.00",
+              isGiftLine: true,
+            },
+          ],
+        },
+      },
+    });
+
+    const query = { from: new Date("2000-01-01"), to: new Date("2100-01-01"), bucket: "day" as const, limit: 10, metric: "products" as const };
+    const report = await getProductsRecipesReport(admin.id, query);
+
+    const row = report.topProducts.find((p) => p.productId === product.id);
+    expect(row).toMatchObject({ quantity: 10, revenue: 1000 });
+  });
+
   it("ranks top recipes by viewCount", async () => {
     const admin = await makeFullAccessAdmin();
     const category = await makeCategory();

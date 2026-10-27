@@ -55,6 +55,7 @@ model User {
   addresses                     Address[]
   orders                        Order[]
   couponRedemptions             CouponRedemption[]
+  giftOfferRedemptions          GiftOfferRedemption[]
   rewardAccount                 RewardAccount?
   rewardTransactions            RewardTransaction[]
   badges                        CustomerBadge[]
@@ -303,24 +304,31 @@ model Product {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  images            ProductImage[]
-  videos            ProductVideo[]
-  nutrition         ProductNutrition?
-  ingredients       ProductIngredient[]
-  inspirationCards  ProductInspirationCard[]
-  featuredItems     ProductFeaturedItem[]
-  allergens         Allergen[]
-  certifications    Certification[]
-  bundle            ProductBundle?
-  bundleComponentOf BundleItem[]
+  images               ProductImage[]
+  videos               ProductVideo[]
+  nutrition            ProductNutrition?
+  ingredients          ProductIngredient[]
+  inspirationCards     ProductInspirationCard[]
+  featuredItems        ProductFeaturedItem[]
+  allergens            Allergen[]
+  certifications       Certification[]
+  bundle               ProductBundle?
+  bundleComponentOf    BundleItem[]
+  // Story 5 (Free Gift). Two distinct relations to GiftOffer — this is
+  // the product the offer attaches to (@unique, one offer per product,
+  // same shape as `bundle` above) vs. `giftOfferAsGift` below (the
+  // product granted AS a gift, which may be the gift in several
+  // different products' offers at once).
+  giftOfferAsQualifier GiftOffer?               @relation("GiftOfferQualifyingProduct")
+  giftOfferAsGift      GiftOffer[]              @relation("GiftOfferGiftProduct")
   // Story 3 (Custom Packaging).
-  packagingOptions  ProductPackagingOption[]
+  packagingOptions     ProductPackagingOption[]
   // STORY (Product Variants). Any product may have zero-or-more variants;
   // `variants.length > 0` is the sole signal that this product is sold
   // by size/variant rather than as a single SKU — once true, this
   // product's own stockQuantity/inStock/price rows are never read by
   // variant-aware cart/checkout/order code (not deleted, just inert).
-  variants          ProductVariant[]
+  variants             ProductVariant[]
 
   standardPrices       StandardPrice[]
   salePrices           SalePrice[]
@@ -405,14 +413,17 @@ model ProductVariant {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  cartItems           CartItem[]
-  orderItems          OrderItem[]
+  cartItems              CartItem[]
+  orderItems             OrderItem[]
   // Story 2 (Bundles). Reverse side of BundleItem.componentVariantId — a
   // variant pinned as an eligible bundle component.
-  bundleComponentOf   BundleItem[]
+  bundleComponentOf      BundleItem[]
   // Story 3 (Custom Packaging). Reverse side of
   // ProductPackagingOption.variantId.
-  packagingOptionPins ProductPackagingOption[]
+  packagingOptionPins    ProductPackagingOption[]
+  // Story 5 (Free Gift). Reverse side of GiftOffer.giftVariantId — a
+  // variant pinned as the specific size granted by a gift offer.
+  giftOfferAsGiftVariant GiftOffer[]
 
   @@index([productId])
   @@index([productId, isActive])
@@ -683,6 +694,92 @@ model BundleItem {
   @@index([bundleId])
   @@index([componentProductId])
   @@index([componentVariantId])
+}
+
+// Story 5 (Free Gift / Free Issue, Option C). One row per qualifying
+// product — same one-offer-per-product shape as ProductBundle.productId.
+// Eligibility window/status mirrors ProductBundle exactly (status +
+// startDate/endDate) so a shared isActiveAndInWindow helper serves both.
+model GiftOffer {
+  id        String  @id @default(cuid())
+  productId String  @unique
+  product   Product @relation("GiftOfferQualifyingProduct", fields: [productId], references: [id], onDelete: Cascade)
+
+  name        String
+  description String?
+  status      ContentStatus @default(Active)
+  startDate   DateTime?
+  endDate     DateTime?
+
+  // Eligibility conditions — both independent/nullable; if both are set,
+  // both must hold. Null means "no such condition." minSpend is scoped to
+  // the qualifying line's own spend, not the cart-wide subtotal.
+  minQuantity Int?
+  minSpend    Decimal? @db.Decimal(10, 2)
+
+  // The gift itself — single product, optional single variant pin, same
+  // nullable-variant-pin convention as BundleItem.componentVariantId.
+  giftProductId String
+  giftProduct   Product         @relation("GiftOfferGiftProduct", fields: [giftProductId], references: [id], onDelete: Restrict)
+  giftVariantId String?
+  giftVariant   ProductVariant? @relation(fields: [giftVariantId], references: [id], onDelete: Restrict)
+  giftQuantity  Int             @default(1)
+
+  // Dedicated, non-tradable gift stock pool — NOT a decrement layered on
+  // top of giftProduct's own sellable stock (that's what
+  // BundleStockMode.OwnStock does, and is the wrong shape here: a gift
+  // cap must be independent of the gift product's own sellable
+  // inventory). Checked against count(GiftOfferRedemption), never a
+  // mutable counter. Null = unlimited (bounded only by the gift
+  // product/variant's own stock).
+  giftStockLimit Int?
+
+  // Redemption limits, counted the same way CouponRedemption counts a
+  // Coupon's limits (see GiftOfferRedemption below) — never a
+  // decrementing counter.
+  redemptionLimitGlobal      Int?
+  redemptionLimitPerCustomer Int?
+
+  // Reserved for a later phase's admin-configurable auto-include
+  // ("whether the gift is automatically included or requires customer
+  // selection"). Always false, never read, this phase — selection-only
+  // v1, same as how a bundle is chosen today.
+  autoInclude Boolean @default(false)
+  // "Whether the offer can be combined with other promotions." Captured
+  // per spec, not yet enforced by discount.service.ts this phase.
+  stackable   Boolean @default(false)
+
+  cartItems   CartItem[]
+  orderItems  OrderItem[]
+  redemptions GiftOfferRedemption[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([productId])
+  @@index([status, startDate, endDate])
+}
+
+// One row per successful redemption, written atomically with the order —
+// identical counting pattern to CouponRedemption (orderId @unique +
+// optional userId/guestEmail), never a decrementing counter. orderId is
+// @unique because this phase's PromotionSelector only ever lets a
+// customer choose one promotion option per checkout (regular XOR bundle
+// XOR gift), so an order can have at most one gift redemption.
+model GiftOfferRedemption {
+  id          String    @id @default(cuid())
+  giftOfferId String
+  giftOffer   GiftOffer @relation(fields: [giftOfferId], references: [id], onDelete: Restrict)
+  userId      String?
+  user        User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+  guestEmail  String?
+  orderId     String    @unique
+  order       Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  createdAt   DateTime  @default(now())
+
+  @@index([giftOfferId])
+  @@index([giftOfferId, userId])
+  @@index([giftOfferId, guestEmail])
 }
 
 // Story 3 (Custom Travel/Export Packaging).
@@ -1649,12 +1746,24 @@ model CartItem {
   packagingOption               ProductPackagingOption?        @relation(fields: [packagingOptionId], references: [id], onDelete: SetNull)
   packagingDeclaredAvailability PackagingDeclaredAvailability?
   packagingChargeSnapshot       Decimal?                       @db.Decimal(10, 2)
+  // Story 5 (Free Gift). Null for every non-gift line. Set together, same
+  // convention as bundleId/bundleInstanceId: giftOfferId identifies which
+  // offer this row came from; giftInstanceId is an opaque per-add tag
+  // (not an FK) so two independent "add this gift" actions never merge.
+  // This row's own productId/variantId are the GIFT product/variant
+  // (giftOffer.giftProductId/giftVariantId) — never the qualifying
+  // product's id, which is why this discriminator must be in the unique
+  // index below: otherwise a $0 gift line for product X would collide
+  // with and merge into a paid cart line for that same product X.
+  giftOfferId                   String?
+  giftOffer                     GiftOffer?                     @relation(fields: [giftOfferId], references: [id], onDelete: Cascade)
+  giftInstanceId                String?
   quantity                      Int
   unitPriceSnapshot             Decimal                        @db.Decimal(10, 2)
   createdAt                     DateTime                       @default(now())
   updatedAt                     DateTime                       @updatedAt
 
-  @@unique([cartId, productId, variantId, bundleInstanceId, packagingOptionId])
+  @@unique([cartId, productId, variantId, bundleInstanceId, packagingOptionId, giftInstanceId])
 }
 
 // --- Coupons & Promotions (STORY-029) ---
@@ -2243,6 +2352,7 @@ model Order {
   statusHistory         OrderStatusHistory[]
   integrationEvents     OrderIntegrationEvent[]
   couponRedemption      CouponRedemption?
+  giftOfferRedemption   GiftOfferRedemption?
   rewardTransactions    RewardTransaction[]
   badgesAwarded         CustomerBadge[]
   // STORY-031. The referral this order qualified (if any) — set on the
@@ -2306,6 +2416,17 @@ model OrderItem {
   packagingRatePerGram          Decimal?                       @db.Decimal(10, 4)
   packagingNetWeightGrams       Int?
   packagingMinimumChargeApplied Boolean                        @default(false)
+  // Story 5 (Free Gift). Flat snapshots, same convention as
+  // bundleId/bundleName — an order's gift grouping survives independently
+  // of whether the GiftOffer is later edited/deactivated (SetNull,
+  // matching bundleId's own pattern). isGiftLine is explicit, not
+  // inferred from unitPrice == 0 — a genuinely $0-priced regular product
+  // (if one ever exists) must never be misreported as a gift in
+  // analytics/exports.
+  giftOfferId                   String?
+  giftOffer                     GiftOffer?                     @relation(fields: [giftOfferId], references: [id], onDelete: SetNull)
+  giftOfferName                 String?
+  isGiftLine                    Boolean                        @default(false)
   unitPrice                     Decimal                        @db.Decimal(10, 2)
   quantity                      Int
   lineTotal                     Decimal                        @db.Decimal(10, 2)

@@ -88,7 +88,10 @@ export interface TopProductRow {
 export async function getTopProducts(from: Date, to: Date, limit: number): Promise<TopProductRow[]> {
   const grouped = await prisma.orderItem.groupBy({
     by: ["productId", "productName"],
-    where: { order: { createdAt: { gte: from, lte: to }, status: { not: "Cancelled" } } },
+    // Story 5 (Free Gift). isGiftLine: false — a free gift's lineTotal is
+    // already 0 so revenue is naturally unaffected, but its quantity isn't
+    // zero and would otherwise inflate "units sold" for the gift product.
+    where: { order: { createdAt: { gte: from, lte: to }, status: { not: "Cancelled" } }, isGiftLine: false },
     _sum: { quantity: true, lineTotal: true },
     orderBy: { _sum: { lineTotal: "desc" } },
     take: limit,
@@ -112,7 +115,8 @@ export async function getProductRevenueForIds(productIds: string[], from: Date, 
   if (productIds.length === 0) return new Map();
   const grouped = await prisma.orderItem.groupBy({
     by: ["productId"],
-    where: { productId: { in: productIds }, order: { createdAt: { gte: from, lte: to }, status: { not: "Cancelled" } } },
+    // Story 5 (Free Gift). Same isGiftLine: false exclusion as getTopProducts above.
+    where: { productId: { in: productIds }, order: { createdAt: { gte: from, lte: to }, status: { not: "Cancelled" } }, isGiftLine: false },
     _sum: { quantity: true, lineTotal: true },
   });
   const result = new Map<string, { revenue: number; quantity: number }>();

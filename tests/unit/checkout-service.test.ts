@@ -24,6 +24,7 @@ import {
   resolveDeliveryForCart,
 } from "@/services/checkout.service";
 import { confirmPayment } from "@/services/payment.service";
+import { addGiftToCart } from "@/services/gift-offer.service";
 import type { PlaceOrderInput } from "@/validation/checkout.schema";
 
 let sequence = 0;
@@ -99,6 +100,19 @@ async function makePackagingOption(productId: string, overrides: Record<string, 
   return prisma.productPackagingOption.create({ data: { productId, packagingMethodId: method.id, charge: "50.00", ...overrides } });
 }
 
+/** Story 5 (Free Gift). */
+async function makeGiftOffer(qualifyingProduct: { id: string }, giftProduct: { id: string }, overrides: Record<string, unknown> = {}) {
+  sequence += 1;
+  return prisma.giftOffer.create({
+    data: {
+      product: { connect: { id: qualifyingProduct.id } },
+      name: `Checkout Svc Gift Offer ${sequence}`,
+      giftProduct: { connect: { id: giftProduct.id } },
+      ...overrides,
+    },
+  });
+}
+
 /**
  * Story 4 (Payment Restriction). Every createIntentForCart/placeOrder call
  * now requires at least one admin-configured, enabled PaymentMethodSetting
@@ -124,11 +138,13 @@ beforeEach(async () => {
 
 afterEach(async () => {
   await prisma.orderStatusHistory.deleteMany();
+  await prisma.giftOfferRedemption.deleteMany();
   await prisma.orderItem.deleteMany();
   await prisma.order.deleteMany();
   await prisma.payment.deleteMany();
   await prisma.cartItem.deleteMany();
   await prisma.cart.deleteMany();
+  await prisma.giftOffer.deleteMany();
   await prisma.address.deleteMany();
   await prisma.deliveryRateOverride.deleteMany();
   await prisma.deliveryRate.deleteMany();
@@ -323,6 +339,155 @@ describe("placeOrder", () => {
     const saved = await listSavedAddresses(user.id);
     expect(saved).toHaveLength(1);
     expect(saved[0]).toMatchObject({ city: "Colombo", isDefault: true });
+  });
+});
+
+describe("placeOrder — Gift Offers (Story 5)", () => {
+  async function checkoutToConfirmedPayment(cookie: string) {
+    const intent = await createIntentForCart(null, cookie, "Colombo", "Card");
+    await confirmPayment(intent.providerReference, { outcome: "success" });
+    return intent;
+  }
+
+  it("places an order with a gift line: decrements the gift product's stock, writes an isGiftLine order item, and records a GiftOfferRedemption row", async () => {
+    await makeZone();
+    const qualifying = await makeProduct();
+    const gift = await makeProduct({ stockQuantity: 10 });
+    const offer = await makeGiftOffer(qualifying, gift, { giftQuantity: 2 });
+
+    const cookie = await guestCartWith(qualifying.id, 1);
+    const { newCookieValue } = await addGiftToCart(null, cookie, offer.id);
+    const finalCookie = newCookieValue ?? cookie;
+    const intent = await checkoutToConfirmedPayment(finalCookie);
+
+    const result = await placeOrder(null, finalCookie, {
+      idempotencyKey: crypto.randomUUID(),
+      address,
+      guestEmail: "guest@test.com",
+      providerReference: intent.providerReference,
+      paymentMethod: "Card",
+    });
+
+    const order = await prisma.order.findUnique({ where: { orderNumber: result.orderNumber }, include: { items: true } });
+    const giftLine = order?.items.find((item) => item.isGiftLine);
+    expect(giftLine).toMatchObject({ isGiftLine: true, giftOfferId: offer.id, quantity: 2, unitPrice: expect.anything() });
+    expect(giftLine?.unitPrice.toString()).toBe("0");
+
+    const liveGiftProduct = await prisma.product.findUnique({ where: { id: gift.id } });
+    expect(liveGiftProduct?.stockQuantity).toBe(8); // 10 - giftQuantity 2
+
+    const redemption = await prisma.giftOfferRedemption.findUnique({ where: { orderId: order!.id } });
+    expect(redemption?.giftOfferId).toBe(offer.id);
+  });
+
+  it("rejects at checkout when the gift offer was deactivated after the cart-add but before payment confirmation", async () => {
+    await makeZone();
+    const qualifying = await makeProduct();
+    const gift = await makeProduct();
+    const offer = await makeGiftOffer(qualifying, gift);
+
+    const cookie = await guestCartWith(qualifying.id, 1);
+    const { newCookieValue } = await addGiftToCart(null, cookie, offer.id);
+    const finalCookie = newCookieValue ?? cookie;
+    const intent = await checkoutToConfirmedPayment(finalCookie);
+
+    await prisma.giftOffer.update({ where: { id: offer.id }, data: { status: "Inactive" } });
+
+    await expect(
+      placeOrder(null, finalCookie, {
+        idempotencyKey: crypto.randomUUID(),
+        address,
+        guestEmail: "guest@test.com",
+        providerReference: intent.providerReference,
+        paymentMethod: "Card",
+      }),
+    ).rejects.toThrow();
+
+    expect(await prisma.order.count()).toBe(0); // no ghost order
+  });
+
+  it("enforces the gift offer's global redemption limit at checkout, even though add-to-cart allowed it", async () => {
+    await makeZone();
+    const qualifying = await makeProduct();
+    const gift = await makeProduct();
+    const offer = await makeGiftOffer(qualifying, gift, { redemptionLimitGlobal: 1 });
+
+    // One prior redemption already consumed the global limit.
+    const priorOrder = await prisma.order.create({
+      data: {
+        orderNumber: "CHK-SVC-PRIOR-GIFT-ORDER",
+        idempotencyKey: "idem-chk-svc-prior-gift-order",
+        status: "Confirmed",
+        subtotal: "0.00",
+        deliveryCharge: "0.00",
+        grandTotal: "0.00",
+        deliveryZoneName: "Western",
+        shipRecipientName: "Test Customer",
+        shipPhone: "+94 77 123 4567",
+        shipLine1: "10 Test Lane",
+        shipCity: "Colombo",
+      },
+    });
+    await prisma.giftOfferRedemption.create({ data: { giftOfferId: offer.id, orderId: priorOrder.id } });
+
+    const cookie = await guestCartWith(qualifying.id, 1);
+    const { newCookieValue } = await addGiftToCart(null, cookie, offer.id); // add-to-cart doesn't check this limit
+    const finalCookie = newCookieValue ?? cookie;
+    const intent = await checkoutToConfirmedPayment(finalCookie);
+
+    await expect(
+      placeOrder(null, finalCookie, {
+        idempotencyKey: crypto.randomUUID(),
+        address,
+        guestEmail: "guest@test.com",
+        providerReference: intent.providerReference,
+        paymentMethod: "Card",
+      }),
+    ).rejects.toThrow();
+
+    expect(await prisma.order.count()).toBe(1); // only the prior seeded order — no new ghost order
+  });
+
+  it("enforces the gift offer's per-customer redemption limit at checkout, scoped by guest email", async () => {
+    await makeZone();
+    const qualifying = await makeProduct();
+    const gift = await makeProduct();
+    const offer = await makeGiftOffer(qualifying, gift, { redemptionLimitPerCustomer: 1 });
+
+    const priorOrder = await prisma.order.create({
+      data: {
+        orderNumber: "CHK-SVC-PRIOR-GIFT-ORDER-2",
+        idempotencyKey: "idem-chk-svc-prior-gift-order-2",
+        status: "Confirmed",
+        subtotal: "0.00",
+        deliveryCharge: "0.00",
+        grandTotal: "0.00",
+        deliveryZoneName: "Western",
+        shipRecipientName: "Test Customer",
+        shipPhone: "+94 77 123 4567",
+        shipLine1: "10 Test Lane",
+        shipCity: "Colombo",
+        guestEmail: "repeat-guest@test.com",
+      },
+    });
+    await prisma.giftOfferRedemption.create({ data: { giftOfferId: offer.id, orderId: priorOrder.id, guestEmail: "repeat-guest@test.com" } });
+
+    const cookie = await guestCartWith(qualifying.id, 1);
+    const { newCookieValue } = await addGiftToCart(null, cookie, offer.id);
+    const finalCookie = newCookieValue ?? cookie;
+    const intent = await checkoutToConfirmedPayment(finalCookie);
+
+    await expect(
+      placeOrder(null, finalCookie, {
+        idempotencyKey: crypto.randomUUID(),
+        address,
+        guestEmail: "repeat-guest@test.com", // same guest the prior redemption belongs to
+        providerReference: intent.providerReference,
+        paymentMethod: "Card",
+      }),
+    ).rejects.toThrow();
+
+    expect(await prisma.order.count()).toBe(1); // only the prior seeded order
   });
 });
 

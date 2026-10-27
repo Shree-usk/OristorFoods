@@ -204,6 +204,7 @@ export default async function ProductDetailPage({ params }: ProductDetailPagePro
                 packagingOptions={product.packagingOptions}
                 bundle={product.bundle}
                 bundleItems={product.bundleItems}
+                giftOffer={product.giftOffer}
               />
             </div>
 

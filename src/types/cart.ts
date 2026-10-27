@@ -15,6 +15,10 @@ export interface CartLineItem {
   /** Shared by every row exploded from one "add bundle to cart" action — null for a plain line. See bundle.service.ts. */
   bundleInstanceId: string | null;
   bundleName: string | null;
+  /** Story 5 (Free Gift). Set for a gift line — unitPrice/lineTotal are always 0 for these. See gift-offer.service.ts. */
+  giftOfferId: string | null;
+  giftInstanceId: string | null;
+  giftOfferName: string | null;
   /** Story 3 (Custom Packaging). Null for a plain/default-packaging line. packagingCharge is this line's already-final packaging TOTAL (not a per-unit rate — see cart.service.ts::toLineItem), already folded into lineTotal. */
   packagingOptionId: string | null;
   packagingMethodName: string | null;

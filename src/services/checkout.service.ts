@@ -23,6 +23,7 @@ import { validateCoupon } from "@/services/coupon.service";
 import { resolveDiscountForCart } from "@/services/discount.service";
 import { checkRedemptionVelocity } from "@/services/fraud-detection.service";
 import type { DiscountableLine } from "@/services/discount.service";
+import { assertGiftOfferRedeemableAtCheckout } from "@/services/gift-offer.service";
 import { createOrder, getOrderForConfirmation } from "@/services/order.service";
 import { createManualPaymentIntent, createPaymentIntent, getPaymentByReference } from "@/services/payment.service";
 import { resolvePointsRedemptionForCart, validateRedemptionAtPlaceOrder } from "@/services/rewards.service";
@@ -68,6 +69,10 @@ interface CheckoutCartState {
     bundleId: string | null;
     bundleInstanceId: string | null;
     bundleName: string | null;
+    /** Story 5 (Free Gift). Null for a plain line — see gift-offer.service.ts. */
+    giftOfferId: string | null;
+    giftInstanceId: string | null;
+    giftOfferName: string | null;
     /** Story 3 (Custom Packaging). Null when no packaging option is selected — see packaging.service.ts. */
     packagingOptionId: string | null;
     packagingMethodName: string | null;
@@ -133,6 +138,9 @@ export async function requireCheckoutableCart(userId: string | null, guestCookie
       bundleId: itemById.get(line.id)?.bundleId ?? null,
       bundleInstanceId: line.bundleInstanceId,
       bundleName: line.bundleName,
+      giftOfferId: line.giftOfferId,
+      giftInstanceId: line.giftInstanceId,
+      giftOfferName: line.giftOfferName,
       packagingOptionId: line.packagingOptionId,
       packagingMethodName: line.packagingMethodName,
       packagingCharge: line.packagingCharge,
@@ -173,7 +181,18 @@ async function resolveBundleInstancesForOrder(lines: CheckoutCartState["lines"])
 }
 
 function toDiscountableLines(cart: CheckoutCartState): DiscountableLine[] {
-  return cart.lines.map((line) => ({ productId: line.productId, categoryIds: line.categoryIds, lineTotal: line.lineTotal }));
+  // Story 5 (Free Gift). A gift line is never a discount candidate — same
+  // exclusion cart.service.ts::buildSummary's own discountableLines
+  // construction already applies, kept consistent here so a coupon can
+  // never behave differently between the cart preview and checkout itself.
+  return cart.lines
+    .filter((line) => !line.giftOfferId)
+    .map((line) => ({ productId: line.productId, categoryIds: line.categoryIds, lineTotal: line.lineTotal }));
+}
+
+/** Story 5 (Free Gift). Distinct gift offer ids present in the checkout cart — always at most one today, since PromotionSelector only lets a customer choose one promotion option, but this doesn't assume that invariant holds forever. */
+function distinctGiftOfferIds(lines: CheckoutCartState["lines"]): string[] {
+  return [...new Set(lines.filter((line) => line.giftOfferId).map((line) => line.giftOfferId as string))];
 }
 
 /**
@@ -314,6 +333,20 @@ export async function placeOrder(
 
   const cart = await requireCheckoutableCart(userId, guestCookieValue);
   const guestEmailForValidation = userId ? null : (input.guestEmail ?? null);
+
+  // Final, THROWING gift-offer re-validation. requireCheckoutableCart above
+  // already rejects a deactivated/expired/stock-exhausted gift or one
+  // whose qualifying condition lapsed (folded into the cart's own
+  // `unavailable` flag), but redemptionLimitGlobal/redemptionLimitPerCustomer
+  // depend on customer identity — a guest's email only exists from here on
+  // — so those two checks can only happen at this point, mirroring the
+  // coupon re-validation immediately below. Computed once and reused below
+  // (at most one entry today — PromotionSelector only lets a customer
+  // choose one promotion option per checkout).
+  const giftOfferIds = distinctGiftOfferIds(cart.lines);
+  for (const giftOfferId of giftOfferIds) {
+    await assertGiftOfferRedeemableAtCheckout(giftOfferId, userId, guestEmailForValidation);
+  }
 
   // Story 4 (Payment Restriction), second defense-in-depth gate — the
   // cart (and therefore whether restriction even applies) may have
@@ -483,6 +516,9 @@ export async function placeOrder(
       bundleId: line.bundleId,
       bundleInstanceId: line.bundleInstanceId,
       bundleName: line.bundleName,
+      giftOfferId: line.giftOfferId,
+      giftOfferName: line.giftOfferName,
+      isGiftLine: line.giftOfferId !== null,
       packagingOptionId: line.packagingOptionId,
       packagingMethodName: line.packagingMethodName,
       packagingCharge: line.packagingCharge.toFixed(2),
@@ -503,6 +539,8 @@ export async function placeOrder(
     bundleInstances: await resolveBundleInstancesForOrder(cart.lines),
     cartId: cart.cartId,
     couponRedemption,
+    // Story 5 (Free Gift). giftOfferIds was already re-validated above.
+    giftOfferRedemption: giftOfferIds[0] ? { giftOfferId: giftOfferIds[0] } : null,
     requiresManualReview,
   });
 

@@ -16,11 +16,13 @@ interface CartLineItemRowProps {
   isMutating?: boolean;
   /** The message from this row's most recent failed mutation, if any. */
   error?: string | null;
-  /** Story 2 (Bundles). True for a bundle's exploded component row — quantity/remove are whole-bundle actions (see BundleGroupHeader), not per-row. */
+  /** Disables the quantity +/- stepper. True for a bundle's exploded component row and for a Story 5 free-gift row — neither can be resized independently. */
   locked?: boolean;
+  /** Story 2 (Bundles). Hides this row's own remove (X) button — a bundle's rows are removed as a whole group via BundleGroupHeader instead, not per-row. A locked gift row still gets its own remove button (there's no group header for a single gift line); `onRemove` is expected to call the gift-specific removal endpoint in that case. */
+  hideRemove?: boolean;
 }
 
-export function CartLineItemRow({ item, onQuantityChange, onRemove, isMutating = false, error = null, locked = false }: CartLineItemRowProps) {
+export function CartLineItemRow({ item, onQuantityChange, onRemove, isMutating = false, error = null, locked = false, hideRemove = false }: CartLineItemRowProps) {
   const noticeId = `cart-item-notice-${item.id}`;
   const hasNotice = item.priceChanged || item.unavailable || item.quantityCapped || !!error;
 
@@ -89,7 +91,7 @@ export function CartLineItemRow({ item, onQuantityChange, onRemove, isMutating =
           >
             <Plus />
           </Button>
-          {!locked && (
+          {!hideRemove && (
             <Button type="button" variant="ghost" size="icon-sm" aria-label={`Remove ${item.productName} from cart`} disabled={isMutating} onClick={onRemove}>
               <X />
             </Button>

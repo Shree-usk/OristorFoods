@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { ProductDetailBundle, ProductDetailBundleItem } from "@/services/product.service";
+import type { ProductDetailBundle, ProductDetailBundleItem, ProductDetailGiftOffer } from "@/services/product.service";
 
 vi.mock("next-auth/react", () => ({
   useSession: () => ({ status: "unauthenticated" }),
@@ -33,6 +33,7 @@ const baseProps = {
   shortDescription: "Authentic roasted curry powder.",
   variants: [],
   packagingOptions: [],
+  giftOffer: null,
 };
 
 function makeBundle(overrides: Partial<ProductDetailBundle> = {}): ProductDetailBundle {
@@ -69,6 +70,24 @@ function makeBundleItems(): ProductDetailBundleItem[] {
       maxQuantity: null,
     },
   ];
+}
+
+function makeGiftOffer(overrides: Partial<ProductDetailGiftOffer> = {}): ProductDetailGiftOffer {
+  return {
+    id: "gift-1",
+    name: "Free Chili Paste",
+    description: "Get a free jar with this purchase.",
+    minQuantity: null,
+    minSpend: null,
+    giftProductName: "Chili Paste",
+    giftProductImageSrc: "/images/products/chili-paste.webp",
+    giftProductImageAlt: "Chili Paste",
+    giftQuantity: 1,
+    standaloneValue: 350,
+    currency: "LKR",
+    inStock: true,
+    ...overrides,
+  };
 }
 
 beforeEach(() => {
@@ -155,5 +174,86 @@ describe("PromotionSelector — eligible bundle present", () => {
     screen.getByRole("button", { name: "Add to Cart" }).click();
 
     await waitFor(() => expect(useUiStore.getState().isCartDrawerOpen).toBe(true));
+  });
+});
+
+describe("PromotionSelector — eligible gift offer present", () => {
+  it("defaults to the regular purchase option, showing exactly one Add to Cart control", () => {
+    renderWithProviders(<PromotionSelector {...baseProps} bundle={null} bundleItems={[]} giftOffer={makeGiftOffer()} />);
+
+    expect(screen.getByRole("button", { name: "Add to Cart" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Add free gift to cart" })).not.toBeInTheDocument();
+  });
+
+  it("shows the gift card with a Free price label and the gift's worth struck through", () => {
+    renderWithProviders(<PromotionSelector {...baseProps} bundle={null} bundleItems={[]} giftOffer={makeGiftOffer({ standaloneValue: 350 })} />);
+
+    const giftOption = screen.getByRole("button", { name: /Free Chili Paste/ });
+    expect(within(giftOption).getByText("Free")).toBeInTheDocument();
+    expect(within(giftOption).getByText("LKR 350")).toBeInTheDocument();
+  });
+
+  it("switching to the gift option hides the regular Add to Cart and shows the gift's own, never both at once", async () => {
+    renderWithProviders(<PromotionSelector {...baseProps} bundle={null} bundleItems={[]} giftOffer={makeGiftOffer()} />);
+
+    screen.getByRole("button", { name: /Free Chili Paste/ }).click();
+
+    await waitFor(() => expect(screen.getByRole("button", { name: "Add free gift to cart" })).toBeInTheDocument());
+    expect(screen.queryByRole("button", { name: "Add to Cart" })).not.toBeInTheDocument();
+  });
+
+  it("disables the gift option and labels it unavailable when the gift is out of stock", () => {
+    renderWithProviders(<PromotionSelector {...baseProps} bundle={null} bundleItems={[]} giftOffer={makeGiftOffer({ inStock: false })} />);
+
+    const giftOption = screen.getByRole("button", { name: /Free Chili Paste/ });
+    expect(giftOption).toBeDisabled();
+    expect(within(giftOption).getByText("Currently unavailable")).toBeInTheDocument();
+  });
+
+  it("opens the cart drawer after adding the free gift", async () => {
+    renderWithProviders(<PromotionSelector {...baseProps} bundle={null} bundleItems={[]} giftOffer={makeGiftOffer()} />);
+
+    screen.getByRole("button", { name: /Free Chili Paste/ }).click();
+    await waitFor(() => screen.getByRole("button", { name: "Add free gift to cart" }));
+    screen.getByRole("button", { name: "Add free gift to cart" }).click();
+
+    await waitFor(() => expect(useUiStore.getState().isCartDrawerOpen).toBe(true));
+  });
+
+  it("the gift CTA calls the gift-specific /api/cart/gift endpoint, never the regular or bundle add-to-cart routes", async () => {
+    renderWithProviders(<PromotionSelector {...baseProps} bundle={null} bundleItems={[]} giftOffer={makeGiftOffer({ id: "gift-offer-99" })} />);
+
+    screen.getByRole("button", { name: /Free Chili Paste/ }).click();
+    await waitFor(() => screen.getByRole("button", { name: "Add free gift to cart" }));
+    screen.getByRole("button", { name: "Add free gift to cart" }).click();
+
+    await waitFor(() => expect(useUiStore.getState().isCartDrawerOpen).toBe(true));
+
+    const fetchMock = fetch as unknown as ReturnType<typeof vi.fn>;
+    const giftCall = fetchMock.mock.calls.find(([url]) => url === "/api/cart/gift") as [string, { body: string }] | undefined;
+    expect(giftCall).toBeDefined();
+    expect(JSON.parse(giftCall![1].body)).toEqual({ giftOfferId: "gift-offer-99" });
+    expect(fetchMock.mock.calls.some(([url]) => url === "/api/cart/items" || url === "/api/cart/bundle")).toBe(false);
+  });
+});
+
+describe("PromotionSelector — both a bundle and a gift offer eligible", () => {
+  it("renders all three options, and switching between every pair never shows two Add-to-Cart controls at once", async () => {
+    renderWithProviders(<PromotionSelector {...baseProps} bundle={makeBundle()} bundleItems={makeBundleItems()} giftOffer={makeGiftOffer()} />);
+
+    expect(screen.getByRole("button", { name: /Roasted Curry Powder only/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Curry Night Bundle/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Free Chili Paste/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Add to Cart" })).toBeInTheDocument();
+
+    screen.getByRole("button", { name: /Free Chili Paste/ }).click();
+    await waitFor(() => expect(screen.getByRole("button", { name: "Add free gift to cart" })).toBeInTheDocument());
+    expect(screen.queryByRole("button", { name: "Add to Cart" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Add bundle to cart" })).not.toBeInTheDocument();
+
+    screen.getByRole("button", { name: /Curry Night Bundle/ }).click();
+    await waitFor(() => expect(screen.getByRole("button", { name: "Add bundle to cart" })).toBeInTheDocument());
+    expect(screen.queryByRole("button", { name: "Add to Cart" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Add free gift to cart" })).not.toBeInTheDocument();
   });
 });

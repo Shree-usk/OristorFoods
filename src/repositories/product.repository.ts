@@ -74,6 +74,14 @@ export function findProductDetailBySlug(slug: string) {
           },
         },
       },
+      // Story 5 (Free Gift). The qualifying-product side of the two
+      // Product<->GiftOffer relations — mirrors `bundle` above.
+      giftOfferAsQualifier: {
+        include: {
+          giftProduct: { include: { images: { where: { isPrimary: true }, take: 1 } } },
+          giftVariant: true,
+        },
+      },
       variants: {
         where: { isActive: true },
         include: { images: { orderBy: [{ isPrimary: "desc" }, { sortOrder: "asc" }] } },
