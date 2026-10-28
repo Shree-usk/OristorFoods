@@ -58,7 +58,7 @@ export async function getGiftOfferAdminDetail(adminUserId: string, id: string) {
 
 export async function createGiftOffer(adminUserId: string, input: CreateGiftOfferFormInput) {
   await requirePermission(adminUserId, "Marketing", "Edit");
-  const { productId, giftProductId, giftVariantId, ...rest } = input;
+  const { productId, giftProductId, giftVariantId, qualifyingVariantId, ...rest } = input;
   try {
     const offer = await giftOfferRepository.createGiftOffer({
       ...rest,
@@ -74,6 +74,7 @@ export async function createGiftOffer(adminUserId: string, input: CreateGiftOffe
       redemptionLimitPerCustomer: rest.redemptionLimitPerCustomer ?? null,
       stackable: rest.stackable ?? false,
       product: { connect: { id: productId } },
+      qualifyingVariant: qualifyingVariantId ? { connect: { id: qualifyingVariantId } } : undefined,
       giftProduct: { connect: { id: giftProductId } },
       giftVariant: giftVariantId ? { connect: { id: giftVariantId } } : undefined,
     });

@@ -423,7 +423,11 @@ model ProductVariant {
   packagingOptionPins    ProductPackagingOption[]
   // Story 5 (Free Gift). Reverse side of GiftOffer.giftVariantId — a
   // variant pinned as the specific size granted by a gift offer.
-  giftOfferAsGiftVariant GiftOffer[]
+  giftOfferAsGiftVariant       GiftOffer[] @relation("GiftOfferGiftVariant")
+  // Reverse side of GiftOffer.qualifyingVariantId — a variant pinned as
+  // the specific size that must be purchased to unlock the offer (null
+  // on the GiftOffer side means any variant qualifies).
+  giftOfferAsQualifyingVariant GiftOffer[] @relation("GiftOfferQualifyingVariant")
 
   @@index([productId])
   @@index([productId, isActive])
@@ -705,6 +709,15 @@ model GiftOffer {
   productId String  @unique
   product   Product @relation("GiftOfferQualifyingProduct", fields: [productId], references: [id], onDelete: Cascade)
 
+  // Optional pin narrowing which of the qualifying product's own variants
+  // counts toward eligibility. Null (the default, and the only behavior
+  // that existed before this field) means "any variant of this product
+  // qualifies" — preserves current behavior exactly. Immutable after
+  // creation, same as productId itself (enforced in
+  // gift-offer-admin.schema.ts, not here).
+  qualifyingVariantId String?
+  qualifyingVariant   ProductVariant? @relation("GiftOfferQualifyingVariant", fields: [qualifyingVariantId], references: [id], onDelete: Restrict)
+
   name        String
   description String?
   status      ContentStatus @default(Active)
@@ -722,7 +735,7 @@ model GiftOffer {
   giftProductId String
   giftProduct   Product         @relation("GiftOfferGiftProduct", fields: [giftProductId], references: [id], onDelete: Restrict)
   giftVariantId String?
-  giftVariant   ProductVariant? @relation(fields: [giftVariantId], references: [id], onDelete: Restrict)
+  giftVariant   ProductVariant? @relation("GiftOfferGiftVariant", fields: [giftVariantId], references: [id], onDelete: Restrict)
   giftQuantity  Int             @default(1)
 
   // Dedicated, non-tradable gift stock pool — NOT a decrement layered on

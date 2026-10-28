@@ -12,6 +12,8 @@ export interface GiftOfferAdmin {
   id: string;
   productId: string;
   product: { id: string; name: string; slug: string };
+  qualifyingVariantId: string | null;
+  qualifyingVariant: { id: string; name: string } | null;
   name: string;
   description: string | null;
   status: GiftOfferStatusValue;
@@ -34,6 +36,7 @@ export interface GiftOfferAdmin {
 
 export interface CreateGiftOfferFormInput {
   productId: string;
+  qualifyingVariantId: string | null;
   name: string;
   description: string | null;
   status?: GiftOfferStatusValue;
@@ -50,7 +53,7 @@ export interface CreateGiftOfferFormInput {
   stackable: boolean;
 }
 
-export type UpdateGiftOfferFormInput = Partial<Omit<CreateGiftOfferFormInput, "productId">>;
+export type UpdateGiftOfferFormInput = Partial<Omit<CreateGiftOfferFormInput, "productId" | "qualifyingVariantId">>;
 
 export async function fetchGiftOffers(): Promise<{ giftOffers: GiftOfferAdmin[] }> {
   const response = await fetch("/api/admin/gift-offers");

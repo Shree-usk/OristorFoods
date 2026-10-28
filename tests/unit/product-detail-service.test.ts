@@ -353,6 +353,48 @@ describe("getProductDetail", () => {
     expect(detail?.giftOffer).not.toBeNull();
     expect(detail?.giftOffer).toMatchObject({ name: "Live Gift", standaloneValue: 50, giftQuantity: 1, inStock: true });
   });
+
+  it("falls back to the gift variant's real price for 'worth' display when promoPrice is explicitly 0, instead of showing 0", async () => {
+    const giftProduct = await createProduct({ sku: "PD-GIFT-VARIANT-ZERO-PROMO", slug: "pd-gift-variant-zero-promo-gift", name: "Gift", status: "Published" });
+    const giftVariant = await prisma.productVariant.create({
+      data: { productId: giftProduct.id, sku: "PD-GIFT-VARIANT-ZERO-PROMO-V1", name: "500g", netWeightGrams: 500, price: "320.00", promoPrice: "0.00", currency: "LKR", stockQuantity: 10, isActive: true, inStock: true },
+    });
+    const hostProduct = await createProduct({ sku: "PD-HOST-GIFT-VARIANT-ZERO-PROMO", slug: "pd-host-variant-zero-promo-gift", name: "Host", status: "Published" });
+    await createStandardPrice({ product: { connect: { id: hostProduct.id } }, price: "300.00" });
+    await prisma.giftOffer.create({
+      data: {
+        product: { connect: { id: hostProduct.id } },
+        name: "Zero Promo Variant Gift",
+        giftProduct: { connect: { id: giftProduct.id } },
+        giftVariant: { connect: { id: giftVariant.id } },
+      },
+    });
+
+    const detail = await getProductDetail("pd-host-variant-zero-promo-gift");
+
+    expect(detail?.giftOffer).toMatchObject({ standaloneValue: 320 });
+  });
+
+  it("uses the gift variant's real non-zero promoPrice for 'worth' display when one is genuinely set (regression)", async () => {
+    const giftProduct = await createProduct({ sku: "PD-GIFT-VARIANT-REAL-PROMO", slug: "pd-gift-variant-real-promo-gift", name: "Gift", status: "Published" });
+    const giftVariant = await prisma.productVariant.create({
+      data: { productId: giftProduct.id, sku: "PD-GIFT-VARIANT-REAL-PROMO-V1", name: "500g", netWeightGrams: 500, price: "320.00", promoPrice: "280.00", currency: "LKR", stockQuantity: 10, isActive: true, inStock: true },
+    });
+    const hostProduct = await createProduct({ sku: "PD-HOST-GIFT-VARIANT-REAL-PROMO", slug: "pd-host-variant-real-promo-gift", name: "Host", status: "Published" });
+    await createStandardPrice({ product: { connect: { id: hostProduct.id } }, price: "300.00" });
+    await prisma.giftOffer.create({
+      data: {
+        product: { connect: { id: hostProduct.id } },
+        name: "Real Promo Variant Gift",
+        giftProduct: { connect: { id: giftProduct.id } },
+        giftVariant: { connect: { id: giftVariant.id } },
+      },
+    });
+
+    const detail = await getProductDetail("pd-host-variant-real-promo-gift");
+
+    expect(detail?.giftOffer).toMatchObject({ standaloneValue: 280 });
+  });
 });
 
 describe("listRelatedProducts", () => {

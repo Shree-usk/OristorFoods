@@ -5,7 +5,7 @@ import { computeBundleDiscountedTotal } from "@/services/bundle-pricing.service"
 import { isActiveAndInWindow } from "@/services/eligibility-window";
 import * as giftOfferRepository from "@/repositories/gift-offer.repository";
 import * as pricingService from "@/services/pricing.service";
-import { resolveVariantPrice } from "@/services/product-variant.service";
+import { resolveVariantPrice, type AvailableVariant } from "@/services/product-variant.service";
 import * as packagingRepository from "@/repositories/packaging.repository";
 import * as productRepository from "@/repositories/product.repository";
 import * as seoRepository from "@/repositories/seo.repository";
@@ -564,6 +564,22 @@ async function resolveBundleDetail(
 type ProductDetailGiftOfferRow = NonNullable<Awaited<ReturnType<typeof productRepository.findProductDetailBySlug>>>["giftOfferAsQualifier"];
 
 /**
+ * Scoped ONLY to the gift-offer "worth" display below — does not change
+ * resolveVariantPrice itself, which stays untouched (it's real charged
+ * pricing for cart/bundle lines, where promoPrice intentionally
+ * overriding price — even to exactly 0 — is the correct, relied-upon
+ * contract). A "worth" display must never collapse to 0 while the
+ * variant has a real non-zero price: if the resolved price is exactly 0,
+ * fall back to the variant's own undiscounted price. Any non-zero case
+ * keeps today's priority order unchanged.
+ */
+function resolveGiftWorthValue(variant: Pick<AvailableVariant, "price" | "promoPrice" | "currency">): { price: number; currency: string } {
+  const resolved = resolveVariantPrice(variant);
+  if (resolved.price === 0) return { price: variant.price.toNumber(), currency: resolved.currency };
+  return resolved;
+}
+
+/**
  * Resolves a product's eligible gift offer for the PDP — mirrors
  * resolveBundleDetail's shape. The gift product/variant's price is
  * resolved for DISPLAY ONLY ("worth LKR X, yours free") — a gift is never
@@ -577,7 +593,7 @@ async function resolveGiftOfferDetail(giftOffer: ProductDetailGiftOfferRow, cust
   let currency: string;
   let giftInStock: boolean;
   if (giftOffer.giftVariant) {
-    const resolved = resolveVariantPrice(giftOffer.giftVariant);
+    const resolved = resolveGiftWorthValue(giftOffer.giftVariant);
     standaloneValue = resolved.price;
     currency = resolved.currency;
     giftInStock = giftOffer.giftVariant.isActive && giftOffer.giftVariant.inStock;

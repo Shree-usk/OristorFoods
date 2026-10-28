@@ -24,6 +24,7 @@ import {
 
 interface GiftOfferFormState extends CreateGiftOfferFormInput {
   productName: string;
+  qualifyingVariantName: string | null;
   giftProductName: string;
   giftVariantName: string | null;
 }
@@ -36,6 +37,8 @@ function emptyForm(): GiftOfferFormState {
   return {
     productId: "",
     productName: "",
+    qualifyingVariantId: null,
+    qualifyingVariantName: null,
     name: "",
     description: null,
     status: "Active",
@@ -59,6 +62,8 @@ function toFormState(offer: GiftOfferAdmin): GiftOfferFormState {
   return {
     productId: offer.productId,
     productName: offer.product.name,
+    qualifyingVariantId: offer.qualifyingVariantId,
+    qualifyingVariantName: offer.qualifyingVariant?.name ?? null,
     name: offer.name,
     description: offer.description,
     status: offer.status,
@@ -131,10 +136,10 @@ export function AdminGiftOffersPanel() {
 
   async function handleSubmit() {
     setActionError(null);
-    const { productName: _productName, giftProductName: _giftProductName, giftVariantName: _giftVariantName, ...input } = form;
+    const { productName: _productName, qualifyingVariantName: _qualifyingVariantName, giftProductName: _giftProductName, giftVariantName: _giftVariantName, ...input } = form;
     try {
       if (editingId) {
-        const { productId: _productId, ...updateInput } = input;
+        const { productId: _productId, qualifyingVariantId: _qualifyingVariantId, ...updateInput } = input;
         await updateGiftOfferAdmin(editingId, updateInput);
       } else {
         await createGiftOfferAdmin(input);
@@ -173,7 +178,10 @@ export function AdminGiftOffersPanel() {
           {giftOffers.map((offer) => (
             <TableRow key={offer.id}>
               <TableCell className="font-medium">{offer.name}</TableCell>
-              <TableCell>{offer.product.name}</TableCell>
+              <TableCell>
+                {offer.product.name}
+                {offer.qualifyingVariant ? ` — ${offer.qualifyingVariant.name}` : ""}
+              </TableCell>
               <TableCell>
                 {offer.giftQuantity} x {offer.giftProduct.name}
                 {offer.giftVariant ? ` — ${offer.giftVariant.name}` : ""}
@@ -212,9 +220,11 @@ export function AdminGiftOffersPanel() {
           <p className="text-caption text-charcoal/60">The product a customer must buy to unlock this gift. Set once, not editable afterward.</p>
           <div className="mt-1">
             <GiftQualifyingProductPicker
-              value={form.productId ? { id: form.productId, name: form.productName } : null}
+              value={form.productId ? { id: form.productId, name: form.productName, variantId: form.qualifyingVariantId, variantName: form.qualifyingVariantName } : null}
               disabled={!!editingId}
-              onChange={(product: PickedProduct) => setForm({ ...form, productId: product.id, productName: product.name })}
+              onChange={(product: PickedProduct) =>
+                setForm({ ...form, productId: product.id, productName: product.name, qualifyingVariantId: product.variantId ?? null, qualifyingVariantName: product.variantName ?? null })
+              }
             />
           </div>
 

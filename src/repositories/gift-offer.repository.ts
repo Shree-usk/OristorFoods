@@ -5,6 +5,7 @@ import { prisma } from "@/lib/db";
 
 const withGiftProductAndQualifier = {
   product: { select: { id: true, name: true, slug: true } },
+  qualifyingVariant: true,
   giftProduct: { include: { images: { where: { isPrimary: true }, take: 1 } } },
   giftVariant: true,
 } satisfies Prisma.GiftOfferInclude;

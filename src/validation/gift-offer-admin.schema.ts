@@ -28,10 +28,11 @@ function refineDates<T extends { startDate?: Date | null; endDate?: Date | null 
   });
 }
 
-/** productId (the qualifying product) is required and immutable — set once at creation, same as every other identity-defining FK in this codebase. */
+/** productId (the qualifying product) and qualifyingVariantId are required/immutable — set once at creation, same as every other identity-defining FK in this codebase. qualifyingVariantId is deliberately NOT in giftOfferFields, so updateGiftOfferSchema structurally cannot accept it. */
 export const createGiftOfferSchema = refineDates(
   z.object({
     productId: z.string().min(1, "Select a qualifying product."),
+    qualifyingVariantId: z.string().min(1).optional().nullable(),
     ...giftOfferFields,
   }),
 );
