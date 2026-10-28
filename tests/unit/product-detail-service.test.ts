@@ -21,6 +21,8 @@ afterEach(async () => {
   resetProductDetailExtensionsForTesting();
   await prisma.bundleItem.deleteMany();
   await prisma.productBundle.deleteMany();
+  await prisma.giftOfferRedemption.deleteMany();
+  await prisma.giftOffer.deleteMany();
   await prisma.product.deleteMany();
   await prisma.category.deleteMany();
 });
@@ -277,6 +279,79 @@ describe("getProductDetail", () => {
 
     expect(detail?.bundle).not.toBeNull();
     expect(detail?.bundle?.name).toBe("Live Bundle");
+  });
+
+  it("omits an Inactive gift offer from the PDP (Story 5)", async () => {
+    const giftProduct = await createProduct({ sku: "PD-GIFT-INACTIVE", slug: "pd-gift-inactive-gift", name: "Gift", status: "Published" });
+    await createStandardPrice({ product: { connect: { id: giftProduct.id } }, price: "50.00" });
+    const hostProduct = await createProduct({ sku: "PD-HOST-GIFT-INACTIVE", slug: "pd-host-inactive-gift", name: "Host", status: "Published" });
+    await createStandardPrice({ product: { connect: { id: hostProduct.id } }, price: "300.00" });
+    await prisma.giftOffer.create({
+      data: { product: { connect: { id: hostProduct.id } }, name: "Inactive Gift", status: "Inactive", giftProduct: { connect: { id: giftProduct.id } } },
+    });
+
+    const detail = await getProductDetail("pd-host-inactive-gift");
+
+    expect(detail?.giftOffer).toBeNull();
+  });
+
+  it("omits a gift offer scheduled to start in the future", async () => {
+    const giftProduct = await createProduct({ sku: "PD-GIFT-FUTURE", slug: "pd-gift-future-gift", name: "Gift", status: "Published" });
+    await createStandardPrice({ product: { connect: { id: giftProduct.id } }, price: "50.00" });
+    const hostProduct = await createProduct({ sku: "PD-HOST-GIFT-FUTURE", slug: "pd-host-future-gift", name: "Host", status: "Published" });
+    await createStandardPrice({ product: { connect: { id: hostProduct.id } }, price: "300.00" });
+    await prisma.giftOffer.create({
+      data: {
+        product: { connect: { id: hostProduct.id } },
+        name: "Future Gift",
+        startDate: new Date(Date.now() + 24 * 60 * 60 * 1000),
+        giftProduct: { connect: { id: giftProduct.id } },
+      },
+    });
+
+    const detail = await getProductDetail("pd-host-future-gift");
+
+    expect(detail?.giftOffer).toBeNull();
+  });
+
+  it("omits a gift offer whose end date has already passed", async () => {
+    const giftProduct = await createProduct({ sku: "PD-GIFT-EXPIRED", slug: "pd-gift-expired-gift", name: "Gift", status: "Published" });
+    await createStandardPrice({ product: { connect: { id: giftProduct.id } }, price: "50.00" });
+    const hostProduct = await createProduct({ sku: "PD-HOST-GIFT-EXPIRED", slug: "pd-host-expired-gift", name: "Host", status: "Published" });
+    await createStandardPrice({ product: { connect: { id: hostProduct.id } }, price: "300.00" });
+    await prisma.giftOffer.create({
+      data: {
+        product: { connect: { id: hostProduct.id } },
+        name: "Expired Gift",
+        endDate: new Date(Date.now() - 24 * 60 * 60 * 1000),
+        giftProduct: { connect: { id: giftProduct.id } },
+      },
+    });
+
+    const detail = await getProductDetail("pd-host-expired-gift");
+
+    expect(detail?.giftOffer).toBeNull();
+  });
+
+  it("includes an Active gift offer that is inside its scheduled start/end window", async () => {
+    const giftProduct = await createProduct({ sku: "PD-GIFT-WINDOW", slug: "pd-gift-window-gift", name: "Gift", status: "Published" });
+    await createStandardPrice({ product: { connect: { id: giftProduct.id } }, price: "50.00" });
+    const hostProduct = await createProduct({ sku: "PD-HOST-GIFT-WINDOW", slug: "pd-host-window-gift", name: "Host", status: "Published" });
+    await createStandardPrice({ product: { connect: { id: hostProduct.id } }, price: "300.00" });
+    await prisma.giftOffer.create({
+      data: {
+        product: { connect: { id: hostProduct.id } },
+        name: "Live Gift",
+        startDate: new Date(Date.now() - 24 * 60 * 60 * 1000),
+        endDate: new Date(Date.now() + 24 * 60 * 60 * 1000),
+        giftProduct: { connect: { id: giftProduct.id } },
+      },
+    });
+
+    const detail = await getProductDetail("pd-host-window-gift");
+
+    expect(detail?.giftOffer).not.toBeNull();
+    expect(detail?.giftOffer).toMatchObject({ name: "Live Gift", standaloneValue: 50, giftQuantity: 1, inStock: true });
   });
 });
 

@@ -4,10 +4,11 @@ import Image from "next/image";
 import { useState } from "react";
 
 import { BundleDisplay } from "@/components/storefront/product/bundle-display";
+import { GiftOfferDisplay } from "@/components/storefront/product/gift-offer-display";
 import { ProductPurchasePanel } from "@/components/storefront/product/product-purchase-panel";
 import { useVariantSelection } from "@/components/storefront/product/variant-selection-context";
 import { cn } from "@/lib/utils";
-import type { ProductDetailBundle, ProductDetailBundleItem, ProductDetailPackagingOption, ProductDetailVariant } from "@/services/product.service";
+import type { ProductDetailBundle, ProductDetailBundleItem, ProductDetailGiftOffer, ProductDetailPackagingOption, ProductDetailVariant } from "@/services/product.service";
 
 interface PromotionSelectorProps {
   productId: string;
@@ -23,19 +24,21 @@ interface PromotionSelectorProps {
   packagingOptions: ProductDetailPackagingOption[];
   bundle: ProductDetailBundle | null;
   bundleItems: ProductDetailBundleItem[];
+  giftOffer: ProductDetailGiftOffer | null;
 }
 
-type PurchaseOption = "regular" | "bundle";
+type PurchaseOption = "regular" | "bundle" | "gift";
 
 /**
- * Project Cinnamon — Promotion Selection prototype (Phase 2). Lets a
- * customer choose the regular purchase OR the product's eligible bundle as
- * mutually exclusive options, reusing ProductPurchasePanel and
- * BundleDisplay exactly as they already work (neither is modified — this
- * only decides which one is visible, and shows a compact summary of both
- * above the selected one's full controls). When the product has no
- * eligible bundle, renders ProductPurchasePanel alone — byte-for-byte the
- * same as before this component existed.
+ * Project Cinnamon — Promotion Selection. Lets a customer choose the
+ * regular purchase, the product's eligible bundle, and/or its eligible
+ * free-gift offer as mutually exclusive options, reusing
+ * ProductPurchasePanel/BundleDisplay/GiftOfferDisplay exactly as they
+ * already work (none is modified — this only decides which one is
+ * visible, and shows a compact summary of each above the selected one's
+ * full controls). When the product has no eligible bundle or gift,
+ * renders ProductPurchasePanel alone — byte-for-byte the same as before
+ * this component existed.
  */
 export function PromotionSelector({
   productId,
@@ -51,6 +54,7 @@ export function PromotionSelector({
   packagingOptions,
   bundle,
   bundleItems,
+  giftOffer,
 }: PromotionSelectorProps) {
   const [selected, setSelected] = useState<PurchaseOption>("regular");
   const { selectedVariantId } = useVariantSelection();
@@ -70,14 +74,14 @@ export function PromotionSelector({
     />
   );
 
-  if (!bundle) return regularPurchasePanel;
+  if (!bundle && !giftOffer) return regularPurchasePanel;
 
   // Same variant-aware price ProductPurchasePanel shows at its own top —
   // mirrored here so the "regular" card's price stays correct if the
   // shopper already changed size before looking at this selector.
   const regularDisplayPrice = selectedVariant ? (selectedVariant.promoPrice ?? selectedVariant.price) : price;
   const regularDisplayCurrency = selectedVariant?.currency ?? currency;
-  const savings = bundle.standaloneTotal - bundle.discountedTotal;
+  const savings = bundle ? bundle.standaloneTotal - bundle.discountedTotal : 0;
 
   return (
     <div>
@@ -90,20 +94,38 @@ export function PromotionSelector({
           title={`${productName} only`}
           priceLabel={`${regularDisplayCurrency} ${regularDisplayPrice.toLocaleString()}`}
         />
-        <OptionCard
-          selected={selected === "bundle"}
-          onSelect={() => setSelected("bundle")}
-          disabled={!bundle.inStock}
-          imageSrc={bundleItems[0]?.imageSrc || null}
-          title={bundle.name}
-          priceLabel={`${bundle.currency} ${bundle.discountedTotal.toLocaleString()}`}
-          originalPriceLabel={savings > 0 ? `${bundle.currency} ${bundle.standaloneTotal.toLocaleString()}` : null}
-          savingsLabel={savings > 0 ? `Save ${bundle.currency} ${savings.toLocaleString()}` : null}
-          unavailableLabel={!bundle.inStock ? "Currently unavailable" : null}
-        />
+        {bundle && (
+          <OptionCard
+            selected={selected === "bundle"}
+            onSelect={() => setSelected("bundle")}
+            disabled={!bundle.inStock}
+            imageSrc={bundleItems[0]?.imageSrc || null}
+            title={bundle.name}
+            priceLabel={`${bundle.currency} ${bundle.discountedTotal.toLocaleString()}`}
+            originalPriceLabel={savings > 0 ? `${bundle.currency} ${bundle.standaloneTotal.toLocaleString()}` : null}
+            savingsLabel={savings > 0 ? `Save ${bundle.currency} ${savings.toLocaleString()}` : null}
+            unavailableLabel={!bundle.inStock ? "Currently unavailable" : null}
+          />
+        )}
+        {giftOffer && (
+          <OptionCard
+            selected={selected === "gift"}
+            onSelect={() => setSelected("gift")}
+            disabled={!giftOffer.inStock}
+            imageSrc={giftOffer.giftProductImageSrc}
+            title={giftOffer.name}
+            priceLabel="Free"
+            originalPriceLabel={giftOffer.standaloneValue > 0 ? `${giftOffer.currency} ${giftOffer.standaloneValue.toLocaleString()}` : null}
+            unavailableLabel={!giftOffer.inStock ? "Currently unavailable" : null}
+          />
+        )}
       </div>
 
-      <div className="mt-4">{selected === "regular" ? regularPurchasePanel : <BundleDisplay bundle={bundle} items={bundleItems} />}</div>
+      <div className="mt-4">
+        {selected === "regular" && regularPurchasePanel}
+        {selected === "bundle" && bundle && <BundleDisplay bundle={bundle} items={bundleItems} />}
+        {selected === "gift" && giftOffer && <GiftOfferDisplay giftOffer={giftOffer} />}
+      </div>
     </div>
   );
 }

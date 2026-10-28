@@ -2,6 +2,8 @@ import { Prisma, type CustomerGroup, type ProductType } from "@/generated/prisma
 import * as categoryRepository from "@/repositories/category.repository";
 import * as collectionService from "@/services/collection.service";
 import { computeBundleDiscountedTotal } from "@/services/bundle-pricing.service";
+import { isActiveAndInWindow } from "@/services/eligibility-window";
+import * as giftOfferRepository from "@/repositories/gift-offer.repository";
 import * as pricingService from "@/services/pricing.service";
 import { resolveVariantPrice } from "@/services/product-variant.service";
 import * as packagingRepository from "@/repositories/packaging.repository";
@@ -346,6 +348,24 @@ export interface ProductDetailBundle {
   currency: string;
   inStock: boolean;
 }
+
+/** Story 5 (Free Gift). Gift-offer metadata for the PDP — null for a product with no eligible gift offer configured. */
+export interface ProductDetailGiftOffer {
+  id: string;
+  name: string;
+  description: string | null;
+  minQuantity: number | null;
+  minSpend: number | null;
+  giftProductName: string;
+  giftProductImageSrc: string | null;
+  giftProductImageAlt: string;
+  giftQuantity: number;
+  /** Live, resolved standalone price of ONE unit of the gift — display only ("worth LKR X"), never charged. */
+  standaloneValue: number;
+  currency: string;
+  inStock: boolean;
+}
+
 export interface ProductDetailVariant {
   id: string;
   sku: string;
@@ -408,6 +428,7 @@ export interface ProductDetail {
   certifications: { name: string; certificateImage: string | null }[];
   bundleItems: ProductDetailBundleItem[];
   bundle: ProductDetailBundle | null;
+  giftOffer: ProductDetailGiftOffer | null;
   /** Non-empty only for a variant-driven product — see getProductDetail for how price/currency below are then derived from the default-selected variant instead of the 5-tier pricing system. */
   variants: ProductDetailVariant[];
   /** Story 3 (Custom Packaging). Variant-scoped filtering happens client-side — avoids a round-trip on every size switch. */
@@ -464,14 +485,6 @@ export interface CompareItem {
 type ProductDetailBundleRow = NonNullable<Awaited<ReturnType<typeof productRepository.findProductDetailBySlug>>>["bundle"];
 
 /**
- * Resolves a bundle's component rows + headline standalone/discounted
- * total for the PDP. The headline total only ever reflects the bundle's
- * REQUIRED items (every item, for a Fixed bundle) — Selectable/
- * MixAndMatch bundles have nothing to total until the customer picks,
- * which bundle-display.tsx drives live via the public preview endpoint
- * instead of this static field.
- */
-/**
  * The repository's `bundle` include has no `where` clause (a product has
  * at most one bundle row, active or not), so this status/date-window check
  * is the only thing standing between a Draft/Inactive/not-yet-started/
@@ -480,13 +493,17 @@ type ProductDetailBundleRow = NonNullable<Awaited<ReturnType<typeof productRepos
  * "expired, inactive... offers cannot be purchased" rules.
  */
 function isBundleEligibleNow(bundle: NonNullable<ProductDetailBundleRow>): boolean {
-  if (bundle.status !== "Active") return false;
-  const now = new Date();
-  if (bundle.startDate && bundle.startDate > now) return false;
-  if (bundle.endDate && bundle.endDate < now) return false;
-  return true;
+  return isActiveAndInWindow(bundle);
 }
 
+/**
+ * Resolves a bundle's component rows + headline standalone/discounted
+ * total for the PDP. The headline total only ever reflects the bundle's
+ * REQUIRED items (every item, for a Fixed bundle) — Selectable/
+ * MixAndMatch bundles have nothing to total until the customer picks,
+ * which bundle-display.tsx drives live via the public preview endpoint
+ * instead of this static field.
+ */
 async function resolveBundleDetail(
   bundle: ProductDetailBundleRow,
   customerGroup: CustomerGroup,
@@ -541,6 +558,57 @@ async function resolveBundleDetail(
       currency: "LKR",
       inStock: bundle.stockMode === "OwnStock" ? bundle.inStock && (bundle.stockQuantity ?? 0) > 0 : requiredItems.every((item) => item.inStock),
     },
+  };
+}
+
+type ProductDetailGiftOfferRow = NonNullable<Awaited<ReturnType<typeof productRepository.findProductDetailBySlug>>>["giftOfferAsQualifier"];
+
+/**
+ * Resolves a product's eligible gift offer for the PDP — mirrors
+ * resolveBundleDetail's shape. The gift product/variant's price is
+ * resolved for DISPLAY ONLY ("worth LKR X, yours free") — a gift is never
+ * priced like a purchase; see gift-offer.service.ts for the cart-side
+ * enforcement that it's always added at unitPriceSnapshot "0.00".
+ */
+async function resolveGiftOfferDetail(giftOffer: ProductDetailGiftOfferRow, customerGroup: CustomerGroup): Promise<ProductDetailGiftOffer | null> {
+  if (!giftOffer || !isActiveAndInWindow(giftOffer)) return null;
+
+  let standaloneValue: number;
+  let currency: string;
+  let giftInStock: boolean;
+  if (giftOffer.giftVariant) {
+    const resolved = resolveVariantPrice(giftOffer.giftVariant);
+    standaloneValue = resolved.price;
+    currency = resolved.currency;
+    giftInStock = giftOffer.giftVariant.isActive && giftOffer.giftVariant.inStock;
+  } else {
+    const resolved = await pricingService.resolvePrice({ productId: giftOffer.giftProductId, customerGroup });
+    standaloneValue = resolved?.price.toNumber() ?? 0;
+    currency = resolved?.currency ?? "LKR";
+    giftInStock = giftOffer.giftProduct.inStock;
+  }
+
+  // giftStockLimit caps gift UNITS, not redemptions — each redemption
+  // grants giftQuantity units (see gift-offer.service.ts::assertGiftOfferPurchasable).
+  let stockLimitReached = false;
+  if (giftOffer.giftStockLimit !== null) {
+    const redeemed = await giftOfferRepository.countRedemptions(giftOffer.id);
+    stockLimitReached = redeemed * giftOffer.giftQuantity >= giftOffer.giftStockLimit;
+  }
+
+  return {
+    id: giftOffer.id,
+    name: giftOffer.name,
+    description: giftOffer.description,
+    minQuantity: giftOffer.minQuantity,
+    minSpend: giftOffer.minSpend?.toNumber() ?? null,
+    giftProductName: giftOffer.giftProduct.name,
+    giftProductImageSrc: giftOffer.giftProduct.images[0]?.url ?? null,
+    giftProductImageAlt: giftOffer.giftProduct.images[0]?.altText ?? giftOffer.giftProduct.name,
+    giftQuantity: giftOffer.giftQuantity,
+    standaloneValue,
+    currency,
+    inStock: giftInStock && !stockLimitReached,
   };
 }
 
@@ -609,6 +677,7 @@ export async function getProductDetail(
 
   const bundleDetail = await resolveBundleDetail(product.bundle, customerGroup ?? "Retail");
   const bundleOriginalPrice = bundleDetail.bundle && bundleDetail.bundle.discountedTotal < bundleDetail.bundle.standaloneTotal ? bundleDetail.bundle.standaloneTotal : null;
+  const giftOfferDetail = await resolveGiftOfferDetail(product.giftOfferAsQualifier, customerGroup ?? "Retail");
 
   const detail: ProductDetail = {
     id: product.id,
@@ -665,6 +734,7 @@ export async function getProductDetail(
     certifications: product.certifications.map((certification) => ({ name: certification.name, certificateImage: certification.certificateImage })),
     bundleItems: bundleDetail.items,
     bundle: bundleDetail.bundle,
+    giftOffer: giftOfferDetail,
     variants: product.variants.map((variant) => ({
       id: variant.id,
       sku: variant.sku,

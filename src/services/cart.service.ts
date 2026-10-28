@@ -6,6 +6,7 @@ import type { CartItemWithProduct } from "@/repositories/cart.repository";
 import * as productVariantRepository from "@/repositories/product-variant.repository";
 import * as rewardsRepository from "@/repositories/rewards.repository";
 import { resolveBundleInstancePrices } from "@/services/bundle.service";
+import { resolveGiftLinePrices } from "@/services/gift-offer.service";
 import {
   CART_COOKIE_NAME,
   recordAddToCartInteraction,
@@ -17,6 +18,7 @@ import {
   BundleLineLockedError,
   CartItemForbiddenError,
   CartItemNotFoundError,
+  GiftLineLockedError,
   PackagingMinimumQuantityError,
 } from "@/services/cart.errors";
 import { resolveDiscountForCart } from "@/services/discount.service";
@@ -43,6 +45,7 @@ function toLineItem(
   packagingRequiresManualReview: boolean = false,
   packagingNetWeightGrams: number | null = null,
   packagingMinimumChargeApplied: boolean = false,
+  giftInvalid: boolean = false,
 ): CartLineItem {
   // A variant's own dedicated photo (ProductVariantImage) wins over the
   // parent product's photo when the selected variant has one — falls back
@@ -57,9 +60,13 @@ function toLineItem(
   // to drop this component — see bundle.service.ts::resolveBundleInstancePrices.
   // packagingInvalid (Story 3) is the same idea for a deactivated/
   // out-of-window/past-cutoff/MOQ-no-longer-met packaging selection.
+  // giftInvalid (Story 5) is the same idea for a deactivated/out-of-window/
+  // stock-exhausted gift offer, or one whose qualifying condition is no
+  // longer met — see gift-offer.service.ts::resolveGiftLinePrices.
   const unavailable =
     bundleInvalid ||
     packagingInvalid ||
+    giftInvalid ||
     (item.variant ? !item.variant.isActive || !item.variant.inStock : item.product.status !== "Published" || !item.product.inStock);
   const availableQuantity = item.variant ? item.variant.stockQuantity : item.product.stockQuantity;
   const quantityCapped = item.quantity > availableQuantity;
@@ -72,6 +79,9 @@ function toLineItem(
     variantName: item.variant?.name ?? null,
     bundleInstanceId: item.bundleInstanceId,
     bundleName: item.bundle?.name ?? null,
+    giftOfferId: item.giftOfferId,
+    giftInstanceId: item.giftInstanceId,
+    giftOfferName: item.giftOffer?.name ?? null,
     // Story 3 (Custom Packaging). packagingMethodName is read live off the
     // joined relation (mirrors bundleName) — never trusted from a stale
     // snapshot. packagingChargeTotal is this line's already-final
@@ -106,8 +116,11 @@ function toLineItem(
     // STORY-049: campaignMultiplier is 1 with no active RewardCampaign — a no-op, same shape as every other resolved-once-per-cart-read factor here (price, discount).
     // The packaging surcharge deliberately never earns points — an explicit
     // choice, since the brief is silent on it and this avoids inventing a
-    // reward rule nobody asked for.
-    rewardPointsEarned: Math.round(item.product.rewardPoints * item.quantity * campaignMultiplier),
+    // reward rule nobody asked for. A free gift line (Story 5) always earns
+    // 0 — rewardPoints is computed flat per-product with no price
+    // derivation that would naturally zero it for a $0 line, so this must
+    // be explicit.
+    rewardPointsEarned: item.giftOfferId ? 0 : Math.round(item.product.rewardPoints * item.quantity * campaignMultiplier),
     priceChanged,
     unavailable,
     quantityCapped,
@@ -140,10 +153,11 @@ function toLineItem(
  */
 async function buildSummary(cart: Prisma.CartGetPayload<object>, items: CartItemWithProduct[], userId: string | null): Promise<CartSummary> {
   const customerGroup = await resolveCustomerGroupForUser(userId);
-  const [campaignMultiplier, setting, bundleResolution] = await Promise.all([
+  const [campaignMultiplier, setting, bundleResolution, giftResolution] = await Promise.all([
     resolveActiveMultiplier(customerGroup),
     rewardsRepository.getSetting(),
     resolveBundleInstancePrices(items, customerGroup),
+    resolveGiftLinePrices(items),
   ]);
   // Story 3 (Custom Packaging). Pure/synchronous — unlike bundle
   // re-validation, a packaging option's eligibility depends only on its
@@ -156,7 +170,17 @@ async function buildSummary(cart: Prisma.CartGetPayload<object>, items: CartItem
     let liveUnitPrice: number;
     let currency: string;
     let bundleInvalid = false;
-    if (item.bundleInstanceId) {
+    let giftInvalid = false;
+    if (item.giftInstanceId) {
+      // Story 5 (Free Gift). Unconditionally 0 — never derived from the
+      // gift product's live catalog price. Checked FIRST, ahead of every
+      // other branch (a gift row still has its own variant/product
+      // relation populated — the real gift product/variant — but must
+      // never be priced like an ordinary line for it).
+      giftInvalid = giftResolution.invalidInstanceIds.has(item.giftInstanceId);
+      liveUnitPrice = 0;
+      currency = item.variant?.currency ?? "LKR";
+    } else if (item.bundleInstanceId) {
       // Story 2 (Bundles). Baked-in bundle discount, re-derived fresh on
       // every read exactly like a plain line's price — never trusted from
       // the stored snapshot. Checked FIRST, ahead of the
@@ -184,7 +208,11 @@ async function buildSummary(cart: Prisma.CartGetPayload<object>, items: CartItem
       liveUnitPrice = resolved?.price.toNumber() ?? item.unitPriceSnapshot.toNumber();
       currency = resolved?.currency ?? "LKR";
     }
-    const priceChanged = !bundleInvalid && liveUnitPrice !== item.unitPriceSnapshot.toNumber();
+    // A gift line's price is always 0 by construction — this guard is
+    // belt-and-suspenders (both sides are already 0) so a future refactor
+    // can never accidentally wire a real price into the gift branch
+    // without priceChanged silently going true and re-snapshotting it.
+    const priceChanged = !bundleInvalid && !giftInvalid && liveUnitPrice !== item.unitPriceSnapshot.toNumber();
     if (priceChanged) {
       await cartRepository.updateCartItemSnapshot(item.id, liveUnitPrice.toFixed(2));
     }
@@ -226,9 +254,16 @@ async function buildSummary(cart: Prisma.CartGetPayload<object>, items: CartItem
       packagingRequiresManualReview,
       packagingResolution.netWeightGramsByItemId.get(item.id) ?? null,
       packagingResolution.minimumChargeAppliedByItemId.get(item.id) ?? false,
+      giftInvalid,
     );
     lineItems.push(line);
-    discountableLines.push({ productId: item.productId, categoryIds: item.product.categories.map((category) => category.id), lineTotal: line.lineTotal });
+    // Story 5 (Free Gift). A gift line is never a discount candidate — its
+    // lineTotal is already 0, and letting it into the pool would let a
+    // product-scoped coupon/promotion match on the gift product's
+    // presence in the cart, which isn't a real purchase of it.
+    if (!item.giftOfferId) {
+      discountableLines.push({ productId: item.productId, categoryIds: item.product.categories.map((category) => category.id), lineTotal: line.lineTotal });
+    }
   }
 
   const subtotal = Math.round(lineItems.reduce((sum, item) => sum + item.lineTotal, 0) * 100) / 100;
@@ -382,6 +417,12 @@ export async function updateItemQuantity(
   // component independently would silently break the bundle's own
   // min/max and re-priced discount.
   if (item.bundleInstanceId) throw new BundleLineLockedError();
+  // Story 5 (Free Gift). A gift row's quantity is fixed by its offer's
+  // giftQuantity — resizing it directly would let a customer claim more
+  // free units than they're entitled to (the cart drawer renders it with
+  // the same generic +/- control as any other line, so this must be
+  // enforced server-side, not just omitted from a bespoke UI).
+  if (item.giftInstanceId) throw new GiftLineLockedError();
   // Story 3 (Custom Packaging). Lowering below the pinned option's own
   // minimum is rejected synchronously, the same way StockExceededError/
   // ProductUnavailableError already block a mutation rather than letting
@@ -414,6 +455,10 @@ export async function removeItem(userId: string | null, guestCookieValue: string
   // reference left to re-validate against — use
   // bundle.service.ts::removeBundleFromCart to remove the whole instance.
   if (item.bundleInstanceId) throw new BundleLineLockedError();
+  // Story 5 (Free Gift). Use gift-offer.service.ts::removeGiftFromCart
+  // instead, so the removal is keyed by giftInstanceId the same way a
+  // bundle instance's removal is above.
+  if (item.giftInstanceId) throw new GiftLineLockedError();
   await cartRepository.deleteCartItem(itemId);
 }
 
@@ -459,32 +504,55 @@ export async function mergeGuestCartIntoUser(userId: string, guestCookieValue: s
 
   const { cart: userCart } = await resolveCartIdentity(userId, undefined);
   const userItems = await cartRepository.listCartItemsWithProduct(userCart.id);
-  // Keyed by productId+variantId+bundleInstanceId+packagingOptionId — two
-  // different sizes, two different packaging choices, or two different
-  // bundle instances of the same product must merge independently, never
-  // combine into one row's quantity. Including bundleInstanceId here is
-  // the fix for a real bug: an earlier version of this key omitted it,
-  // which let a guest bundle's exploded component rows silently fold into
-  // an unrelated existing line's quantity (or, on no match, get re-inserted
-  // with bundleId/bundleInstanceId hard-coded null below) — dissolving the
-  // bundle grouping entirely, after which "Remove bundle" 404s because
-  // bundle.service.ts::removeBundleFromCart can no longer find any row
-  // carrying that instance id. A bundleInstanceId is unique per add-to-cart
-  // action, so a guest bundle component never actually matches an existing
-  // user-cart row via this key — it always takes the "insert new" branch
-  // below, which now also carries its bundle tag through correctly.
-  const lineKey = (productId: string, variantId: string | null, bundleInstanceId: string | null, packagingOptionId: string | null) =>
-    `${productId}:${variantId ?? ""}:${bundleInstanceId ?? ""}:${packagingOptionId ?? ""}`;
-  const userItemByKey = new Map(userItems.map((item) => [lineKey(item.productId, item.variantId, item.bundleInstanceId, item.packagingOptionId), item]));
+  // Keyed by productId+variantId+bundleInstanceId+packagingOptionId+
+  // giftInstanceId — two different sizes, two different packaging choices,
+  // or two different bundle/gift instances of the same product must merge
+  // independently, never combine into one row's quantity. Including
+  // bundleInstanceId here is the fix for a real bug: an earlier version of
+  // this key omitted it, which let a guest bundle's exploded component
+  // rows silently fold into an unrelated existing line's quantity (or, on
+  // no match, get re-inserted with bundleId/bundleInstanceId hard-coded
+  // null below) — dissolving the bundle grouping entirely, after which
+  // "Remove bundle" 404s because bundle.service.ts::removeBundleFromCart
+  // can no longer find any row carrying that instance id. A
+  // bundleInstanceId is unique per add-to-cart action, so a guest bundle
+  // component never actually matches an existing user-cart row via this
+  // key — it always takes the "insert new" branch below, which now also
+  // carries its bundle tag through correctly. giftInstanceId (Story 5)
+  // needs the identical treatment, for the identical reason.
+  const lineKey = (productId: string, variantId: string | null, bundleInstanceId: string | null, packagingOptionId: string | null, giftInstanceId: string | null) =>
+    `${productId}:${variantId ?? ""}:${bundleInstanceId ?? ""}:${packagingOptionId ?? ""}:${giftInstanceId ?? ""}`;
+  const userItemByKey = new Map(
+    userItems.map((item) => [lineKey(item.productId, item.variantId, item.bundleInstanceId, item.packagingOptionId, item.giftInstanceId), item]),
+  );
   const customerGroup = await resolveCustomerGroupForUser(userId);
 
   for (const guestItem of guestItems) {
-    const existing = userItemByKey.get(lineKey(guestItem.productId, guestItem.variantId, guestItem.bundleInstanceId, guestItem.packagingOptionId));
+    const existing = userItemByKey.get(
+      lineKey(guestItem.productId, guestItem.variantId, guestItem.bundleInstanceId, guestItem.packagingOptionId, guestItem.giftInstanceId),
+    );
     const combinedQuantity = (existing?.quantity ?? 0) + guestItem.quantity;
 
     let cappedQuantity: number;
     let unitPrice: string;
-    if (guestItem.variantId) {
+    if (guestItem.giftOfferId && guestItem.giftInstanceId) {
+      // Story 5 (Free Gift). Never re-priced from the live catalog —
+      // unconditionally "0.00" regardless of which branch below runs.
+      // Stock is still checked against the real gift product/variant so a
+      // gift that's gone out of stock while the guest cart was dormant is
+      // correctly dropped, same convention every other branch here uses.
+      if (guestItem.variantId) {
+        const variant = await productVariantRepository.findVariantById(guestItem.variantId);
+        if (!variant || !variant.isActive || !variant.inStock) continue;
+        cappedQuantity = Math.min(combinedQuantity, variant.stockQuantity);
+      } else {
+        const product = await findProductById(guestItem.productId);
+        if (!product || product.status !== "Published" || !product.inStock) continue;
+        cappedQuantity = Math.min(combinedQuantity, product.stockQuantity);
+      }
+      if (cappedQuantity <= 0) continue;
+      unitPrice = "0.00";
+    } else if (guestItem.variantId) {
       const variant = await productVariantRepository.findVariantById(guestItem.variantId);
       if (!variant || !variant.isActive || !variant.inStock) continue; // dropped, same convention requireAvailableVariant enforces
       cappedQuantity = Math.min(combinedQuantity, variant.stockQuantity);
@@ -515,7 +583,10 @@ export async function mergeGuestCartIntoUser(userId: string, guestCookieValue: s
       // component row that survived a guest→user cart merge — see the
       // lineKey comment above for the full failure chain this caused.
       const bundle = guestItem.bundleId && guestItem.bundleInstanceId ? { bundleId: guestItem.bundleId, bundleInstanceId: guestItem.bundleInstanceId } : null;
-      await cartRepository.upsertCartItem(userCart.id, guestItem.productId, guestItem.variantId, cappedQuantity, unitPrice, bundle, packaging);
+      // Story 5 (Free Gift). Same bug class, same fix — carry the gift tag
+      // through instead of silently stripping it.
+      const gift = guestItem.giftOfferId && guestItem.giftInstanceId ? { giftOfferId: guestItem.giftOfferId, giftInstanceId: guestItem.giftInstanceId } : null;
+      await cartRepository.upsertCartItem(userCart.id, guestItem.productId, guestItem.variantId, cappedQuantity, unitPrice, bundle, packaging, gift);
     }
   }
 }

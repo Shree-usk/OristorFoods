@@ -13,11 +13,31 @@ import { buttonVariants } from "@/components/ui/button";
 import { useCart } from "@/hooks/use-cart";
 
 export default function CartPage() {
-  const { cart, isPending, updateQuantity, removeItem, isUpdatingItemId, updateQuantityError, isRemovingItemId, removeItemError, removeBundle, isRemovingBundleInstanceId, removeBundleError } = useCart();
+  const {
+    cart,
+    isPending,
+    updateQuantity,
+    removeItem,
+    isUpdatingItemId,
+    updateQuantityError,
+    isRemovingItemId,
+    removeItemError,
+    removeBundle,
+    isRemovingBundleInstanceId,
+    removeBundleError,
+    removeGift,
+    isRemovingGiftInstanceId,
+    removeGiftError,
+  } = useCart();
   const [announcement, setAnnouncement] = useState("");
 
   function handleRemove(itemId: string, productName: string) {
     removeItem(itemId);
+    setAnnouncement(`Removed ${productName} from cart.`);
+  }
+
+  function handleRemoveGift(giftInstanceId: string, productName: string) {
+    removeGift(giftInstanceId);
     setAnnouncement(`Removed ${productName} from cart.`);
   }
 
@@ -49,13 +69,15 @@ export default function CartPage() {
                   <CartLineItemRow
                     key={item.id}
                     item={item}
-                    locked={!!item.bundleInstanceId}
+                    locked={!!item.bundleInstanceId || !!item.giftInstanceId}
+                    hideRemove={!!item.bundleInstanceId}
                     onQuantityChange={(quantity) => updateQuantity(item.id, quantity)}
-                    onRemove={() => handleRemove(item.id, item.productName)}
-                    isMutating={isUpdatingItemId === item.id || isRemovingItemId === item.id}
+                    onRemove={() => (item.giftInstanceId ? handleRemoveGift(item.giftInstanceId, item.productName) : handleRemove(item.id, item.productName))}
+                    isMutating={isUpdatingItemId === item.id || isRemovingItemId === item.id || (!!item.giftInstanceId && isRemovingGiftInstanceId === item.giftInstanceId)}
                     error={
                       (updateQuantityError?.itemId === item.id && updateQuantityError.message) ||
                       (removeItemError?.itemId === item.id && removeItemError.message) ||
+                      (item.giftInstanceId && removeGiftError?.giftInstanceId === item.giftInstanceId && removeGiftError.message) ||
                       null
                     }
                   />

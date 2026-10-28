@@ -14,6 +14,7 @@ import {
 } from "@/services/cart.errors";
 import { recordAddToCartInteraction, requireAvailableProduct, resolveCartIdentity, type CartIdentityResult } from "@/services/cart-identity.service";
 import { computeBundleDiscountedTotal, distributeBundleTotal, type BundleComponentPriceInput } from "@/services/bundle-pricing.service";
+import { isActiveAndInWindow } from "@/services/eligibility-window";
 import { resolveCustomerGroupForUser, resolvePrice } from "@/services/pricing.service";
 import { requireAvailableVariant, resolveVariantPrice } from "@/services/product-variant.service";
 
@@ -51,10 +52,7 @@ interface ResolvedBundleRow {
 }
 
 function assertBundlePurchasable(bundle: BundleWithItems): void {
-  const now = new Date();
-  if (bundle.status !== "Active") throw new BundleUnavailableError();
-  if (bundle.startDate && bundle.startDate > now) throw new BundleUnavailableError();
-  if (bundle.endDate && bundle.endDate < now) throw new BundleUnavailableError();
+  if (!isActiveAndInWindow(bundle)) throw new BundleUnavailableError();
 }
 
 type EffectiveItem = { item: BundleWithItems["items"][number]; quantity: number };

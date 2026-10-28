@@ -104,6 +104,17 @@ export function useCart() {
     onSuccess: invalidate,
   });
 
+  // Story 5 (Free Gift). Mirrors removeBundleMutation above — a gift row
+  // is locked (cart.service.ts::removeItem rejects it) and must be
+  // removed through this dedicated, giftInstanceId-keyed endpoint instead.
+  const removeGiftMutation = useMutation({
+    mutationFn: async (giftInstanceId: string) => {
+      const response = await fetch(`/api/cart/gift/${giftInstanceId}`, { method: "DELETE", credentials: "include" });
+      if (!response.ok) await throwWithServerMessage(response, "Failed to remove gift");
+    },
+    onSuccess: invalidate,
+  });
+
   // STORY-029. Applying/removing a coupon changes the total, so — like
   // every other cart mutation here — it invalidates ["cart"] rather than
   // trying to locally patch the cached summary; any component reading
@@ -174,6 +185,9 @@ export function useCart() {
     removeBundle: (bundleInstanceId: string) => removeBundleMutation.mutate(bundleInstanceId),
     isRemovingBundleInstanceId: removeBundleMutation.isPending ? removeBundleMutation.variables : undefined,
     removeBundleError: removeBundleMutation.isError ? { bundleInstanceId: removeBundleMutation.variables, message: removeBundleMutation.error.message } : null,
+    removeGift: (giftInstanceId: string) => removeGiftMutation.mutate(giftInstanceId),
+    isRemovingGiftInstanceId: removeGiftMutation.isPending ? removeGiftMutation.variables : undefined,
+    removeGiftError: removeGiftMutation.isError ? { giftInstanceId: removeGiftMutation.variables, message: removeGiftMutation.error.message } : null,
     applyCoupon: (code: string) => applyCouponMutation.mutateAsync(code),
     removeCoupon: () => removeCouponMutation.mutateAsync(),
     isApplyingCoupon: applyCouponMutation.isPending,
