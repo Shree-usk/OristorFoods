@@ -7,6 +7,7 @@ import { createProduct } from "@/repositories/product.repository";
 import { createGiftOffer, getGiftOfferAdminDetail, listGiftOffersForAdmin, updateGiftOffer } from "@/services/gift-offer-admin.service";
 import { GiftOfferAdminNotFoundError, GiftOfferProductAlreadyHasOfferError } from "@/services/gift-offer-admin.errors";
 import { PermissionDeniedError } from "@/services/permission.errors";
+import { updateGiftOfferSchema } from "@/validation/gift-offer-admin.schema";
 
 const EMAIL_DOMAIN = "@gift-offer-admin-svc-test.test";
 const ROLE_KEY_PREFIX = "gift-offer-admin-svc-test-role-";
@@ -30,6 +31,13 @@ function makeFullAccessAdmin() {
 async function makeProduct() {
   sequence += 1;
   return createProduct({ sku: `${SKU_PREFIX}${sequence}`, slug: `gift-offer-admin-svc-test-${sequence}`, name: `Gift Offer Admin Svc Test Product ${sequence}`, status: "Published" });
+}
+
+async function makeVariant(productId: string, overrides: Record<string, unknown> = {}) {
+  sequence += 1;
+  return prisma.productVariant.create({
+    data: { productId, sku: `${SKU_PREFIX}variant-${sequence}`, name: "1Kg", netWeightGrams: 1000, price: "900.00", currency: "LKR", stockQuantity: 10, isActive: true, inStock: true, ...overrides },
+  });
 }
 
 function giftOfferInput(productId: string, giftProductId: string, overrides: Partial<Parameters<typeof createGiftOffer>[1]> = {}) {
@@ -91,5 +99,28 @@ describe("gift-offer-admin.service", () => {
     const stranger = await makeAdmin([]);
 
     await expect(listGiftOffersForAdmin(stranger.id)).rejects.toBeInstanceOf(PermissionDeniedError);
+  });
+
+  it("accepts qualifyingVariantId at creation and returns it on the created offer", async () => {
+    const admin = await makeFullAccessAdmin();
+    const qualifying = await makeProduct();
+    const pinnedVariant = await makeVariant(qualifying.id, { name: "1Kg" });
+    const gift = await makeProduct();
+
+    const created = await createGiftOffer(admin.id, giftOfferInput(qualifying.id, gift.id, { qualifyingVariantId: pinnedVariant.id }));
+
+    expect(created.qualifyingVariantId).toBe(pinnedVariant.id);
+    expect(created.qualifyingVariant?.name).toBe("1Kg");
+  });
+
+  it("strips qualifyingVariantId from an update payload at the validation boundary, same as productId already is (immutable after creation)", () => {
+    const otherVariantId = "some-other-variant-id";
+    const parsed = updateGiftOfferSchema.safeParse({ name: "Renamed", productId: "some-other-product-id", qualifyingVariantId: otherVariantId });
+
+    expect(parsed.success).toBe(true);
+    if (parsed.success) {
+      expect(parsed.data).not.toHaveProperty("productId");
+      expect(parsed.data).not.toHaveProperty("qualifyingVariantId");
+    }
   });
 });

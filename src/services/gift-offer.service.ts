@@ -16,7 +16,7 @@ import {
 import { recordAddToCartInteraction, requireAvailableProduct, resolveCartIdentity, type CartIdentityResult } from "@/services/cart-identity.service";
 import { isActiveAndInWindow } from "@/services/eligibility-window";
 import { resolveCustomerGroupForUser, resolvePrice } from "@/services/pricing.service";
-import { requireAvailableVariant } from "@/services/product-variant.service";
+import { requireAvailableVariant, resolveVariantPrice } from "@/services/product-variant.service";
 
 /**
  * Customer-facing cart orchestration for free gifts (Story 5, Option C).
@@ -47,9 +47,20 @@ async function assertGiftOfferPurchasable(offer: GiftOfferWithProducts): Promise
   }
 }
 
-/** Sums the qualifying product's own cart lines (by productId, any variant) — the basis for minQuantity/minSpend checks. */
-function qualifyingLineStats(items: CartItemWithProduct[], qualifyingProductId: string): { quantity: number; spend: number } {
-  const lines = items.filter((item) => item.productId === qualifyingProductId && !item.giftOfferId);
+/**
+ * Sums the qualifying product's own cart lines — matched by productId, and
+ * by variantId too when the offer pins a specific qualifying variant
+ * (qualifyingVariantId === null means any variant of the product
+ * qualifies, the pre-existing behavior). Basis for minQuantity/minSpend
+ * checks.
+ */
+function qualifyingLineStats(
+  items: CartItemWithProduct[],
+  offer: Pick<GiftOfferWithProducts, "productId" | "qualifyingVariantId">,
+): { quantity: number; spend: number } {
+  const lines = items.filter(
+    (item) => item.productId === offer.productId && !item.giftOfferId && (offer.qualifyingVariantId === null || item.variantId === offer.qualifyingVariantId),
+  );
   const quantity = lines.reduce((sum, line) => sum + line.quantity, 0);
   const spend = lines.reduce((sum, line) => sum + line.unitPriceSnapshot.toNumber() * line.quantity, 0);
   return { quantity, spend };
@@ -80,7 +91,7 @@ export async function addGiftToCart(userId: string | null, guestCookieValue: str
   }
 
   const existingItems = await cartRepository.listCartItemsWithProduct(identity.cart.id);
-  assertEligibilityConditionsMet(offer, qualifyingLineStats(existingItems, offer.productId));
+  assertEligibilityConditionsMet(offer, qualifyingLineStats(existingItems, offer));
 
   const customerGroup = await resolveCustomerGroupForUser(userId);
 
@@ -89,11 +100,21 @@ export async function addGiftToCart(userId: string | null, guestCookieValue: str
   // own line is represented in the cart, same as selecting a bundle
   // guarantees its component is represented. Only backfills at quantity 1
   // when genuinely absent; an existing line's quantity is left untouched.
-  const alreadyQualifying = qualifyingLineStats(existingItems, offer.productId).quantity > 0;
+  // When the offer pins a qualifying variant, the backfilled line must be
+  // that exact variant — backfilling the unvarianted base product would
+  // never satisfy the pin, making the gift permanently unreachable.
+  const alreadyQualifying = qualifyingLineStats(existingItems, offer).quantity > 0;
   if (!alreadyQualifying) {
-    await requireAvailableProduct(offer.productId, 1);
-    const resolved = await resolvePrice({ productId: offer.productId, customerGroup, quantity: 1 });
-    await cartRepository.upsertCartItem(identity.cart.id, offer.productId, null, 1, (resolved?.price ?? new Prisma.Decimal(0)).toFixed(2));
+    let qualifyingUnitPrice: string;
+    if (offer.qualifyingVariantId) {
+      const variant = await requireAvailableVariant(offer.qualifyingVariantId, 1);
+      qualifyingUnitPrice = resolveVariantPrice(variant).price.toFixed(2);
+    } else {
+      await requireAvailableProduct(offer.productId, 1);
+      const resolved = await resolvePrice({ productId: offer.productId, customerGroup, quantity: 1 });
+      qualifyingUnitPrice = (resolved?.price ?? new Prisma.Decimal(0)).toFixed(2);
+    }
+    await cartRepository.upsertCartItem(identity.cart.id, offer.productId, offer.qualifyingVariantId, 1, qualifyingUnitPrice);
   }
 
   const giftInstanceId = randomUUID();
@@ -176,7 +197,7 @@ export async function resolveGiftLinePrices(items: CartItemWithProduct[]): Promi
       continue;
     }
     try {
-      assertEligibilityConditionsMet(offer, qualifyingLineStats(items, offer.productId));
+      assertEligibilityConditionsMet(offer, qualifyingLineStats(items, offer));
     } catch {
       invalidInstanceIds.add(instanceId);
     }

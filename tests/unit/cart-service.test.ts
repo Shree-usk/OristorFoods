@@ -800,6 +800,51 @@ describe("Gift Offers (Story 5)", () => {
     const giftLine = summary.items.find((item) => item.giftOfferId === offer.id);
     expect(giftLine?.unavailable).toBe(true);
   });
+
+  it("qualifying-variant pin: buying the pinned variant unlocks the gift, and backfills a line for that exact variant", async () => {
+    const qualifying = await makeProduct();
+    const pinnedVariant = await makeVariant(qualifying.id, { name: "1Kg", price: "900.00" });
+    const gift = await makeProduct();
+    const offer = await makeGiftOffer(qualifying, gift, { qualifyingVariant: { connect: { id: pinnedVariant.id } } });
+
+    const { newCookieValue } = await addGiftToCart(null, undefined, offer.id);
+    const summary = await getCart(null, newCookieValue ?? undefined);
+
+    const qualifyingLine = summary.items.find((item) => item.productId === qualifying.id && !item.giftOfferId);
+    expect(qualifyingLine?.variantId).toBe(pinnedVariant.id);
+    expect(qualifyingLine?.quantity).toBe(1);
+    const giftLine = summary.items.find((item) => item.giftOfferId === offer.id);
+    expect(giftLine?.unavailable).toBeFalsy();
+  });
+
+  it("qualifying-variant pin: buying a different variant of the same product does not unlock the gift", async () => {
+    const qualifying = await makeProduct();
+    const pinnedVariant = await makeVariant(qualifying.id, { name: "1Kg", price: "900.00" });
+    const otherVariant = await makeVariant(qualifying.id, { name: "100g", price: "150.00" });
+    const gift = await makeProduct();
+    const offer = await makeGiftOffer(qualifying, gift, { qualifyingVariant: { connect: { id: pinnedVariant.id } }, minQuantity: 1 });
+
+    const { newCookieValue } = await addItem(null, undefined, qualifying.id, 1, otherVariant.id);
+    await expect(addGiftToCart(null, newCookieValue ?? undefined, offer.id)).rejects.toThrow();
+  });
+
+  it("qualifying-variant pin: a previously-eligible gift line is flagged unavailable once the pinned variant's line is swapped for a different variant", async () => {
+    const qualifying = await makeProduct();
+    const pinnedVariant = await makeVariant(qualifying.id, { name: "1Kg", price: "900.00" });
+    const otherVariant = await makeVariant(qualifying.id, { name: "100g", price: "150.00" });
+    const gift = await makeProduct();
+    const offer = await makeGiftOffer(qualifying, gift, { qualifyingVariant: { connect: { id: pinnedVariant.id } }, minQuantity: 1 });
+
+    const { newCookieValue } = await addItem(null, undefined, qualifying.id, 1, pinnedVariant.id);
+    await addGiftToCart(null, newCookieValue ?? undefined, offer.id);
+    const qualifyingRow = await prisma.cartItem.findFirstOrThrow({ where: { productId: qualifying.id, giftOfferId: null } });
+    await removeItem(null, newCookieValue ?? undefined, qualifyingRow.id);
+    await addItem(null, newCookieValue ?? undefined, qualifying.id, 1, otherVariant.id);
+
+    const revalidated = await getCart(null, newCookieValue ?? undefined);
+    const giftLine = revalidated.items.find((item) => item.giftOfferId === offer.id);
+    expect(giftLine?.unavailable).toBe(true);
+  });
 });
 
 describe("Custom Packaging (Story 3)", () => {
