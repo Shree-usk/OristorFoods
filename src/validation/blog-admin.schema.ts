@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { optionalMediaUrlSchema } from "@/validation/media-url.schema";
+
 const slugRegex = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
 /** Create and update share one shape — matches recipe-admin.schema.ts's convention. */
@@ -48,3 +50,13 @@ export const bulkModerateCommentsSchema = z.object({
   ids: z.array(z.string().min(1)).min(1, "Select at least one comment."),
   action: z.enum(["approve", "reject"]),
 });
+
+/** Create and update share one shape, matching blogPostAdminSchema's own convention above. */
+export const blogAuthorAdminSchema = z.object({
+  name: z.string().trim().min(1, "Name is required.").max(200),
+  slug: z.string().trim().min(1, "Slug is required.").regex(slugRegex, "Slug must be lowercase, alphanumeric, and hyphen-separated."),
+  bio: z.string().trim().max(1000).optional().nullable(),
+  avatarUrl: optionalMediaUrlSchema,
+});
+
+export type BlogAuthorAdminFormInput = z.infer<typeof blogAuthorAdminSchema>;

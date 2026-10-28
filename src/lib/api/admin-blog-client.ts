@@ -1,4 +1,4 @@
-import type { BlogPostAdminFormInput } from "@/validation/blog-admin.schema";
+import type { BlogAuthorAdminFormInput, BlogPostAdminFormInput } from "@/validation/blog-admin.schema";
 
 /** STORY-044. Fetch wrappers for /api/admin/blog/* — mirrors admin-recipe-client.ts's assertOk convention. */
 
@@ -167,4 +167,36 @@ export async function bulkModerateBlogComments(ids: string[], action: "approve" 
   });
   await assertOkWithServerMessage(response, "Failed to bulk moderate comments");
   return response.json();
+}
+
+export interface AdminBlogAuthor {
+  id: string;
+  name: string;
+  slug: string;
+  bio: string | null;
+  avatarUrl: string | null;
+  _count: { posts: number };
+}
+
+export async function fetchAdminBlogAuthors(): Promise<AdminBlogAuthor[]> {
+  const response = await fetch("/api/admin/blog/authors");
+  assertOk(response, "Failed to load authors");
+  return response.json();
+}
+
+export async function createAdminBlogAuthor(input: BlogAuthorAdminFormInput): Promise<AdminBlogAuthor> {
+  const response = await fetch("/api/admin/blog/authors", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(input) });
+  await assertOkWithServerMessage(response, "Failed to create author");
+  return response.json();
+}
+
+export async function updateAdminBlogAuthor(id: string, input: Partial<BlogAuthorAdminFormInput>): Promise<AdminBlogAuthor> {
+  const response = await fetch(`/api/admin/blog/authors/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(input) });
+  await assertOkWithServerMessage(response, "Failed to save author");
+  return response.json();
+}
+
+export async function deleteAdminBlogAuthor(id: string): Promise<void> {
+  const response = await fetch(`/api/admin/blog/authors/${id}`, { method: "DELETE" });
+  await assertOkWithServerMessage(response, "Failed to delete author");
 }

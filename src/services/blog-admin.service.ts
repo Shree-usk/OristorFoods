@@ -6,11 +6,20 @@ import { getRecipeCardsBySlugs } from "@/services/recipe.service";
 import { writeAuditLog } from "@/services/audit-log.service";
 import { refreshContentEmbeddingBestEffort } from "@/services/embedding.service";
 import { requirePermission } from "@/services/permission.service";
-import { BlogCommentIllegalTransitionError, BlogCommentNotFoundError, BlogPostNotDraftError, BlogPostNotFoundError, BlogPostSlugConflictError } from "@/services/blog-admin.errors";
+import {
+  BlogAuthorInUseError,
+  BlogAuthorNotFoundError,
+  BlogAuthorSlugConflictError,
+  BlogCommentIllegalTransitionError,
+  BlogCommentNotFoundError,
+  BlogPostNotDraftError,
+  BlogPostNotFoundError,
+  BlogPostSlugConflictError,
+} from "@/services/blog-admin.errors";
 import { computeReadingTimeMinutes } from "@/lib/blog-reading-time";
 export { deriveEffectiveStatus, type BlogPostEffectiveStatus } from "@/lib/blog-post-status";
 import { parseBodyBlocks } from "@/lib/blog-body-blocks";
-import type { BlogPostAdminValidatedInput } from "@/validation/blog-admin.schema";
+import type { BlogAuthorAdminFormInput, BlogPostAdminValidatedInput } from "@/validation/blog-admin.schema";
 import * as versioningService from "@/services/versioning.service";
 
 function toWriteInput(input: BlogPostAdminValidatedInput): BlogPostAdminWriteInput {
@@ -252,4 +261,65 @@ export async function bulkModerateComments(adminUserId: string, commentIds: stri
   }
 
   return { updated, skipped };
+}
+
+// --- Authors ---
+// Unblocks the post form's required authorId field on a fresh environment
+// (previously only seedable via prisma/seed-blog.ts's demo data, with no
+// admin screen at all) — same "Blog" module as posts/comments above.
+
+export async function listAuthorsForAdmin(adminUserId: string) {
+  await requirePermission(adminUserId, "Blog", "View");
+  return blogRepository.listBlogAuthorsForAdmin();
+}
+
+async function requireAuthor(id: string) {
+  const author = await blogRepository.findBlogAuthorById(id);
+  if (!author) throw new BlogAuthorNotFoundError();
+  return author;
+}
+
+async function assertAuthorSlugAvailable(slug: string, excludeId?: string): Promise<void> {
+  const existing = await blogRepository.findBlogAuthorBySlug(slug);
+  if (existing && existing.id !== excludeId) throw new BlogAuthorSlugConflictError();
+}
+
+export async function createAuthor(adminUserId: string, input: BlogAuthorAdminFormInput) {
+  await requirePermission(adminUserId, "Blog", "Edit");
+  await assertAuthorSlugAvailable(input.slug);
+
+  const author = await blogRepository.createBlogAuthor({
+    name: input.name,
+    slug: input.slug,
+    bio: input.bio ?? null,
+    avatarUrl: input.avatarUrl || null,
+  });
+  await writeAuditLog({ actorId: adminUserId, action: "blog_author_created", module: "Blog", targetType: "BlogAuthor", targetId: author.id });
+  return author;
+}
+
+export async function updateAuthor(adminUserId: string, id: string, input: Partial<BlogAuthorAdminFormInput>) {
+  await requirePermission(adminUserId, "Blog", "Edit");
+  await requireAuthor(id);
+  if (input.slug !== undefined) await assertAuthorSlugAvailable(input.slug, id);
+
+  const author = await blogRepository.updateBlogAuthor(id, {
+    ...(input.name !== undefined && { name: input.name }),
+    ...(input.slug !== undefined && { slug: input.slug }),
+    ...(input.bio !== undefined && { bio: input.bio ?? null }),
+    ...(input.avatarUrl !== undefined && { avatarUrl: input.avatarUrl || null }),
+  });
+  await writeAuditLog({ actorId: adminUserId, action: "blog_author_updated", module: "Blog", targetType: "BlogAuthor", targetId: id });
+  return author;
+}
+
+/** An author with any existing posts can't be deleted outright — see BlogAuthorInUseError. */
+export async function deleteAuthor(adminUserId: string, id: string): Promise<void> {
+  await requirePermission(adminUserId, "Blog", "Delete");
+  await requireAuthor(id);
+  const postCount = await blogRepository.countPostsByAuthor(id);
+  if (postCount > 0) throw new BlogAuthorInUseError();
+
+  await blogRepository.deleteBlogAuthorById(id);
+  await writeAuditLog({ actorId: adminUserId, action: "blog_author_deleted", module: "Blog", targetType: "BlogAuthor", targetId: id });
 }

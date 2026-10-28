@@ -1,4 +1,12 @@
-export type BlogAdminErrorCode = "not_found" | "slug_conflict" | "not_draft" | "comment_not_found" | "illegal_comment_transition";
+export type BlogAdminErrorCode =
+  | "not_found"
+  | "slug_conflict"
+  | "not_draft"
+  | "comment_not_found"
+  | "illegal_comment_transition"
+  | "author_not_found"
+  | "author_slug_conflict"
+  | "author_in_use";
 
 export class BlogAdminError extends Error {
   constructor(
@@ -39,5 +47,24 @@ export class BlogCommentNotFoundError extends BlogAdminError {
 export class BlogCommentIllegalTransitionError extends BlogAdminError {
   constructor(from: string, to: string) {
     super("illegal_comment_transition", `Cannot change comment status from ${from} to ${to}.`);
+  }
+}
+
+export class BlogAuthorNotFoundError extends BlogAdminError {
+  constructor() {
+    super("author_not_found", "Author not found.");
+  }
+}
+
+export class BlogAuthorSlugConflictError extends BlogAdminError {
+  constructor() {
+    super("author_slug_conflict", "An author with this slug already exists.");
+  }
+}
+
+/** BlogPost.authorId has no onDelete: Cascade — an author with existing posts can't be deleted outright, mirroring BlogPostNotDraftError's own "real history, not scratch state" guard above. */
+export class BlogAuthorInUseError extends BlogAdminError {
+  constructor() {
+    super("author_in_use", "This author has existing posts and can't be deleted. Reassign those posts to a different author first.");
   }
 }
