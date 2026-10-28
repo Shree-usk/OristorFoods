@@ -209,6 +209,35 @@ export function listAllBlogAuthorsForAdmin() {
   return prisma.blogAuthor.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true, slug: true } });
 }
 
+/** Authors management list (distinct from listAllBlogAuthorsForAdmin's lightweight {id,name,slug} reference-data shape above) — includes the post count the delete guard and list view both need. */
+export function listBlogAuthorsForAdmin() {
+  return prisma.blogAuthor.findMany({ orderBy: { name: "asc" }, include: { _count: { select: { posts: true } } } });
+}
+
+export function findBlogAuthorBySlug(slug: string) {
+  return prisma.blogAuthor.findUnique({ where: { slug } });
+}
+
+export function findBlogAuthorById(id: string) {
+  return prisma.blogAuthor.findUnique({ where: { id } });
+}
+
+export function createBlogAuthor(data: Prisma.BlogAuthorCreateInput) {
+  return prisma.blogAuthor.create({ data });
+}
+
+export function updateBlogAuthor(id: string, data: Prisma.BlogAuthorUpdateInput) {
+  return prisma.blogAuthor.update({ where: { id }, data });
+}
+
+export function countPostsByAuthor(authorId: string) {
+  return prisma.blogPost.count({ where: { authorId } });
+}
+
+export function deleteBlogAuthorById(id: string) {
+  return prisma.blogAuthor.delete({ where: { id } });
+}
+
 export function listAllBlogTagsForAdmin() {
   return prisma.blogTag.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true, slug: true } });
 }

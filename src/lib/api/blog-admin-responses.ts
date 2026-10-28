@@ -10,6 +10,9 @@ const statusByCode: Record<BlogAdminErrorCode, number> = {
   not_draft: 409,
   comment_not_found: 404,
   illegal_comment_transition: 409,
+  author_not_found: 404,
+  author_slug_conflict: 409,
+  author_in_use: 409,
 };
 
 /** Every /api/admin/blog/* route handler's catch block goes through this. */

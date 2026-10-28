@@ -4,19 +4,23 @@ import { afterEach, describe, expect, it } from "vitest";
 import { prisma } from "@/lib/db";
 import type { AdminAction, AdminModule } from "@/generated/prisma/client";
 import { PermissionDeniedError } from "@/services/permission.errors";
-import { BlogCommentIllegalTransitionError, BlogPostNotDraftError, BlogPostSlugConflictError } from "@/services/blog-admin.errors";
+import { BlogAuthorInUseError, BlogAuthorNotFoundError, BlogAuthorSlugConflictError, BlogCommentIllegalTransitionError, BlogPostNotDraftError, BlogPostSlugConflictError } from "@/services/blog-admin.errors";
 import {
   approveComment,
   archivePost,
   bulkModerateComments,
+  createAuthor,
   createPost,
+  deleteAuthor,
   deleteComment,
   deletePost,
   deriveEffectiveStatus,
   hideComment,
+  listAuthorsForAdmin,
   publishPost,
   rejectComment,
   restorePost,
+  updateAuthor,
   updatePost,
 } from "@/services/blog-admin.service";
 import type { BlogPostAdminValidatedInput } from "@/validation/blog-admin.schema";
@@ -260,5 +264,66 @@ describe("blog-admin.service — comment moderation", () => {
     const comment = await makePendingComment(fullAdmin, author);
 
     await expect(approveComment(editOnlyAdmin.id, comment.id)).rejects.toBeInstanceOf(PermissionDeniedError);
+  });
+});
+
+describe("blog-admin.service — authors", () => {
+  it("creates an author and lists it with its post count", async () => {
+    const admin = await makeFullAccessAdmin();
+    sequence += 1;
+    const author = await createAuthor(admin.id, { name: "A New Author", slug: `${AUTHOR_SLUG_PREFIX}${sequence}`, bio: "A short bio.", avatarUrl: "" });
+
+    expect(author.name).toBe("A New Author");
+
+    const listed = await listAuthorsForAdmin(admin.id);
+    const row = listed.find((item) => item.id === author.id);
+    expect(row?._count.posts).toBe(0);
+
+    const log = await prisma.auditLog.findFirst({ where: { actorId: admin.id, action: "blog_author_created" } });
+    expect(log).not.toBeNull();
+  });
+
+  it("rejects a duplicate author slug", async () => {
+    const admin = await makeFullAccessAdmin();
+    const author = await makeAuthor();
+    await expect(createAuthor(admin.id, { name: "Someone Else", slug: author.slug, bio: null, avatarUrl: "" })).rejects.toBeInstanceOf(BlogAuthorSlugConflictError);
+  });
+
+  it("updates an author's name without requiring every field", async () => {
+    const admin = await makeFullAccessAdmin();
+    const author = await makeAuthor();
+    const updated = await updateAuthor(admin.id, author.id, { name: "Renamed Author" });
+
+    expect(updated.name).toBe("Renamed Author");
+    expect(updated.slug).toBe(author.slug);
+  });
+
+  it("rejects updating a nonexistent author", async () => {
+    const admin = await makeFullAccessAdmin();
+    await expect(updateAuthor(admin.id, "does-not-exist", { name: "X" })).rejects.toBeInstanceOf(BlogAuthorNotFoundError);
+  });
+
+  it("deletes an author with no posts", async () => {
+    const admin = await makeFullAccessAdmin();
+    const author = await makeAuthor();
+
+    await deleteAuthor(admin.id, author.id);
+    const found = await prisma.blogAuthor.findUnique({ where: { id: author.id } });
+    expect(found).toBeNull();
+  });
+
+  it("refuses to delete an author who has existing posts", async () => {
+    const admin = await makeFullAccessAdmin();
+    const author = await makeAuthor();
+    await createPost(admin.id, baseInput(author.id));
+
+    await expect(deleteAuthor(admin.id, author.id)).rejects.toBeInstanceOf(BlogAuthorInUseError);
+  });
+
+  it("denies author management to an admin without Blog:Edit", async () => {
+    const viewerRole = await makeRole([{ module: "Blog", action: "View" }]);
+    const viewer = await makeAdminUser(viewerRole.id);
+    sequence += 1;
+    await expect(createAuthor(viewer.id, { name: "Blocked", slug: `${AUTHOR_SLUG_PREFIX}${sequence}`, bio: null, avatarUrl: "" })).rejects.toBeInstanceOf(PermissionDeniedError);
   });
 });

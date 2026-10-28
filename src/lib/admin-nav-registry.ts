@@ -48,6 +48,7 @@ export const ADMIN_NAV_GROUPS: AdminNavGroup[] = [
       { label: "Search glossary", href: "/admin/search-glossary", module: "Products", action: "View" },
       { label: "Recipes", href: "/admin/recipes", module: "Recipes", action: "View" },
       { label: "Blog posts", href: "/admin/blog/posts", module: "Blog", action: "View" },
+      { label: "Blog authors", href: "/admin/blog/authors", module: "Blog", action: "View" },
       { label: "Blog comments", href: "/admin/blog/comments", module: "Blog", action: "View" },
       { label: "Media library", href: "/admin/media", module: "MediaLibrary", action: "View" },
       { label: "Homepage builder", href: "/admin/homepage-builder", module: "HomepageBuilder", action: "View" },
