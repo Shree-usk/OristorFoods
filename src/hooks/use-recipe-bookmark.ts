@@ -23,6 +23,7 @@ function optimisticPlaceholder(recipeId: string): RecipeCard {
     slug: "",
     href: "",
     title: "",
+    shortDescription: "",
     heroImage: "",
     heroImageAlt: "",
     categoryName: "",

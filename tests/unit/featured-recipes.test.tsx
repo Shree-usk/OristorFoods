@@ -25,6 +25,7 @@ function card(slug: string, title: string): RecipeCard {
     slug,
     href: `/recipes/${slug}`,
     title,
+    shortDescription: `${title}, made simple.`,
     heroImage: "/images/products/export/curry-powder.webp",
     heroImageAlt: `${title} image`,
     categoryName: "Curries",
@@ -44,14 +45,18 @@ beforeEach(() => {
 });
 
 describe("FeaturedRecipes", () => {
-  it("renders the featured recipes as cards linking to their pages", async () => {
+  it("renders the main recipe and side recipes, all linking to their own pages", async () => {
     vi.mocked(getFeaturedRecipes).mockResolvedValue([card("dhal-curry", "Dhal Curry"), card("seeni-sambol", "Seeni Sambol")]);
 
     renderWithProviders(await FeaturedRecipes());
 
-    expect(getFeaturedRecipes).toHaveBeenCalledWith(4);
-    expect(screen.getByRole("heading", { level: 2, name: "Featured Recipes" })).toBeInTheDocument();
+    expect(getFeaturedRecipes).toHaveBeenCalledWith(5);
+    expect(screen.getByRole("heading", { level: 2, name: "Cook with Oristor" })).toBeInTheDocument();
+    // The first recipe is the large "main" story — its title and its "Read More" CTA both link to it.
     expect(screen.getByRole("link", { name: "Dhal Curry" })).toHaveAttribute("href", "/recipes/dhal-curry");
+    expect(screen.getByRole("link", { name: /Read More/ })).toHaveAttribute("href", "/recipes/dhal-curry");
+    // Every remaining recipe is a side row, also linking to its own page.
+    expect(screen.getByRole("link", { name: "Seeni Sambol" })).toHaveAttribute("href", "/recipes/seeni-sambol");
     expect(screen.getByRole("link", { name: "View all recipes" })).toHaveAttribute("href", "/recipes");
   });
 

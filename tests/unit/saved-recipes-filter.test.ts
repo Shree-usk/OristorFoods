@@ -10,6 +10,7 @@ function makeRecipe(overrides: Partial<RecipeCard>): RecipeCard {
     slug: overrides.slug ?? "slug",
     href: overrides.href ?? "/recipes/slug",
     title: overrides.title ?? "Title",
+    shortDescription: "",
     heroImage: "",
     heroImageAlt: "",
     categoryName: overrides.categoryName ?? "Category",

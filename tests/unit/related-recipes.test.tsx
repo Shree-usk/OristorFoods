@@ -26,7 +26,7 @@ describe("RelatedRecipes", () => {
     renderRelated(
       <RelatedRecipes
         recipes={[
-          { id: "r1", slug: "r1", href: "/recipes/r1", title: "R1", heroImage: "/a.webp", heroImageAlt: "a", categoryName: "Curries", cuisine: null, difficulty: "Easy", totalTimeMinutes: 30, avgRating: null, ratingCount: 0, dietaryTags: [], hasVideo: false },
+          { id: "r1", slug: "r1", href: "/recipes/r1", title: "R1", shortDescription: "R1, made simple.", heroImage: "/a.webp", heroImageAlt: "a", categoryName: "Curries", cuisine: null, difficulty: "Easy", totalTimeMinutes: 30, avgRating: null, ratingCount: 0, dietaryTags: [], hasVideo: false },
         ]}
       />,
     );

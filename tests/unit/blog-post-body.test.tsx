@@ -23,6 +23,7 @@ const sampleRecipe: RecipeCardData = {
   slug: "sri-lankan-chicken-curry",
   href: "/recipes/sri-lankan-chicken-curry",
   title: "Sri Lankan Chicken Curry",
+  shortDescription: "A rich, spiced chicken curry.",
   heroImage: "/curry.webp",
   heroImageAlt: "Chicken curry",
   categoryName: "Curries",
