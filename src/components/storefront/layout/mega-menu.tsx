@@ -13,11 +13,11 @@ import type { MegaMenuSection } from "@/lib/nav-config";
  */
 export function MegaMenuPanel({ sections }: { sections: MegaMenuSection[] }) {
   return (
-    <div className="grid min-w-56 gap-4 p-2 sm:grid-flow-col sm:auto-cols-max">
+    <div className="grid min-w-64 gap-6 p-4 sm:grid-flow-col sm:auto-cols-max">
       {sections.map((section) => (
-        <div key={section.heading} className="flex gap-4">
+        <div key={section.heading} className="flex gap-5">
           <div>
-            <p className="px-2 pb-1 text-caption font-medium text-stone uppercase tracking-wide">
+            <p className="px-2 pb-2 text-caption font-medium text-stone uppercase tracking-wide">
               {section.heading}
             </p>
             <ul className="flex flex-col">
@@ -33,14 +33,19 @@ export function MegaMenuPanel({ sections }: { sections: MegaMenuSection[] }) {
           {section.promoTile && (
             <Link
               href={section.promoTile.ctaHref}
-              className="relative flex w-40 shrink-0 flex-col overflow-hidden rounded-lg border border-border"
+              className="group relative flex w-48 shrink-0 flex-col overflow-hidden rounded-lg border border-border transition-shadow hover:shadow-md"
             >
-              <div className="relative h-24 w-full">
-                <Image src={section.promoTile.imageUrl} alt={section.promoTile.imageAlt} fill className="object-cover" />
+              <div className="relative h-28 w-full overflow-hidden">
+                <Image
+                  src={section.promoTile.imageUrl}
+                  alt={section.promoTile.imageAlt}
+                  fill
+                  className="object-cover transition-transform duration-300 group-hover:scale-105"
+                />
               </div>
-              <div className="p-2">
-                <p className="text-small font-medium text-charcoal">{section.promoTile.heading}</p>
-                <p className="text-caption text-primary">{section.promoTile.ctaLabel}</p>
+              <div className="bg-cream p-3">
+                <p className="font-heading text-small font-medium text-charcoal">{section.promoTile.heading}</p>
+                <p className="mt-1 text-caption font-medium text-primary">{section.promoTile.ctaLabel}</p>
               </div>
             </Link>
           )}

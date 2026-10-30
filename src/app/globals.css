@@ -151,7 +151,7 @@
   /* Sticky header offset — STORY-004 sets the real header height; kept as
      a single source of truth so scroll-padding and any fixed-header
      spacing stay in sync. See docs/architecture-decisions.md. */
-  --header-height: 4rem;
+  --header-height: 4.5rem;
 }
 
 @layer base {

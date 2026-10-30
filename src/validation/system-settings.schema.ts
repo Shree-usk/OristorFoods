@@ -26,6 +26,13 @@ export const companySettingSchema = z.object({
   pickupLocationMapUrl: z.preprocess(emptyToNull, z.string().trim().url("Enter a valid URL.").nullable().optional()),
 });
 
+export const announcementBarSettingSchema = z.object({
+  message: z.preprocess(emptyToNull, z.string().trim().min(1).max(200).nullable().optional()),
+  linkLabel: z.preprocess(emptyToNull, z.string().trim().min(1).max(60).nullable().optional()),
+  linkHref: z.preprocess(emptyToNull, z.string().trim().min(1).nullable().optional()),
+  isEnabled: z.boolean().optional(),
+});
+
 export const currencySettingSchema = z.object({
   baseCurrency: z.string().trim().length(3, "Use a 3-letter currency code.").optional(),
   supportedCurrencies: z.array(z.string().trim().length(3)).min(1).optional(),

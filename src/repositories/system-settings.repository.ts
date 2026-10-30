@@ -142,3 +142,11 @@ export function getInventorySetting() {
 export function updateInventorySetting(lowStockThreshold: number) {
   return prisma.inventorySetting.upsert({ where: { id: "global" }, create: { id: "global", lowStockThreshold }, update: { lowStockThreshold } });
 }
+
+export function getAnnouncementBarSetting() {
+  return prisma.announcementBarSetting.findUnique({ where: { id: "global" } });
+}
+
+export function updateAnnouncementBarSetting(input: Prisma.AnnouncementBarSettingUncheckedCreateInput) {
+  return prisma.announcementBarSetting.upsert({ where: { id: "global" }, create: { id: "global", ...input }, update: input });
+}

@@ -102,6 +102,39 @@ export async function getPickupLocation() {
   return { name: setting.pickupLocationName, address: setting.pickupLocationAddress, mapUrl: setting.pickupLocationMapUrl };
 }
 
+// --- Announcement bar (Header/Nav redesign) ---
+
+export interface AnnouncementBarSettingInput {
+  message?: string | null;
+  linkLabel?: string | null;
+  linkHref?: string | null;
+  isEnabled?: boolean;
+}
+
+export async function getAnnouncementBarSetting(adminUserId: string) {
+  await requirePermission(adminUserId, "SystemSettings", "View");
+  return systemSettingsRepository.getAnnouncementBarSetting();
+}
+
+export async function updateAnnouncementBarSetting(adminUserId: string, input: AnnouncementBarSettingInput) {
+  await requirePermission(adminUserId, "SystemSettings", "Edit");
+  const updated = await systemSettingsRepository.updateAnnouncementBarSetting(input);
+  await writeAuditLog({ actorId: adminUserId, action: "announcement_bar_setting_updated", module: "SystemSettings", targetType: "AnnouncementBarSetting", targetId: "global" });
+  return updated;
+}
+
+/**
+ * Storefront-facing — no admin session at this call site (header renders
+ * on every route). Hidden by default: null until an admin has both
+ * enabled it and set a message, same "no fabricated fallback" rule as
+ * getResolvedCompanyInfo's contactHero* fields above.
+ */
+export async function getResolvedAnnouncementBar() {
+  const setting = await systemSettingsRepository.getAnnouncementBarSetting();
+  if (!setting?.isEnabled || !setting?.message) return null;
+  return { message: setting.message, linkLabel: setting.linkLabel, linkHref: setting.linkHref };
+}
+
 // --- Currencies ---
 
 export interface CurrencySettingInput {

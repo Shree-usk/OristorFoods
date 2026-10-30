@@ -97,9 +97,10 @@ export function SearchOverlay() {
     >
       <DialogTrigger
         aria-label="Search"
-        className="inline-flex size-9 items-center justify-center rounded-lg hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
+        className="inline-flex h-9 items-center gap-1.5 rounded-lg px-2 text-sm font-medium hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none xl:px-3"
       >
         <Search className="size-5" aria-hidden="true" />
+        <span className="hidden xl:inline">Search</span>
       </DialogTrigger>
       <DialogContent aria-label="Search Oristor" className="top-20 max-w-xl translate-y-0">
         <form role="search" aria-label="Site" onSubmit={handleSubmit}>

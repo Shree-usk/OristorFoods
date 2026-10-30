@@ -12,7 +12,17 @@ import {
   NavigationMenuTrigger,
 } from "@/components/ui/navigation-menu";
 import type { NavItem } from "@/lib/nav-config";
+import { cn } from "@/lib/utils";
 import { MegaMenuPanel } from "./mega-menu";
+
+/**
+ * Red underline under the current section — applied in JS from `isActive`
+ * rather than a `data-active` CSS selector, since NavigationMenuTrigger
+ * (used for Products/Recipes) has no `active` prop of its own to drive
+ * one: the trigger just opens a flyout, it isn't itself a link.
+ */
+const activeIndicatorClass =
+  "relative after:absolute after:inset-x-2 after:-bottom-0.5 after:h-0.5 after:rounded-full after:bg-primary";
 
 /**
  * Desktop primary nav (Home, Products, Recipes, Food Academy, Export,
@@ -29,14 +39,16 @@ export function NavLinks({ items }: { items: NavItem[] }) {
 
   return (
     <NavigationMenu>
-      <NavigationMenuList>
+      <NavigationMenuList className="gap-0 xl:gap-1.5">
         {items.map((item) => {
           const isActive = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
 
           if (item.megaMenu) {
             return (
               <NavigationMenuItem key={item.href}>
-                <NavigationMenuTrigger className="px-1.5 xl:px-2.5">{item.label}</NavigationMenuTrigger>
+                <NavigationMenuTrigger className={cn("px-1.5 text-sm font-medium xl:px-2.5", isActive && activeIndicatorClass)}>
+                  {item.label}
+                </NavigationMenuTrigger>
                 <NavigationMenuContent>
                   <MegaMenuPanel sections={item.megaMenu} />
                 </NavigationMenuContent>
@@ -48,7 +60,7 @@ export function NavLinks({ items }: { items: NavItem[] }) {
             <NavigationMenuItem key={item.href}>
               <NavigationMenuLink
                 active={isActive}
-                className="px-1.5 xl:px-2"
+                className={cn("px-1.5 text-sm font-medium xl:px-2", isActive && activeIndicatorClass)}
                 render={<Link href={item.href} />}
               >
                 {item.label}
