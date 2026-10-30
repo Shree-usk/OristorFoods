@@ -42,6 +42,28 @@ export async function updateCompanySetting(input: CompanySettingInput): Promise<
   return response.json();
 }
 
+export interface AnnouncementBarSetting {
+  id: string;
+  message: string | null;
+  linkLabel: string | null;
+  linkHref: string | null;
+  isEnabled: boolean;
+}
+
+export type AnnouncementBarSettingInput = Partial<Omit<AnnouncementBarSetting, "id">>;
+
+export async function fetchAnnouncementBarSetting(): Promise<AnnouncementBarSetting | null> {
+  const response = await fetch("/api/admin/settings/announcement-bar");
+  if (!response.ok) throw new Error(`Failed to load announcement bar settings (${response.status})`);
+  return response.json();
+}
+
+export async function updateAnnouncementBarSetting(input: AnnouncementBarSettingInput): Promise<AnnouncementBarSetting> {
+  const response = await fetch("/api/admin/settings/announcement-bar", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(input) });
+  await assertOkWithServerMessage(response, "Failed to save announcement bar settings");
+  return response.json();
+}
+
 export interface CurrencySetting {
   id: string;
   baseCurrency: string;

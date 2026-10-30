@@ -12,16 +12,19 @@ import {
   deleteBankAccount,
   deleteFeatureFlag,
   deletePaymentMethod,
+  getAnnouncementBarSetting,
   getCompanySetting,
   getFreeShippingThreshold,
   getLowStockThreshold,
   getPickupLocation,
+  getResolvedAnnouncementBar,
   getResolvedCompanyInfo,
   isFeatureEnabled,
   listBankAccounts,
   listEligibleBankAccounts,
   listFeatureFlags,
   listPaymentMethods,
+  updateAnnouncementBarSetting,
   updateBankAccount,
   updateCompanySetting,
   updateCurrencySetting,
@@ -54,6 +57,7 @@ async function makeFullAccessAdmin() {
 afterEach(async () => {
   await prisma.auditLog.deleteMany({ where: { actor: { email: { endsWith: EMAIL_DOMAIN } } } });
   await prisma.companySetting.deleteMany({});
+  await prisma.announcementBarSetting.deleteMany({});
   await prisma.currencySetting.deleteMany({});
   await prisma.localeSetting.deleteMany({});
   await prisma.taxSetting.deleteMany({});
@@ -105,6 +109,53 @@ describe("system-settings.service — Company", () => {
       contactHeroSubcopy: "Custom subcopy",
       contactLocationHeading: "Find us here",
     });
+  });
+});
+
+describe("system-settings.service — Announcement bar", () => {
+  it("is hidden by default, and hidden again if isEnabled is turned back off", async () => {
+    await expect(getResolvedAnnouncementBar()).resolves.toBeNull();
+
+    const admin = await makeFullAccessAdmin();
+    await updateAnnouncementBarSetting(admin.id, { message: "Authentic Sri Lankan flavours, made with care.", isEnabled: true });
+    await expect(getResolvedAnnouncementBar()).resolves.toEqual({
+      message: "Authentic Sri Lankan flavours, made with care.",
+      linkLabel: null,
+      linkHref: null,
+    });
+
+    await updateAnnouncementBarSetting(admin.id, { isEnabled: false });
+    await expect(getResolvedAnnouncementBar()).resolves.toBeNull();
+  });
+
+  it("stays hidden when enabled but no message has ever been set", async () => {
+    const admin = await makeFullAccessAdmin();
+    await updateAnnouncementBarSetting(admin.id, { isEnabled: true });
+    await expect(getResolvedAnnouncementBar()).resolves.toBeNull();
+  });
+
+  it("round-trips the optional link fields and audit-logs the save", async () => {
+    const admin = await makeFullAccessAdmin();
+    await updateAnnouncementBarSetting(admin.id, {
+      message: "Free delivery over LKR 10,000",
+      isEnabled: true,
+      linkLabel: "Shop now",
+      linkHref: "/products",
+    });
+
+    await expect(getResolvedAnnouncementBar()).resolves.toEqual({
+      message: "Free delivery over LKR 10,000",
+      linkLabel: "Shop now",
+      linkHref: "/products",
+    });
+    const logCount = await prisma.auditLog.count({ where: { actorId: admin.id, action: "announcement_bar_setting_updated" } });
+    expect(logCount).toBe(1);
+  });
+
+  it("rejects a View-only admin's write but allows the read", async () => {
+    const viewer = await makeAdmin([{ module: "SystemSettings", action: "View" }]);
+    await expect(getAnnouncementBarSetting(viewer.id)).resolves.toBeNull();
+    await expect(updateAnnouncementBarSetting(viewer.id, { message: "x" })).rejects.toBeInstanceOf(PermissionDeniedError);
   });
 });
 

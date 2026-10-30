@@ -45,13 +45,27 @@ export interface MegaMenuSection {
  */
 const productsMegaMenu: MegaMenuSection[] = [
   {
-    heading: "Shop",
+    heading: "Shop by Category",
     links: [
       { label: "All Products", href: "/products" },
       { label: "Best Sellers", href: "/products?collection=best-sellers" },
-      { label: "Gift Packs", href: "/products?collection=gift-packs" },
       { label: "Export Range", href: "/products?collection=export" },
     ],
+  },
+  {
+    heading: "Discover More",
+    links: [
+      { label: "Gift Packs", href: "/products?collection=gift-packs" },
+      { label: "New Arrivals", href: "/products?sort=newest" },
+      { label: "Compare Products", href: "/products/compare" },
+    ],
+    promoTile: {
+      imageUrl: "/images/products/gifts/Gift-1.webp",
+      imageAlt: "An Oristor gift pack, ready to send",
+      heading: "Bring home the taste of Sri Lanka.",
+      ctaLabel: "Explore Gift Packs",
+      ctaHref: "/products?collection=gift-packs",
+    },
   },
 ];
 

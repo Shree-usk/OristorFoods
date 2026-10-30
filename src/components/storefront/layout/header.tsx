@@ -1,4 +1,5 @@
 import { getResolvedHeaderItems } from "@/services/navigation.service";
+import { AnnouncementBar } from "./announcement-bar";
 import { Container } from "./container";
 import { HeaderActions } from "./header-actions";
 import { Logo } from "./logo";
@@ -25,18 +26,22 @@ export async function Header() {
   const items = await getResolvedHeaderItems();
 
   return (
-    <StickyHeaderShell>
-      {/* Tighter gaps below `xl`: at 1024px the 13 nav links plus 7 action
-          icons only just fit (tests/e2e/layout.spec.ts checks for overflow). */}
-      <Container size="wide" className="flex h-full items-center justify-between gap-2 xl:gap-4">
-        <Logo />
-        <div className="hidden lg:flex">
-          <NavLinks items={items} />
-        </div>
-        <div className="hidden lg:flex">
-          <HeaderActions />
-        </div>
-      </Container>
-    </StickyHeaderShell>
+    <>
+      {/* Not sticky — scrolls away with the page, unlike the shell below. */}
+      <AnnouncementBar />
+      <StickyHeaderShell>
+        {/* Tighter gaps below `xl`: at 1024px the 13 nav links plus 7 action
+            icons only just fit (tests/e2e/layout.spec.ts checks for overflow). */}
+        <Container size="wide" className="flex h-full items-center justify-between gap-2 xl:gap-4">
+          <Logo />
+          <div className="hidden lg:flex">
+            <NavLinks items={items} />
+          </div>
+          <div className="hidden lg:flex">
+            <HeaderActions />
+          </div>
+        </Container>
+      </StickyHeaderShell>
+    </>
   );
 }

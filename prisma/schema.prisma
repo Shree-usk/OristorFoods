@@ -3837,6 +3837,19 @@ model InventorySetting {
   updatedAt         DateTime @updatedAt
 }
 
+// Global header's optional top strip (Header/Nav redesign). Hidden on the
+// storefront until an admin sets isEnabled + message — no hardcoded
+// fallback text, same zero-downtime-cutover pattern as CompanySetting's
+// contactHero* fields above.
+model AnnouncementBarSetting {
+  id        String   @id @default("global")
+  message   String?
+  linkLabel String?
+  linkHref  String?
+  isEnabled Boolean  @default(false)
+  updatedAt DateTime @updatedAt
+}
+
 // --- Instagram integration (Settings > Integrations) ---
 // Backs the storefront's "Follow @oristorfoods" homepage section. Uses the
 // Instagram API with Instagram Login (Business Login for Instagram) — the

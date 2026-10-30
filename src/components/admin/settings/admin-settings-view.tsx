@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { AnnouncementBarSettingsPanel } from "./announcement-bar-settings-panel";
 import { BankAccountsPanel } from "./bank-accounts-panel";
 import { CompanySettingsPanel } from "./company-settings-panel";
 import { CurrencySettingsPanel } from "./currency-settings-panel";
@@ -24,7 +25,7 @@ import { TaxSettingsPanel } from "./tax-settings-panel";
  * full editing surface at /admin/rewards-referrals; duplicating it
  * here would contradict this story's own AC wording.
  */
-const TAB_VALUES = ["company", "currencies", "languages", "taxes", "shipping", "payment-methods", "bank-accounts", "notifications", "rewards-referrals", "feature-flags", "policy-documents", "integrations"];
+const TAB_VALUES = ["company", "announcement-bar", "currencies", "languages", "taxes", "shipping", "payment-methods", "bank-accounts", "notifications", "rewards-referrals", "feature-flags", "policy-documents", "integrations"];
 
 export function AdminSettingsView() {
   const searchParams = useSearchParams();
@@ -38,6 +39,7 @@ export function AdminSettingsView() {
       <Tabs defaultValue={initialTab} className="mt-6">
         <TabsList className="flex-wrap">
           <TabsTrigger value="company">Company</TabsTrigger>
+          <TabsTrigger value="announcement-bar">Announcement Bar</TabsTrigger>
           <TabsTrigger value="currencies">Currencies</TabsTrigger>
           <TabsTrigger value="languages">Languages</TabsTrigger>
           <TabsTrigger value="taxes">Taxes</TabsTrigger>
@@ -53,6 +55,9 @@ export function AdminSettingsView() {
 
         <TabsContent value="company" className="mt-4">
           <CompanySettingsPanel />
+        </TabsContent>
+        <TabsContent value="announcement-bar" className="mt-4">
+          <AnnouncementBarSettingsPanel />
         </TabsContent>
         <TabsContent value="currencies" className="mt-4">
           <CurrencySettingsPanel />
