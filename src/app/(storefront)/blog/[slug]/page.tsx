@@ -42,7 +42,7 @@ export default async function BlogDetailPage({ params }: BlogDetailPageProps) {
   const blocks = parseBodyBlocks(post.bodyContent);
 
   return (
-    <Section>
+    <Section containerSize="narrow">
       <Breadcrumbs items={[{ name: "Blog", href: "/blog" }, { name: post.title, href: post.href }]} />
       {post.jsonLdOverride ? (
         <JsonLdScript data={post.jsonLdOverride} />
