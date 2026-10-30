@@ -75,6 +75,7 @@ export const recipeCardSelect = {
   id: true,
   slug: true,
   title: true,
+  shortDescription: true,
   heroImage: true,
   heroImageAlt: true,
   cuisine: true,

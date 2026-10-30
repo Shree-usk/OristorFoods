@@ -5,6 +5,7 @@ export interface RecipeCard {
   /** `/recipes/${slug}` (the detail page is STORY-018). */
   href: string;
   title: string;
+  shortDescription: string;
   heroImage: string;
   heroImageAlt: string;
   categoryName: string;

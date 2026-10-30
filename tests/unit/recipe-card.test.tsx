@@ -24,6 +24,7 @@ const recipe: RecipeCardData = {
   slug: "sri-lankan-chicken-curry",
   href: "/recipes/sri-lankan-chicken-curry",
   title: "Sri Lankan Chicken Curry",
+  shortDescription: "A rich, spiced chicken curry.",
   heroImage: "/images/products/export/chicken-masala.png",
   heroImageAlt: "Oristor chicken masala, used in this recipe",
   categoryName: "Curries",

@@ -16,6 +16,7 @@ function card(id: string, title: string): RecipeCard {
     slug: id,
     href: `/recipes/${id}`,
     title,
+    shortDescription: `${title}, made simple.`,
     heroImage: "/images/products/export/curry-powder.webp",
     heroImageAlt: `${title} image`,
     categoryName: "Curries",

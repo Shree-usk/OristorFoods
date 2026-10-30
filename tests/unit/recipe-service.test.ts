@@ -79,6 +79,7 @@ describe("listRecipes", () => {
           slug: "chicken-curry",
           href: "/recipes/chicken-curry",
           title: "Chicken Curry",
+          shortDescription: "A test recipe.",
           heroImage: "/images/products/export/curry-powder.webp",
           heroImageAlt: "Test hero image",
           categoryName: "Curries",

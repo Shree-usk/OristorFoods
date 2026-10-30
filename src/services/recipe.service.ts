@@ -18,6 +18,7 @@ export function toRecipeCard(row: RecipeCardRow): RecipeCard {
     slug: row.slug,
     href: recipeHref(row.slug),
     title: row.title,
+    shortDescription: row.shortDescription,
     heroImage: row.heroImage,
     heroImageAlt: row.heroImageAlt,
     categoryName: row.category.name,
