@@ -18,7 +18,7 @@ interface BlogPostBodyProps {
 
 export function BlogPostBody({ blocks, recipeCards, videoPosterUrl, videoPosterAlt }: BlogPostBodyProps) {
   return (
-    <div className="max-w-2xl">
+    <div>
       {blocks.map((block, index) => {
         if (block.kind === "markdown") {
           return <MarkdownContent key={index} content={block.content} />;
