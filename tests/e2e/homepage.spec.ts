@@ -16,7 +16,7 @@ const sectionHeadings = [
   { level: 2, name: "Featured Recipes" },
   { level: 2, name: "Product Collections" },
   { level: 2, name: "Learn to Cook Sri Lankan the Authentic Way" }, // Food Academy
-  { level: 2, name: "What Our Customers Say" }, // Customer Reviews
+  { level: 2, name: "What Our Customers Are Saying" }, // Customer Reviews
   { level: 2, name: "Partner with Oristor for Global Distribution" }, // Export Solutions
   { level: 2, name: "Earn Points on Every Order" }, // Rewards Club
   { level: 2, name: "Follow @oristorfoods" }, // Instagram Gallery

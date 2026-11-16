@@ -188,3 +188,31 @@
     font-variant-numeric: tabular-nums;
     }
 }
+
+/* Customer reviews marquee strip. Track renders its item list twice; -50%
+   is exactly one full copy, so the loop has no visible seam. Plain CSS
+   (not a Tailwind arbitrary-value utility) because the duration is
+   computed at runtime from the review count — Tailwind's JIT only
+   generates classes it can see as literal strings in source, so an
+   interpolated `animate-[marquee_${n}s_...]` class would never make it
+   into the compiled CSS. The duration flows in via the --marquee-duration
+   custom property instead, which plain inline styles always support. The
+   global prefers-reduced-motion rule above already collapses this (and
+   every other animation) to a single near-instant frame, so no separate
+   reduced-motion handling is needed here. */
+@keyframes marquee {
+  from {
+    transform: translateX(0);
+    }
+  to {
+    transform: translateX(-50%);
+    }
+  }
+
+.marquee-track {
+  animation: marquee var(--marquee-duration, 50s) linear infinite;
+  }
+
+.marquee-group:hover .marquee-track {
+  animation-play-state: paused;
+  }
