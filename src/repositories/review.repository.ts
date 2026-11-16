@@ -95,7 +95,7 @@ export function countPendingReviews() {
   return prisma.review.count({ where: { status: "Pending" } });
 }
 
-/** Cross-product, for the homepage's "What Our Customers Say" section — only reviews an admin has explicitly starred Published AND featured, never every published review across the catalogue. */
+/** Cross-product, for the homepage's "What Our Customers Are Saying" section — only reviews an admin has explicitly starred Published AND featured, never every published review across the catalogue. */
 export function listFeaturedReviews(limit: number): Promise<ReviewWithAuthor[]> {
   return prisma.review.findMany({
     where: { status: "Published", featured: true },
