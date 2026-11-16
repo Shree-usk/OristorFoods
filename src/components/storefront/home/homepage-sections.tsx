@@ -10,11 +10,13 @@ import { InstagramGallery } from "@/components/storefront/home/instagram-gallery
 import { ProductCollections } from "@/components/storefront/home/product-collections";
 import { RewardsClubTeaser } from "@/components/storefront/home/rewards-club-teaser";
 import { WhyChooseOristor } from "@/components/storefront/home/why-choose-oristor";
+import { Leaf } from "lucide-react";
+import { resolveFeatureIcon } from "@/lib/feature-icons";
 import { getFeaturedCategoriesForStorefront } from "@/services/category.service";
 import { getFeaturedCollectionsForStorefront } from "@/services/collection.service";
 import { getRecentPostsForStorefront } from "@/services/instagram.service";
 import { getFeaturedReviewsForStorefront } from "@/services/review.service";
-import type { CategoryCardData, CollectionCardData, InstagramPostData, ReviewData } from "@/types/home";
+import type { CategoryCardData, CollectionCardData, InstagramPostData, ReviewData, WhyChooseFeatureData } from "@/types/home";
 import {
   featuredCategories,
   foodAcademyTeaser,
@@ -138,8 +140,22 @@ export async function HomepageSections({ layout }: { layout: HomepageLayoutDetai
           }
           case "FeaturedCategories":
             return <FeaturedCategories key={section.id} categories={resolvedCategories} titleOverride={section.titleOverride} />;
-          case "WhyChooseOristor":
-            return <WhyChooseOristor key={section.id} features={whyChooseFeatures} titleOverride={section.titleOverride} />;
+          case "WhyChooseOristor": {
+            // Zero-downtime cutover, same pattern as FeaturedCategories/
+            // ProductCollections above: nothing admin-edited yet ->
+            // the original 4 approved benefits, never an empty strip.
+            const visibleFeatures = section.features.filter((feature) => feature.visible);
+            const resolvedFeatures: WhyChooseFeatureData[] =
+              visibleFeatures.length > 0
+                ? visibleFeatures.map((feature) => ({
+                    id: feature.id,
+                    icon: resolveFeatureIcon(feature.icon) ?? Leaf,
+                    title: feature.title,
+                    description: feature.description,
+                  }))
+                : whyChooseFeatures;
+            return <WhyChooseOristor key={section.id} features={resolvedFeatures} />;
+          }
           case "BestSellingProducts":
             return <BestSellingProducts key={section.id} titleOverride={section.titleOverride} />;
           case "FeaturedRecipes":

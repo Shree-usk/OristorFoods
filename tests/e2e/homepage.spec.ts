@@ -1,14 +1,17 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test } from "@playwright/test";
 
-// Exact blueprint Section 4 order. "Newsletter" and "Footer" (the last
-// two blueprint items) are satisfied by the site-wide <Footer> — see the
-// comment in src/app/(storefront)/page.tsx and docs/architecture-decisions.md
-// for why a second, separate newsletter section isn't rendered here too.
+// Blueprint Section 4 order, with the Homepage/Header redesign's one
+// deviation: WhyChooseOristor is now a full-width benefits strip right
+// after the Hero Banner (see why-choose-oristor.tsx) with no heading of
+// its own, so it's intentionally absent from this list rather than
+// reordered within it. "Newsletter" and "Footer" (the last two blueprint
+// items) are satisfied by the site-wide <Footer> — see the comment in
+// src/app/(storefront)/page.tsx and docs/architecture-decisions.md for
+// why a second, separate newsletter section isn't rendered here too.
 const sectionHeadings = [
   { level: 1, name: "Feel the Difference" }, // Hero Banner
   { level: 2, name: "Shop by Category" }, // Featured Categories
-  { level: 2, name: "Why Choose Oristor" },
   { level: 2, name: "Best Selling Products" },
   { level: 2, name: "Featured Recipes" },
   { level: 2, name: "Product Collections" },
@@ -31,6 +34,26 @@ test("homepage renders all sections in the exact blueprint order", async ({ page
   const expectedNames = sectionHeadings.map((s) => s.name);
   const filtered = headingTexts.filter((text) => expectedNames.includes(text));
   expect(filtered).toEqual(expectedNames);
+});
+
+test("the benefits strip sits between the hero and Shop by Category, with all 4 items present once", async ({ page }) => {
+  await page.goto("/");
+
+  const benefitTitle = page.getByText("Authentic Sri Lankan Recipes");
+  await expect(benefitTitle).toBeVisible();
+  await expect(benefitTitle).toHaveCount(1);
+  for (const title of ["Premium Quality, Verified", "Trusted by Thousands", "Sustainably Sourced"]) {
+    await expect(page.getByText(title)).toHaveCount(1);
+  }
+
+  const heroHeadingBox = await page.getByRole("heading", { level: 1 }).boundingBox();
+  const benefitBox = await benefitTitle.boundingBox();
+  const shopByCategoryBox = await page.getByRole("heading", { level: 2, name: "Shop by Category" }).boundingBox();
+  expect(heroHeadingBox).not.toBeNull();
+  expect(benefitBox).not.toBeNull();
+  expect(shopByCategoryBox).not.toBeNull();
+  expect(benefitBox!.y).toBeGreaterThan(heroHeadingBox!.y);
+  expect(shopByCategoryBox!.y).toBeGreaterThan(benefitBox!.y);
 });
 
 test("exactly one <h1> on the homepage", async ({ page }) => {

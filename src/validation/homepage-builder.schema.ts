@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { FEATURE_ICON_OPTIONS } from "@/lib/feature-icons";
+
 export const homepageSectionTypeEnum = z.enum([
   "HeroBanner",
   "FeaturedCategories",
@@ -91,4 +93,20 @@ export const updateHeroBannerSlideSchema = z
 
 export const listLayoutsQuerySchema = z.object({
   status: z.enum(["Draft", "Published", "Archived"]).optional(),
+});
+
+const featureIconSchema = z.string().refine((name) => name in FEATURE_ICON_OPTIONS, "Unknown icon.");
+
+export const homepageSectionFeatureSchema = z.object({
+  icon: featureIconSchema,
+  title: z.string().trim().min(1, "Title is required.").max(100),
+  description: z.string().trim().min(1, "Description is required.").max(300),
+  visible: z.boolean().default(true),
+});
+
+export const updateHomepageSectionFeatureSchema = z.object({
+  icon: featureIconSchema.optional(),
+  title: z.string().trim().min(1, "Title is required.").max(100).optional(),
+  description: z.string().trim().min(1, "Description is required.").max(300).optional(),
+  visible: z.boolean().optional(),
 });

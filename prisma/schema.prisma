@@ -3431,6 +3431,11 @@ model HomepageSection {
   titleOverride       String?
   descriptionOverride String?
   banners             HeroBannerSlide[]
+  // Admin-editable items for the WhyChooseOristor type's benefit strip
+  // (icon/title/description, STORY-042 follow-up) — unused for every
+  // other section type, same "only this one type uses it" shape as
+  // `banners` above.
+  features            HomepageSectionFeature[]
   createdAt           DateTime            @default(now())
   updatedAt           DateTime            @updatedAt
   seasonalCampaigns   SeasonalCampaign[]
@@ -3460,6 +3465,26 @@ model HeroBannerSlide {
   alignment         ContentAlignment @default(Left)
   createdAt         DateTime         @default(now())
   updatedAt         DateTime         @updatedAt
+
+  @@index([sectionId])
+}
+
+// Homepage/Header redesign follow-up. One benefit item in the
+// WhyChooseOristor section's strip — icon is a curated name string (see
+// feature-icons.ts), same "name, not a component reference" contract
+// MenuItem.icon already uses for the exact same Server->Client prop
+// boundary reason.
+model HomepageSectionFeature {
+  id          String          @id @default(cuid())
+  sectionId   String
+  section     HomepageSection @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  sortOrder   Int
+  visible     Boolean         @default(true)
+  icon        String
+  title       String
+  description String
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
 
   @@index([sectionId])
 }

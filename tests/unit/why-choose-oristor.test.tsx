@@ -12,21 +12,12 @@ const features: WhyChooseFeatureData[] = [
 ];
 
 describe("WhyChooseOristor", () => {
-  it("renders the section title, defaulting when no override is set", () => {
-    render(<WhyChooseOristor features={features} />);
-    expect(screen.getByRole("heading", { name: "Why Choose Oristor" })).toBeInTheDocument();
-  });
-
-  it("honours a titleOverride", () => {
-    render(<WhyChooseOristor features={features} titleOverride="The Oristor Difference" />);
-    expect(screen.getByRole("heading", { name: "The Oristor Difference" })).toBeInTheDocument();
-  });
-
-  it("renders every feature's title and description", () => {
+  it("renders every feature's title and description, with no section heading", () => {
     render(<WhyChooseOristor features={features} />);
     expect(screen.getByText("Authentic Sri Lankan Recipes")).toBeInTheDocument();
     expect(screen.getByText("Made the traditional way.")).toBeInTheDocument();
     expect(screen.getByText("Premium Quality, Verified")).toBeInTheDocument();
     expect(screen.getByText("Every batch is checked.")).toBeInTheDocument();
+    expect(screen.queryByRole("heading")).not.toBeInTheDocument();
   });
 });
