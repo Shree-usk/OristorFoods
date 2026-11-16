@@ -4,17 +4,18 @@ import type { HomepageSectionType } from "@/lib/api/admin-homepage-builder-clien
  * Display order and names — shared between the builder canvas and the
  * "Add section" picker. Originally blueprint Section 4's exact order;
  * the Homepage/Header redesign moved WhyChooseOristor to right after
- * HeroBanner (see homepage-builder.service.ts's DEFAULT_SECTION_ORDER).
+ * HeroBanner and CustomerReviews to right after FeaturedCategories (see
+ * homepage-builder.service.ts's DEFAULT_SECTION_ORDER).
  */
 export const SECTION_TYPE_ORDER: HomepageSectionType[] = [
   "HeroBanner",
   "WhyChooseOristor",
   "FeaturedCategories",
+  "CustomerReviews",
   "BestSellingProducts",
   "FeaturedRecipes",
   "ProductCollections",
   "FoodAcademy",
-  "CustomerReviews",
   "ExportSolutions",
   "RewardsClub",
   "InstagramGallery",

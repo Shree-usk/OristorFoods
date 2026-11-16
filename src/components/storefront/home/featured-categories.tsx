@@ -9,7 +9,7 @@ import type { CategoryCardData } from "@/types/home";
 export function FeaturedCategories({ categories, titleOverride }: { categories: CategoryCardData[]; titleOverride?: string | null }) {
   return (
     <Section>
-      <h2 className="text-h2 font-heading text-charcoal">{titleOverride || "Shop by Category"}</h2>
+      <h2 className="text-center text-h2 font-heading text-charcoal">{titleOverride || "Shop by Category"}</h2>
       {/*
         A real grid, not flex-wrap — every card in a row must be the exact
         same width AND height regardless of how long each category's own
@@ -36,7 +36,7 @@ export function FeaturedCategories({ categories, titleOverride }: { categories: 
                 />
               </div>
               <div className="flex flex-1 flex-col border-t border-border-soft px-3 py-3 text-center">
-                <p className="text-small font-medium text-charcoal">{category.name}</p>
+                <p className="text-body font-bold text-charcoal">{category.name}</p>
                 {category.description && <p className="mt-1 line-clamp-2 text-caption text-charcoal/70">{category.description}</p>}
                 <span className="mt-auto inline-flex items-center justify-center gap-1 pt-2 text-caption font-medium text-chilli">
                   Explore category

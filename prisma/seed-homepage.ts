@@ -9,8 +9,9 @@ import { prisma } from "../src/lib/db";
  * fixture fallback (which exists only as a never-blank safety net, not
  * the intended steady state). Section order follows
  * homepage-builder.service.ts's DEFAULT_SECTION_ORDER (Homepage/Header
- * redesign: WhyChooseOristor sits right after HeroBanner, not in its
- * original blueprint spot) — its 4 benefit items match
+ * redesign: WhyChooseOristor sits right after HeroBanner and
+ * CustomerReviews sits right after FeaturedCategories, neither in its
+ * original blueprint spot) — WhyChooseOristor's 4 benefit items match
  * home-fixtures.ts's whyChooseFeatures exactly, so publishing this seed
  * causes no visual change versus the fixture fallback it replaces.
  */
@@ -73,11 +74,11 @@ export async function seedHomepage() {
             },
           },
           { type: "FeaturedCategories", sortOrder: 2 },
-          { type: "BestSellingProducts", sortOrder: 3 },
-          { type: "FeaturedRecipes", sortOrder: 4 },
-          { type: "ProductCollections", sortOrder: 5 },
-          { type: "FoodAcademy", sortOrder: 6 },
-          { type: "CustomerReviews", sortOrder: 7 },
+          { type: "CustomerReviews", sortOrder: 3 },
+          { type: "BestSellingProducts", sortOrder: 4 },
+          { type: "FeaturedRecipes", sortOrder: 5 },
+          { type: "ProductCollections", sortOrder: 6 },
+          { type: "FoodAcademy", sortOrder: 7 },
           { type: "ExportSolutions", sortOrder: 8 },
           { type: "RewardsClub", sortOrder: 9 },
           { type: "InstagramGallery", sortOrder: 10 },
