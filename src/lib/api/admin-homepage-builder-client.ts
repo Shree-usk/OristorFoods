@@ -40,6 +40,16 @@ export interface HeroBannerSlide {
   alignment: ContentAlignment;
 }
 
+export interface HomepageSectionFeature {
+  id: string;
+  sectionId: string;
+  sortOrder: number;
+  visible: boolean;
+  icon: string;
+  title: string;
+  description: string;
+}
+
 export interface HomepageSection {
   id: string;
   layoutId: string;
@@ -49,6 +59,7 @@ export interface HomepageSection {
   titleOverride: string | null;
   descriptionOverride: string | null;
   banners: HeroBannerSlide[];
+  features: HomepageSectionFeature[];
 }
 
 export interface HomepageLayout {
@@ -230,4 +241,51 @@ export async function reorderBanners(layoutId: string, sectionId: string, ordere
     body: JSON.stringify({ orderedIds }),
   });
   assertOk(response, "Failed to reorder banners");
+}
+
+export interface HomepageSectionFeatureInput {
+  icon: string;
+  title: string;
+  description: string;
+  visible?: boolean;
+}
+
+export async function addFeature(layoutId: string, sectionId: string, input: HomepageSectionFeatureInput): Promise<HomepageSectionFeature> {
+  const response = await fetch(`/api/admin/homepage-builder/layouts/${layoutId}/sections/${sectionId}/features`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({ error: "Failed to add benefit item" }));
+    throw new Error(body.error ?? "Failed to add benefit item");
+  }
+  return response.json();
+}
+
+export async function updateFeature(layoutId: string, sectionId: string, featureId: string, input: Partial<HomepageSectionFeatureInput>): Promise<HomepageSectionFeature> {
+  const response = await fetch(`/api/admin/homepage-builder/layouts/${layoutId}/sections/${sectionId}/features/${featureId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({ error: "Failed to update benefit item" }));
+    throw new Error(body.error ?? "Failed to update benefit item");
+  }
+  return response.json();
+}
+
+export async function removeFeature(layoutId: string, sectionId: string, featureId: string): Promise<void> {
+  const response = await fetch(`/api/admin/homepage-builder/layouts/${layoutId}/sections/${sectionId}/features/${featureId}`, { method: "DELETE" });
+  assertOk(response, "Failed to remove benefit item");
+}
+
+export async function reorderFeatures(layoutId: string, sectionId: string, orderedIds: string[]): Promise<void> {
+  const response = await fetch(`/api/admin/homepage-builder/layouts/${layoutId}/sections/${sectionId}/features/reorder`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ orderedIds }),
+  });
+  assertOk(response, "Failed to reorder benefit items");
 }

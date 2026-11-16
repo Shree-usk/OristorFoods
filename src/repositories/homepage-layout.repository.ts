@@ -6,7 +6,10 @@ import { prisma } from "@/lib/db";
 const withSections = {
   sections: {
     orderBy: { sortOrder: "asc" },
-    include: { banners: { orderBy: { sortOrder: "asc" } } },
+    include: {
+      banners: { orderBy: { sortOrder: "asc" } },
+      features: { orderBy: { sortOrder: "asc" } },
+    },
   },
 } satisfies Prisma.HomepageLayoutInclude;
 
@@ -66,7 +69,13 @@ export function updateLayoutAuditFields(id: string, updatedById: string) {
 }
 
 export function findSectionById(id: string) {
-  return prisma.homepageSection.findUnique({ where: { id }, include: { banners: { orderBy: { sortOrder: "asc" } } } });
+  return prisma.homepageSection.findUnique({
+    where: { id },
+    include: {
+      banners: { orderBy: { sortOrder: "asc" } },
+      features: { orderBy: { sortOrder: "asc" } },
+    },
+  });
 }
 
 export function countSectionsByType(layoutId: string, type: HomepageSectionType) {
@@ -74,7 +83,7 @@ export function countSectionsByType(layoutId: string, type: HomepageSectionType)
 }
 
 export function createSection(data: Prisma.HomepageSectionCreateInput) {
-  return prisma.homepageSection.create({ data, include: { banners: true } });
+  return prisma.homepageSection.create({ data, include: { banners: true, features: true } });
 }
 
 export interface UpdateSectionInput {
@@ -91,7 +100,7 @@ export function updateSection(id: string, input: UpdateSectionInput) {
       ...(input.titleOverride !== undefined ? { titleOverride: input.titleOverride } : {}),
       ...(input.descriptionOverride !== undefined ? { descriptionOverride: input.descriptionOverride } : {}),
     },
-    include: { banners: true },
+    include: { banners: true, features: true },
   });
 }
 

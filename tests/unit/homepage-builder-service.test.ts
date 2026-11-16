@@ -8,19 +8,24 @@ import {
   DuplicateHeroBannerSectionError,
   HeroBannerSectionDuplicateNotAllowedError,
   HomepageLayoutNotDraftError,
+  HomepageSectionFeatureNotFoundError,
   NoArchivedLayoutError,
 } from "@/services/homepage-builder.errors";
 import {
   addBanner,
+  addFeature,
   addSection,
   createDraftLayout,
   deleteDraftLayout,
   duplicateBanner,
   duplicateSection,
   publishLayout,
+  removeFeature,
   reorderBanners,
+  reorderFeatures,
   reorderSections,
   rollbackToPrevious,
+  updateFeature,
   updateSection,
 } from "@/services/homepage-builder.service";
 
@@ -63,7 +68,7 @@ afterEach(async () => {
 });
 
 describe("homepage-builder.service", () => {
-  it("creates a blank draft seeded with all 11 default section types in blueprint order", async () => {
+  it("creates a blank draft seeded with all 11 default section types, Hero Banner first", async () => {
     const admin = await makeFullAccessAdmin();
     const layout = await createDraftLayout(admin.id, { cloneFromPublished: false });
 
@@ -76,11 +81,13 @@ describe("homepage-builder.service", () => {
     expect(log).not.toBeNull();
   });
 
-  it("clones a published layout's sections and hero banner slides into a new draft", async () => {
+  it("clones a published layout's sections, hero banner slides, and benefit items into a new draft", async () => {
     const admin = await makeFullAccessAdmin();
     const draft = await createDraftLayout(admin.id, { cloneFromPublished: false });
     const heroSection = draft.sections.find((s) => s.type === "HeroBanner")!;
+    const whyChooseSection = draft.sections.find((s) => s.type === "WhyChooseOristor")!;
     await addBanner(admin.id, draft.id, heroSection.id, { headline: "Original", desktopImageUrl: "/a.png", desktopImageAlt: "a" });
+    await addFeature(admin.id, draft.id, whyChooseSection.id, { icon: "Leaf", title: "Original benefit", description: "Original description" });
     await publishLayout(admin.id, draft.id);
 
     const clone = await createDraftLayout(admin.id, { cloneFromPublished: true });
@@ -88,6 +95,9 @@ describe("homepage-builder.service", () => {
     const clonedHero = clone.sections.find((s) => s.type === "HeroBanner")!;
     expect(clonedHero.banners).toHaveLength(1);
     expect(clonedHero.banners[0].headline).toBe("Original");
+    const clonedWhyChoose = clone.sections.find((s) => s.type === "WhyChooseOristor")!;
+    expect(clonedWhyChoose.features).toHaveLength(1);
+    expect(clonedWhyChoose.features[0].title).toBe("Original benefit");
   });
 
   it("rejects a second HeroBanner section on the same layout", async () => {
@@ -145,6 +155,39 @@ describe("homepage-builder.service", () => {
     await reorderBanners(admin.id, draft.id, hero.id, [second.id, first.id, duplicate.id]);
     const reordered = await prisma.heroBannerSlide.findMany({ where: { sectionId: hero.id }, orderBy: { sortOrder: "asc" } });
     expect(reordered.map((s) => s.id)).toEqual([second.id, first.id, duplicate.id]);
+  });
+
+  it("adds, updates, removes, and reorders benefit items within the WhyChooseOristor section", async () => {
+    const admin = await makeFullAccessAdmin();
+    const draft = await createDraftLayout(admin.id, { cloneFromPublished: false });
+    const whyChoose = draft.sections.find((s) => s.type === "WhyChooseOristor")!;
+
+    const first = await addFeature(admin.id, draft.id, whyChoose.id, { icon: "Leaf", title: "First", description: "First description" });
+    const second = await addFeature(admin.id, draft.id, whyChoose.id, { icon: "Award", title: "Second", description: "Second description" });
+    expect(first.sortOrder).toBe(0);
+    expect(second.sortOrder).toBe(1);
+
+    const updated = await updateFeature(admin.id, draft.id, whyChoose.id, first.id, { title: "First (edited)" });
+    expect(updated.title).toBe("First (edited)");
+
+    await reorderFeatures(admin.id, draft.id, whyChoose.id, [second.id, first.id]);
+    const reordered = await prisma.homepageSectionFeature.findMany({ where: { sectionId: whyChoose.id }, orderBy: { sortOrder: "asc" } });
+    expect(reordered.map((f) => f.id)).toEqual([second.id, first.id]);
+
+    await removeFeature(admin.id, draft.id, whyChoose.id, first.id);
+    await expect(prisma.homepageSectionFeature.findUniqueOrThrow({ where: { id: first.id } })).rejects.toThrow();
+  });
+
+  it("rejects an unknown or cross-section benefit item id", async () => {
+    const admin = await makeFullAccessAdmin();
+    const draft = await createDraftLayout(admin.id, { cloneFromPublished: false });
+    const whyChoose = draft.sections.find((s) => s.type === "WhyChooseOristor")!;
+    const categories = draft.sections.find((s) => s.type === "FeaturedCategories")!;
+
+    await expect(updateFeature(admin.id, draft.id, whyChoose.id, "not-a-real-id", { title: "x" })).rejects.toBeInstanceOf(HomepageSectionFeatureNotFoundError);
+
+    const feature = await addFeature(admin.id, draft.id, whyChoose.id, { icon: "Leaf", title: "Belongs to WhyChoose", description: "d" });
+    await expect(updateFeature(admin.id, draft.id, categories.id, feature.id, { title: "x" })).rejects.toBeInstanceOf(HomepageSectionFeatureNotFoundError);
   });
 
   it("rejects modifying a non-Draft layout", async () => {

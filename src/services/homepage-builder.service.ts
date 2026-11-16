@@ -1,5 +1,6 @@
 import type { ContentAlignment, HomepageLayoutStatus, HomepageSectionType, Prisma } from "@/generated/prisma/client";
 import * as heroBannerRepository from "@/repositories/hero-banner.repository";
+import * as homepageFeatureRepository from "@/repositories/homepage-feature.repository";
 import * as homepageLayoutRepository from "@/repositories/homepage-layout.repository";
 import type { HomepageLayoutDetail } from "@/repositories/homepage-layout.repository";
 import { writeAuditLog } from "@/services/audit-log.service";
@@ -9,17 +10,25 @@ import {
   HeroBannerSlideNotFoundError,
   HomepageLayoutNotDraftError,
   HomepageLayoutNotFoundError,
+  HomepageSectionFeatureNotFoundError,
   HomepageSectionNotFoundError,
   NoArchivedLayoutError,
 } from "@/services/homepage-builder.errors";
 import { requirePermission } from "@/services/permission.service";
 import * as versioningService from "@/services/versioning.service";
 
-/** STORY-006's exact section order (docs/blueprint.md Section 4, minus Newsletter/Footer — already folded into the site-wide Footer, per STORY-006's own documented deviation). */
+/**
+ * Default section order. Originally STORY-006's exact blueprint Section 4
+ * order (minus Newsletter/Footer — already folded into the site-wide
+ * Footer, per STORY-006's own documented deviation); the Homepage/Header
+ * redesign moved WhyChooseOristor to right after HeroBanner (a full-width
+ * benefits strip immediately under the hero, before Featured Categories)
+ * — see why-choose-oristor.tsx.
+ */
 export const DEFAULT_SECTION_ORDER: HomepageSectionType[] = [
   "HeroBanner",
-  "FeaturedCategories",
   "WhyChooseOristor",
+  "FeaturedCategories",
   "BestSellingProducts",
   "FeaturedRecipes",
   "ProductCollections",
@@ -82,6 +91,17 @@ function sectionsCreateFromLayout(sections: HomepageLayoutDetail["sections"]): P
             videoUrl: banner.videoUrl,
             overlayEnabled: banner.overlayEnabled,
             alignment: banner.alignment,
+          })),
+        }
+      : undefined,
+    features: section.features.length
+      ? {
+          create: section.features.map((feature) => ({
+            sortOrder: feature.sortOrder,
+            visible: feature.visible,
+            icon: feature.icon,
+            title: feature.title,
+            description: feature.description,
           })),
         }
       : undefined,
@@ -322,6 +342,67 @@ export async function reorderBanners(adminUserId: string, layoutId: string, sect
 
   await heroBannerRepository.reorderSlides(sectionId, orderedBannerIds);
   await writeAuditLog({ actorId: adminUserId, action: "homepage_banners_reordered", module: "HomepageBuilder", targetType: "HomepageSection", targetId: sectionId });
+}
+
+// --- WhyChooseOristor benefit items ---
+
+export interface HomepageSectionFeatureInput {
+  icon: string;
+  title: string;
+  description: string;
+  visible?: boolean;
+}
+
+async function requireFeatureInSection(sectionId: string, featureId: string) {
+  const feature = await homepageFeatureRepository.findFeatureById(featureId);
+  if (!feature || feature.sectionId !== sectionId) throw new HomepageSectionFeatureNotFoundError();
+  return feature;
+}
+
+export async function addFeature(adminUserId: string, layoutId: string, sectionId: string, input: HomepageSectionFeatureInput) {
+  await requirePermission(adminUserId, "HomepageBuilder", "Edit");
+  await requireDraftLayout(layoutId);
+  await requireSectionInLayout(layoutId, sectionId);
+
+  const sortOrder = await homepageFeatureRepository.nextFeatureSortOrder(sectionId);
+  const feature = await homepageFeatureRepository.createFeature({
+    section: { connect: { id: sectionId } },
+    sortOrder,
+    ...input,
+  });
+
+  await writeAuditLog({ actorId: adminUserId, action: "homepage_feature_added", module: "HomepageBuilder", targetType: "HomepageSectionFeature", targetId: feature.id });
+  return feature;
+}
+
+export async function updateFeature(adminUserId: string, layoutId: string, sectionId: string, featureId: string, input: Partial<HomepageSectionFeatureInput>) {
+  await requirePermission(adminUserId, "HomepageBuilder", "Edit");
+  await requireDraftLayout(layoutId);
+  await requireSectionInLayout(layoutId, sectionId);
+  await requireFeatureInSection(sectionId, featureId);
+
+  const updated = await homepageFeatureRepository.updateFeature(featureId, input);
+  await writeAuditLog({ actorId: adminUserId, action: "homepage_feature_updated", module: "HomepageBuilder", targetType: "HomepageSectionFeature", targetId: featureId });
+  return updated;
+}
+
+export async function removeFeature(adminUserId: string, layoutId: string, sectionId: string, featureId: string): Promise<void> {
+  await requirePermission(adminUserId, "HomepageBuilder", "Delete");
+  await requireDraftLayout(layoutId);
+  await requireSectionInLayout(layoutId, sectionId);
+  await requireFeatureInSection(sectionId, featureId);
+
+  await homepageFeatureRepository.deleteFeatureById(featureId);
+  await writeAuditLog({ actorId: adminUserId, action: "homepage_feature_removed", module: "HomepageBuilder", targetType: "HomepageSectionFeature", targetId: featureId });
+}
+
+export async function reorderFeatures(adminUserId: string, layoutId: string, sectionId: string, orderedFeatureIds: string[]): Promise<void> {
+  await requirePermission(adminUserId, "HomepageBuilder", "Edit");
+  await requireDraftLayout(layoutId);
+  await requireSectionInLayout(layoutId, sectionId);
+
+  await homepageFeatureRepository.reorderFeatures(sectionId, orderedFeatureIds);
+  await writeAuditLog({ actorId: adminUserId, action: "homepage_features_reordered", module: "HomepageBuilder", targetType: "HomepageSection", targetId: sectionId });
 }
 
 // --- Publish / rollback ---

@@ -26,11 +26,15 @@ import {
 import { getPublishedHomepageLayout } from "@/services/homepage.service";
 
 /**
- * Homepage — every section in the exact order from docs/blueprint.md
- * Section 4. Section order/visibility and Hero Banner content are
- * admin-editable via STORY-042's Homepage Builder once a layout has been
- * published; the other 10 sections' actual content is still typed fixture
- * data (light-touch scope this pass — see docs/architecture-decisions.md).
+ * Homepage — docs/blueprint.md Section 4's order, with one deliberate
+ * deviation from the Homepage/Header redesign: WhyChooseOristor moved to
+ * right after HeroBanner (a full-width benefits strip under the hero,
+ * before Featured Categories) instead of its original blueprint spot.
+ * Section order/visibility and Hero Banner content are admin-editable via
+ * STORY-042's Homepage Builder once a layout has been published; the
+ * other sections' actual content is still typed fixture data except
+ * WhyChooseOristor, whose 4 items are now admin-editable too (light-touch
+ * scope otherwise — see docs/architecture-decisions.md).
  *
  * **Fallback, never blank:** if no HomepageLayout has ever been
  * published (a fresh environment before the seed/an admin publishes
@@ -81,8 +85,8 @@ export default async function Home() {
   return (
     <>
       <HeroBanner data={heroBanner} />
-      <FeaturedCategories categories={featuredCategories} />
       <WhyChooseOristor features={whyChooseFeatures} />
+      <FeaturedCategories categories={featuredCategories} />
       <BestSellingProducts />
       <FeaturedRecipes />
       <ProductCollections collections={productCollections} />

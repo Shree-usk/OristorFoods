@@ -2,6 +2,7 @@ export type HomepageBuilderErrorCode =
   | "layout_not_found"
   | "section_not_found"
   | "banner_not_found"
+  | "feature_not_found"
   | "layout_not_draft"
   | "duplicate_hero_banner_section"
   | "hero_banner_duplicate_not_allowed"
@@ -32,6 +33,12 @@ export class HomepageSectionNotFoundError extends HomepageBuilderError {
 export class HeroBannerSlideNotFoundError extends HomepageBuilderError {
   constructor() {
     super("banner_not_found", "Hero banner slide not found.");
+  }
+}
+
+export class HomepageSectionFeatureNotFoundError extends HomepageBuilderError {
+  constructor() {
+    super("feature_not_found", "Benefit item not found.");
   }
 }
 

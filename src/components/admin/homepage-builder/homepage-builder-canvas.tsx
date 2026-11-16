@@ -17,6 +17,7 @@ import { ExportHeroEditor } from "@/components/admin/homepage-builder/export-her
 import { HeroBannerEditor } from "@/components/admin/homepage-builder/hero-banner-editor";
 import { SectionEditor } from "@/components/admin/homepage-builder/section-editor";
 import { SECTION_TYPE_LABELS, SECTION_TYPE_ORDER } from "@/components/admin/homepage-builder/section-labels";
+import { WhyChooseFeaturesEditor } from "@/components/admin/homepage-builder/why-choose-features-editor";
 import {
   addSection,
   duplicateSection,
@@ -192,7 +193,17 @@ export function HomepageBuilderCanvas({ layoutId }: HomepageBuilderCanvasProps) 
       {editingSection && editingSection.type === "ExportSolutions" && (
         <ExportHeroEditor open={editingSectionId !== null} onOpenChange={(open) => !open && setEditingSectionId(null)} onChanged={invalidate} />
       )}
-      {editingSection && editingSection.type !== "HeroBanner" && editingSection.type !== "ExportSolutions" && (
+      {editingSection && editingSection.type === "WhyChooseOristor" && (
+        <WhyChooseFeaturesEditor
+          layoutId={layoutId}
+          section={editingSection}
+          draftEditable={layout.status === "Draft"}
+          open={editingSectionId !== null}
+          onOpenChange={(open) => !open && setEditingSectionId(null)}
+          onChanged={invalidate}
+        />
+      )}
+      {editingSection && editingSection.type !== "HeroBanner" && editingSection.type !== "ExportSolutions" && editingSection.type !== "WhyChooseOristor" && (
         <SectionEditor
           layoutId={layoutId}
           section={editingSection}
@@ -238,6 +249,7 @@ function SortableSectionRow({
         )}
         <span className="text-small font-medium text-charcoal">{SECTION_TYPE_LABELS[section.type]}</span>
         {section.type === "HeroBanner" && <span className="text-small text-muted-foreground">{section.banners.length} banner{section.banners.length === 1 ? "" : "s"}</span>}
+        {section.type === "WhyChooseOristor" && <span className="text-small text-muted-foreground">{section.features.length} benefit{section.features.length === 1 ? "" : "s"}</span>}
         {(section.titleOverride || section.descriptionOverride) && <span className="text-small text-muted-foreground">(custom title)</span>}
       </div>
       <div className="flex items-center gap-3">

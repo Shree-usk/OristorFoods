@@ -8,6 +8,7 @@ const statusByCode: Record<HomepageBuilderErrorCode, number> = {
   layout_not_found: 404,
   section_not_found: 404,
   banner_not_found: 404,
+  feature_not_found: 404,
   layout_not_draft: 409,
   duplicate_hero_banner_section: 409,
   hero_banner_duplicate_not_allowed: 409,
