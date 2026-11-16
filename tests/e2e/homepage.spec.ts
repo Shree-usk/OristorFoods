@@ -1,22 +1,23 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test } from "@playwright/test";
 
-// Blueprint Section 4 order, with the Homepage/Header redesign's one
-// deviation: WhyChooseOristor is now a full-width benefits strip right
+// Blueprint Section 4 order, with the Homepage/Header redesign's two
+// deviations: WhyChooseOristor is now a full-width benefits strip right
 // after the Hero Banner (see why-choose-oristor.tsx) with no heading of
 // its own, so it's intentionally absent from this list rather than
-// reordered within it. "Newsletter" and "Footer" (the last two blueprint
-// items) are satisfied by the site-wide <Footer> — see the comment in
-// src/app/(storefront)/page.tsx and docs/architecture-decisions.md for
-// why a second, separate newsletter section isn't rendered here too.
+// reordered within it; CustomerReviews (the reviews marquee) moved to
+// right after Featured Categories. "Newsletter" and "Footer" (the last
+// two blueprint items) are satisfied by the site-wide <Footer> — see the
+// comment in src/app/(storefront)/page.tsx and docs/architecture-decisions.md
+// for why a second, separate newsletter section isn't rendered here too.
 const sectionHeadings = [
   { level: 1, name: "Feel the Difference" }, // Hero Banner
   { level: 2, name: "Shop by Category" }, // Featured Categories
+  { level: 2, name: "What Our Customers Are Saying" }, // Customer Reviews
   { level: 2, name: "Best Selling Products" },
-  { level: 2, name: "Featured Recipes" },
+  { level: 2, name: "Cook with Oristor" }, // Featured Recipes
   { level: 2, name: "Product Collections" },
   { level: 2, name: "Learn to Cook Sri Lankan the Authentic Way" }, // Food Academy
-  { level: 2, name: "What Our Customers Are Saying" }, // Customer Reviews
   { level: 2, name: "Partner with Oristor for Global Distribution" }, // Export Solutions
   { level: 2, name: "Earn Points on Every Order" }, // Rewards Club
   { level: 2, name: "Follow @oristorfoods" }, // Instagram Gallery

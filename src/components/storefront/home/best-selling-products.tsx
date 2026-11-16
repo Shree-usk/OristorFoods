@@ -41,9 +41,9 @@ export async function BestSellingProducts({ titleOverride }: { titleOverride?: s
 
   return (
     <Section>
-      <div className="flex items-baseline justify-between">
+      <div className="text-center">
         <h2 className="text-h2 font-heading text-charcoal">{heading}</h2>
-        <Link href="/products?collection=best-sellers" className="text-small text-chilli hover:underline">
+        <Link href="/products?collection=best-sellers" className="mt-2 inline-block text-small text-chilli hover:underline">
           View all
         </Link>
       </div>

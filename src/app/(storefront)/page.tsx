@@ -26,10 +26,12 @@ import {
 import { getPublishedHomepageLayout } from "@/services/homepage.service";
 
 /**
- * Homepage — docs/blueprint.md Section 4's order, with one deliberate
- * deviation from the Homepage/Header redesign: WhyChooseOristor moved to
+ * Homepage — docs/blueprint.md Section 4's order, with two deliberate
+ * deviations from the Homepage/Header redesign: WhyChooseOristor moved to
  * right after HeroBanner (a full-width benefits strip under the hero,
- * before Featured Categories) instead of its original blueprint spot.
+ * before Featured Categories), and CustomerReviews moved to right after
+ * Featured Categories (the reviews marquee) — both instead of their
+ * original blueprint spots.
  * Section order/visibility and Hero Banner content are admin-editable via
  * STORY-042's Homepage Builder once a layout has been published; the
  * other sections' actual content is still typed fixture data except
@@ -87,11 +89,11 @@ export default async function Home() {
       <HeroBanner data={heroBanner} />
       <WhyChooseOristor features={whyChooseFeatures} />
       <FeaturedCategories categories={featuredCategories} />
+      <CustomerReviews reviews={customerReviews} />
       <BestSellingProducts />
       <FeaturedRecipes />
       <ProductCollections collections={productCollections} />
       <FoodAcademyTeaser data={foodAcademyTeaser} />
-      <CustomerReviews reviews={customerReviews} />
       <ExportSolutions />
       <RewardsClubTeaser data={rewardsClubTeaser} />
       <InstagramGallery posts={instagramPosts} />

@@ -22,18 +22,19 @@ import * as versioningService from "@/services/versioning.service";
  * order (minus Newsletter/Footer — already folded into the site-wide
  * Footer, per STORY-006's own documented deviation); the Homepage/Header
  * redesign moved WhyChooseOristor to right after HeroBanner (a full-width
- * benefits strip immediately under the hero, before Featured Categories)
- * — see why-choose-oristor.tsx.
+ * benefits strip immediately under the hero, before Featured Categories —
+ * see why-choose-oristor.tsx) and moved CustomerReviews to right after
+ * FeaturedCategories (the reviews marquee — see customer-reviews.tsx).
  */
 export const DEFAULT_SECTION_ORDER: HomepageSectionType[] = [
   "HeroBanner",
   "WhyChooseOristor",
   "FeaturedCategories",
+  "CustomerReviews",
   "BestSellingProducts",
   "FeaturedRecipes",
   "ProductCollections",
   "FoodAcademy",
-  "CustomerReviews",
   "ExportSolutions",
   "RewardsClub",
   "InstagramGallery",
