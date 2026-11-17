@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/db";
 import type { Prisma, ProductStatus } from "@/generated/prisma/client";
 import { escapeLikePattern } from "@/lib/escape-like-pattern";
+import { EXPORT_CATALOGUE_UNCATEGORIZED_SLUG } from "@/lib/export-catalogue-constants";
 
 export function createProduct(data: Prisma.ProductCreateInput) {
   return prisma.product.create({ data });
@@ -286,6 +287,7 @@ export function findFeaturedProductIds(excludeProductId: string, limit: number) 
 export interface ExportCatalogueProductFilters {
   search?: string;
   collectionSlug?: string;
+  categorySlug?: string;
 }
 
 export interface ExportCatalogueProductRow {
@@ -298,6 +300,9 @@ export interface ExportCatalogueProductRow {
   weightGrams: number | null;
   isExportFeatured: boolean;
   collections: { id: string; name: string; slug: string }[];
+  // Up to 6 images, primary first — enough for the catalogue card's slider
+  // without ballooning payload size; findExportCatalogueProductBySlug below
+  // fetches the full, uncapped set for the detail page.
   images: { url: string; altText: string | null }[];
 }
 
@@ -309,6 +314,11 @@ function buildExportCatalogueWhere(filters: ExportCatalogueProductFilters): Pris
   return {
     status: "Published",
     isExportEnabled: true,
+    ...(filters.categorySlug === EXPORT_CATALOGUE_UNCATEGORIZED_SLUG
+      ? { categories: { none: {} } }
+      : filters.categorySlug
+        ? { categories: { some: { slug: filters.categorySlug } } }
+        : {}),
     ...(filters.collectionSlug ? { collections: { some: { slug: filters.collectionSlug } } } : {}),
     ...(filters.search
       ? {
@@ -343,7 +353,7 @@ export async function findExportCatalogueProducts(
         weightGrams: true,
         isExportFeatured: true,
         collections: { select: { id: true, name: true, slug: true } },
-        images: { where: { isPrimary: true }, take: 1, select: { url: true, altText: true } },
+        images: { orderBy: [{ isPrimary: "desc" }, { sortOrder: "asc" }], take: 6, select: { url: true, altText: true } },
       },
     }),
     prisma.product.count({ where }),
@@ -364,6 +374,87 @@ export function findExportCatalogueProductsByIds(ids: string[]) {
       exportDescription: true,
       weightGrams: true,
       images: { where: { isPrimary: true }, take: 1, select: { url: true, altText: true } },
+    },
+  });
+}
+
+export interface ExportCatalogueCategoryOption {
+  id: string;
+  name: string;
+  slug: string;
+}
+
+/**
+ * Categories with at least one qualifying export-catalogue product — powers
+ * the grouped catalogue's section list. Deliberately lives here, not
+ * category.repository.ts: the Published+isExportEnabled visibility rule
+ * must have exactly one definition (see buildExportCatalogueWhere above),
+ * not a second copy that can drift from it.
+ */
+export function findExportCatalogueCategories(): Promise<ExportCatalogueCategoryOption[]> {
+  return prisma.category.findMany({
+    where: { status: "Active", products: { some: { status: "Published", isExportEnabled: true } } },
+    orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+    select: { id: true, name: true, slug: true },
+  });
+}
+
+export interface ExportCatalogueProductDetailRow {
+  id: string;
+  sku: string;
+  slug: string;
+  name: string;
+  shortDescription: string | null;
+  exportDescription: string | null;
+  weightGrams: number | null;
+  isExportFeatured: boolean;
+  categories: { id: string; name: string; slug: string }[];
+  collections: { id: string; name: string; slug: string }[];
+  images: { url: string; altText: string | null; isPrimary: boolean }[];
+  nutrition: {
+    servingSize: string;
+    calories: Prisma.Decimal;
+    protein: Prisma.Decimal;
+    fat: Prisma.Decimal;
+    saturatedFat: Prisma.Decimal;
+    carbohydrates: Prisma.Decimal;
+    sugar: Prisma.Decimal;
+    fibre: Prisma.Decimal;
+    sodium: Prisma.Decimal;
+  } | null;
+  ingredients: { name: string; isAllergen: boolean }[];
+  allergens: { name: string; icon: string | null }[];
+  certifications: { name: string; certificateImage: string | null }[];
+}
+
+/**
+ * /export/catalogue/[slug]'s own fetch — same hardcoded
+ * Published+isExportEnabled visibility rule as the listing above, never
+ * caller-supplied. findFirst (not findUnique) since the where combines the
+ * unique slug with those extra filters, the same pattern
+ * findExportCatalogueProductsByIds already uses for id+status+isExportEnabled.
+ * Returns null on no match or on a real-but-unpublished/export-disabled
+ * product — the caller must notFound(), never fabricate a page for either case.
+ */
+export function findExportCatalogueProductBySlug(slug: string): Promise<ExportCatalogueProductDetailRow | null> {
+  return prisma.product.findFirst({
+    where: { slug, status: "Published", isExportEnabled: true },
+    select: {
+      id: true,
+      sku: true,
+      slug: true,
+      name: true,
+      shortDescription: true,
+      exportDescription: true,
+      weightGrams: true,
+      isExportFeatured: true,
+      categories: { where: { status: "Active" }, select: { id: true, name: true, slug: true } },
+      collections: { select: { id: true, name: true, slug: true } },
+      images: { orderBy: [{ isPrimary: "desc" }, { sortOrder: "asc" }], select: { url: true, altText: true, isPrimary: true } },
+      nutrition: true,
+      ingredients: { orderBy: { sortOrder: "asc" }, select: { name: true, isAllergen: true } },
+      allergens: { select: { name: true, icon: true } },
+      certifications: { select: { name: true, certificateImage: true } },
     },
   });
 }
