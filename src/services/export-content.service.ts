@@ -1,7 +1,11 @@
 import * as exportContentRepository from "@/repositories/export-content.repository";
 import { listCertifications } from "@/repositories/product.repository";
 import { writeAuditLog } from "@/services/audit-log.service";
-import { ExportProcessStepNotFoundError, ExportSolutionCardNotFoundError } from "@/services/export-content.errors";
+import {
+  ExportCertificationStripItemNotFoundError,
+  ExportProcessStepNotFoundError,
+  ExportSolutionCardNotFoundError,
+} from "@/services/export-content.errors";
 import { requirePermission } from "@/services/permission.service";
 
 export interface ExportPageHeroSettingInput {
@@ -53,6 +57,7 @@ export async function updatePageHeroSetting(adminUserId: string, input: ExportPa
 
 export interface ExportSolutionCardInput {
   icon: string;
+  iconImageUrl?: string | null;
   title: string;
   description: string;
   visible?: boolean;
@@ -60,8 +65,15 @@ export interface ExportSolutionCardInput {
 
 export interface ExportProcessStepInput {
   icon: string;
+  iconImageUrl?: string | null;
   title: string;
   description: string;
+  visible?: boolean;
+}
+
+export interface ExportCertificationStripItemInput {
+  imageUrl?: string | null;
+  label: string;
   visible?: boolean;
 }
 
@@ -141,6 +153,49 @@ export async function reorderProcessSteps(adminUserId: string, orderedIds: strin
   await writeAuditLog({ actorId: adminUserId, action: "export_process_steps_reordered", module: "ExportPortal", targetType: "ExportProcessStep", targetId: "all" });
 }
 
+// --- Certification strip items (admin, gated ExportPortal) ---
+// Deliberately separate from Certification/getCertificationsForStorefront
+// below — this strip holds any short trust claim the business wants
+// shown under the hero, not only formal product certifications, and the
+// business wants to keep adding to it freely. See the schema comment on
+// ExportCertificationStripItem.
+
+export async function listCertificationStripItemsForAdmin(adminUserId: string) {
+  await requirePermission(adminUserId, "ExportPortal", "View");
+  return exportContentRepository.listCertificationStripItems();
+}
+
+export async function addCertificationStripItem(adminUserId: string, input: ExportCertificationStripItemInput) {
+  await requirePermission(adminUserId, "ExportPortal", "Edit");
+  const sortOrder = await exportContentRepository.nextCertificationStripItemSortOrder();
+  const item = await exportContentRepository.createCertificationStripItem({ sortOrder, ...input });
+  await writeAuditLog({ actorId: adminUserId, action: "export_certification_strip_item_added", module: "ExportPortal", targetType: "ExportCertificationStripItem", targetId: item.id });
+  return item;
+}
+
+export async function updateCertificationStripItem(adminUserId: string, id: string, input: Partial<ExportCertificationStripItemInput>) {
+  await requirePermission(adminUserId, "ExportPortal", "Edit");
+  const existing = await exportContentRepository.findCertificationStripItemById(id);
+  if (!existing) throw new ExportCertificationStripItemNotFoundError();
+  const updated = await exportContentRepository.updateCertificationStripItem(id, input);
+  await writeAuditLog({ actorId: adminUserId, action: "export_certification_strip_item_updated", module: "ExportPortal", targetType: "ExportCertificationStripItem", targetId: id });
+  return updated;
+}
+
+export async function removeCertificationStripItem(adminUserId: string, id: string): Promise<void> {
+  await requirePermission(adminUserId, "ExportPortal", "Delete");
+  const existing = await exportContentRepository.findCertificationStripItemById(id);
+  if (!existing) throw new ExportCertificationStripItemNotFoundError();
+  await exportContentRepository.deleteCertificationStripItemById(id);
+  await writeAuditLog({ actorId: adminUserId, action: "export_certification_strip_item_removed", module: "ExportPortal", targetType: "ExportCertificationStripItem", targetId: id });
+}
+
+export async function reorderCertificationStripItems(adminUserId: string, orderedIds: string[]): Promise<void> {
+  await requirePermission(adminUserId, "ExportPortal", "Edit");
+  await exportContentRepository.reorderCertificationStripItems(orderedIds);
+  await writeAuditLog({ actorId: adminUserId, action: "export_certification_strip_items_reordered", module: "ExportPortal", targetType: "ExportCertificationStripItem", targetId: "all" });
+}
+
 // --- Storefront (public, no permission gate) ---
 
 export async function getPageHeroForStorefront() {
@@ -168,12 +223,19 @@ export async function getProcessStepsForStorefront() {
   return steps.filter((step) => step.visible);
 }
 
+export async function getCertificationStripForStorefront() {
+  const items = await exportContentRepository.listCertificationStripItems();
+  return items.filter((item) => item.visible);
+}
+
 /**
  * Real, admin-managed Certification rows (name + a real certificateImage
- * logo) — the same model already used on individual products. A
- * certification only earns a spot in this site-wide trust strip once it
- * has both a name and a logo image; nothing here invents a certification
- * the business doesn't actually hold.
+ * logo) — the same model already used on individual products. Only used
+ * for the footer's certification badges; the /export page's own
+ * certification strip uses getCertificationStripForStorefront above
+ * instead. A certification only earns a spot in the footer once it has
+ * both a name and a logo image; nothing here invents a certification the
+ * business doesn't actually hold.
  */
 export async function getCertificationsForStorefront() {
   const certifications = await listCertifications();

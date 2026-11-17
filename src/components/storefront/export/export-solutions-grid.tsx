@@ -1,3 +1,5 @@
+import Image from "next/image";
+
 import { ScrollReveal } from "@/components/motion";
 import { Section } from "@/components/storefront/layout/section";
 import { resolveExportIcon } from "@/lib/export-icons";
@@ -5,6 +7,7 @@ import { resolveExportIcon } from "@/lib/export-icons";
 export interface ExportSolutionCardData {
   id: string;
   icon: string;
+  iconImageUrl: string | null;
   title: string;
   description: string;
 }
@@ -29,7 +32,13 @@ export function ExportSolutionsGrid({ cards }: { cards: ExportSolutionCardData[]
             <ScrollReveal key={card.id} delay={index * 0.05}>
               <div className="rounded-lg border border-border-soft bg-cream p-7 text-center">
                 <div className="mx-auto flex size-14 items-center justify-center rounded-full bg-chilli/10">
-                  {Icon && <Icon className="size-6 text-chilli" aria-hidden="true" />}
+                  {card.iconImageUrl ? (
+                    <span className="relative size-7 shrink-0">
+                      <Image src={card.iconImageUrl} alt="" fill sizes="28px" className="object-contain" />
+                    </span>
+                  ) : (
+                    Icon && <Icon className="size-6 text-chilli" aria-hidden="true" />
+                  )}
                 </div>
                 <p className="mt-4 text-h4 font-heading text-charcoal">{card.title}</p>
                 <p className="mt-2 text-small text-charcoal/70">{card.description}</p>

@@ -10,7 +10,7 @@ import { ExportSolutionsGrid } from "@/components/storefront/export/export-solut
 import { Section } from "@/components/storefront/layout/section";
 import { getExportCollectionsForStorefront } from "@/services/export-catalogue.service";
 import {
-  getCertificationsForStorefront,
+  getCertificationStripForStorefront,
   getPageHeroForStorefront,
   getProcessStepsForStorefront,
   getSolutionCardsForStorefront,
@@ -30,10 +30,10 @@ export default async function ExportPage({ searchParams }: ExportPageProps) {
   const { collection } = await searchParams;
   const initialCollectionSlug = typeof collection === "string" ? collection : undefined;
 
-  const [collections, hero, certifications, solutionCards, processSteps] = await Promise.all([
+  const [collections, hero, certificationStripItems, solutionCards, processSteps] = await Promise.all([
     getExportCollectionsForStorefront(),
     getPageHeroForStorefront(),
-    getCertificationsForStorefront(),
+    getCertificationStripForStorefront(),
     getSolutionCardsForStorefront(),
     getProcessStepsForStorefront(),
   ]);
@@ -51,7 +51,7 @@ export default async function ExportPage({ searchParams }: ExportPageProps) {
   return (
     <>
       <ExportPageHero data={hero} />
-      <ExportCertificationStrip certifications={certifications} />
+      <ExportCertificationStrip items={certificationStripItems} />
       <ExportSolutionsGrid cards={solutionCards} />
       <ExportBuyerJourney steps={processSteps} />
 

@@ -30,6 +30,7 @@ export function createSolutionCard(data: Prisma.ExportSolutionCardCreateInput) {
 export interface UpdateSolutionCardInput {
   visible?: boolean;
   icon?: string;
+  iconImageUrl?: string | null;
   title?: string;
   description?: string;
 }
@@ -70,6 +71,7 @@ export function createProcessStep(data: Prisma.ExportProcessStepCreateInput) {
 export interface UpdateProcessStepInput {
   visible?: boolean;
   icon?: string;
+  iconImageUrl?: string | null;
   title?: string;
   description?: string;
 }
@@ -90,5 +92,44 @@ export function reorderProcessSteps(orderedIds: string[]) {
 
 export async function nextProcessStepSortOrder(): Promise<number> {
   const last = await prisma.exportProcessStep.findFirst({ orderBy: { sortOrder: "desc" } });
+  return (last?.sortOrder ?? -1) + 1;
+}
+
+// --- Certification strip items (admin-managed, separate from Certification) ---
+
+export function listCertificationStripItems() {
+  return prisma.exportCertificationStripItem.findMany({ orderBy: { sortOrder: "asc" } });
+}
+
+export function findCertificationStripItemById(id: string) {
+  return prisma.exportCertificationStripItem.findUnique({ where: { id } });
+}
+
+export function createCertificationStripItem(data: Prisma.ExportCertificationStripItemCreateInput) {
+  return prisma.exportCertificationStripItem.create({ data });
+}
+
+export interface UpdateCertificationStripItemInput {
+  visible?: boolean;
+  imageUrl?: string | null;
+  label?: string;
+}
+
+export function updateCertificationStripItem(id: string, input: UpdateCertificationStripItemInput) {
+  return prisma.exportCertificationStripItem.update({ where: { id }, data: input });
+}
+
+export function deleteCertificationStripItemById(id: string) {
+  return prisma.exportCertificationStripItem.delete({ where: { id } });
+}
+
+export function reorderCertificationStripItems(orderedIds: string[]) {
+  return prisma.$transaction(
+    orderedIds.map((id, index) => prisma.exportCertificationStripItem.updateMany({ where: { id }, data: { sortOrder: index } })),
+  );
+}
+
+export async function nextCertificationStripItemSortOrder(): Promise<number> {
+  const last = await prisma.exportCertificationStripItem.findFirst({ orderBy: { sortOrder: "desc" } });
   return (last?.sortOrder ?? -1) + 1;
 }

@@ -39,21 +39,21 @@ describe("ExportPageHero", () => {
 });
 
 describe("ExportCertificationStrip", () => {
-  it("renders every certification's name", () => {
+  it("renders every item's label, independent of Certification master data", () => {
     render(
       <ExportCertificationStrip
-        certifications={[
-          { id: "1", name: "ISO 22000", certificateImage: "/certs/iso.png" },
-          { id: "2", name: "HACCP", certificateImage: null },
+        items={[
+          { id: "1", label: "ISO 22000", imageUrl: "/certs/iso.png" },
+          { id: "2", label: "25+ Years of Trust", imageUrl: null },
         ]}
       />,
     );
     expect(screen.getByText("ISO 22000")).toBeInTheDocument();
-    expect(screen.getByText("HACCP")).toBeInTheDocument();
+    expect(screen.getByText("25+ Years of Trust")).toBeInTheDocument();
   });
 
-  it("renders nothing when there are no certifications", () => {
-    const { container } = render(<ExportCertificationStrip certifications={[]} />);
+  it("renders nothing when there are no items", () => {
+    const { container } = render(<ExportCertificationStrip items={[]} />);
     expect(container).toBeEmptyDOMElement();
   });
 });
@@ -63,8 +63,8 @@ describe("ExportSolutionsGrid", () => {
     render(
       <ExportSolutionsGrid
         cards={[
-          { id: "1", icon: "Package", title: "Bulk & Foodservice Supply", description: "Industrial quantities." },
-          { id: "2", icon: "Tag", title: "Private Label / OEM", description: "Custom branding." },
+          { id: "1", icon: "Package", iconImageUrl: null, title: "Bulk & Foodservice Supply", description: "Industrial quantities." },
+          { id: "2", icon: "Tag", iconImageUrl: null, title: "Private Label / OEM", description: "Custom branding." },
         ]}
       />,
     );
@@ -72,6 +72,16 @@ describe("ExportSolutionsGrid", () => {
     expect(heading).toHaveClass("text-center");
     expect(screen.getByText("Bulk & Foodservice Supply")).toBeInTheDocument();
     expect(screen.getByText("Private Label / OEM")).toBeInTheDocument();
+  });
+
+  it("renders the uploaded icon image instead of the curated icon when set", () => {
+    const { container } = render(
+      <ExportSolutionsGrid
+        cards={[{ id: "1", icon: "Package", iconImageUrl: "/icons/custom.png", title: "Custom", description: "d" }]}
+      />,
+    );
+    expect(container.querySelector("img")).toBeInTheDocument();
+    expect(container.querySelector("svg")).not.toBeInTheDocument();
   });
 
   it("renders nothing when there are no cards", () => {
@@ -85,8 +95,8 @@ describe("ExportBuyerJourney", () => {
     render(
       <ExportBuyerJourney
         steps={[
-          { id: "1", icon: "FileText", title: "Inquiry", description: "Tell us your products." },
-          { id: "2", icon: "Truck", title: "Shipment", description: "Shipped to your port." },
+          { id: "1", icon: "FileText", iconImageUrl: null, title: "Inquiry", description: "Tell us your products." },
+          { id: "2", icon: "Truck", iconImageUrl: null, title: "Shipment", description: "Shipped to your port." },
         ]}
       />,
     );
@@ -95,6 +105,14 @@ describe("ExportBuyerJourney", () => {
     expect(screen.getByText("02")).toBeInTheDocument();
     expect(screen.getByText("Inquiry")).toBeInTheDocument();
     expect(screen.getByText("Shipment")).toBeInTheDocument();
+  });
+
+  it("renders the uploaded icon image instead of the curated icon when set", () => {
+    const { container } = render(
+      <ExportBuyerJourney steps={[{ id: "1", icon: "FileText", iconImageUrl: "/icons/custom.png", title: "Custom", description: "d" }]} />,
+    );
+    expect(container.querySelector("img")).toBeInTheDocument();
+    expect(container.querySelector("svg")).not.toBeInTheDocument();
   });
 
   it("renders nothing when there are no steps", () => {

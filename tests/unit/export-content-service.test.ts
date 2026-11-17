@@ -4,18 +4,27 @@ import { afterEach, describe, expect, it } from "vitest";
 import type { AdminAction, AdminModule } from "@/generated/prisma/client";
 import { prisma } from "@/lib/db";
 import { PermissionDeniedError } from "@/services/permission.errors";
-import { ExportProcessStepNotFoundError, ExportSolutionCardNotFoundError } from "@/services/export-content.errors";
 import {
+  ExportCertificationStripItemNotFoundError,
+  ExportProcessStepNotFoundError,
+  ExportSolutionCardNotFoundError,
+} from "@/services/export-content.errors";
+import {
+  addCertificationStripItem,
   addProcessStep,
   addSolutionCard,
+  getCertificationStripForStorefront,
   getCertificationsForStorefront,
   getPageHeroForStorefront,
   getProcessStepsForStorefront,
   getSolutionCardsForStorefront,
+  removeCertificationStripItem,
   removeProcessStep,
   removeSolutionCard,
+  reorderCertificationStripItems,
   reorderProcessSteps,
   reorderSolutionCards,
+  updateCertificationStripItem,
   updatePageHeroSetting,
   updateProcessStep,
   updateSolutionCard,
@@ -44,6 +53,7 @@ afterEach(async () => {
   await prisma.auditLog.deleteMany({ where: { actor: { email: { endsWith: EMAIL_DOMAIN } } } });
   await prisma.exportSolutionCard.deleteMany({});
   await prisma.exportProcessStep.deleteMany({});
+  await prisma.exportCertificationStripItem.deleteMany({});
   await prisma.exportPageHeroSetting.deleteMany({});
   await prisma.adminUser.deleteMany({ where: { email: { endsWith: EMAIL_DOMAIN } } });
   await prisma.rolePermission.deleteMany({ where: { role: { key: { startsWith: ROLE_KEY_PREFIX } } } });
@@ -83,8 +93,9 @@ describe("export-content.service — Export Solutions cards", () => {
     expect(first.sortOrder).toBe(0);
     expect(second.sortOrder).toBe(1);
 
-    const updated = await updateSolutionCard(admin.id, first.id, { title: "Bulk Supply (edited)" });
+    const updated = await updateSolutionCard(admin.id, first.id, { title: "Bulk Supply (edited)", iconImageUrl: "/icons/custom.png" });
     expect(updated.title).toBe("Bulk Supply (edited)");
+    expect(updated.iconImageUrl).toBe("/icons/custom.png");
 
     await reorderSolutionCards(admin.id, [second.id, first.id]);
     const reordered = await prisma.exportSolutionCard.findMany({ orderBy: { sortOrder: "asc" } });
@@ -147,7 +158,42 @@ describe("export-content.service — Export Process steps", () => {
   });
 });
 
-describe("export-content.service — certifications strip", () => {
+describe("export-content.service — certification strip items", () => {
+  it("adds, updates, removes, and reorders items, independent of Certification master data", async () => {
+    const admin = await makeFullAccessAdmin();
+
+    const first = await addCertificationStripItem(admin.id, { label: "ISO 22000", imageUrl: "/certs/iso.png" });
+    const second = await addCertificationStripItem(admin.id, { label: "25+ Years of Trust" });
+    expect(first.sortOrder).toBe(0);
+    expect(second.sortOrder).toBe(1);
+
+    const updated = await updateCertificationStripItem(admin.id, first.id, { label: "ISO 22000:2018" });
+    expect(updated.label).toBe("ISO 22000:2018");
+
+    await reorderCertificationStripItems(admin.id, [second.id, first.id]);
+    const reordered = await prisma.exportCertificationStripItem.findMany({ orderBy: { sortOrder: "asc" } });
+    expect(reordered.map((item) => item.id)).toEqual([second.id, first.id]);
+
+    await removeCertificationStripItem(admin.id, first.id);
+    await expect(prisma.exportCertificationStripItem.findUnique({ where: { id: first.id } })).resolves.toBeNull();
+  });
+
+  it("rejects an unknown item id", async () => {
+    const admin = await makeFullAccessAdmin();
+    await expect(updateCertificationStripItem(admin.id, "not-a-real-id", { label: "x" })).rejects.toBeInstanceOf(ExportCertificationStripItemNotFoundError);
+  });
+
+  it("the storefront getter only returns visible items", async () => {
+    const admin = await makeFullAccessAdmin();
+    const visible = await addCertificationStripItem(admin.id, { label: "Visible" });
+    await addCertificationStripItem(admin.id, { label: "Hidden", visible: false });
+
+    const result = await getCertificationStripForStorefront();
+    expect(result.map((item) => item.id)).toEqual([visible.id]);
+  });
+});
+
+describe("export-content.service — certifications (footer only)", () => {
   it("only includes certifications that have a real logo image", async () => {
     const withLogo = await prisma.certification.create({ data: { name: "ISO 22000", certificateImage: "/certs/iso.png" } });
     await prisma.certification.create({ data: { name: "No Logo Yet", certificateImage: null } });

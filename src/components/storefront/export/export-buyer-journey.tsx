@@ -1,9 +1,12 @@
+import Image from "next/image";
+
 import { Section } from "@/components/storefront/layout/section";
 import { resolveExportIcon } from "@/lib/export-icons";
 
 export interface ExportProcessStepData {
   id: string;
   icon: string;
+  iconImageUrl: string | null;
   title: string;
   description: string;
 }
@@ -29,7 +32,13 @@ export function ExportBuyerJourney({ steps }: { steps: ExportProcessStepData[] }
           return (
             <div key={step.id} className="relative flex flex-1 flex-col items-center px-2 text-center">
               <div className="relative z-10 flex size-12 items-center justify-center rounded-full border-2 border-chilli bg-cream">
-                {Icon && <Icon className="size-5 text-chilli" aria-hidden="true" />}
+                {step.iconImageUrl ? (
+                  <span className="relative size-6 shrink-0">
+                    <Image src={step.iconImageUrl} alt="" fill sizes="24px" className="object-contain" />
+                  </span>
+                ) : (
+                  Icon && <Icon className="size-5 text-chilli" aria-hidden="true" />
+                )}
               </div>
               <p className="mt-2.5 text-caption font-semibold tracking-wide text-chilli">{String(index + 1).padStart(2, "0")}</p>
               <p className="mt-0.5 text-small font-semibold text-charcoal">{step.title}</p>
