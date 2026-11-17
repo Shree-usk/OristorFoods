@@ -9,7 +9,9 @@ import { PermissionDeniedError } from "@/services/permission.errors";
 import {
   bulkSetExportVisibilityForAdmin,
   generateExportCataloguePdf,
+  getExportCatalogueProductDetail,
   getExportCatalogueSettingForAdmin,
+  listExportCatalogueCategoryGroups,
   listExportCatalogueProducts,
   listExportCatalogueProductsForAdmin,
   updateExportCatalogueSettingForAdmin,
@@ -48,10 +50,23 @@ async function makeProduct(overrides: Partial<Parameters<typeof prisma.product.c
   });
 }
 
+async function makeCategory(overrides: Partial<Parameters<typeof prisma.category.create>[0]["data"]> = {}) {
+  sequence += 1;
+  return prisma.category.create({
+    data: {
+      name: `Export Catalogue Test Category ${sequence}`,
+      slug: `export-catalogue-svc-test-category-${sequence}`,
+      status: "Active",
+      ...overrides,
+    },
+  });
+}
+
 afterEach(async () => {
   await prisma.exportCatalogueSetting.deleteMany({ where: { id: "global" } });
   await prisma.product.deleteMany({ where: { sku: { startsWith: SKU_PREFIX } } });
   await prisma.collection.deleteMany({ where: { slug: { startsWith: "export-catalogue-svc-test-" } } });
+  await prisma.category.deleteMany({ where: { slug: { startsWith: "export-catalogue-svc-test-category-" } } });
   await prisma.auditLog.deleteMany({ where: { actor: { email: { endsWith: EMAIL_DOMAIN } } } });
   await prisma.adminUser.deleteMany({ where: { email: { endsWith: EMAIL_DOMAIN } } });
   await prisma.rolePermission.deleteMany({ where: { role: { key: { startsWith: ROLE_KEY_PREFIX } } } });
@@ -94,6 +109,105 @@ describe("export-catalogue.service — listExportCatalogueProducts (public)", ()
     const result = await listExportCatalogueProducts({ search: "cinnamon" });
 
     expect(result.items.map((item) => item.id)).toEqual([match.id]);
+  });
+
+  it("filters by categorySlug", async () => {
+    const category = await makeCategory();
+    const inCategory = await makeProduct({ isExportEnabled: true, categories: { connect: { id: category.id } } });
+    await makeProduct({ isExportEnabled: true });
+
+    const result = await listExportCatalogueProducts({ categorySlug: category.slug });
+
+    expect(result.items.map((item) => item.id)).toEqual([inCategory.id]);
+  });
+
+  it("the 'uncategorized' sentinel returns only products with zero categories", async () => {
+    const category = await makeCategory();
+    const categorized = await makeProduct({ isExportEnabled: true, categories: { connect: { id: category.id } } });
+    const uncategorized = await makeProduct({ isExportEnabled: true });
+
+    const result = await listExportCatalogueProducts({ categorySlug: "uncategorized" });
+
+    expect(result.items.map((item) => item.id)).toEqual([uncategorized.id]);
+    expect(result.items.map((item) => item.id)).not.toContain(categorized.id);
+  });
+});
+
+describe("export-catalogue.service — listExportCatalogueCategoryGroups (public)", () => {
+  it("groups qualifying products under each Active category with qualifying products, in sortOrder", async () => {
+    const second = await makeCategory({ sortOrder: 2 });
+    const first = await makeCategory({ sortOrder: 1 });
+    const productInFirst = await makeProduct({ isExportEnabled: true, categories: { connect: { id: first.id } } });
+    const productInSecond = await makeProduct({ isExportEnabled: true, categories: { connect: { id: second.id } } });
+
+    const groups = await listExportCatalogueCategoryGroups();
+    const relevant = groups.filter((group) => group.category?.id === first.id || group.category?.id === second.id);
+
+    expect(relevant.map((group) => group.category?.id)).toEqual([first.id, second.id]);
+    expect(relevant[0].items.map((item) => item.id)).toEqual([productInFirst.id]);
+    expect(relevant[1].items.map((item) => item.id)).toEqual([productInSecond.id]);
+  });
+
+  it("omits a category with zero qualifying products", async () => {
+    const empty = await makeCategory();
+
+    const groups = await listExportCatalogueCategoryGroups();
+
+    expect(groups.some((group) => group.category?.id === empty.id)).toBe(false);
+  });
+
+  it("appends an Uncategorized group only when a product has zero categories", async () => {
+    const uncategorized = await makeProduct({ isExportEnabled: true });
+
+    const groups = await listExportCatalogueCategoryGroups();
+    const uncategorizedGroup = groups.find((group) => group.category === null);
+
+    expect(uncategorizedGroup).toBeDefined();
+    expect(uncategorizedGroup?.items.map((item) => item.id)).toContain(uncategorized.id);
+  });
+
+  it("caps each section's items while reporting the real total", async () => {
+    const category = await makeCategory();
+    const products = await Promise.all(
+      Array.from({ length: 9 }, () => makeProduct({ isExportEnabled: true, categories: { connect: { id: category.id } } })),
+    );
+
+    const groups = await listExportCatalogueCategoryGroups();
+    const group = groups.find((g) => g.category?.id === category.id);
+
+    expect(group?.items.length).toBe(8);
+    expect(group?.total).toBe(products.length);
+  });
+});
+
+describe("export-catalogue.service — getExportCatalogueProductDetail (public)", () => {
+  it("returns null for a Draft, Archived, export-disabled, or missing slug", async () => {
+    const draft = await makeProduct({ isExportEnabled: true, status: "Draft" });
+    const archived = await makeProduct({ isExportEnabled: true, status: "Archived" });
+    const exportDisabled = await makeProduct({ isExportEnabled: false });
+
+    expect(await getExportCatalogueProductDetail(draft.slug)).toBeNull();
+    expect(await getExportCatalogueProductDetail(archived.slug)).toBeNull();
+    expect(await getExportCatalogueProductDetail(exportDisabled.slug)).toBeNull();
+    expect(await getExportCatalogueProductDetail("not-a-real-slug")).toBeNull();
+  });
+
+  it("returns the full detail shape for a qualifying product, with nutrition as plain numbers", async () => {
+    const category = await makeCategory();
+    const product = await makeProduct({
+      isExportEnabled: true,
+      exportDescription: "Export-ready packaging.",
+      categories: { connect: { id: category.id } },
+      nutrition: { create: { servingSize: "30g", calories: "120.50", protein: "2.00", fat: "1.00", saturatedFat: "0.50", carbohydrates: "25.00", sugar: "10.00", fibre: "1.00", sodium: "5.00" } },
+    });
+
+    const detail = await getExportCatalogueProductDetail(product.slug);
+
+    expect(detail?.id).toBe(product.id);
+    expect(detail?.exportDescription).toBe("Export-ready packaging.");
+    expect(detail?.categories.map((c) => c.id)).toEqual([category.id]);
+    expect(detail?.nutrition?.calories).toBe(120.5);
+    expect(typeof detail?.nutrition?.calories).toBe("number");
   });
 });
 

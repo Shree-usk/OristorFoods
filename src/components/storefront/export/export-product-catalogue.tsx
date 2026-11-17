@@ -9,7 +9,9 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { fetchExportCatalogueProducts } from "@/lib/api/export-catalogue-client";
+import type { ExportCatalogueCategoryGroup } from "@/services/export-catalogue.service";
 
+import { ExportCatalogueCategorySections } from "./export-catalogue-category-sections";
 import { ExportProductCard } from "./export-product-card";
 import { ExportSelectionBar } from "./export-selection-bar";
 
@@ -21,26 +23,45 @@ export interface ExportCatalogueCollectionOption {
   name: string;
 }
 
-interface ExportProductCatalogueProps {
-  collectionOptions: ExportCatalogueCollectionOption[];
-  initialCollectionSlug?: string;
+export interface ExportCatalogueCategoryOption {
+  slug: string;
+  name: string;
 }
 
-export function ExportProductCatalogue({ collectionOptions, initialCollectionSlug }: ExportProductCatalogueProps) {
+interface ExportProductCatalogueProps {
+  collectionOptions: ExportCatalogueCollectionOption[];
+  categoryOptions: ExportCatalogueCategoryOption[];
+  initialCollectionSlug?: string;
+  initialCategorySlug?: string;
+  initialCategoryGroups: ExportCatalogueCategoryGroup[];
+}
+
+export function ExportProductCatalogue({
+  collectionOptions,
+  categoryOptions,
+  initialCollectionSlug,
+  initialCategorySlug,
+  initialCategoryGroups,
+}: ExportProductCatalogueProps) {
   const [search, setSearch] = useState("");
   const [collectionSlug, setCollectionSlug] = useState<string | undefined>(initialCollectionSlug);
+  const [categorySlug, setCategorySlug] = useState<string | undefined>(initialCategorySlug);
   const [page, setPage] = useState(1);
   const debouncedSearch = useDebouncedValue(search, SEARCH_DEBOUNCE_MS);
+  const isFiltered = Boolean(debouncedSearch || collectionSlug || categorySlug);
 
   const query = useQuery({
-    queryKey: ["export-catalogue-products", debouncedSearch, collectionSlug, page],
-    queryFn: ({ signal }) => fetchExportCatalogueProducts({ search: debouncedSearch || undefined, collectionSlug, page, pageSize: PAGE_SIZE }, signal),
+    queryKey: ["export-catalogue-products", debouncedSearch, collectionSlug, categorySlug, page],
+    queryFn: ({ signal }) =>
+      fetchExportCatalogueProducts({ search: debouncedSearch || undefined, collectionSlug, categorySlug, page, pageSize: PAGE_SIZE }, signal),
     placeholderData: keepPreviousData,
+    enabled: isFiltered,
   });
 
   function clearFilters() {
     setSearch("");
     setCollectionSlug(undefined);
+    setCategorySlug(undefined);
     setPage(1);
   }
 
@@ -85,7 +106,26 @@ export function ExportProductCatalogue({ collectionOptions, initialCollectionSlu
             ))}
           </SelectContent>
         </Select>
-        {(search || collectionSlug) && (
+        <Select
+          value={categorySlug ?? "all"}
+          onValueChange={(value) => {
+            setCategorySlug(value && value !== "all" ? value : undefined);
+            setPage(1);
+          }}
+        >
+          <SelectTrigger aria-label="Filter by category" className="w-56">
+            <SelectValue>{(selected: string | null) => (selected && selected !== "all" ? categoryOptions.find((option) => option.slug === selected)?.name ?? "All categories" : "All categories")}</SelectValue>
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All categories</SelectItem>
+            {categoryOptions.map((option) => (
+              <SelectItem key={option.slug} value={option.slug}>
+                {option.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        {(search || collectionSlug || categorySlug) && (
           <Button type="button" variant="ghost" size="sm" onClick={clearFilters}>
             Clear filters
           </Button>
@@ -93,7 +133,9 @@ export function ExportProductCatalogue({ collectionOptions, initialCollectionSlu
       </div>
 
       <div className="mt-6">
-        {query.isPending ? (
+        {!isFiltered ? (
+          <ExportCatalogueCategorySections groups={initialCategoryGroups} />
+        ) : query.isPending ? (
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
             {Array.from({ length: 8 }).map((_, i) => (
               <div key={i} className="aspect-[3/4] animate-pulse rounded-lg bg-charcoal/5" />
@@ -118,7 +160,7 @@ export function ExportProductCatalogue({ collectionOptions, initialCollectionSlu
         ) : (
           <div className="rounded-lg border border-charcoal/10 bg-ivory p-8 text-center">
             <p className="text-body text-charcoal/70">No products match those filters.</p>
-            {(search || collectionSlug) && (
+            {(search || collectionSlug || categorySlug) && (
               <Button type="button" variant="outline" size="sm" className="mt-3" onClick={clearFilters}>
                 Clear filters
               </Button>

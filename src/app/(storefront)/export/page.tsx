@@ -8,7 +8,7 @@ import { ExportPageHero } from "@/components/storefront/export/export-page-hero"
 import { ExportProductCatalogue } from "@/components/storefront/export/export-product-catalogue";
 import { ExportSolutionsGrid } from "@/components/storefront/export/export-solutions-grid";
 import { Section } from "@/components/storefront/layout/section";
-import { getExportCollectionsForStorefront } from "@/services/export-catalogue.service";
+import { getExportCollectionsForStorefront, listExportCatalogueCategoryGroups } from "@/services/export-catalogue.service";
 import {
   getCertificationStripForStorefront,
   getPageHeroForStorefront,
@@ -27,15 +27,17 @@ interface ExportPageProps {
 }
 
 export default async function ExportPage({ searchParams }: ExportPageProps) {
-  const { collection } = await searchParams;
+  const { collection, category } = await searchParams;
   const initialCollectionSlug = typeof collection === "string" ? collection : undefined;
+  const initialCategorySlug = typeof category === "string" ? category : undefined;
 
-  const [collections, hero, certificationStripItems, solutionCards, processSteps] = await Promise.all([
+  const [collections, hero, certificationStripItems, solutionCards, processSteps, categoryGroups] = await Promise.all([
     getExportCollectionsForStorefront(),
     getPageHeroForStorefront(),
     getCertificationStripForStorefront(),
     getSolutionCardsForStorefront(),
     getProcessStepsForStorefront(),
+    listExportCatalogueCategoryGroups(),
   ]);
   const resolvedCollections = collections
     .filter((collection) => collection.image)
@@ -47,6 +49,9 @@ export default async function ExportPage({ searchParams }: ExportPageProps) {
       description: collection.description,
     }));
   const collectionOptions = collections.map((collection) => ({ slug: collection.slug, name: collection.name }));
+  const categoryOptions = categoryGroups
+    .filter((group) => group.category !== null)
+    .map((group) => ({ slug: group.category!.slug, name: group.category!.name }));
 
   return (
     <>
@@ -62,7 +67,13 @@ export default async function ExportPage({ searchParams }: ExportPageProps) {
       ) : null}
 
       <Section id="catalogue" spacing="sm">
-        <ExportProductCatalogue collectionOptions={collectionOptions} initialCollectionSlug={initialCollectionSlug} />
+        <ExportProductCatalogue
+          collectionOptions={collectionOptions}
+          categoryOptions={categoryOptions}
+          initialCollectionSlug={initialCollectionSlug}
+          initialCategorySlug={initialCategorySlug}
+          initialCategoryGroups={categoryGroups}
+        />
       </Section>
 
       <Section id="enquiry">

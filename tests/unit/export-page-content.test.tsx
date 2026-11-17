@@ -2,6 +2,7 @@ import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
 import { ExportBuyerJourney } from "@/components/storefront/export/export-buyer-journey";
+import { ExportCatalogueCategorySections } from "@/components/storefront/export/export-catalogue-category-sections";
 import { ExportCertificationStrip } from "@/components/storefront/export/export-certification-strip";
 import { ExportPageHero } from "@/components/storefront/export/export-page-hero";
 import { ExportSolutionsGrid } from "@/components/storefront/export/export-solutions-grid";
@@ -117,6 +118,52 @@ describe("ExportBuyerJourney", () => {
 
   it("renders nothing when there are no steps", () => {
     const { container } = render(<ExportBuyerJourney steps={[]} />);
+    expect(container).toBeEmptyDOMElement();
+  });
+});
+
+describe("ExportCatalogueCategorySections", () => {
+  const product = {
+    id: "p1",
+    sku: "SKU-1",
+    slug: "product-1",
+    name: "Product One",
+    shortDescription: null,
+    exportDescription: null,
+    weightGrams: null,
+    isExportFeatured: false,
+    collections: [],
+    images: [],
+  };
+
+  it("renders a heading per category and 'Uncategorized' for the null-category group", () => {
+    render(
+      <ExportCatalogueCategorySections
+        groups={[
+          { category: { id: "c1", name: "Spices", slug: "spices" }, items: [product], total: 1 },
+          { category: null, items: [{ ...product, id: "p2", slug: "product-2" }], total: 1 },
+        ]}
+      />,
+    );
+    expect(screen.getByRole("heading", { level: 3, name: "Spices" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 3, name: "Uncategorized" })).toBeInTheDocument();
+  });
+
+  it("shows a 'View all' link only when total exceeds the items shown", () => {
+    render(
+      <ExportCatalogueCategorySections
+        groups={[
+          { category: { id: "c1", name: "Spices", slug: "spices" }, items: [product], total: 10 },
+          { category: { id: "c2", name: "Snacks", slug: "snacks" }, items: [product], total: 1 },
+        ]}
+      />,
+    );
+    expect(screen.getByRole("link", { name: "View all in Spices" })).toHaveAttribute("href", "/export?category=spices#catalogue");
+    expect(screen.queryByRole("link", { name: "View all in Snacks" })).not.toBeInTheDocument();
+  });
+
+  it("renders nothing when there are no groups", () => {
+    const { container } = render(<ExportCatalogueCategorySections groups={[]} />);
     expect(container).toBeEmptyDOMElement();
   });
 });

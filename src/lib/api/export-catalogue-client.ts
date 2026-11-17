@@ -27,6 +27,7 @@ export interface ExportCatalogueProductPage {
 export interface ExportCatalogueProductQuery {
   search?: string;
   collectionSlug?: string;
+  categorySlug?: string;
   page?: number;
   pageSize?: number;
 }
@@ -35,6 +36,7 @@ export async function fetchExportCatalogueProducts(query: ExportCatalogueProduct
   const params = new URLSearchParams();
   if (query.search) params.set("search", query.search);
   if (query.collectionSlug) params.set("collectionSlug", query.collectionSlug);
+  if (query.categorySlug) params.set("categorySlug", query.categorySlug);
   params.set("page", String(query.page ?? 1));
   params.set("pageSize", String(query.pageSize ?? 24));
 
