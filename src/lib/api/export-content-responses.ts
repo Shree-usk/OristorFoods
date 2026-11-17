@@ -7,6 +7,7 @@ import { serverErrorResponse } from "@/lib/api/responses";
 const statusByCode: Record<ExportContentErrorCode, number> = {
   solution_card_not_found: 404,
   process_step_not_found: 404,
+  certification_strip_item_not_found: 404,
 };
 
 /** Every /api/admin/export/{solution-cards,process-steps}/* route handler's catch block goes through this. */

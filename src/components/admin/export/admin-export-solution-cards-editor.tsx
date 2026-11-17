@@ -7,6 +7,7 @@ import { GripVertical } from "lucide-react";
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 
+import { AssetPickerDialog } from "@/components/admin/media/asset-picker-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -24,7 +25,7 @@ import {
 import { EXPORT_ICON_OPTIONS } from "@/lib/export-icons";
 import { toastManager } from "@/lib/toast";
 
-const EMPTY_CARD: ExportSolutionCardInput = { icon: "Package", title: "", description: "", visible: true };
+const EMPTY_CARD: ExportSolutionCardInput = { icon: "Package", iconImageUrl: "", title: "", description: "", visible: true };
 
 /** /export page revamp. The 3 "Export Solutions" cards shown right after the certification strip — same list+drag-reorder shape as why-choose-features-editor.tsx, minus the section/sheet wrapper since this IS the dedicated admin page. */
 export function AdminExportSolutionCardsEditor() {
@@ -121,7 +122,11 @@ function SortableCardRow({ card, onEdit, onRemove }: { card: ExportSolutionCard;
         <button type="button" {...attributes} {...listeners} className="cursor-grab text-muted-foreground active:cursor-grabbing" aria-label={`Reorder ${card.title}`}>
           <GripVertical className="size-4" />
         </button>
-        {Icon && <Icon className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />}
+        {card.iconImageUrl ? (
+          <img src={card.iconImageUrl} alt="" className="size-4 shrink-0 object-contain" />
+        ) : (
+          Icon && <Icon className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+        )}
         <span className="truncate text-small text-charcoal">{card.title || "(untitled)"}</span>
         {!card.visible && <span className="text-small text-muted-foreground">(hidden)</span>}
       </div>
@@ -139,10 +144,13 @@ function SortableCardRow({ card, onEdit, onRemove }: { card: ExportSolutionCard;
 
 function CardForm({ card, onSaved, onCancel }: { card: ExportSolutionCard | null; onSaved: () => void; onCancel: () => void }) {
   const [form, setForm] = useState<ExportSolutionCardInput>(
-    card ? { icon: card.icon, title: card.title, description: card.description, visible: card.visible } : EMPTY_CARD,
+    card
+      ? { icon: card.icon, iconImageUrl: card.iconImageUrl ?? "", title: card.title, description: card.description, visible: card.visible }
+      : EMPTY_CARD,
   );
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [picker, setPicker] = useState(false);
 
   function set<K extends keyof ExportSolutionCardInput>(key: K, value: ExportSolutionCardInput[K]) {
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -180,6 +188,23 @@ function CardForm({ card, onSaved, onCancel }: { card: ExportSolutionCard | null
             ))}
           </SelectContent>
         </Select>
+        <p className="mt-1 text-caption text-charcoal/60">Used unless a custom icon image is uploaded below.</p>
+      </div>
+      <div>
+        <Label>Custom icon image (optional)</Label>
+        <div className="mt-1 flex items-center gap-3">
+          <Button type="button" variant="outline" size="sm" onClick={() => setPicker(true)}>
+            {form.iconImageUrl ? "Change image" : "Upload image"}
+          </Button>
+          {form.iconImageUrl && (
+            <>
+              <img src={form.iconImageUrl} alt="" className="size-6 shrink-0 object-contain" />
+              <Button type="button" variant="ghost" size="sm" onClick={() => set("iconImageUrl", "")}>
+                Clear
+              </Button>
+            </>
+          )}
+        </div>
       </div>
       <div>
         <Label htmlFor="sol-card-title">Title</Label>
@@ -198,6 +223,15 @@ function CardForm({ card, onSaved, onCancel }: { card: ExportSolutionCard | null
           Back
         </Button>
       </div>
+
+      <AssetPickerDialog
+        open={picker}
+        onOpenChange={setPicker}
+        onSelect={(asset) => {
+          set("iconImageUrl", asset.url);
+          setPicker(false);
+        }}
+      />
     </div>
   );
 }

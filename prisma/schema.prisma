@@ -4043,6 +4043,12 @@ model ExportSolutionCard {
   sortOrder   Int
   visible     Boolean  @default(true)
   icon        String
+  /**
+   * Admin-uploaded icon image, shown in place of the curated `icon` when
+   * set. `icon` stays required as the fallback so a card never renders
+   * with no icon at all if an uploaded image is later removed.
+   */
+  iconImageUrl String?
   title       String
   description String
   createdAt   DateTime @default(now())
@@ -4054,10 +4060,27 @@ model ExportProcessStep {
   sortOrder   Int
   visible     Boolean  @default(true)
   icon        String
+  iconImageUrl String?
   title       String
   description String
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+}
+
+// /export page revamp. Deliberately separate from the Certification model
+// (listCertifications/getCertificationsForStorefront, still used by the
+// footer's badge row) — the strip under the hero needs to hold any short
+// trust claim the business wants shown there (not only formal
+// certifications tied to products), and the business wants to keep adding
+// to it without those additions becoming real Certification records.
+model ExportCertificationStripItem {
+  id        String   @id @default(cuid())
+  sortOrder Int
+  visible   Boolean  @default(true)
+  imageUrl  String?
+  label     String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 // Strictly internal — never visible to the enquirer (AC). A reply sent

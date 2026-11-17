@@ -19,8 +19,11 @@ export const exportPageHeroSettingSchema = z.object({
   secondaryCtaHref: z.preprocess(emptyToNull, z.string().trim().min(1).nullable().optional()),
 });
 
+const exportIconImageUrlSchema = z.preprocess(emptyToNull, z.string().trim().min(1).nullable().optional());
+
 export const exportSolutionCardSchema = z.object({
   icon: exportIconSchema,
+  iconImageUrl: exportIconImageUrlSchema,
   title: z.string().trim().min(1, "Title is required.").max(100),
   description: z.string().trim().min(1, "Description is required.").max(300),
   visible: z.boolean().default(true),
@@ -28,6 +31,7 @@ export const exportSolutionCardSchema = z.object({
 
 export const updateExportSolutionCardSchema = z.object({
   icon: exportIconSchema.optional(),
+  iconImageUrl: exportIconImageUrlSchema,
   title: z.string().trim().min(1, "Title is required.").max(100).optional(),
   description: z.string().trim().min(1, "Description is required.").max(300).optional(),
   visible: z.boolean().optional(),
@@ -35,6 +39,7 @@ export const updateExportSolutionCardSchema = z.object({
 
 export const exportProcessStepSchema = z.object({
   icon: exportIconSchema,
+  iconImageUrl: exportIconImageUrlSchema,
   title: z.string().trim().min(1, "Title is required.").max(100),
   description: z.string().trim().min(1, "Description is required.").max(300),
   visible: z.boolean().default(true),
@@ -42,8 +47,21 @@ export const exportProcessStepSchema = z.object({
 
 export const updateExportProcessStepSchema = z.object({
   icon: exportIconSchema.optional(),
+  iconImageUrl: exportIconImageUrlSchema,
   title: z.string().trim().min(1, "Title is required.").max(100).optional(),
   description: z.string().trim().min(1, "Description is required.").max(300).optional(),
+  visible: z.boolean().optional(),
+});
+
+export const exportCertificationStripItemSchema = z.object({
+  imageUrl: z.preprocess(emptyToNull, z.string().trim().min(1).nullable().optional()),
+  label: z.string().trim().min(1, "Label is required.").max(100),
+  visible: z.boolean().default(true),
+});
+
+export const updateExportCertificationStripItemSchema = z.object({
+  imageUrl: z.preprocess(emptyToNull, z.string().trim().min(1).nullable().optional()),
+  label: z.string().trim().min(1, "Label is required.").max(100).optional(),
   visible: z.boolean().optional(),
 });
 

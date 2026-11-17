@@ -1,4 +1,4 @@
-export type ExportContentErrorCode = "solution_card_not_found" | "process_step_not_found";
+export type ExportContentErrorCode = "solution_card_not_found" | "process_step_not_found" | "certification_strip_item_not_found";
 
 export class ExportContentError extends Error {
   constructor(
@@ -19,5 +19,11 @@ export class ExportSolutionCardNotFoundError extends ExportContentError {
 export class ExportProcessStepNotFoundError extends ExportContentError {
   constructor() {
     super("process_step_not_found", "Export process step not found.");
+  }
+}
+
+export class ExportCertificationStripItemNotFoundError extends ExportContentError {
+  constructor() {
+    super("certification_strip_item_not_found", "Certification strip item not found.");
   }
 }

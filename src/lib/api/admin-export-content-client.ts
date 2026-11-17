@@ -43,12 +43,14 @@ export interface ExportSolutionCard {
   sortOrder: number;
   visible: boolean;
   icon: string;
+  iconImageUrl: string | null;
   title: string;
   description: string;
 }
 
 export interface ExportSolutionCardInput {
   icon: string;
+  iconImageUrl?: string | null;
   title: string;
   description: string;
   visible?: boolean;
@@ -105,12 +107,14 @@ export interface ExportProcessStep {
   sortOrder: number;
   visible: boolean;
   icon: string;
+  iconImageUrl: string | null;
   title: string;
   description: string;
 }
 
 export interface ExportProcessStepInput {
   icon: string;
+  iconImageUrl?: string | null;
   title: string;
   description: string;
   visible?: boolean;
@@ -160,4 +164,64 @@ export async function reorderExportProcessSteps(orderedIds: string[]): Promise<v
     body: JSON.stringify({ orderedIds }),
   });
   assertOk(response, "Failed to reorder process steps");
+}
+
+export interface ExportCertificationStripItem {
+  id: string;
+  sortOrder: number;
+  visible: boolean;
+  imageUrl: string | null;
+  label: string;
+}
+
+export interface ExportCertificationStripItemInput {
+  imageUrl?: string | null;
+  label: string;
+  visible?: boolean;
+}
+
+export async function fetchExportCertificationStripItems(): Promise<ExportCertificationStripItem[]> {
+  const response = await fetch("/api/admin/export/certification-strip");
+  if (!response.ok) throw new Error(`Failed to load certification strip items (${response.status})`);
+  return response.json();
+}
+
+export async function addExportCertificationStripItem(input: ExportCertificationStripItemInput): Promise<ExportCertificationStripItem> {
+  const response = await fetch("/api/admin/export/certification-strip", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({ error: "Failed to add strip item" }));
+    throw new Error(body.error ?? "Failed to add strip item");
+  }
+  return response.json();
+}
+
+export async function updateExportCertificationStripItem(id: string, input: Partial<ExportCertificationStripItemInput>): Promise<ExportCertificationStripItem> {
+  const response = await fetch(`/api/admin/export/certification-strip/${id}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({ error: "Failed to update strip item" }));
+    throw new Error(body.error ?? "Failed to update strip item");
+  }
+  return response.json();
+}
+
+export async function removeExportCertificationStripItem(id: string): Promise<void> {
+  const response = await fetch(`/api/admin/export/certification-strip/${id}`, { method: "DELETE" });
+  assertOk(response, "Failed to remove strip item");
+}
+
+export async function reorderExportCertificationStripItems(orderedIds: string[]): Promise<void> {
+  const response = await fetch("/api/admin/export/certification-strip/reorder", {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ orderedIds }),
+  });
+  assertOk(response, "Failed to reorder strip items");
 }
