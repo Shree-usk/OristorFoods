@@ -1,11 +1,20 @@
 import type { Metadata } from "next";
 
 import { ExportBuyerJourney } from "@/components/storefront/export/export-buyer-journey";
+import { ExportCertificationStrip } from "@/components/storefront/export/export-certification-strip";
 import { ExportCollectionsGrid } from "@/components/storefront/export/export-collections-grid";
 import { ExportEnquiryForm } from "@/components/storefront/export/export-enquiry-form";
+import { ExportPageHero } from "@/components/storefront/export/export-page-hero";
 import { ExportProductCatalogue } from "@/components/storefront/export/export-product-catalogue";
+import { ExportSolutionsGrid } from "@/components/storefront/export/export-solutions-grid";
 import { Section } from "@/components/storefront/layout/section";
 import { getExportCollectionsForStorefront } from "@/services/export-catalogue.service";
+import {
+  getCertificationsForStorefront,
+  getPageHeroForStorefront,
+  getProcessStepsForStorefront,
+  getSolutionCardsForStorefront,
+} from "@/services/export-content.service";
 
 export const metadata: Metadata = {
   title: "Export Solutions",
@@ -21,7 +30,13 @@ export default async function ExportPage({ searchParams }: ExportPageProps) {
   const { collection } = await searchParams;
   const initialCollectionSlug = typeof collection === "string" ? collection : undefined;
 
-  const collections = await getExportCollectionsForStorefront();
+  const [collections, hero, certifications, solutionCards, processSteps] = await Promise.all([
+    getExportCollectionsForStorefront(),
+    getPageHeroForStorefront(),
+    getCertificationsForStorefront(),
+    getSolutionCardsForStorefront(),
+    getProcessStepsForStorefront(),
+  ]);
   const resolvedCollections = collections
     .filter((collection) => collection.image)
     .map((collection) => ({
@@ -35,27 +50,16 @@ export default async function ExportPage({ searchParams }: ExportPageProps) {
 
   return (
     <>
-      <Section>
-        <div className="mx-auto max-w-3xl text-center">
-          <p className="text-small font-medium tracking-wide text-chilli uppercase">Export Solutions</p>
-          <h1 className="mt-2 text-h1 font-heading text-charcoal">Partner with Oristor for Global Distribution</h1>
-          <p className="mt-4 text-body text-charcoal/80">
-            From single-origin sourcing to bulk export packaging, we work with distributors, importers, and retailers
-            worldwide to bring authentic Sri Lankan food products to new markets. Browse our collections, select the
-            products you&apos;re interested in, and our export team will follow up with pricing and availability.
-          </p>
-        </div>
-      </Section>
+      <ExportPageHero data={hero} />
+      <ExportCertificationStrip certifications={certifications} />
+      <ExportSolutionsGrid cards={solutionCards} />
+      <ExportBuyerJourney steps={processSteps} />
 
       {resolvedCollections.length > 0 ? (
         <Section spacing="sm">
           <ExportCollectionsGrid collections={resolvedCollections} />
         </Section>
       ) : null}
-
-      <Section spacing="sm">
-        <ExportBuyerJourney />
-      </Section>
 
       <Section id="catalogue" spacing="sm">
         <ExportProductCatalogue collectionOptions={collectionOptions} initialCollectionSlug={initialCollectionSlug} />

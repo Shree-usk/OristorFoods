@@ -17,8 +17,8 @@ export function ExportCollectionsGrid({ collections }: { collections: ExportColl
 
   return (
     <div>
-      <h2 className="text-h2 font-heading text-charcoal">Explore Our Collections</h2>
-      <p className="mt-2 max-w-2xl text-body text-charcoal/80">
+      <h2 className="text-center text-h2 font-heading text-charcoal">Explore Our Collections</h2>
+      <p className="mx-auto mt-2 max-w-2xl text-center text-body text-charcoal/80">
         Browse by collection to find the products best suited to your market, then add them to your selection below.
       </p>
       <div className="mt-8 grid grid-cols-1 gap-6 sm:grid-cols-3">

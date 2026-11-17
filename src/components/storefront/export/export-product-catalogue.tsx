@@ -48,8 +48,8 @@ export function ExportProductCatalogue({ collectionOptions, initialCollectionSlu
 
   return (
     <div>
-      <h2 className="text-h2 font-heading text-charcoal">Product Catalogue</h2>
-      <p className="mt-2 max-w-2xl text-body text-charcoal/80">
+      <h2 className="text-center text-h2 font-heading text-charcoal">Product Catalogue</h2>
+      <p className="mx-auto mt-2 max-w-2xl text-center text-body text-charcoal/80">
         Search our export-ready range and select the products you&apos;d like to include in your enquiry or download as a PDF catalogue.
       </p>
 

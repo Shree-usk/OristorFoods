@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Mail, MapPin, Phone } from "lucide-react";
 
 import { legalLinks } from "@/lib/footer-config";
+import { getCertificationsForStorefront } from "@/services/export-content.service";
 import { getResolvedFooterColumns } from "@/services/navigation.service";
 import { getResolvedCompanyInfo } from "@/services/system-settings.service";
 import { Container } from "./container";
@@ -26,7 +27,11 @@ import { SocialLinks } from "./social-links";
  * `CompanySetting.socialLinks` isn't wired to `<SocialLinks>` here).
  */
 export async function Footer() {
-  const [footerColumns, contactInfo] = await Promise.all([getResolvedFooterColumns(), getResolvedCompanyInfo()]);
+  const [footerColumns, contactInfo, certifications] = await Promise.all([
+    getResolvedFooterColumns(),
+    getResolvedCompanyInfo(),
+    getCertificationsForStorefront(),
+  ]);
 
   return (
     // pb-16 reserves space for the fixed mobile bottom nav (MobileNav,
@@ -78,11 +83,16 @@ export async function Footer() {
                 {link.label}
               </Link>
             ))}
-            {/* Food-safety/quality certification badges (ISO/HACCP, etc.)
-                — placeholder text pending real certification assets; swap
-                for logo images once the client supplies them. */}
-            <span className="rounded border border-ivory/20 px-2 py-0.5 text-caption">ISO Certified</span>
-            <span className="rounded border border-ivory/20 px-2 py-0.5 text-caption">HACCP Compliant</span>
+            {/* Real, admin-managed certifications (Certifications admin) — only
+                ones with a real logo image reach here; see
+                export-content.service.ts::getCertificationsForStorefront.
+                Renders nothing extra when none qualify yet, rather than the
+                placeholder text this used to hardcode. */}
+            {certifications.map((certification) => (
+              <span key={certification.id} className="rounded border border-ivory/20 px-2 py-0.5 text-caption">
+                {certification.name}
+              </span>
+            ))}
           </div>
         </Container>
       </div>
