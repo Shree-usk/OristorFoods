@@ -4011,6 +4011,55 @@ model ExportHeroSetting {
   updatedAt DateTime @updatedAt
 }
 
+// /export page revamp. Deliberately a SEPARATE singleton from
+// ExportHeroSetting above, not a reuse of it — that one is the
+// homepage's own Export teaser, with its own copy/defaults; coupling the
+// two would mean editing one silently changes the other, and would
+// overwrite the /export page's already-approved copy with the teaser's
+// different defaults the moment this ships. Same shape, intentionally
+// independent content.
+model ExportPageHeroSetting {
+  id                 String  @id @default("global")
+  backgroundImageUrl String?
+  backgroundImageAlt String?
+  eyebrow            String?
+  headline           String?
+  description        String? @db.VarChar(500)
+  primaryCtaLabel    String?
+  primaryCtaHref     String?
+  secondaryCtaLabel  String?
+  secondaryCtaHref   String?
+
+  updatedAt DateTime @updatedAt
+}
+
+// /export page revamp. Flat, admin-ordered lists — same shape as
+// PaymentMethodSetting/BankAccountSetting in system-settings.repository.ts
+// (no parent/section relation to hang off of, unlike HomepageSectionFeature).
+// icon is a curated name string, resolved only by whichever
+// Server/Client Component renders it — see export-icons.ts.
+model ExportSolutionCard {
+  id          String   @id @default(cuid())
+  sortOrder   Int
+  visible     Boolean  @default(true)
+  icon        String
+  title       String
+  description String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model ExportProcessStep {
+  id          String   @id @default(cuid())
+  sortOrder   Int
+  visible     Boolean  @default(true)
+  icon        String
+  title       String
+  description String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
 // Strictly internal — never visible to the enquirer (AC). A reply sent
 // to the enquirer is tracked via writeAuditLog instead, not here; see
 // docs/architecture-decisions.md's STORY-058 entry.
