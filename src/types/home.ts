@@ -83,11 +83,12 @@ export interface WhyChooseFeatureData {
 }
 
 /**
- * Shared shape for the marketing "teaser" sections that still use the
- * plain image+text layout (Food Academy, Rewards Club) — structurally
- * identical (headline, description, CTA, image), so one type/component
- * pattern covers both instead of two near-duplicate ones. Export Solutions
- * moved to the richer, admin-controllable ExportHeroData shape below.
+ * Shared shape for the marketing "teaser" sections built on the plain
+ * image+text layout (headline, description, CTA, image) — used as-is by
+ * Rewards Club. Food Academy renders a richer variant (FoodAcademyTeaser)
+ * on the same data, which is why the optional fields below exist only for
+ * it; Export Solutions moved to the fuller, admin-controllable
+ * ExportHeroData shape below.
  */
 export interface TeaserSectionData {
   eyebrow: string;
@@ -97,6 +98,11 @@ export interface TeaserSectionData {
   ctaHref: string;
   imageSrc: ImageSource;
   imageAlt: string;
+  /** Food Academy only — the understated text link next to the CTA button. */
+  secondaryCtaLabel?: string;
+  secondaryCtaHref?: string;
+  /** Food Academy only — short line inside the circular badge over the image. */
+  badgeText?: string;
 }
 
 /**
