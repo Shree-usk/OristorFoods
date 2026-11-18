@@ -63,8 +63,20 @@ export const foodAcademyEntryAdminSchema = z.object({
 
 export type FoodAcademyEntryAdminInput = z.infer<typeof foodAcademyEntryAdminSchema>;
 
+export const listFoodAcademyEntriesQuerySchema = z.object({
+  page: z.coerce.number().int().positive().default(1),
+  pageSize: z.coerce.number().int().positive().max(100).default(20),
+  status: z.enum(["Draft", "Published"]).optional(),
+  categoryId: z.string().min(1).optional(),
+  search: z.string().trim().min(1).optional(),
+});
+
 export const foodAcademyReorderSchema = z.object({
   orderedIds: z.array(z.string().min(1)).min(1),
+});
+
+export const foodAcademyEntryFeaturedSchema = z.object({
+  isFeatured: z.boolean(),
 });
 
 export const foodAcademyPageSettingAdminSchema = z.object({
