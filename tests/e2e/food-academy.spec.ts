@@ -41,6 +41,24 @@ test("the hub page shows a featured row of the featured entries", async ({ page 
   await expect(featuredGrid.getByRole("heading", { level: 3, name: "Tempering (Tadka): A Complete Guide" })).toBeVisible();
 });
 
+test("the hub page renders the hero (its h1) and the category subject tiles, falling back to default copy with no admin edits", async ({ page }) => {
+  await page.goto("/food-academy");
+
+  await expect(page.getByRole("heading", { level: 1, name: "Know your ingredients. Discover your flavour." })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 2, name: "Explore the world of flavour" })).toBeVisible();
+  await expect(page.getByRole("link", { name: /Ingredients/ }).first()).toHaveAttribute("href", "/food-academy?category=ingredients");
+});
+
+test("a category-tile link filters the hub the same way as the matching filter chip", async ({ page }) => {
+  await page.goto("/food-academy");
+
+  await page.getByRole("link", { name: /Ingredients/ }).first().click();
+  await expect(page).toHaveURL(/\/food-academy\?category=ingredients$/);
+  await expect(page.getByRole("heading", { level: 3, name: "Understanding Sri Lankan Curry Powder" })).toBeVisible();
+  // The hero/category-tiles/featured sections are hidden once a filter is active.
+  await expect(page.getByRole("heading", { level: 2, name: "Explore the world of flavour" })).toHaveCount(0);
+});
+
 test("clicking a category chip filters via navigation and updates the URL", async ({ page }) => {
   await page.goto("/food-academy");
 
