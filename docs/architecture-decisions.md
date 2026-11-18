@@ -10372,3 +10372,50 @@ install blocker), so e2e coverage relied on CI.
 Deferred (not part of this build): per-page Instagram post curation
 (explicitly out of scope per the scope decision above); any richer
 featured-content ordering beyond the single `sortOrder` field.
+
+## 2026-11-18 — Homepage "Explore the world of flavour" cards (PR #135)
+
+Built the second half of the homepage's Food Academy concept that had been
+explicitly deferred earlier the same day: a numbered 3-card strip ("Learn
+with Oristor" / "Explore the world of flavour" / "Visit the Food Academy")
+rendered directly under the existing `FoodAcademyTeaser` hero.
+
+**No schema or admin-UI work needed.** By the time this was revisited,
+Project Cinnamon (above) had already shipped a real, admin-managed
+`FoodAcademyCategory` list. New component `FoodAcademyExploreCards`
+(`src/components/storefront/home/food-academy-explore-cards.tsx`) sources
+its 3 cards straight from `listCategories()` — the same function
+`/food-academy`'s own category tiles and filter chips already use — and
+links each card through the hub's existing `?category=<slug>` filter.
+Wired into `homepage-sections.tsx`'s existing `case "FoodAcademy"` via a
+`Fragment`, right after `<FoodAcademyTeaser>`, so it shares that section's
+existing admin visibility/order toggle rather than needing a new
+`HomepageLayout` section type. Satisfies CLAUDE.md's Admin Console
+Principle for free: editing a category in Admin > Food Academy >
+Categories updates this strip too.
+
+Visual style (italic serif numbered label, serif card heading, bordered
+cream card, bottom-right arrow link) matches the user-supplied reference
+concept using only existing design tokens — no new ones added. The
+section's own heading/eyebrow/description text is hardcoded in the
+component, following the same convention as `FeaturedCategories`' "Shop
+by Category" (most homepage sections don't expose a `titleOverride`;
+only a few do).
+
+**Local DB had gone completely empty** (0 categories/recipes/products) —
+the already-documented PGlite data-loss issue — which made the new
+section silently render nothing via its own empty-state guard before a
+`npx prisma db seed` fixed it. Verified at 1440px and 390px via a local
+Playwright-against-system-Chrome screenshot (same workaround as previous
+sessions — the sandboxed Chromium download and the Claude-in-Chrome
+extension were both unavailable in this environment).
+
+Deployed to `staging.oristor.com` the same session: no schema change, so
+no migration/backup was needed — `git pull` → `npm ci --include=dev` →
+`npm run build` → `sudo systemctl restart oristor-web`. Verified via
+`curl -H 'Host: staging.oristor.com' https://localhost/ -k` returning 200
+with the new heading present in the response body, and a clean
+`journalctl -u oristor-web` post-restart. See
+`docs/ORISTOR_VPS_DEPLOYMENT_HANDOVER.md` for the full deploy procedure —
+its "current stage" section was refreshed this session to stop describing
+an already-completed Nginx/systemd/SSL setup as not-yet-done.
