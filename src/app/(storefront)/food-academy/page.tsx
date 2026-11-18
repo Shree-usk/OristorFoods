@@ -6,12 +6,15 @@ import { FoodAcademyCard } from "@/components/storefront/food-academy/food-acade
 import { FoodAcademyCategoryTiles } from "@/components/storefront/food-academy/food-academy-category-tiles";
 import { FoodAcademyFeaturedSection } from "@/components/storefront/food-academy/food-academy-featured-section";
 import { FoodAcademyHero } from "@/components/storefront/food-academy/food-academy-hero";
+import { FoodAcademyInstagramSection } from "@/components/storefront/food-academy/food-academy-instagram-section";
 import { FoodAcademyPageJsonLd } from "@/components/storefront/food-academy/food-academy-page-json-ld";
 import { ItemListJsonLd } from "@/components/storefront/product/item-list-json-ld";
 import { cn } from "@/lib/utils";
 import { listCategories, listEntries, listFeaturedEntries } from "@/services/food-academy.service";
 import { getFoodAcademyPageSettingForStorefront } from "@/services/food-academy-page-setting.service";
+import { getRecentPostsForStorefront } from "@/services/instagram.service";
 import { foodAcademyListQuerySchema } from "@/validation/food-academy.schema";
+import type { InstagramPostData } from "@/types/home";
 
 export async function generateMetadata(): Promise<Metadata> {
   const settings = await getFoodAcademyPageSettingForStorefront();
@@ -41,16 +44,27 @@ export default async function FoodAcademyPage({ searchParams }: FoodAcademyPageP
     page: rawParams.page,
   });
 
-  const [settings, result, categories, featured] = await Promise.all([
+  const [settings, result, categories, featured, instagramPosts] = await Promise.all([
     getFoodAcademyPageSettingForStorefront(),
     listEntries(query),
     listCategories(),
     query.category || query.contentType ? Promise.resolve([]) : listFeaturedEntries(),
+    getRecentPostsForStorefront(10),
   ]);
 
   if (!settings.enabled) notFound();
 
   const hasActiveFilter = Boolean(query.category || query.contentType);
+
+  // Same raw-row-to-view-model mapping homepage-sections.tsx uses for the
+  // homepage's own InstagramGallery — this page's Instagram section reuses
+  // the identical live, auto-synced feed, not a per-page curated one.
+  const resolvedInstagramPosts: InstagramPostData[] = instagramPosts.map((post) => ({
+    id: post.id,
+    imageSrc: post.imageUrl,
+    imageAlt: post.caption ? post.caption.slice(0, 120) : "Oristor Instagram post",
+    href: post.permalink,
+  }));
 
   return (
     <>
@@ -111,6 +125,16 @@ export default async function FoodAcademyPage({ searchParams }: FoodAcademyPageP
         )}
         <ItemListJsonLd items={result.entries.map((entry) => ({ href: entry.href, name: entry.title }))} />
       </Section>
+
+      {settings.instagramEnabled && (
+        <FoodAcademyInstagramSection
+          heading={settings.instagramHeading}
+          description={settings.instagramDescription}
+          ctaLabel={settings.instagramCtaLabel}
+          ctaHref={settings.instagramCtaHref}
+          posts={resolvedInstagramPosts}
+        />
+      )}
 
       <FoodAcademyPageJsonLd name={settings.seoTitle} description={settings.seoMetaDescription} />
     </>

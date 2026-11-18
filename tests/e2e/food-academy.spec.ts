@@ -1,6 +1,8 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test } from "@playwright/test";
 
+import { prisma } from "@/lib/db";
+
 // The storefront's global PageTransition (src/components/motion/page-transition.tsx)
 // fades every route in via Framer Motion (opacity 0 -> 1 over 300ms), keyed
 // on pathname so it restarts on every navigation. Scanning with axe while
@@ -157,6 +159,31 @@ test("returns 404 for a nonexistent or draft Food Academy slug, and 200 for a pu
   expect((await page.request.get("/food-academy/does-not-exist")).status()).toBe(404);
   expect((await page.request.get("/food-academy/the-history-of-avurudu-food-traditions")).status()).toBe(404);
   expect((await page.request.get("/food-academy/understanding-sri-lankan-curry-powder")).status()).toBe(200);
+});
+
+test.describe("Food Academy Instagram section", () => {
+  const POST_ID_PREFIX = "e2e-fa-instagram-";
+
+  test.afterEach(async () => {
+    await prisma.instagramPost.deleteMany({ where: { id: { startsWith: POST_ID_PREFIX } } });
+  });
+
+  test("shows the synced Instagram feed, sourced from the same live feed as the homepage's", async ({ page }) => {
+    await prisma.instagramPost.create({
+      data: {
+        id: `${POST_ID_PREFIX}1`,
+        imageUrl: "/images/products/export/curry-powder.webp",
+        permalink: "https://instagram.com/p/e2e-food-academy-test",
+        caption: "E2E test post",
+        postedAt: new Date(),
+      },
+    });
+
+    await page.goto("/food-academy");
+
+    await expect(page.getByRole("heading", { name: "A Taste of ORISTOR on Instagram" })).toBeVisible();
+    await expect(page.locator('a[href="https://instagram.com/p/e2e-food-academy-test"]')).toBeVisible();
+  });
 });
 
 test("Food Academy hub page has no automatically detectable accessibility violations", async ({ page }) => {

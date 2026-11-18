@@ -10288,3 +10288,87 @@ viewport for a capture.
 Stops here per the story's own phasing — no free-gift (Option C)
 infrastructure, no promotion-rule/stacking changes, nothing deployed
 beyond the local dev/staging branch.
+
+## 2026-11-18 — Project Cinnamon: Food Academy admin CMS + storefront rebuild
+
+Full admin authoring for Food Academy (STORY-020's models — previously
+read-only from the app's own perspective, content only ever arrived via
+`prisma/seed-food-academy.ts`) plus a rebuilt `/food-academy` storefront
+page reading that content. Delivered as 5 incremental PRs starting at #130,
+each independently mergeable per this repo's usual convention; a detailed
+plan was written and approved via plan mode before any code — see the
+plan-mode audit in that session for the full file-by-file design.
+
+**New singleton settings model, `FoodAcademyPageSetting`**: copies
+`ExportHeroSetting`'s exact pattern (`id: "global"`, every content field
+nullable, admin upsert + storefront per-field `?? default` merge) rather
+than StoryPages' repeating-block pattern — right-sized to this page's
+actual shape (a small fixed set of named fields: hero, section headings,
+Instagram config, SEO), not an arbitrary list. `FoodAcademyCategory`
+gained `tileImageUrl`/`tileImageAlt` (reused for both the existing
+entry-filter chips and the new "Explore the world of flavour" subject
+tiles — no parallel taxonomy). `FoodAcademyEntry` gained an admin-curated
+`sortOrder` for featured-card ordering, replacing the previous
+`publishedAt`-based (recency) ordering — a deliberate behavior change.
+
+**New `AdminModule.FoodAcademy` had to be wired into four places**, not
+just the Prisma enum — `prisma/seed-admin.ts`'s default role matrix, and
+two hand-maintained Roles-UI module arrays
+(`src/validation/role-admin.schema.ts`, `src/lib/api/admin-roles-client.ts`)
+that are **not** enum-driven. Both arrays were already stale (missing
+`ContactEnquiries`/`StoryPages` from earlier modules) — backfilled while
+touching the same lines rather than leaving a known gap. Any future new
+`AdminModule` value needs the same four-place check.
+
+**Real bug found and fixed while manually exercising the live admin UI**
+(not caught by unit tests, which mock nothing and only cover the service
+layer): every optional admin-form field (image URLs, descriptions, CTA
+labels) is submitted as `""` when left blank, never omitted. A `.min(1)`
+Zod guard meant to catch a genuinely-missing value instead rejected a
+legitimately-blank field, surfacing a raw Zod error to the admin on save.
+Fixed with a shared `optionalText()` Zod helper (normalizes `""`/
+`undefined` to `null`) applied to every optional field across all three
+admin schemas — this is the pattern to reuse for any future admin form
+built on a plain (non-array) optional text/URL field.
+
+**Admin nav restructured from client-state Tabs to route-based Links**
+partway through (`admin-food-academy-nav.tsx`): Entries needed real,
+deep-linkable routes (list/new/`[id]`) that a Base UI `Tabs` panel can't
+provide, so Page settings and Categories moved to their own routes too.
+
+**Instagram section reuses the existing live, OAuth-synced feed as-is**
+(`getRecentPostsForStorefront`) — a user-confirmed scope decision, not a
+new per-page curation layer. `FoodAcademyInstagramSection` is a new
+component (5/3/2-column grid, larger edge-to-edge tiles) rather than a
+variant of the homepage's `InstagramGallery`, which stays untouched.
+
+**Environment gotchas re-confirmed this session** (all already documented
+elsewhere in this file, hit again back-to-back while manually verifying
+each stage): `prisma/seed-admin.ts` is not idempotent against a non-empty
+DB (aborts on the first `Role` unique-constraint collision, before
+reaching any `AdminUser` creation); the local PGlite `prisma dev` server
+silently lost all data more than once mid-session, and once needed the
+full stale-lock-file recovery documented in this file's STORY-001/
+STORY-064 entries above (`Data\default\server.json` +
+`Data\durable-streams\default\server.lock*`); a stale `.next` build
+cache intermittently 404s unrelated, pre-existing API routes (including
+`/api/auth/session`) until a full `rm -rf .next` + restart. `migrate
+dev` was not attempted at all this time — went straight to the
+already-established offline-diff
+workflow (`migrate diff --from-schema <git-HEAD-copy> --to-schema
+prisma/schema.prisma --script`, applied via `db push` +
+`migrate resolve --applied`).
+
+**Tests**: 44 new/updated unit tests across repository, service, schema
+and component layers (including 3 regression tests for the blank-field
+bug), plus e2e coverage extended in `tests/e2e/admin-food-academy.spec.ts`
+(page settings, categories, full entry CRUD + publish-readiness guard)
+and `tests/e2e/food-academy.spec.ts` (hero/tiles default content,
+category-tile→filter navigation, live Instagram feed). Every stage
+manually verified end-to-end against a live dev server before merging —
+`npm run test:e2e` could not be run locally (documented Playwright-
+install blocker), so e2e coverage relied on CI.
+
+Deferred (not part of this build): per-page Instagram post curation
+(explicitly out of scope per the scope decision above); any richer
+featured-content ordering beyond the single `sortOrder` field.
