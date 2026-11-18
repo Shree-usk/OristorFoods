@@ -46,6 +46,14 @@ describe("listFeaturedEntries", () => {
 
     expect((await listFeaturedEntries()).map((e) => e.title)).toEqual(["Featured"]);
   });
+
+  it("orders by the admin-curated sortOrder", async () => {
+    const category = await makeFoodAcademyCategory();
+    await makeFoodAcademyEntry({ title: "Second", categoryId: category.id, isFeatured: true, sortOrder: 1 });
+    await makeFoodAcademyEntry({ title: "First", categoryId: category.id, isFeatured: true, sortOrder: 0 });
+
+    expect((await listFeaturedEntries()).map((e) => e.title)).toEqual(["First", "Second"]);
+  });
 });
 
 describe("listCategories", () => {

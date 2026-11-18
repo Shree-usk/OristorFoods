@@ -258,7 +258,7 @@ export async function seedFoodAcademy(): Promise<{
     recipeIds.set(slug, recipe.id);
   }
 
-  for (const entry of entries) {
+  for (const [index, entry] of entries.entries()) {
     await prisma.foodAcademyEntry.create({
       data: {
         slug: entry.slug,
@@ -271,6 +271,10 @@ export async function seedFoodAcademy(): Promise<{
         readingTimeMinutes: entry.readingTimeMinutes ?? null,
         authorName: entry.authorName ?? null,
         isFeatured: entry.isFeatured,
+        // Array order doubles as the seed's featured display order — real
+        // admin-curated ordering happens through the Food Academy CMS, this
+        // just avoids every seeded row tying at the sortOrder default.
+        sortOrder: index,
         status: entry.status,
         publishedAt: entry.publishedAt ? new Date(`${entry.publishedAt}T09:00:00Z`) : null,
         sections: entry.sections

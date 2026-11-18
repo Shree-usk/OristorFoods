@@ -1426,6 +1426,11 @@ model FoodAcademyCategory {
   name        String
   slug        String             @unique
   description String?
+  // Cover image for the storefront "Explore the world of flavour" subject
+  // tile — separate from `description` above (used for both the entry
+  // hub's filter-chip label and the tile's body copy), not a duplicate.
+  tileImageUrl String?
+  tileImageAlt String?
   sortOrder   Int                @default(0)
   status      ContentStatus      @default(Active)
   entries     FoodAcademyEntry[]
@@ -1449,6 +1454,10 @@ model FoodAcademyEntry {
   readingTimeMinutes Int?
   authorName         String?
   isFeatured         Boolean                @default(false)
+  // Admin-controlled display order among featured entries (ascending).
+  // Independent of `publishedAt` — featured ordering is curated, not
+  // recency-based.
+  sortOrder          Int                    @default(0)
   status             FoodAcademyEntryStatus @default(Draft)
   publishedAt        DateTime?
   createdAt          DateTime               @default(now())
@@ -1462,6 +1471,7 @@ model FoodAcademyEntry {
   @@index([status, categoryId])
   @@index([status, contentType])
   @@index([status, isFeatured])
+  @@index([status, isFeatured, sortOrder])
 }
 
 model FoodAcademySection {
@@ -1496,6 +1506,58 @@ model FoodAcademyProductRef {
 
   @@unique([entryId, productId])
   @@index([productId])
+}
+
+// /food-academy page settings (singleton) — hero, section copy, SEO, and
+// section visibility for the storefront Food Academy page. Mirrors
+// ExportHeroSetting's "id: global" singleton-row pattern: a plain fixed-field
+// model, not a repeating block list, since this page's admin-editable
+// surface is a small fixed set of named fields, not an arbitrary list of
+// blocks (contrast StoryPageBlock, which IS block-based because its pages
+// have a variable chapter list). Deliberately separate from the homepage's
+// own Food Academy teaser copy (fixture-driven via TeaserSectionData) —
+// same reasoning as ExportHeroSetting staying separate from the homepage
+// Export teaser: coupling the two would mean editing one silently changes
+// the other.
+model FoodAcademyPageSetting {
+  id String @id @default("global")
+
+  enabled Boolean @default(true)
+
+  // Hero
+  heroEyebrow           String?
+  heroHeading           String?
+  heroDescription       String? @db.VarChar(500)
+  heroPrimaryCtaLabel   String?
+  heroPrimaryCtaHref    String?
+  heroSecondaryCtaLabel String?
+  heroSecondaryCtaHref  String?
+  heroImageUrl          String?
+  heroImageAlt          String?
+  heroBadgeText         String?
+
+  // "Explore the world of flavour" section
+  exploreHeading     String?
+  exploreDescription String? @db.VarChar(400)
+
+  // "Featured learning content" section
+  featuredHeading     String?
+  featuredDescription String? @db.VarChar(400)
+
+  // Instagram section
+  instagramEnabled     Boolean @default(true)
+  instagramHeading     String?
+  instagramDescription String? @db.VarChar(400)
+  instagramCtaLabel    String?
+  instagramCtaHref     String?
+
+  // SEO
+  seoTitle           String?
+  seoMetaDescription String? @db.VarChar(300)
+  seoCanonicalPath   String?
+  seoOgImageUrl      String?
+
+  updatedAt DateTime @updatedAt
 }
 
 // --- Blog (STORY-021) ---
@@ -2922,6 +2984,7 @@ enum AdminModule {
   CRMAnalytics
   ContactEnquiries
   StoryPages
+  FoodAcademy
 }
 
 enum AdminAction {

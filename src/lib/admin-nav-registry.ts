@@ -53,6 +53,7 @@ export const ADMIN_NAV_GROUPS: AdminNavGroup[] = [
       { label: "Media library", href: "/admin/media", module: "MediaLibrary", action: "View" },
       { label: "Homepage builder", href: "/admin/homepage-builder", module: "HomepageBuilder", action: "View" },
       { label: "Story pages (About/Contact)", href: "/admin/story-pages", module: "StoryPages", action: "View" },
+      { label: "Food Academy", href: "/admin/food-academy", module: "FoodAcademy", action: "View" },
       { label: "Navigation & menus", href: "/admin/navigation", module: "Navigation", action: "View" },
       { label: "SEO", href: "/admin/seo", module: "SEO", action: "View" },
       { label: "Redirects", href: "/admin/seo/redirects", module: "SEO", action: "View" },

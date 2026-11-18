@@ -26,7 +26,10 @@ export type AdminModuleValue =
   | "ERPIntegration"
   | "UsersRolesAudit"
   | "ExportPortal"
-  | "CRMAnalytics";
+  | "CRMAnalytics"
+  | "ContactEnquiries"
+  | "StoryPages"
+  | "FoodAcademy";
 
 export type AdminActionValue = "View" | "Edit" | "Delete" | "Approve" | "Export" | "Audit";
 
@@ -51,6 +54,9 @@ export const ADMIN_MODULES: AdminModuleValue[] = [
   "UsersRolesAudit",
   "ExportPortal",
   "CRMAnalytics",
+  "ContactEnquiries",
+  "StoryPages",
+  "FoodAcademy",
 ];
 
 export const ADMIN_ACTIONS: AdminActionValue[] = ["View", "Edit", "Delete", "Approve", "Export", "Audit"];
