@@ -1,0 +1,85 @@
+// @vitest-environment node
+import { afterEach, describe, expect, it } from "vitest";
+
+import { prisma } from "@/lib/db";
+import { PermissionDeniedError } from "@/services/permission.errors";
+import { foodAcademyPageDefaults } from "@/lib/fixtures/food-academy-fixtures";
+import {
+  getFoodAcademyPageSettingForAdmin,
+  getFoodAcademyPageSettingForStorefront,
+  updateFoodAcademyPageSettingForAdmin,
+} from "@/services/food-academy-page-setting.service";
+
+const EMAIL_DOMAIN = "@food-academy-page-setting-svc-test.test";
+const ROLE_KEY_PREFIX = "food-academy-page-setting-svc-test-role-";
+let sequence = 0;
+
+async function makeRole(grants: { module: "FoodAcademy"; action: "View" | "Edit" }[]) {
+  sequence += 1;
+  const role = await prisma.role.create({ data: { key: `${ROLE_KEY_PREFIX}${sequence}`, name: `Food Academy Page Setting Svc Test Role ${sequence}` } });
+  if (grants.length > 0) await prisma.rolePermission.createMany({ data: grants.map((grant) => ({ roleId: role.id, ...grant })) });
+  return role;
+}
+
+async function makeAdminUser(roleId: string) {
+  sequence += 1;
+  return prisma.adminUser.create({ data: { email: `admin-${sequence}${EMAIL_DOMAIN}`, name: "Test Admin", passwordHash: "unused", roleId } });
+}
+
+afterEach(async () => {
+  await prisma.auditLog.deleteMany({ where: { actor: { email: { endsWith: EMAIL_DOMAIN } } } });
+  await prisma.adminUser.deleteMany({ where: { email: { endsWith: EMAIL_DOMAIN } } });
+  await prisma.rolePermission.deleteMany({ where: { role: { key: { startsWith: ROLE_KEY_PREFIX } } } });
+  await prisma.role.deleteMany({ where: { key: { startsWith: ROLE_KEY_PREFIX } } });
+  await prisma.foodAcademyPageSetting.deleteMany();
+});
+
+describe("getFoodAcademyPageSettingForStorefront", () => {
+  it("falls back to fixture defaults for every unset field", async () => {
+    const data = await getFoodAcademyPageSettingForStorefront();
+    expect(data.heroHeading).toBe(foodAcademyPageDefaults.heroHeading);
+    expect(data.heroEyebrow).toBe(foodAcademyPageDefaults.heroEyebrow);
+    expect(data.enabled).toBe(true);
+    expect(data.heroImageUrl).toBeNull();
+  });
+
+  it("prefers real admin-set values over the defaults, per field", async () => {
+    const role = await makeRole([
+      { module: "FoodAcademy", action: "View" },
+      { module: "FoodAcademy", action: "Edit" },
+    ]);
+    const admin = await makeAdminUser(role.id);
+    await updateFoodAcademyPageSettingForAdmin(admin.id, { heroHeading: "Custom Heading" });
+
+    const data = await getFoodAcademyPageSettingForStorefront();
+    expect(data.heroHeading).toBe("Custom Heading");
+    // Untouched fields still fall back to defaults.
+    expect(data.heroEyebrow).toBe(foodAcademyPageDefaults.heroEyebrow);
+  });
+});
+
+describe("admin get/update — permissions", () => {
+  it("denies read without View permission", async () => {
+    const role = await makeRole([]);
+    const admin = await makeAdminUser(role.id);
+    await expect(getFoodAcademyPageSettingForAdmin(admin.id)).rejects.toBeInstanceOf(PermissionDeniedError);
+  });
+
+  it("denies update without Edit permission", async () => {
+    const role = await makeRole([{ module: "FoodAcademy", action: "View" }]);
+    const admin = await makeAdminUser(role.id);
+    await expect(updateFoodAcademyPageSettingForAdmin(admin.id, { heroHeading: "X" })).rejects.toBeInstanceOf(PermissionDeniedError);
+  });
+
+  it("writes an audit log entry on update", async () => {
+    const role = await makeRole([
+      { module: "FoodAcademy", action: "View" },
+      { module: "FoodAcademy", action: "Edit" },
+    ]);
+    const admin = await makeAdminUser(role.id);
+    await updateFoodAcademyPageSettingForAdmin(admin.id, { heroHeading: "Updated" });
+
+    const log = await prisma.auditLog.findFirst({ where: { actorId: admin.id, action: "food_academy_page_settings_updated" } });
+    expect(log).not.toBeNull();
+  });
+});

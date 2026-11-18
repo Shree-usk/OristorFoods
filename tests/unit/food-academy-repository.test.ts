@@ -60,6 +60,18 @@ describe("findFeaturedFoodAcademyEntries", () => {
     const featured = await findFeaturedFoodAcademyEntries(10);
     expect(featured.map((e) => e.title)).toEqual(["Featured Published"]);
   });
+
+  it("orders by the admin-curated sortOrder, not publish recency", async () => {
+    const category = await makeFoodAcademyCategory();
+    // Published most recently but given the highest sortOrder — should
+    // sort last, confirming order is curated, not recency-based.
+    await makeFoodAcademyEntry({ title: "Third", categoryId: category.id, isFeatured: true, sortOrder: 2, publishedAt: new Date("2026-09-03T00:00:00Z") });
+    await makeFoodAcademyEntry({ title: "First", categoryId: category.id, isFeatured: true, sortOrder: 0, publishedAt: new Date("2026-09-01T00:00:00Z") });
+    await makeFoodAcademyEntry({ title: "Second", categoryId: category.id, isFeatured: true, sortOrder: 1, publishedAt: new Date("2026-09-02T00:00:00Z") });
+
+    const featured = await findFeaturedFoodAcademyEntries(10);
+    expect(featured.map((e) => e.title)).toEqual(["First", "Second", "Third"]);
+  });
 });
 
 describe("findPublishedFoodAcademyEntryBySlug", () => {

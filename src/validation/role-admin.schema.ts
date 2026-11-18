@@ -21,6 +21,9 @@ export const ADMIN_MODULES = [
   "UsersRolesAudit",
   "ExportPortal",
   "CRMAnalytics",
+  "ContactEnquiries",
+  "StoryPages",
+  "FoodAcademy",
 ] as const;
 
 const ADMIN_ACTIONS = ["View", "Edit", "Delete", "Approve", "Export", "Audit"] as const;

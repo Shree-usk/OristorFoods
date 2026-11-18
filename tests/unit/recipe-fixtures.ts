@@ -234,6 +234,7 @@ export interface FoodAcademyEntryOverrides {
   categoryId: string;
   bodyContent?: string | null;
   isFeatured?: boolean;
+  sortOrder?: number;
   status?: "Draft" | "Published";
   publishedAt?: Date | null;
   recipeIds?: string[];
@@ -251,6 +252,7 @@ export function makeFoodAcademyEntry(overrides: FoodAcademyEntryOverrides) {
     categoryId: overrides.categoryId,
     bodyContent: overrides.bodyContent === undefined ? "Body content." : overrides.bodyContent,
     isFeatured: overrides.isFeatured ?? false,
+    sortOrder: overrides.sortOrder ?? 0,
     status: overrides.status ?? "Published",
     publishedAt: overrides.publishedAt === undefined ? new Date("2026-09-01T00:00:00Z") : overrides.publishedAt,
     recipeRefs: { create: (overrides.recipeIds ?? []).map((recipeId) => ({ recipeId })) },
