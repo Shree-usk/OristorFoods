@@ -27,13 +27,26 @@ UFW is active. Default incoming DENY; outgoing ALLOW.
 Allowed inbound: 22/tcp, 80/tcp, 443/tcp.
 
 Security already implemented:
-- Root SSH login disabled.
-- Password SSH authentication was intended to be disabled; verify before production.
-- SSH key authentication is intended.
+- Root SSH login disabled (`PermitRootLogin no`).
+- Password SSH authentication disabled; key-only.
 - GitHub deploy key is READ-ONLY.
 - Do not weaken SSH security or firewall rules without approval.
 
-Nginx is not yet installed.
+Two Linux users exist:
+- `oristor` (uid 1000) — owns `/home/oristor/apps/OristorFoods`, runs the
+  `oristor-web` systemd service, has sudo.
+- `oristoradmin` (uid 1001) — operator/deploy account created 2026-11-18,
+  **passwordless sudo** via `/etc/sudoers.d/oristoradmin`. This is the
+  account to SSH in as; use `sudo -u oristor <command>` to act as the app
+  owner (e.g. for `git pull`/`npm`/`prisma` commands against the app
+  directory), and plain `sudo <command>` as `oristoradmin` itself for
+  service/system-level commands (`systemctl`, log inspection, etc. —
+  `oristor` does NOT have passwordless sudo for these).
+
+Nginx **is installed and configured** — reverse-proxies
+`staging.oristor.com` (443) to `127.0.0.1:3000`, with a Let's Encrypt/
+Certbot SSL certificate. `oristor.com` (production) is a separate,
+untouched site.
 
 ## 3. Stack
 - Next.js 16.2.10
@@ -55,8 +68,10 @@ Do not upgrade major dependencies during deployment unless a specific story requ
 ## 4. Git state
 Repository: git@github.com:Shree-usk/OristorFoods.git
 Branch: master
-Handover commit: 3a8b7c9
-Commit: feat: STORY-074 admin-editable content for About Us & Contact Us (#70)
+Last confirmed deployed commit (2026-11-18): 96f2a19 — merge of PR #135
+("Explore the world of flavour" homepage cards). This line goes stale
+every deploy — treat it as "last known", not authoritative; run
+`git log -1` on the VPS to get the real current state.
 
 The VPS uses a GitHub read-only deploy key. Pull from GitHub; do not push application changes from the VPS.
 
@@ -133,24 +148,68 @@ No S3/Cloudinary provider has been selected for the current deployment.
 Future integrations must use the existing provider abstractions.
 
 ## 8. Deployment stage
-Database migration is COMPLETE.
+**Items 1–11 below are COMPLETE as of 2026-11-18** — staging.oristor.com
+is live, serving real traffic over HTTPS, running as a systemd service,
+with the database migrated and seeded. This section is left as the
+original plan for historical context; see "Working deploy procedure"
+below for what an ordinary code-only update actually looks like now.
 
-Next stages:
-1. Verify migration/table state.
-2. Run `npx prisma generate` if required.
-3. Review seed files before seeding.
-4. Do NOT blindly run the full seed.
-5. Determine required staging seed data.
-6. Run `npm run build`.
-7. Run `npm run start` locally on the VPS and verify health.
-8. Install/configure Nginx.
-9. Configure staging.oristor.com DNS.
-10. Obtain HTTPS for staging.oristor.com.
-11. Run the app as a persistent service (systemd or approved process manager).
-12. Test authentication, admin, products, content, cart, checkout/mock payment and completed stories.
+1. ✅ Verify migration/table state.
+2. ✅ Run `npx prisma generate` if required.
+3. ✅ Review seed files before seeding.
+4. ✅ Do NOT blindly run the full seed. (Full seed was run once deliberately on the initially-empty DB; later resets used it again after confirming the DB was genuinely empty — never on a DB with real/admin-entered data.)
+5. ✅ Determine required staging seed data.
+6. ✅ Run `npm run build`.
+7. ✅ Run `npm run start` locally on the VPS and verify health.
+8. ✅ Install/configure Nginx.
+9. ✅ Configure staging.oristor.com DNS.
+10. ✅ Obtain HTTPS for staging.oristor.com (Certbot/Let's Encrypt).
+11. ✅ Run the app as a persistent service — `oristor-web.service` (systemd), runs `npm run start` as user `oristor`, `WorkingDirectory=/home/oristor/apps/OristorFoods`, `Environment=NODE_ENV=production`.
+12. Ongoing: test authentication, admin, products, content, cart, checkout/mock payment and completed stories as new work ships.
 13. Only after staging is stable consider production cutover to oristor.com.
 
 Do NOT change oristor.com during staging.
+
+### Working deploy procedure (ordinary code-only update, no schema change)
+Run as `oristoradmin` via SSH, piping a script through `sudo -u oristor
+bash -s` to avoid nested-quoting issues:
+```
+ssh -i <key> oristoradmin@201.18.217.126 "sudo -u oristor bash -s" <<'EOF'
+set -e
+cd /home/oristor/apps/OristorFoods
+git pull origin master
+# Run npm without an inherited NODE_ENV=production, or npm ci silently
+# skips devDependencies (e.g. @tailwindcss/postcss) and the build breaks.
+env -i HOME="$HOME" PATH="$PATH" USER="$USER" bash -lc \
+  "cd /home/oristor/apps/OristorFoods && npm ci --include=dev"
+env -i HOME="$HOME" PATH="$PATH" USER="$USER" bash -lc \
+  "cd /home/oristor/apps/OristorFoods && npm run build"
+EOF
+```
+Then, as `oristoradmin` directly (not nested inside the `sudo -u oristor`
+shell — `oristor` itself doesn't have passwordless sudo for `systemctl`):
+```
+ssh -i <key> oristoradmin@201.18.217.126 "sudo systemctl restart oristor-web"
+```
+Verify over the real domain (not bare `curl localhost` — the nginx vhost
+is name-based):
+```
+curl -H 'Host: staging.oristor.com' https://localhost/<path> -k
+```
+If the change includes a new Prisma migration: run `npx prisma generate`
+then `npx prisma migrate deploy` (never `db push`/`migrate reset`) between
+`npm ci` and `npm run build`, and take a `pg_dump` backup first — see
+Section 9. If it adds a new `AdminModule` enum value, do not run the full
+seed on a non-empty DB; grant the new module's `RolePermission` rows by
+mirroring an existing similar module's grants per role via a small
+one-off script instead.
+
+**Known gotcha**: never pass `DATABASE_URL` directly to `psql`/`pg_dump`
+as a connection string — a character in the password breaks libpq's URL
+parser (though Prisma's own parser handles it fine) and can echo a
+password fragment into command output. Parse `DATABASE_URL` with Node's
+`new URL()` and export `PGHOST`/`PGPORT`/`PGUSER`/`PGPASSWORD`/
+`PGDATABASE` env vars instead.
 
 ## 9. Backup strategy — mandatory
 Hostinger automatic backup add-on was not purchased to reduce cost. Therefore backups must be implemented separately.
@@ -254,14 +313,24 @@ If deployment fails:
 - Never destroy data to make deployment pass.
 
 ## 12. Current SSH note
-The current laptop previously attempted:
-`C:\Users\ushreekumar\.ssh\oristor-vps`
-which was not the correct key path.
-
-The working laptop key was created under:
+**Working as of 2026-11-18**: SSH in as `oristoradmin` (NOT `root` —
+`PermitRootLogin no` is set, so root SSH will always fail regardless of
+key), using the key at:
 `C:\Users\ushreekumar\OneDrive - Humanetics\USK\oristor-vps-laptop`
 
-Restore/fix passwordless SSH before relying on it. Do not weaken SSH security.
+```
+ssh -i "C:\Users\ushreekumar\OneDrive - Humanetics\USK\oristor-vps-laptop" oristoradmin@201.18.217.126
+```
+
+`oristoradmin` has passwordless sudo. A second working key exists at
+`C:\Users\ushreekumar\OneDrive - Humanetics\USK\Skyreck\OFPSSH` but is
+NOT currently authorized on the server (only `oristor-vps-laptop`'s
+public key is in `oristoradmin`'s `authorized_keys`) — do not assume it
+works without checking first.
+
+(Historical note: an earlier laptop/session had tried
+`C:\Users\ushreekumar\.ssh\oristor-vps`, which was never the correct
+path — superseded by the above.)
 
 ## 13. Immediate Claude Code checks
 Start by checking, NOT changing:
