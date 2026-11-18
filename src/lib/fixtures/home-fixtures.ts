@@ -166,12 +166,15 @@ export const customerReviews: ReviewData[] = [
 ];
 
 export const foodAcademyTeaser: TeaserSectionData = {
-  eyebrow: "Food Academy",
-  headline: "Learn to Cook Sri Lankan the Authentic Way",
+  eyebrow: "The Oristor Food Academy",
+  headline: "Know your ingredients. Discover your flavour.",
   description:
-    "Guides, techniques, and ingredient deep-dives from Oristor's kitchen — start with the basics or go deep on regional specialties.",
+    "Go beyond recipes. Explore the spices, ingredients and time-honoured techniques that make Sri Lankan cooking truly special.",
   ctaLabel: "Explore Food Academy",
   ctaHref: "/food-academy",
+  secondaryCtaLabel: "Discover what you'll learn",
+  secondaryCtaHref: "/food-academy",
+  badgeText: "A little knowledge. A lot of flavour.",
   imageSrc: "/images/products/export/turmeric-powder.webp",
   imageAlt: "Oristor turmeric powder",
 };
