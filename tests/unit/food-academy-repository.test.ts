@@ -159,6 +159,14 @@ describe("findActiveFoodAcademyCategories", () => {
     const categories = await findActiveFoodAcademyCategories();
     expect(categories.map((c) => c.name)).toEqual(["Knife Skills"]);
   });
+
+  it("includes the subject-tile fields (description, tileImageUrl, tileImageAlt)", async () => {
+    const category = await makeFoodAcademyCategory({ description: "Spices and more.", tileImageUrl: "/img.webp", tileImageAlt: "Spices" });
+    await makeFoodAcademyEntry({ categoryId: category.id });
+
+    const [result] = await findActiveFoodAcademyCategories();
+    expect(result).toMatchObject({ description: "Spices and more.", tileImageUrl: "/img.webp", tileImageAlt: "Spices" });
+  });
 });
 
 describe("findRecipesByIds (recipe.repository.ts)", () => {

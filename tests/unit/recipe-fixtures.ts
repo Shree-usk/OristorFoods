@@ -213,6 +213,9 @@ export interface FoodAcademyCategoryOverrides {
   name?: string;
   slug?: string;
   status?: ContentStatus;
+  description?: string | null;
+  tileImageUrl?: string | null;
+  tileImageAlt?: string | null;
 }
 
 export function makeFoodAcademyCategory(overrides: FoodAcademyCategoryOverrides = {}) {
@@ -222,6 +225,9 @@ export function makeFoodAcademyCategory(overrides: FoodAcademyCategoryOverrides 
       name: overrides.name ?? `Category ${n}`,
       slug: overrides.slug ?? `fa-category-${n}`,
       status: overrides.status ?? "Active",
+      description: overrides.description ?? null,
+      tileImageUrl: overrides.tileImageUrl ?? null,
+      tileImageAlt: overrides.tileImageAlt ?? null,
     },
   });
 }

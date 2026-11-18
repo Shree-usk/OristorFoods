@@ -128,11 +128,11 @@ export async function findRelatedFoodAcademyEntries(
   return [...sameCategory, ...fallback];
 }
 
-export function findActiveFoodAcademyCategories(): Promise<{ id: string; name: string; slug: string }[]> {
+export function findActiveFoodAcademyCategories(): Promise<{ id: string; name: string; slug: string; description: string | null; tileImageUrl: string | null; tileImageAlt: string | null }[]> {
   return prisma.foodAcademyCategory.findMany({
     where: { status: "Active", entries: { some: { status: "Published" } } },
     orderBy: [{ sortOrder: "asc" }, { id: "asc" }],
-    select: { id: true, name: true, slug: true },
+    select: { id: true, name: true, slug: true, description: true, tileImageUrl: true, tileImageAlt: true },
   });
 }
 
