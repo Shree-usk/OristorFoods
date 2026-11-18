@@ -10,6 +10,22 @@ describe("foodAcademyCategoryAdminSchema", () => {
     const result = foodAcademyCategoryAdminSchema.safeParse({ name: "Ingredients", slug: "ingredients" });
     expect(result.success).toBe(true);
   });
+
+  it("normalizes a left-blank optional field (submitted as \"\", not omitted) to null instead of rejecting it", () => {
+    const result = foodAcademyCategoryAdminSchema.safeParse({
+      name: "Ingredients",
+      slug: "ingredients",
+      description: "",
+      tileImageUrl: "",
+      tileImageAlt: "",
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.description).toBeNull();
+      expect(result.data.tileImageUrl).toBeNull();
+      expect(result.data.tileImageAlt).toBeNull();
+    }
+  });
 });
 
 describe("foodAcademyEntryAdminSchema", () => {
@@ -52,6 +68,23 @@ describe("foodAcademyEntryAdminSchema", () => {
     });
     expect(result.success).toBe(false);
   });
+
+  it("normalizes a left-blank heroImageUrl/authorName (submitted as \"\") to null instead of rejecting it", () => {
+    const result = foodAcademyEntryAdminSchema.safeParse({
+      slug: "test-entry",
+      title: "Test Entry",
+      summary: "A summary.",
+      contentType: "Article",
+      categoryId: "cat_1",
+      heroImageUrl: "",
+      authorName: "",
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.heroImageUrl).toBeNull();
+      expect(result.data.authorName).toBeNull();
+    }
+  });
 });
 
 describe("foodAcademyReorderSchema", () => {
@@ -72,5 +105,15 @@ describe("foodAcademyPageSettingAdminSchema", () => {
   it("accepts explicit nulls to clear a field", () => {
     const result = foodAcademyPageSettingAdminSchema.safeParse({ heroEyebrow: null, heroImageUrl: null });
     expect(result.success).toBe(true);
+  });
+
+  it("normalizes left-blank image fields (submitted as \"\") to null instead of rejecting them — the real-world shape the admin form submits for every untouched field", () => {
+    const result = foodAcademyPageSettingAdminSchema.safeParse({ heroImageUrl: "", seoOgImageUrl: "", heroEyebrow: "" });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.heroImageUrl).toBeNull();
+      expect(result.data.seoOgImageUrl).toBeNull();
+      expect(result.data.heroEyebrow).toBeNull();
+    }
   });
 });
