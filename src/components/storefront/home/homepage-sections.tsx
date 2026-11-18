@@ -1,9 +1,11 @@
+import { Fragment } from "react";
 import type { HomepageLayoutDetail } from "@/repositories/homepage-layout.repository";
 import { BestSellingProducts } from "@/components/storefront/home/best-selling-products";
 import { CustomerReviews } from "@/components/storefront/home/customer-reviews";
 import { ExportSolutions } from "@/components/storefront/home/export-solutions";
 import { FeaturedCategories } from "@/components/storefront/home/featured-categories";
 import { FeaturedRecipes } from "@/components/storefront/home/featured-recipes";
+import { FoodAcademyExploreCards } from "@/components/storefront/home/food-academy-explore-cards";
 import { FoodAcademyTeaser } from "@/components/storefront/home/food-academy-teaser";
 import { HeroBannerSlide } from "@/components/storefront/home/hero-banner-slide";
 import { InstagramGallery } from "@/components/storefront/home/instagram-gallery";
@@ -14,6 +16,7 @@ import { Leaf } from "lucide-react";
 import { resolveFeatureIcon } from "@/lib/feature-icons";
 import { getFeaturedCategoriesForStorefront } from "@/services/category.service";
 import { getFeaturedCollectionsForStorefront } from "@/services/collection.service";
+import { listCategories as listFoodAcademyCategories } from "@/services/food-academy.service";
 import { getRecentPostsForStorefront } from "@/services/instagram.service";
 import { getFeaturedReviewsForStorefront } from "@/services/review.service";
 import type { CategoryCardData, CollectionCardData, InstagramPostData, ReviewData, WhyChooseFeatureData } from "@/types/home";
@@ -103,6 +106,14 @@ export async function HomepageSections({ layout }: { layout: HomepageLayoutDetai
     quote: review.body,
   }));
 
+  const hasFoodAcademySection = visibleSections.some((section) => section.type === "FoodAcademy");
+  // Real, admin-managed Food Academy categories (Admin > Food Academy >
+  // Categories) — the same list the /food-academy hub's own category tiles
+  // and filter chips read from. No fixture fallback: an admin with zero
+  // active categories simply doesn't get this strip yet (see
+  // FoodAcademyExploreCards' own empty-state guard).
+  const foodAcademyCategories = hasFoodAcademySection ? await listFoodAcademyCategories() : [];
+
   return (
     <>
       {visibleSections.map((section) => {
@@ -164,10 +175,12 @@ export async function HomepageSections({ layout }: { layout: HomepageLayoutDetai
             return <ProductCollections key={section.id} collections={resolvedCollections} titleOverride={section.titleOverride} />;
           case "FoodAcademy":
             return (
-              <FoodAcademyTeaser
-                key={section.id}
-                data={{ ...foodAcademyTeaser, headline: section.titleOverride || foodAcademyTeaser.headline, description: section.descriptionOverride || foodAcademyTeaser.description }}
-              />
+              <Fragment key={section.id}>
+                <FoodAcademyTeaser
+                  data={{ ...foodAcademyTeaser, headline: section.titleOverride || foodAcademyTeaser.headline, description: section.descriptionOverride || foodAcademyTeaser.description }}
+                />
+                <FoodAcademyExploreCards categories={foodAcademyCategories} />
+              </Fragment>
             );
           case "CustomerReviews":
             if (resolvedReviews.length === 0) return null;
