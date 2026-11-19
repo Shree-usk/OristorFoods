@@ -72,7 +72,9 @@ describe("getFoodAcademyPageSettingForStorefront", () => {
     expect(data.heroHeading).toBe(foodAcademyPageDefaults.heroHeading);
     expect(data.heroEyebrow).toBe(foodAcademyPageDefaults.heroEyebrow);
     expect(data.enabled).toBe(true);
-    expect(data.heroImageUrl).toBeNull();
+    // heroImageUrl now has a real fixture default too (never a blank hero
+    // image before an admin uploads one) — see foodAcademyPageDefaults.
+    expect(data.heroImageUrl).toBe(foodAcademyPageDefaults.heroImageUrl);
   });
 
   it("prefers real admin-set values over the defaults, per field", async () => {

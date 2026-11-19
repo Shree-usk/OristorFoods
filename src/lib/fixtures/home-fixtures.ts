@@ -165,20 +165,6 @@ export const customerReviews: ReviewData[] = [
   },
 ];
 
-export const foodAcademyTeaser: TeaserSectionData = {
-  eyebrow: "The Oristor Food Academy",
-  headline: "Know your ingredients. Discover your flavour.",
-  description:
-    "Go beyond recipes. Explore the spices, ingredients and time-honoured techniques that make Sri Lankan cooking truly special.",
-  ctaLabel: "Explore Food Academy",
-  ctaHref: "/food-academy",
-  secondaryCtaLabel: "Discover what you'll learn",
-  secondaryCtaHref: "/food-academy",
-  badgeText: "A little knowledge. A lot of flavour.",
-  imageSrc: "/images/products/export/turmeric-powder.webp",
-  imageAlt: "Oristor turmeric powder",
-};
-
 /**
  * Default content for the homepage Export Hero (ExportHeroSetting) — the
  * fallback for any individual field an admin hasn't configured yet, see

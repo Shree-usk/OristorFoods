@@ -10,10 +10,21 @@ import type { FoodAcademyCategoryTile } from "@/types/food-academy";
  * FoodAcademyTeaser hero inside the same admin-toggled FoodAcademy section.
  * Cards are sourced from the real, admin-managed FoodAcademyCategory list
  * (the same data the /food-academy hub's own category tiles and filter
- * chips use), not fixture copy — so adding/editing a category in
- * Admin > Food Academy > Categories updates this strip too.
+ * chips use), not fixture copy. `heading`/`description` come from the same
+ * FoodAcademyPageSetting the hero above it reads (its `exploreHeading`/
+ * `exploreDescription` fields — the same ones the /food-academy hub's own
+ * FoodAcademyCategoryTiles section uses) — editing Admin > Food Academy >
+ * Page settings updates this strip's copy too, not just the cards.
  */
-export function FoodAcademyExploreCards({ categories }: { categories: FoodAcademyCategoryTile[] }) {
+export function FoodAcademyExploreCards({
+  heading,
+  description,
+  categories,
+}: {
+  heading: string;
+  description: string;
+  categories: FoodAcademyCategoryTile[];
+}) {
   const cards = categories.slice(0, 3);
   if (cards.length === 0) return null;
 
@@ -22,8 +33,8 @@ export function FoodAcademyExploreCards({ categories }: { categories: FoodAcadem
       <div className="flex flex-wrap items-end justify-between gap-6">
         <ScrollReveal>
           <p className="text-small font-medium tracking-wide text-chilli uppercase">Learn with ORISTOR</p>
-          <h2 className="mt-2 text-h2 font-heading text-charcoal">Explore the world of flavour</h2>
-          <p className="mt-2 max-w-md text-body text-charcoal/70">Practical food knowledge, rooted in Sri Lankan tradition.</p>
+          <h2 className="mt-2 text-h2 font-heading text-charcoal">{heading}</h2>
+          {description && <p className="mt-2 max-w-md text-body text-charcoal/70">{description}</p>}
         </ScrollReveal>
         <Link
           href="/food-academy"
