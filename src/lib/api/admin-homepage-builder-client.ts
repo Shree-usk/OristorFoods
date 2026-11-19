@@ -16,6 +16,7 @@ export type HomepageSectionType =
   | "FoodAcademy"
   | "CustomerReviews"
   | "ExportSolutions"
+  | "PerfectMatch"
   | "RewardsClub"
   | "InstagramGallery";
 

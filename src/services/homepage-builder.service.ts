@@ -36,6 +36,7 @@ export const DEFAULT_SECTION_ORDER: HomepageSectionType[] = [
   "ProductCollections",
   "FoodAcademy",
   "ExportSolutions",
+  "PerfectMatch",
   "RewardsClub",
   "InstagramGallery",
 ];

@@ -346,6 +346,7 @@ model Product {
   recipeIngredients    RecipeIngredient[]
   cookingTipRefs       CookingTipProductRef[]
   foodAcademyRefs      FoodAcademyProductRef[]
+  perfectMatchEntry    PerfectMatchProduct?
   // STORY-060.
   interactionEvents    ProductInteractionEvent[]
   associationsAsSource ProductAssociation[]      @relation("AssociationSource")
@@ -529,6 +530,72 @@ model ProductFeaturedItem {
   updatedAt   DateTime @updatedAt
 
   @@index([productId])
+}
+
+// Homepage "The Perfect Match" section. A genuine Draft/Published workflow
+// (not the simpler Active/Inactive ContentStatus used by e.g. Category) —
+// shared by both models below since they mean the same thing here.
+enum PerfectMatchStatus {
+  Draft
+  Published
+}
+
+// Singleton (id: "global") — the section's own intro copy, same
+// never-blank-per-field-default pattern as ExportHeroSetting/
+// FoodAcademyPageSetting.
+model PerfectMatchSetting {
+  id          String   @id @default("global")
+  eyebrow     String?
+  heading     String?
+  description String?
+  updatedAt   DateTime @updatedAt
+}
+
+// Links an existing Product into the Perfect Match rail. Never duplicates
+// product data — kicker/promoDescriptionOverride are editorial overlays
+// an admin can set, not copies of the product's own fields.
+model PerfectMatchProduct {
+  id                       String             @id @default(cuid())
+  productId                String             @unique
+  product                  Product            @relation(fields: [productId], references: [id], onDelete: Cascade)
+  kicker                   String?
+  promoDescriptionOverride String?
+  isDefaultFeatured        Boolean            @default(false)
+  status                   PerfectMatchStatus @default(Draft)
+  sortOrder                Int                @default(0)
+  createdAt                DateTime           @default(now())
+  updatedAt                DateTime           @updatedAt
+
+  pairings PerfectMatchPairing[]
+
+  @@index([status, sortOrder])
+}
+
+// Up to 4 Published rows per product for the homepage experience —
+// enforced in the service layer (perfect-match-admin.service.ts), not a
+// DB constraint, same convention as every other "max N" business rule in
+// this codebase.
+model PerfectMatchPairing {
+  id                    String              @id @default(cuid())
+  perfectMatchProductId String
+  perfectMatchProduct   PerfectMatchProduct @relation(fields: [perfectMatchProductId], references: [id], onDelete: Cascade)
+  title                 String
+  description           String?
+  imageUrl              String
+  imageAlt              String?
+  // The prototype's "01 / THE CLASSIC" style label — "01/" is the computed
+  // sort position, only "THE CLASSIC" is stored here.
+  categoryLabel         String?
+  // The prototype's separate small bottom pill (e.g. "A comforting
+  // favourite") — a genuinely different field from categoryLabel above,
+  // confirmed from the prototype's own data shape.
+  supportingTag         String?
+  status                PerfectMatchStatus  @default(Draft)
+  sortOrder             Int                 @default(0)
+  createdAt             DateTime            @default(now())
+  updatedAt             DateTime            @updatedAt
+
+  @@index([perfectMatchProductId, status, sortOrder])
 }
 
 model ProductVideo {
@@ -2985,6 +3052,7 @@ enum AdminModule {
   ContactEnquiries
   StoryPages
   FoodAcademy
+  PerfectMatch
 }
 
 enum AdminAction {
@@ -3452,6 +3520,7 @@ enum HomepageSectionType {
   FoodAcademy
   CustomerReviews
   ExportSolutions
+  PerfectMatch
   RewardsClub
   InstagramGallery
 }

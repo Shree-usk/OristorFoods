@@ -44,6 +44,7 @@ const ALL_MODULES: AdminModule[] = [
   "ContactEnquiries",
   "StoryPages",
   "FoodAcademy",
+  "PerfectMatch",
 ];
 
 const ALL_ACTIONS: AdminAction[] = ["View", "Edit", "Delete", "Approve", "Export", "Audit"];
@@ -60,14 +61,14 @@ interface RoleSeed {
 const ROLE_SEEDS: RoleSeed[] = [
   { key: "super_administrator", name: "Super Administrator", superAdmin: true },
   { key: "administrator", name: "Administrator", fullAccess: true },
-  { key: "marketing_manager", name: "Marketing Manager", homeModules: ["Marketing", "HomepageBuilder", "SEO"] },
+  { key: "marketing_manager", name: "Marketing Manager", homeModules: ["Marketing", "HomepageBuilder", "SEO", "PerfectMatch"] },
   { key: "sales_manager", name: "Sales Manager", homeModules: ["Orders", "Customers", "RewardsReferrals"] },
   { key: "finance_manager", name: "Finance Manager", homeModules: ["Orders", "ExportPortal", "SystemSettings"] },
   { key: "production_manager", name: "Production Manager", homeModules: ["Products", "MediaLibrary"] },
   { key: "warehouse_manager", name: "Warehouse Manager", homeModules: ["Orders", "DeliveryZones", "ERPIntegration"] },
   { key: "customer_support", name: "Customer Support", homeModules: ["Customers", "Orders", "Reviews", "QA", "ContactEnquiries"] },
   { key: "export_manager", name: "Export Manager", homeModules: ["ExportPortal", "Orders", "CRMAnalytics"] },
-  { key: "content_editor", name: "Content Editor", homeModules: ["Blog", "Recipes", "Navigation", "CMSWorkflow", "StoryPages", "FoodAcademy"] },
+  { key: "content_editor", name: "Content Editor", homeModules: ["Blog", "Recipes", "Navigation", "CMSWorkflow", "StoryPages", "FoodAcademy", "PerfectMatch"] },
   { key: "seo_specialist", name: "SEO Specialist", homeModules: ["SEO", "Navigation"] },
   { key: "viewer", name: "Viewer" },
 ];
