@@ -24,6 +24,7 @@ export const ADMIN_MODULES = [
   "ContactEnquiries",
   "StoryPages",
   "FoodAcademy",
+  "PerfectMatch",
 ] as const;
 
 const ADMIN_ACTIONS = ["View", "Edit", "Delete", "Approve", "Export", "Audit"] as const;

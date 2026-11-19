@@ -29,7 +29,8 @@ export type AdminModuleValue =
   | "CRMAnalytics"
   | "ContactEnquiries"
   | "StoryPages"
-  | "FoodAcademy";
+  | "FoodAcademy"
+  | "PerfectMatch";
 
 export type AdminActionValue = "View" | "Edit" | "Delete" | "Approve" | "Export" | "Audit";
 
@@ -57,6 +58,7 @@ export const ADMIN_MODULES: AdminModuleValue[] = [
   "ContactEnquiries",
   "StoryPages",
   "FoodAcademy",
+  "PerfectMatch",
 ];
 
 export const ADMIN_ACTIONS: AdminActionValue[] = ["View", "Edit", "Delete", "Approve", "Export", "Audit"];

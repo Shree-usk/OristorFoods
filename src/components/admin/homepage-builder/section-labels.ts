@@ -17,6 +17,7 @@ export const SECTION_TYPE_ORDER: HomepageSectionType[] = [
   "ProductCollections",
   "FoodAcademy",
   "ExportSolutions",
+  "PerfectMatch",
   "RewardsClub",
   "InstagramGallery",
 ];
@@ -31,6 +32,7 @@ export const SECTION_TYPE_LABELS: Record<HomepageSectionType, string> = {
   FoodAcademy: "Food Academy",
   CustomerReviews: "Customer Reviews",
   ExportSolutions: "Export Solutions",
+  PerfectMatch: "The Perfect Match",
   RewardsClub: "Rewards Club",
   InstagramGallery: "Instagram Gallery",
 };

@@ -68,12 +68,12 @@ afterEach(async () => {
 });
 
 describe("homepage-builder.service", () => {
-  it("creates a blank draft seeded with all 11 default section types, Hero Banner first", async () => {
+  it("creates a blank draft seeded with all 12 default section types, Hero Banner first", async () => {
     const admin = await makeFullAccessAdmin();
     const layout = await createDraftLayout(admin.id, { cloneFromPublished: false });
 
     expect(layout.status).toBe("Draft");
-    expect(layout.sections).toHaveLength(11);
+    expect(layout.sections).toHaveLength(12);
     expect(layout.sections[0].type).toBe("HeroBanner");
     expect(layout.sections.every((s) => s.visible)).toBe(true);
 
@@ -91,7 +91,7 @@ describe("homepage-builder.service", () => {
     await publishLayout(admin.id, draft.id);
 
     const clone = await createDraftLayout(admin.id, { cloneFromPublished: true });
-    expect(clone.sections).toHaveLength(11);
+    expect(clone.sections).toHaveLength(12);
     const clonedHero = clone.sections.find((s) => s.type === "HeroBanner")!;
     expect(clonedHero.banners).toHaveLength(1);
     expect(clonedHero.banners[0].headline).toBe("Original");

@@ -12,6 +12,7 @@ export const homepageSectionTypeEnum = z.enum([
   "FoodAcademy",
   "CustomerReviews",
   "ExportSolutions",
+  "PerfectMatch",
   "RewardsClub",
   "InstagramGallery",
 ]);
