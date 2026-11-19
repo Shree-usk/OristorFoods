@@ -11,10 +11,11 @@ const CATEGORIES: FoodAcademyCategoryTile[] = [
 ];
 
 describe("FoodAcademyExploreCards", () => {
-  it("renders the section heading and up to 3 category cards linking to the hub's filter", () => {
-    render(<FoodAcademyExploreCards categories={CATEGORIES} />);
+  it("renders the admin-provided heading/description and up to 3 category cards linking to the hub's filter", () => {
+    render(<FoodAcademyExploreCards heading="Explore the world of flavour" description="Practical food knowledge." categories={CATEGORIES} />);
 
     expect(screen.getByRole("heading", { name: "Explore the world of flavour" })).toBeInTheDocument();
+    expect(screen.getByText("Practical food knowledge.")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Ingredients/ })).toHaveAttribute("href", "/food-academy?category=ingredients");
     expect(screen.getByRole("link", { name: /Techniques/ })).toHaveAttribute("href", "/food-academy?category=techniques");
     expect(screen.getByRole("link", { name: /Heritage/ })).toHaveAttribute("href", "/food-academy?category=heritage");
@@ -23,14 +24,14 @@ describe("FoodAcademyExploreCards", () => {
   });
 
   it("numbers cards starting at 01, paired with the category name", () => {
-    render(<FoodAcademyExploreCards categories={CATEGORIES} />);
+    render(<FoodAcademyExploreCards heading="Explore" description="" categories={CATEGORIES} />);
     expect(screen.getByText("01 / INGREDIENTS")).toBeInTheDocument();
     expect(screen.getByText("02 / TECHNIQUES")).toBeInTheDocument();
     expect(screen.getByText("03 / HERITAGE")).toBeInTheDocument();
   });
 
   it("renders nothing when there are no categories", () => {
-    const { container } = render(<FoodAcademyExploreCards categories={[]} />);
+    const { container } = render(<FoodAcademyExploreCards heading="Explore" description="" categories={[]} />);
     expect(container).toBeEmptyDOMElement();
   });
 });

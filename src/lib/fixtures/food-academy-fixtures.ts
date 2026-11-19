@@ -5,9 +5,13 @@ import type { FoodAcademyPageSettingData } from "@/types/food-academy";
  * set yet — same per-field "?? default" idiom as home-fixtures.ts's
  * exportHeroDefaults, applied to the /food-academy page instead of a
  * homepage section. Copy sourced from the approved "Project Cinnamon"
- * design brief.
+ * design brief. `heroImageUrl` has a real fallback (unlike `seoOgImageUrl`,
+ * which has no sane default image to fall back to) so the hero never
+ * renders with an empty image slot before an admin uploads one — this is
+ * also now the homepage FoodAcademyTeaser's default image, since it reads
+ * this same settings object.
  */
-export const foodAcademyPageDefaults: Omit<FoodAcademyPageSettingData, "enabled" | "heroImageUrl" | "seoOgImageUrl"> = {
+export const foodAcademyPageDefaults: Omit<FoodAcademyPageSettingData, "enabled" | "seoOgImageUrl"> = {
   heroEyebrow: "The Oristor Food Academy",
   heroHeading: "Know your ingredients. Discover your flavour.",
   heroDescription:
@@ -16,7 +20,8 @@ export const foodAcademyPageDefaults: Omit<FoodAcademyPageSettingData, "enabled"
   heroPrimaryCtaHref: "/food-academy",
   heroSecondaryCtaLabel: "Discover what you'll learn",
   heroSecondaryCtaHref: "/food-academy",
-  heroImageAlt: "Oristor product",
+  heroImageUrl: "/images/products/export/turmeric-powder.webp",
+  heroImageAlt: "Oristor turmeric powder",
   heroBadgeText: "A little knowledge. A lot of flavour.",
   exploreHeading: "Explore the world of flavour",
   exploreDescription: "Practical food knowledge, rooted in Sri Lankan tradition.",

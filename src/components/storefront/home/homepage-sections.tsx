@@ -17,12 +17,12 @@ import { resolveFeatureIcon } from "@/lib/feature-icons";
 import { getFeaturedCategoriesForStorefront } from "@/services/category.service";
 import { getFeaturedCollectionsForStorefront } from "@/services/collection.service";
 import { listCategories as listFoodAcademyCategories } from "@/services/food-academy.service";
+import { getFoodAcademyPageSettingForStorefront } from "@/services/food-academy-page-setting.service";
 import { getRecentPostsForStorefront } from "@/services/instagram.service";
 import { getFeaturedReviewsForStorefront } from "@/services/review.service";
 import type { CategoryCardData, CollectionCardData, InstagramPostData, ReviewData, WhyChooseFeatureData } from "@/types/home";
 import {
   featuredCategories,
-  foodAcademyTeaser,
   instagramPosts,
   productCollections,
   rewardsClubTeaser,
@@ -113,6 +113,11 @@ export async function HomepageSections({ layout }: { layout: HomepageLayoutDetai
   // active categories simply doesn't get this strip yet (see
   // FoodAcademyExploreCards' own empty-state guard).
   const foodAcademyCategories = hasFoodAcademySection ? await listFoodAcademyCategories() : [];
+  // Same FoodAcademyPageSetting the /food-academy hub's own hero reads
+  // (Admin > Food Academy > Page settings) — not a homepage-only fixture.
+  // Per-field "never blank" default merge already happens inside this
+  // service call, same pattern as getExportHeroForStorefront.
+  const foodAcademySettings = hasFoodAcademySection ? await getFoodAcademyPageSettingForStorefront() : null;
 
   return (
     <>
@@ -173,15 +178,25 @@ export async function HomepageSections({ layout }: { layout: HomepageLayoutDetai
             return <FeaturedRecipes key={section.id} titleOverride={section.titleOverride} />;
           case "ProductCollections":
             return <ProductCollections key={section.id} collections={resolvedCollections} titleOverride={section.titleOverride} />;
-          case "FoodAcademy":
+          case "FoodAcademy": {
+            // No titleOverride/descriptionOverride splice here — superseded
+            // by the real FoodAcademyPageSetting model (heroHeading/
+            // heroDescription/exploreHeading/exploreDescription), same
+            // cutover ExportSolutions already made below. foodAcademySettings
+            // is never null when this case runs (hasFoodAcademySection is
+            // true whenever a "FoodAcademy" section is in visibleSections).
+            if (!foodAcademySettings) return null;
             return (
               <Fragment key={section.id}>
-                <FoodAcademyTeaser
-                  data={{ ...foodAcademyTeaser, headline: section.titleOverride || foodAcademyTeaser.headline, description: section.descriptionOverride || foodAcademyTeaser.description }}
+                <FoodAcademyTeaser data={foodAcademySettings} />
+                <FoodAcademyExploreCards
+                  heading={foodAcademySettings.exploreHeading}
+                  description={foodAcademySettings.exploreDescription}
+                  categories={foodAcademyCategories}
                 />
-                <FoodAcademyExploreCards categories={foodAcademyCategories} />
               </Fragment>
             );
+          }
           case "CustomerReviews":
             if (resolvedReviews.length === 0) return null;
             return <CustomerReviews key={section.id} reviews={resolvedReviews} titleOverride={section.titleOverride} />;

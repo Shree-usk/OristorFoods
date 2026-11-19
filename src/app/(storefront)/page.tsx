@@ -6,6 +6,7 @@ import { CustomerReviews } from "@/components/storefront/home/customer-reviews";
 import { ExportSolutions } from "@/components/storefront/home/export-solutions";
 import { FeaturedCategories } from "@/components/storefront/home/featured-categories";
 import { FeaturedRecipes } from "@/components/storefront/home/featured-recipes";
+import { FoodAcademyExploreCards } from "@/components/storefront/home/food-academy-explore-cards";
 import { FoodAcademyTeaser } from "@/components/storefront/home/food-academy-teaser";
 import { HeroBanner } from "@/components/storefront/home/hero-banner";
 import { HomepageSections } from "@/components/storefront/home/homepage-sections";
@@ -16,13 +17,14 @@ import { WhyChooseOristor } from "@/components/storefront/home/why-choose-oristo
 import {
   customerReviews,
   featuredCategories,
-  foodAcademyTeaser,
   heroBanner,
   instagramPosts,
   productCollections,
   rewardsClubTeaser,
   whyChooseFeatures,
 } from "@/lib/fixtures/home-fixtures";
+import { listCategories as listFoodAcademyCategories } from "@/services/food-academy.service";
+import { getFoodAcademyPageSettingForStorefront } from "@/services/food-academy-page-setting.service";
 import { getPublishedHomepageLayout } from "@/services/homepage.service";
 
 /**
@@ -84,6 +86,15 @@ export default async function Home() {
     );
   }
 
+  // Food Academy's teaser + explore cards read the same admin-managed
+  // FoodAcademyPageSetting/categories HomepageSections reads above — not
+  // homepage-fixture data — so this fallback stays in sync with the real
+  // path even for a never-published environment.
+  const [foodAcademySettings, foodAcademyCategories] = await Promise.all([
+    getFoodAcademyPageSettingForStorefront(),
+    listFoodAcademyCategories(),
+  ]);
+
   return (
     <>
       <HeroBanner data={heroBanner} />
@@ -93,7 +104,12 @@ export default async function Home() {
       <BestSellingProducts />
       <FeaturedRecipes />
       <ProductCollections collections={productCollections} />
-      <FoodAcademyTeaser data={foodAcademyTeaser} />
+      <FoodAcademyTeaser data={foodAcademySettings} />
+      <FoodAcademyExploreCards
+        heading={foodAcademySettings.exploreHeading}
+        description={foodAcademySettings.exploreDescription}
+        categories={foodAcademyCategories}
+      />
       <ExportSolutions />
       <RewardsClubTeaser data={rewardsClubTeaser} />
       <InstagramGallery posts={instagramPosts} />

@@ -1,63 +1,47 @@
 import { ArrowRight } from "lucide-react";
-import Image from "next/image";
 import Link from "next/link";
 
 import { ScrollReveal } from "@/components/motion";
 import { Section } from "@/components/storefront/layout/section";
+import { FoodAcademyHeroVisual } from "@/components/storefront/food-academy/food-academy-hero-visual";
 import { Button } from "@/components/ui/button";
-import type { TeaserSectionData } from "@/types/home";
+import type { FoodAcademyPageSettingData } from "@/types/food-academy";
 
 /**
- * Homepage Food Academy teaser. Unlike the plain TeaserSection layout
- * (still used by Rewards Club), this is a bespoke, more editorial
- * treatment — concentric rings and a circular "did you know" badge behind
- * the product shot — matching the brand's Food Academy visual identity.
+ * Homepage Food Academy teaser. Reads the same admin-managed
+ * FoodAcademyPageSetting the /food-academy hub's own hero (FoodAcademyHero)
+ * reads — editing Admin > Food Academy > Page settings now updates both
+ * places at once, rather than this section being stuck on fixture copy.
+ * Shares its image/badge treatment with FoodAcademyHero via
+ * FoodAcademyHeroVisual; stays a separate component only because this
+ * heading is an h2 (the homepage's h1 is the Hero Banner), not an h1.
  */
-export function FoodAcademyTeaser({ data }: { data: TeaserSectionData }) {
+export function FoodAcademyTeaser({ data }: { data: FoodAcademyPageSettingData }) {
   return (
     <Section className="bg-beige">
       <div className="grid grid-cols-1 items-center gap-10 lg:grid-cols-2 lg:gap-16">
         <ScrollReveal>
-          <p className="text-small font-medium tracking-wide text-chilli uppercase">{data.eyebrow}</p>
-          <h2 className="mt-3 text-h1 font-heading text-charcoal">{data.headline}</h2>
-          <p className="mt-4 max-w-md text-body text-charcoal/80">{data.description}</p>
+          <p className="text-small font-medium tracking-wide text-chilli uppercase">{data.heroEyebrow}</p>
+          <h2 className="mt-3 text-h1 font-heading text-charcoal">{data.heroHeading}</h2>
+          <p className="mt-4 max-w-md text-body text-charcoal/80">{data.heroDescription}</p>
           <div className="mt-6 flex flex-wrap items-center gap-x-6 gap-y-3">
-            <Button nativeButton={false} render={<Link href={data.ctaHref} />}>
-              {data.ctaLabel}
+            <Button nativeButton={false} render={<Link href={data.heroPrimaryCtaHref} />}>
+              {data.heroPrimaryCtaLabel}
               <ArrowRight className="size-4" aria-hidden="true" />
             </Button>
-            {data.secondaryCtaLabel && data.secondaryCtaHref && (
+            {data.heroSecondaryCtaLabel && data.heroSecondaryCtaHref && (
               <Link
-                href={data.secondaryCtaHref}
+                href={data.heroSecondaryCtaHref}
                 className="text-small font-medium text-charcoal underline underline-offset-4 hover:text-chilli"
               >
-                {data.secondaryCtaLabel}
+                {data.heroSecondaryCtaLabel}
               </Link>
             )}
           </div>
         </ScrollReveal>
 
         <ScrollReveal delay={0.1}>
-          <div className="relative mx-auto aspect-square w-full max-w-md">
-            <div className="absolute inset-0 rounded-full border border-gold-light" aria-hidden="true" />
-            <div className="absolute inset-8 rounded-full border border-gold-light/70" aria-hidden="true" />
-            <div className="absolute inset-12 flex items-center justify-center overflow-hidden rounded-lg bg-cream shadow-xl">
-              <div className="relative h-full w-full">
-                <Image
-                  src={data.imageSrc}
-                  alt={data.imageAlt}
-                  fill
-                  sizes="(min-width: 1024px) 28vw, 70vw"
-                  className="object-contain p-8"
-                />
-              </div>
-            </div>
-            {data.badgeText && (
-              <div className="absolute -right-2 bottom-4 flex aspect-square w-28 items-center justify-center rounded-full bg-cream p-3 text-center shadow-lg sm:w-32">
-                <p className="font-heading text-caption italic text-chilli">{data.badgeText}</p>
-              </div>
-            )}
-          </div>
+          <FoodAcademyHeroVisual imageUrl={data.heroImageUrl} imageAlt={data.heroImageAlt} badgeText={data.heroBadgeText} />
         </ScrollReveal>
       </div>
     </Section>

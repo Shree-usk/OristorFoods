@@ -64,7 +64,7 @@ export async function getFoodAcademyPageSettingForStorefront(): Promise<FoodAcad
     heroPrimaryCtaHref: setting?.heroPrimaryCtaHref ?? d.heroPrimaryCtaHref,
     heroSecondaryCtaLabel: setting?.heroSecondaryCtaLabel ?? d.heroSecondaryCtaLabel,
     heroSecondaryCtaHref: setting?.heroSecondaryCtaHref ?? d.heroSecondaryCtaHref,
-    heroImageUrl: setting?.heroImageUrl ?? null,
+    heroImageUrl: setting?.heroImageUrl ?? d.heroImageUrl,
     heroImageAlt: setting?.heroImageAlt ?? d.heroImageAlt,
     heroBadgeText: setting?.heroBadgeText ?? d.heroBadgeText,
     exploreHeading: setting?.exploreHeading ?? d.exploreHeading,
