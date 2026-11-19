@@ -1,5 +1,6 @@
 import { getResolvedHeaderItems } from "@/services/navigation.service";
 import { AnnouncementBar } from "./announcement-bar";
+import { AnnouncementBarGate } from "./announcement-bar-gate";
 import { Container } from "./container";
 import { HeaderActions } from "./header-actions";
 import { Logo } from "./logo";
@@ -28,7 +29,9 @@ export async function Header() {
   return (
     <>
       {/* Not sticky — scrolls away with the page, unlike the shell below. */}
-      <AnnouncementBar />
+      <AnnouncementBarGate>
+        <AnnouncementBar />
+      </AnnouncementBarGate>
       <StickyHeaderShell>
         {/* Tighter gaps below `xl`: at 1024px the 13 nav links plus 7 action
             icons only just fit (tests/e2e/layout.spec.ts checks for overflow). */}
