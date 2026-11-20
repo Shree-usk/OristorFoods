@@ -3,7 +3,7 @@ import * as orderRepository from "@/repositories/order.repository";
 import type { OrderAdminListFilters } from "@/repositories/order.repository";
 import * as refundRecordRepository from "@/repositories/refund-record.repository";
 import * as returnRequestRepository from "@/repositories/return-request.repository";
-import type { OrderDetail, OrderDetailLineItem } from "@/services/customer-order-history.service";
+import type { OrderDetail, OrderDetailLineItem, OrderPaymentSummary } from "@/services/customer-order-history.service";
 import { emitOrderEvent } from "@/services/order-integration.service";
 import { OrderHasNoPaymentError, OrderNotFoundError, OrderNotPickupError, OrderRefundAmountExceedsRemainingError } from "@/services/order.errors";
 import { isTransitionAllowed, transitionOrderStatus } from "@/services/order.service";
@@ -68,7 +68,15 @@ export async function listOrdersForAdmin(
 // Detail
 // ---------------------------------------------------------------------------
 
-export interface OrderAdminDetail extends OrderDetail {
+/** Admin sees more of a Payment than the customer-facing OrderPaymentSummary exposes — a transaction reference to quote in support/disputes, when it happened, and why it failed (PayHere prep). */
+export interface AdminOrderPaymentSummary extends OrderPaymentSummary {
+  providerReference: string;
+  failureReason: string | null;
+  createdAt: string;
+}
+
+export interface OrderAdminDetail extends Omit<OrderDetail, "payment"> {
+  payment: AdminOrderPaymentSummary | null;
   customerName: string;
   customerEmail: string | null;
   refundRecords: { id: string; amount: number; reason: string; processedById: string; createdAt: string }[];
@@ -153,7 +161,15 @@ export async function getOrderAdminDetail(adminUserId: string, orderId: string):
     statusHistory: order.statusHistory.map((entry) => ({ status: entry.status, actor: entry.actor, createdAt: entry.createdAt.toISOString() })),
     tracking: { carrier: order.carrier, trackingNumber: order.trackingNumber, trackingUrl: order.trackingUrl },
     payment: order.payment
-      ? { provider: order.payment.provider, status: order.payment.status, amount: order.payment.amount.toNumber(), currency: order.payment.currency }
+      ? {
+          provider: order.payment.provider,
+          status: order.payment.status,
+          amount: order.payment.amount.toNumber(),
+          currency: order.payment.currency,
+          providerReference: order.payment.providerReference,
+          failureReason: order.payment.failureReason,
+          createdAt: order.payment.createdAt.toISOString(),
+        }
       : null,
     cancelledAt: order.cancelledAt?.toISOString() ?? null,
     cancellationReason: order.cancellationReason,

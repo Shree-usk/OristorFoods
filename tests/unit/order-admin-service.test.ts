@@ -143,6 +143,16 @@ describe("order-admin.service — list/detail", () => {
     expect(detail.nextLegalStatuses).toEqual(expect.arrayContaining(["Processing", "Cancelled"]));
   });
 
+  it("exposes the payment's transaction reference, timestamp, and failure reason to admin", async () => {
+    const admin = await makeFullAccessAdmin();
+    const { order } = await makeConfirmedOrder();
+
+    const detail = await getOrderAdminDetail(admin.id, order.id);
+    expect(detail.payment?.providerReference).toMatch(/^mock_ord-adm-/);
+    expect(detail.payment?.createdAt).toBeTruthy();
+    expect(detail.payment?.failureReason).toBeNull();
+  });
+
   it("throws OrderNotFoundError for an unknown id", async () => {
     const admin = await makeFullAccessAdmin();
     await expect(getOrderAdminDetail(admin.id, "missing-id")).rejects.toBeInstanceOf(OrderNotFoundError);

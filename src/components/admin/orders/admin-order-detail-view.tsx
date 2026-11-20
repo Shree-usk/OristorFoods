@@ -293,9 +293,15 @@ export function AdminOrderDetailView({ orderId }: { orderId: string }) {
             Method: {order.paymentMethod === "Card" ? "Card" : order.paymentMethod === "BankTransfer" ? "Bank Transfer" : "Cash on Delivery"}
           </p>
           {order.payment ? (
-            <p className="mt-2 text-small text-charcoal/80">
-              {order.payment.provider} — {order.payment.status} — {formatCurrency(order.payment.amount, order.payment.currency)}
-            </p>
+            <>
+              <p className="mt-2 text-small text-charcoal/80">
+                {order.payment.provider} — {order.payment.status} — {formatCurrency(order.payment.amount, order.payment.currency)}
+              </p>
+              <p className="mt-1 text-small text-charcoal/70">
+                Transaction ref: <span className="font-number">{order.payment.providerReference}</span> · {new Date(order.payment.createdAt).toLocaleString()}
+              </p>
+              {order.payment.failureReason && <p className="mt-1 text-small text-destructive">Failure reason: {order.payment.failureReason}</p>}
+            </>
           ) : (
             <p className="mt-2 text-small text-charcoal/70">No payment recorded.</p>
           )}
