@@ -91,7 +91,15 @@ export interface OrderAdminDetail {
   estimatedDaysMax: number | null;
   statusHistory: { status: string; actor: string; createdAt: string }[];
   tracking: { carrier: string | null; trackingNumber: string | null; trackingUrl: string | null };
-  payment: { provider: string; status: string; amount: number; currency: string } | null;
+  payment: {
+    provider: string;
+    status: string;
+    amount: number;
+    currency: string;
+    providerReference: string;
+    failureReason: string | null;
+    createdAt: string;
+  } | null;
   refundRecords: { id: string; amount: number; reason: string; processedById: string; createdAt: string }[];
   returnRequests: { id: string; status: string; reason: string; reasonCode: string | null; restocked: boolean; createdAt: string; processedAt: string | null }[];
   nextLegalStatuses: OrderStatusValue[];

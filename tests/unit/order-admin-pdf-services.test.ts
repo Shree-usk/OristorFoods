@@ -37,7 +37,7 @@ const FIXTURE_ORDER: OrderAdminDetail = {
   estimatedDaysMax: 3,
   statusHistory: [{ status: "Confirmed", actor: "system:checkout", createdAt: "2026-01-01T10:00:00.000Z" }],
   tracking: { carrier: null, trackingNumber: null, trackingUrl: null },
-  payment: { provider: "mock", status: "Succeeded", amount: 1300, currency: "LKR" },
+  payment: { provider: "mock", status: "Succeeded", amount: 1300, currency: "LKR", providerReference: "mock_fixture-ref", failureReason: null, createdAt: "2026-01-01T10:00:00.000Z" },
   cancelledAt: null,
   cancellationReason: null,
   refundRecords: [],
