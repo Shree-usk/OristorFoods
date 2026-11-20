@@ -35,6 +35,7 @@ export type PerfectMatchSettingAdminInput = z.infer<typeof perfectMatchSettingAd
 
 export const perfectMatchProductAdminSchema = z.object({
   productId: z.string().min(1),
+  tabLabel: optionalText(40),
   kicker: optionalText(120),
   promoDescriptionOverride: optionalText(500),
   isDefaultFeatured: z.boolean().optional().default(false),

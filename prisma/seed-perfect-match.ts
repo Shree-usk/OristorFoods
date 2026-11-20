@@ -40,6 +40,7 @@ interface PerfectMatchProductSeed {
   slug: string;
   shortDescription: string;
   price: string;
+  tabLabel: string;
   kicker: string;
   imageUrl?: string;
   isDefaultFeatured: boolean;
@@ -53,6 +54,7 @@ const PRODUCTS: PerfectMatchProductSeed[] = [
     shortDescription:
       "A familiar heritage flavour made to bring warmth and character to everyday meals. Explore the combinations your table will love.",
     price: "650.00",
+    tabLabel: "Muringa",
     kicker: "Rooted in Sri Lankan tradition",
     isDefaultFeatured: false,
   },
@@ -63,6 +65,7 @@ const PRODUCTS: PerfectMatchProductSeed[] = [
     shortDescription:
       "Rich onion flavour with a traditional touch. A versatile condiment that turns familiar bites into something worth looking forward to.",
     price: "650.00",
+    tabLabel: "Onion Thokku",
     kicker: "Sweet, savoury & full of character",
     isDefaultFeatured: false,
   },
@@ -72,6 +75,7 @@ const PRODUCTS: PerfectMatchProductSeed[] = [
     slug: "oristor-premium-raw-mango-pickle",
     shortDescription: "A bold, tangy favourite that brings a lively spark to the table. A little pickle can make familiar meals feel special.",
     price: "600.00",
+    tabLabel: "Mango Pickle",
     kicker: "A taste of heritage",
     imageUrl: "/images/products/misc/Mango-Pickle-Large.webp",
     isDefaultFeatured: true,
@@ -83,6 +87,7 @@ const PRODUCTS: PerfectMatchProductSeed[] = [
     shortDescription:
       "Golden onion richness with a sweet-spicy balance. A familiar favourite that brings a little celebration to everyday meals.",
     price: "700.00",
+    tabLabel: "Seeni Sambol",
     kicker: "A much-loved Sri Lankan classic",
     isDefaultFeatured: false,
   },
@@ -119,12 +124,18 @@ export async function seedPerfectMatch() {
     if (!existingLink) {
       await perfectMatchRepository.createPerfectMatchProduct({
         product: { connect: { id: product.id } },
+        tabLabel: spec.tabLabel,
         kicker: spec.kicker,
         isDefaultFeatured: spec.isDefaultFeatured,
         status: "Published",
         sortOrder: index,
       });
       linked += 1;
+    } else if (!existingLink.tabLabel) {
+      // Backfill only — tabLabel didn't exist as a field when earlier runs
+      // of this seed created these links, so it's always null here, never
+      // a real value an admin already set. Never touches any other field.
+      await perfectMatchRepository.updatePerfectMatchProduct(existingLink.id, { tabLabel: spec.tabLabel });
     }
   }
 

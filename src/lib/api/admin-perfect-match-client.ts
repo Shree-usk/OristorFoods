@@ -46,6 +46,7 @@ export interface PerfectMatchLinkedProduct {
 export interface PerfectMatchProduct {
   id: string;
   productId: string;
+  tabLabel: string | null;
   kicker: string | null;
   promoDescriptionOverride: string | null;
   isDefaultFeatured: boolean;
@@ -58,6 +59,7 @@ export interface PerfectMatchProduct {
 
 export interface PerfectMatchProductInput {
   productId: string;
+  tabLabel: string | null;
   kicker: string | null;
   promoDescriptionOverride: string | null;
   isDefaultFeatured: boolean;

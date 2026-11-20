@@ -23,13 +23,19 @@ export function AdminPerfectMatchProductDetailView({ productLinkId }: { productL
   const queryKey = ["admin-perfect-match-product", productLinkId];
   const { data, isLoading } = useQuery({ queryKey, queryFn: () => fetchPerfectMatchProduct(productLinkId) });
   const { register, handleSubmit, reset, setValue, watch } = useForm<FormValues>({
-    defaultValues: { kicker: "", promoDescriptionOverride: "", isDefaultFeatured: false, status: "Draft" },
+    defaultValues: { tabLabel: "", kicker: "", promoDescriptionOverride: "", isDefaultFeatured: false, status: "Draft" },
   });
   const [saved, setSaved] = useState(false);
 
   useEffect(() => {
     if (!data) return;
-    reset({ kicker: data.kicker ?? "", promoDescriptionOverride: data.promoDescriptionOverride ?? "", isDefaultFeatured: data.isDefaultFeatured, status: data.status });
+    reset({
+      tabLabel: data.tabLabel ?? "",
+      kicker: data.kicker ?? "",
+      promoDescriptionOverride: data.promoDescriptionOverride ?? "",
+      isDefaultFeatured: data.isDefaultFeatured,
+      status: data.status,
+    });
   }, [data, reset]);
 
   const mutation = useMutation({
@@ -73,6 +79,13 @@ export function AdminPerfectMatchProductDetailView({ productLinkId }: { productL
       </div>
 
       <form onSubmit={handleSubmit(onSubmit)} className="mb-10 grid gap-4">
+        <div>
+          <Label htmlFor="pm-product-tab-label">Tab label</Label>
+          <Input id="pm-product-tab-label" {...register("tabLabel")} placeholder={data.product.name} maxLength={40} />
+          <p className="mt-1 text-caption text-charcoal/60">
+            Short name shown on the homepage&apos;s product selector (e.g. &quot;Mango Pickle&quot;) — leave blank to use the full product name, which is often too long for the tab.
+          </p>
+        </div>
         <div>
           <Label htmlFor="pm-product-kicker">Kicker</Label>
           <Input id="pm-product-kicker" {...register("kicker")} placeholder="A traditional favourite" />

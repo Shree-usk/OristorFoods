@@ -558,6 +558,11 @@ model PerfectMatchProduct {
   id                       String             @id @default(cuid())
   productId                String             @unique
   product                  Product            @relation(fields: [productId], references: [id], onDelete: Cascade)
+  // Short name shown on the homepage's product-selector tab (e.g. "Mango
+  // Pickle") — the real Product.name is usually too long for a pill button
+  // (e.g. "Oristor Premium Raw Mango Pickle"). Falls back to the real
+  // product name when unset, same "never blank" convention as kicker.
+  tabLabel                 String?
   kicker                   String?
   promoDescriptionOverride String?
   isDefaultFeatured        Boolean            @default(false)

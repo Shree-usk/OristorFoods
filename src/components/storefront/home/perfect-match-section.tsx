@@ -76,7 +76,7 @@ export function PerfectMatchSection({ products }: { products: PerfectMatchProduc
                   : "border-input bg-background text-charcoal/70 hover:border-chilli hover:text-chilli",
               )}
             >
-              {product.name}
+              {product.tabLabel}
             </button>
           );
         })}
