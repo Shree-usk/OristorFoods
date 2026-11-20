@@ -10539,3 +10539,53 @@ to production without my explicit approval"), this stays on `master`
 only — unlike the same-session Food Academy work above, which did reach
 `staging.oristor.com` with separate explicit permission. Any future
 deploy of this feature needs its own fresh ask.
+
+## 2026-11-20 — PayHere payment gateway integration (prep, not activated)
+
+**Resolves the open item.** `docs/blueprint.md` Section 10 has carried
+"exact payment gateway provider(s)" as unconfirmed since STORY-026, and
+every gateway-agnostic design decision since (the `PaymentProvider`
+interface, the mock-only webhook route, the boundary-guard test) exists
+*because* of that open item. The client has now confirmed PayHere, with
+`oristor.com` already domain-approved. This is prep work only — the
+production gateway stays inactive (`PAYMENT_PROVIDER=mock` everywhere)
+until a separate, explicit go-live request; see
+`docs/PAYHERE_GO_LIVE_CHECKLIST.md` for the exact activation steps once
+that happens.
+
+**`Payment.providerReference` doubles as PayHere's `order_id`.**
+`checkout.service.ts::placeOrder` requires the `Payment` row to already be
+`Succeeded` *before* the real `Order` row exists (Card alone; see Story 4
+below) — there is no Oristor order number yet at the point a gateway
+needs one. The mock already solved this by minting its own opaque
+`providerReference` and using that as the identifier threaded through
+intent → confirm/webhook → place-order. PayHere's adapter reuses the same
+`providerReference` as the `order_id` it sends to PayHere and receives
+back on `notify_url` — no new identifier, no change to that invariant.
+
+**Provider selection moved one level further out, to keep the boundary
+test meaningful.** `tests/unit/payment-service-boundary.test.ts` used to
+grep `payment.service.ts`'s own source for gateway names (`stripe`,
+`payhere`, …) and fail if any appeared — a deliberate guard against
+guessing a provider while the decision was open. That premise is now
+false by design (the decision is made), so the literal name-ban would
+either have to be deleted or would wrongly block legitimate work. Instead,
+`getActiveProvider()` now calls `createProviderByName()` in a new
+`src/services/payment/provider-registry.ts`, and the test asserts
+`payment.service.ts` imports no concrete provider file directly (only
+`provider-registry.ts` and the interface) — the single-selection-point
+discipline survives, just centered one file further out, where a concrete
+gateway's name is expected to live.
+
+**One additive migration**: `Payment.failureReason String?` (nullable,
+default-free). Closes an admin-visibility gap — `admin-order-detail-view.tsx`
+showed `provider — status — amount` but nowhere to see *why* a payment
+failed — and gives PayHere's notify handler somewhere to record the
+gateway's own `status_message` on a decline. `updatePaymentStatus()` only
+writes it when transitioning to `Failed`; every other transition leaves
+it untouched.
+
+Stage-by-stage detail (PayHereProvider, notify-route signature
+verification, the onsite-JS-SDK checkout UI decision, the known
+chargeback/`status_code -3` gap, and the brief's full test-scenario
+coverage table) is added to this entry as each stage lands.

@@ -332,7 +332,12 @@ up) — same opportunistic-gap category.
 ## 10. Open Items to Confirm Before/During Build
 
 The source spec left these generic or unspecified — confirm with the client before implementing:
-- Exact payment gateway provider(s) (spec only says "Payment Gateway" generically)
+- ~~Exact payment gateway provider(s)~~ — **confirmed: PayHere**, for both
+  staging/dev (behind mock mode, no live credentials) and production
+  `oristor.com` (domain already PayHere-approved, prepared but not yet
+  activated). See `docs/architecture-decisions.md`'s PayHere integration
+  entry and `docs/PAYHERE_GO_LIVE_CHECKLIST.md` for the exact activation
+  steps.
 - Shipping/carrier integrations
 - ~~Zone-wise delivery charge structure~~ — **confirmed:** zones are
   defined by city; rate model (flat/weight/value-based) varies per zone;

@@ -42,9 +42,10 @@ describe("confirmPayment", () => {
 
     const row = await prisma.payment.findUnique({ where: { providerReference: intent.providerReference } });
     expect(row?.status).toBe("Succeeded");
+    expect(row?.failureReason).toBeNull();
   });
 
-  it("marks the payment Failed with a reason on a mock decline", async () => {
+  it("marks the payment Failed with a reason on a mock decline, and persists it", async () => {
     const intent = await createPaymentIntent(500, "LKR");
     const result = await confirmPayment(intent.providerReference, { outcome: "decline" });
     expect(result.status).toBe("Failed");
@@ -52,6 +53,7 @@ describe("confirmPayment", () => {
 
     const row = await prisma.payment.findUnique({ where: { providerReference: intent.providerReference } });
     expect(row?.status).toBe("Failed");
+    expect(row?.failureReason).toMatch(/declined/i);
   });
 
   it("throws on a mock timeout and leaves the payment Pending (retryable)", async () => {

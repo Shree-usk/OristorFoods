@@ -13,8 +13,8 @@ export function findPaymentById(id: string) {
   return prisma.payment.findUnique({ where: { id } });
 }
 
-export function updatePaymentStatus(id: string, status: PaymentStatus) {
-  return prisma.payment.update({ where: { id }, data: { status } });
+export function updatePaymentStatus(id: string, status: PaymentStatus, failureReason?: string | null) {
+  return prisma.payment.update({ where: { id }, data: { status, ...(failureReason !== undefined ? { failureReason } : {}) } });
 }
 
 /** STORY-039. Dashboard's Failed Payments widget. */

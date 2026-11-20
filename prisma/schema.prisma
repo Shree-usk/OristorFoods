@@ -2385,6 +2385,11 @@ model Payment {
   status            PaymentStatus @default(Pending)
   amount            Decimal       @db.Decimal(10, 2)
   currency          String        @default("LKR")
+  // PayHere prep. Set when a provider reports a decline/error (e.g. the
+  // gateway's own status_message) — never populated by the mock provider,
+  // which already returns its failure reason transiently without needing
+  // to persist it. Nullable: most Payment rows never fail.
+  failureReason     String?
   order             Order?
   createdAt         DateTime      @default(now())
   updatedAt         DateTime      @updatedAt
