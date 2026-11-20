@@ -16,6 +16,14 @@ export interface PaymentIntentRequest {
 
 export interface PaymentIntentResponse {
   providerReference: string;
+  /**
+   * Optional extra data the storefront needs to actually start this
+   * provider's own checkout flow (e.g. PayHere's onsite SDK needs merchant
+   * id, hash, and return/cancel/notify URLs). The mock leaves this
+   * undefined — nothing provider-specific lives in this interface itself,
+   * only an opaque bag a concrete provider may populate.
+   */
+  clientPayload?: Record<string, unknown>;
 }
 
 export interface PaymentConfirmation {
