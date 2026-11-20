@@ -10419,3 +10419,123 @@ with the new heading present in the response body, and a clean
 `docs/ORISTOR_VPS_DEPLOYMENT_HANDOVER.md` for the full deploy procedure —
 its "current stage" section was refreshed this session to stop describing
 an already-completed Nginx/systemd/SSL setup as not-yet-done.
+
+## 2026-11-20 — "The Perfect Match" homepage section (PRs #139-#142)
+
+Built a new premium homepage section from a detailed user-supplied brief
+(`docs/ORISTOR_Perfect_Match_Claude_Implementation_Brief.md`) and an
+approved HTML prototype (`docs/oristor-perfect-match-prototype.html`,
+both committed to the repo): 5 selectable product tabs (no page reload),
+a two-column "featured product" panel, and exactly 4 admin-managed "meal
+pairing" cards per product. Placed immediately after the existing Export
+Solutions section. Delivered across 4 independently-mergeable PRs
+(schema/permissions → admin service/API → admin UI → storefront), the
+same staged-delivery convention as Project Cinnamon above — see the
+`perfect-match-homepage-section` session memory for the full stage-by-
+stage build log if deeper detail is ever needed.
+
+**New models**: `PerfectMatchSetting` (singleton intro copy, `id:
+"global"`, same convention as `ExportHeroSetting`), `PerfectMatchProduct`
+(links an existing catalogue `Product` — one-to-one `@relation` +
+`@unique productId`, never duplicates product data), `PerfectMatchPairing`
+(≤4 per product, enforced in the service layer on publish, not the DB).
+New `PerfectMatchStatus` enum (Draft/Published) — deliberately its own
+enum, not a reuse of `ContentStatus` (Active/Inactive, a different
+concept). New `AdminModule.PerfectMatch` and its own `/admin/perfect-match`
+route tree (settings / products / products/[id] with nested pairing CRUD)
+— the generic Homepage Builder canvas `SectionEditor` Sheet was confirmed
+too thin (title/description-override only) for this section's real CRUD
+surface, same reasoning that gave Food Academy its own admin module.
+`PerfectMatch` is still a registered `HomepageSectionType` for the
+ordinary visible/order toggle, with zero new canvas code.
+
+**Real bugs found and fixed during the build**: (1)
+`PerfectMatchProduct.productId`'s one-to-one `@relation` + `@unique`
+means connecting an already-linked product throws Prisma `P2014`
+("required relation violation"), not the classic `P2002` a plain
+`@unique` scalar column raises — the duplicate-link guard checks both
+codes now (see the `prisma-one-to-one-connect-duplicate-is-p2014` session
+memory). (2) A Base UI `Button` rendered via `render={<Link .../>}`
+without `nativeButton={false}` throws a real console error and needs the
+prop even when it "already renders as a link" — found via manual
+Playwright verification, not a type error, since the prop is optional.
+
+**Confirmed scope decision**: of the brief's 5 named products, only 4
+exist in the real catalogue, under fuller branded names (confirmed via a
+direct read-only query against the **staging** database, not the local
+dev seed): Muringa → "Oristor Premium Muringa Thokku", Onion Thokku →
+"Oristor Premium Red Onion Thokku", Mango Pickle → "Oristor Premium Raw
+Mango Pickle", Seeni Sambol → "Oristor Premium Seeni Sambol With Maldive
+Fish". "Garlic Curry" does not exist as a product at all — shipped
+seeded with only the 4 real products, no fake/duplicate product record;
+an admin can add a 5th via the existing-product picker the moment a real
+one exists.
+
+**Two real content gaps, resolved with the user rather than papering
+over them**: (1) of the 4 real products, only "Raw Mango Pickle" has a
+real local packaging photo anywhere in this repo (the other 3 exist only
+on staging) — rather than fabricating a path or reusing an unrelated
+product's photo, those 3 ship imageless and `ImagePlaceholder` renders
+gracefully; an admin uploads the real photo via that product's own Media
+tab whenever it's available. (2) none of the ~16 meal-pairing dish photos
+(rotti, rice, bread, hoppers, etc.) the brief's own copy calls for exist
+in this repo either, and `PerfectMatchPairing.imageUrl` is a **required**
+field with no graceful "unset" state the way a product's own image has —
+rather than seeding a placeholder image, zero `PerfectMatchPairing` rows
+were seeded at all; the pairings grid already hides itself gracefully
+per-product when there are none (an explicit brief requirement: "Handle
+products with no available pairings gracefully"). Both are "ship
+correctly with less seeded content" calls, not shortcuts — the brief
+repeatedly and explicitly forbids fabricating product imagery.
+
+**New type-scale token**: `--text-h5` (20px), added to `globals.css`'s
+`@theme inline` block right after `--text-h4` — the brief's "pairing
+card title" target (19-21px desktop) fell in a genuine gap between
+`text-h4` (24px) and `text-body` (16px); no prior step in the scale
+covered it.
+
+**Storefront implementation**: `perfect-match.tsx` (Server Component,
+self-contained fetch, same convention as `ExportSolutions`, renders
+nothing when zero products are Published — no fabricated fallback, same
+policy as `CustomerReviews`) + `perfect-match-section.tsx` (Client
+Component). The product selector is a hand-rolled WAI-ARIA Tabs pattern
+(real `role="tablist"`/`"tab"`/`"tabpanel"`, roving tabindex, arrow/
+Home/End keyboard navigation) — there was no existing ARIA-tabs
+precedent anywhere else in this codebase to reuse, unlike the
+dnd-kit-reorder or `AssetPickerDialog` patterns elsewhere in this same
+feature. Only the active product's panel and images are ever mounted in
+the DOM, so switching products never pre-loads every hidden product's
+photography. The fade-on-switch transition is a `motion.div` keyed by
+product id (remount-triggers framer-motion's `initial`→`animate`, same
+pattern `PageTransition` already uses — no `AnimatePresence`),
+`useReducedMotion`-gated.
+
+**Seed**: `prisma/seed-perfect-match.ts` find-or-creates each of the 4
+products by exact name — idempotent against an environment (e.g.
+staging) where they already exist, never duplicating a real catalogue
+row. Also fixed `prisma/seed-homepage.ts`, whose `seedHomepage()`
+hand-writes every section's `sortOrder` literally rather than deriving it
+from `DEFAULT_SECTION_ORDER` — the new section needed a manual row added
+there too, or a fresh environment's seed would silently never show it on
+the published layout despite everything else being wired correctly.
+
+**Verified** (brief's own acceptance-criteria list, end to end): section
+sits immediately after Export Solutions and before Rewards Club (DOM
+order + bounding-box checks); visually matches the prototype's editorial
+character at 1440px/768px/390px with zero horizontal overflow at any
+width (Playwright-against-system-Chrome screenshots, the same workaround
+prior sessions used); zero axe violations (any impact) scoped to the
+section, zero critical/serious site-wide; exactly one `<h1>`; zero
+console errors and zero broken-image responses; clicking/arrow-keying
+between tabs swaps the featured product and pairings without a reload;
+"Explore this product" navigates to the real PDP; a product with no
+seeded photo renders the placeholder, never a broken image. `npm run
+test:e2e` could not be run locally (documented Playwright-install
+blocker) — the new `tests/e2e/perfect-match.spec.ts` and the admin
+equivalent rely on CI, both of which passed there.
+
+**Not deployed.** Per the brief's own explicit safeguard ("Do not deploy
+to production without my explicit approval"), this stays on `master`
+only — unlike the same-session Food Academy work above, which did reach
+`staging.oristor.com` with separate explicit permission. Any future
+deploy of this feature needs its own fresh ask.
