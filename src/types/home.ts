@@ -148,6 +148,8 @@ export interface PerfectMatchProductData {
   id: string;
   productId: string;
   name: string;
+  /** Short label for the homepage's product-selector tab — already resolved to the real product name when an admin hasn't set a shorter one. */
+  tabLabel: string;
   href: string;
   /** Editorial label shown above the product name (e.g. "A traditional favourite") — not the product's real category. */
   kicker: string | null;

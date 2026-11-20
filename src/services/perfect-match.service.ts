@@ -35,6 +35,7 @@ function toProductData(row: Awaited<ReturnType<typeof perfectMatchRepository.lis
     id: row.id,
     productId: row.productId,
     name: row.product.name,
+    tabLabel: row.tabLabel ?? row.product.name,
     href: `/products/${row.product.slug}`,
     kicker: row.kicker,
     description: row.promoDescriptionOverride ?? row.product.shortDescription ?? "",

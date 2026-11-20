@@ -160,7 +160,7 @@ function ProductPicker({ excludeIds, onClose, onAdded }: { excludeIds: string[];
     setAdding(productId);
     setError(null);
     try {
-      await addPerfectMatchProduct({ productId, kicker: null, promoDescriptionOverride: null, isDefaultFeatured: false });
+      await addPerfectMatchProduct({ productId, tabLabel: null, kicker: null, promoDescriptionOverride: null, isDefaultFeatured: false });
       toastManager.add({ title: "Product added" });
       onAdded();
     } catch (err) {

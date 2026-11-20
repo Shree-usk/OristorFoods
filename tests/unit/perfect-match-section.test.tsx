@@ -6,10 +6,16 @@ import { PerfectMatchSection } from "@/components/storefront/home/perfect-match-
 import type { PerfectMatchProductData } from "@/types/home";
 
 function makeProduct(overrides: Partial<PerfectMatchProductData> = {}): PerfectMatchProductData {
+  // tabLabel defaults to whatever `name` ends up being (mirroring the real
+  // "falls back to the full product name when unset" service behavior),
+  // so tests that only override `name` don't also need to repeat it as
+  // `tabLabel` — pass `tabLabel` explicitly to test the two diverging.
+  const name = overrides.name ?? "Oristor Premium Raw Mango Pickle";
   return {
     id: "link-1",
     productId: "product-1",
-    name: "Oristor Premium Raw Mango Pickle",
+    name,
+    tabLabel: name,
     href: "/products/oristor-premium-raw-mango-pickle",
     kicker: "A taste of heritage",
     description: "A bold, tangy favourite that brings a lively spark to the table.",
@@ -79,6 +85,14 @@ describe("PerfectMatchSection", () => {
     rerender(<PerfectMatchSection products={[makeProduct({ name: "Mango Pickle", pairings: [makePairing("p1", "Rice & Curry")] })]} />);
     expect(screen.getByText("Mango Pickle, four ways")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Rice & Curry" })).toBeInTheDocument();
+  });
+
+  it("shows the short tabLabel on the tab, not the full product name, when they differ", () => {
+    render(<PerfectMatchSection products={[makeProduct({ name: "Oristor Premium Raw Mango Pickle", tabLabel: "Mango Pickle" })]} />);
+    expect(screen.getByRole("tab", { name: "Mango Pickle" })).toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: "Oristor Premium Raw Mango Pickle" })).not.toBeInTheDocument();
+    // The full name still appears in the featured panel's own heading.
+    expect(screen.getByRole("heading", { name: "Oristor Premium Raw Mango Pickle" })).toBeInTheDocument();
   });
 
   it("links the 'Explore this product' button to the product's real href", () => {

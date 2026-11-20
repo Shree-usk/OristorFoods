@@ -57,6 +57,7 @@ export function createPerfectMatchProduct(data: Prisma.PerfectMatchProductCreate
 }
 
 export interface UpdatePerfectMatchProductInput {
+  tabLabel?: string | null;
   kicker?: string | null;
   promoDescriptionOverride?: string | null;
   isDefaultFeatured?: boolean;

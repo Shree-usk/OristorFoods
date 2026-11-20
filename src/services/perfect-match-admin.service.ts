@@ -81,6 +81,7 @@ export async function addPerfectMatchProduct(adminUserId: string, input: Perfect
   try {
     const created = await perfectMatchRepository.createPerfectMatchProduct({
       product: { connect: { id: input.productId } },
+      tabLabel: input.tabLabel,
       kicker: input.kicker,
       promoDescriptionOverride: input.promoDescriptionOverride,
       sortOrder,
@@ -103,6 +104,7 @@ export async function updatePerfectMatchProductAdmin(adminUserId: string, id: st
 
   if (input.isDefaultFeatured) await perfectMatchRepository.clearOtherDefaultFeaturedProducts(id);
   await perfectMatchRepository.updatePerfectMatchProduct(id, {
+    tabLabel: input.tabLabel,
     kicker: input.kicker,
     promoDescriptionOverride: input.promoDescriptionOverride,
     isDefaultFeatured: input.isDefaultFeatured,

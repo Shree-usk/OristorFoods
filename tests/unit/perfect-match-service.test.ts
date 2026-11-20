@@ -65,7 +65,7 @@ describe("perfect-match.service — getPerfectMatchForStorefront", () => {
   it("omits a Draft product link from the storefront result", async () => {
     const admin = await makeFullAccessAdmin();
     const product = await makeProduct();
-    await addPerfectMatchProduct(admin.id, { productId: product.id, kicker: null, promoDescriptionOverride: null, isDefaultFeatured: false });
+    await addPerfectMatchProduct(admin.id, { productId: product.id, tabLabel: null, kicker: null, promoDescriptionOverride: null, isDefaultFeatured: false });
 
     const data = await getPerfectMatchForStorefront();
     expect(data.products).toEqual([]);
@@ -74,8 +74,8 @@ describe("perfect-match.service — getPerfectMatchForStorefront", () => {
   it("omits a Published link whose underlying catalogue product is no longer Published", async () => {
     const admin = await makeFullAccessAdmin();
     const product = await makeProduct({ status: "Draft" });
-    const link = await addPerfectMatchProduct(admin.id, { productId: product.id, kicker: null, promoDescriptionOverride: null, isDefaultFeatured: false });
-    await updatePerfectMatchProductAdmin(admin.id, link.id, { productId: product.id, kicker: null, promoDescriptionOverride: null, isDefaultFeatured: false, status: "Published" });
+    const link = await addPerfectMatchProduct(admin.id, { productId: product.id, tabLabel: null, kicker: null, promoDescriptionOverride: null, isDefaultFeatured: false });
+    await updatePerfectMatchProductAdmin(admin.id, link.id, { productId: product.id, tabLabel: null, kicker: null, promoDescriptionOverride: null, isDefaultFeatured: false, status: "Published" });
 
     const data = await getPerfectMatchForStorefront();
     expect(data.products).toEqual([]);
@@ -84,8 +84,8 @@ describe("perfect-match.service — getPerfectMatchForStorefront", () => {
   it("falls back to the product's own shortDescription when no promoDescriptionOverride is set", async () => {
     const admin = await makeFullAccessAdmin();
     const product = await makeProduct({ shortDescription: "The product's real short description." });
-    const link = await addPerfectMatchProduct(admin.id, { productId: product.id, kicker: "A traditional favourite", promoDescriptionOverride: null, isDefaultFeatured: false });
-    await updatePerfectMatchProductAdmin(admin.id, link.id, { productId: product.id, kicker: "A traditional favourite", promoDescriptionOverride: null, isDefaultFeatured: false, status: "Published" });
+    const link = await addPerfectMatchProduct(admin.id, { productId: product.id, tabLabel: null, kicker: "A traditional favourite", promoDescriptionOverride: null, isDefaultFeatured: false });
+    await updatePerfectMatchProductAdmin(admin.id, link.id, { productId: product.id, tabLabel: null, kicker: "A traditional favourite", promoDescriptionOverride: null, isDefaultFeatured: false, status: "Published" });
 
     const data = await getPerfectMatchForStorefront();
     expect(data.products).toHaveLength(1);
@@ -93,16 +93,30 @@ describe("perfect-match.service — getPerfectMatchForStorefront", () => {
     expect(data.products[0].kicker).toBe("A traditional favourite");
   });
 
+  it("falls back to the product's real name for tabLabel when unset, and prefers a real tabLabel once set", async () => {
+    const admin = await makeFullAccessAdmin();
+    const product = await makeProduct();
+    const link = await addPerfectMatchProduct(admin.id, { productId: product.id, tabLabel: null, kicker: null, promoDescriptionOverride: null, isDefaultFeatured: false });
+    await updatePerfectMatchProductAdmin(admin.id, link.id, { productId: product.id, tabLabel: null, kicker: null, promoDescriptionOverride: null, isDefaultFeatured: false, status: "Published" });
+
+    let data = await getPerfectMatchForStorefront();
+    expect(data.products[0].tabLabel).toBe(product.name);
+
+    await updatePerfectMatchProductAdmin(admin.id, link.id, { productId: product.id, tabLabel: "Short Name", kicker: null, promoDescriptionOverride: null, isDefaultFeatured: false, status: "Published" });
+    data = await getPerfectMatchForStorefront();
+    expect(data.products[0].tabLabel).toBe("Short Name");
+  });
+
   it("orders products default-featured first, then by sortOrder, and only includes Published pairings up to 4", async () => {
     const admin = await makeFullAccessAdmin();
     const first = await makeProduct();
     const second = await makeProduct();
 
-    const firstLink = await addPerfectMatchProduct(admin.id, { productId: first.id, kicker: null, promoDescriptionOverride: null, isDefaultFeatured: false });
-    await updatePerfectMatchProductAdmin(admin.id, firstLink.id, { productId: first.id, kicker: null, promoDescriptionOverride: null, isDefaultFeatured: false, status: "Published" });
+    const firstLink = await addPerfectMatchProduct(admin.id, { productId: first.id, tabLabel: null, kicker: null, promoDescriptionOverride: null, isDefaultFeatured: false });
+    await updatePerfectMatchProductAdmin(admin.id, firstLink.id, { productId: first.id, tabLabel: null, kicker: null, promoDescriptionOverride: null, isDefaultFeatured: false, status: "Published" });
 
-    const secondLink = await addPerfectMatchProduct(admin.id, { productId: second.id, kicker: null, promoDescriptionOverride: null, isDefaultFeatured: true });
-    await updatePerfectMatchProductAdmin(admin.id, secondLink.id, { productId: second.id, kicker: null, promoDescriptionOverride: null, isDefaultFeatured: true, status: "Published" });
+    const secondLink = await addPerfectMatchProduct(admin.id, { productId: second.id, tabLabel: null, kicker: null, promoDescriptionOverride: null, isDefaultFeatured: true });
+    await updatePerfectMatchProductAdmin(admin.id, secondLink.id, { productId: second.id, tabLabel: null, kicker: null, promoDescriptionOverride: null, isDefaultFeatured: true, status: "Published" });
 
     for (let i = 1; i <= 5; i += 1) {
       const status = i <= 4 ? "Published" : "Draft";

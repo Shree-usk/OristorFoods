@@ -80,7 +80,7 @@ describe("perfect-match-admin.service — permissions", () => {
   it("denies adding a product without Edit permission", async () => {
     const viewer = await makeViewOnlyAdmin();
     const product = await makeProduct();
-    await expect(addPerfectMatchProduct(viewer.id, { productId: product.id, kicker: null, promoDescriptionOverride: null, isDefaultFeatured: false })).rejects.toBeInstanceOf(
+    await expect(addPerfectMatchProduct(viewer.id, { productId: product.id, tabLabel: null, kicker: null, promoDescriptionOverride: null, isDefaultFeatured: false })).rejects.toBeInstanceOf(
       PermissionDeniedError,
     );
   });
@@ -90,13 +90,13 @@ describe("perfect-match-admin.service — products", () => {
   it("adds a product, writes an audit log entry, and rejects linking the underlying product twice", async () => {
     const admin = await makeFullAccessAdmin();
     const product = await makeProduct();
-    const linked = await addPerfectMatchProduct(admin.id, { productId: product.id, kicker: "A traditional favourite", promoDescriptionOverride: null, isDefaultFeatured: false });
+    const linked = await addPerfectMatchProduct(admin.id, { productId: product.id, tabLabel: null, kicker: "A traditional favourite", promoDescriptionOverride: null, isDefaultFeatured: false });
 
     expect(linked.productId).toBe(product.id);
     const log = await prisma.auditLog.findFirst({ where: { actorId: admin.id, action: "perfect_match_product_added" } });
     expect(log).not.toBeNull();
 
-    await expect(addPerfectMatchProduct(admin.id, { productId: product.id, kicker: null, promoDescriptionOverride: null, isDefaultFeatured: false })).rejects.toBeInstanceOf(
+    await expect(addPerfectMatchProduct(admin.id, { productId: product.id, tabLabel: null, kicker: null, promoDescriptionOverride: null, isDefaultFeatured: false })).rejects.toBeInstanceOf(
       PerfectMatchProductAlreadyAddedError,
     );
   });
@@ -104,7 +104,7 @@ describe("perfect-match-admin.service — products", () => {
   it("rejects linking a product id that doesn't exist in the catalogue", async () => {
     const admin = await makeFullAccessAdmin();
     await expect(
-      addPerfectMatchProduct(admin.id, { productId: "does-not-exist", kicker: null, promoDescriptionOverride: null, isDefaultFeatured: false }),
+      addPerfectMatchProduct(admin.id, { productId: "does-not-exist", tabLabel: null, kicker: null, promoDescriptionOverride: null, isDefaultFeatured: false }),
     ).rejects.toBeInstanceOf(PerfectMatchUnderlyingProductNotFoundError);
   });
 
@@ -112,16 +112,16 @@ describe("perfect-match-admin.service — products", () => {
     const admin = await makeFullAccessAdmin();
     const productA = await makeProduct();
     const productB = await makeProduct();
-    const linkedA = await addPerfectMatchProduct(admin.id, { productId: productA.id, kicker: null, promoDescriptionOverride: null, isDefaultFeatured: true });
+    const linkedA = await addPerfectMatchProduct(admin.id, { productId: productA.id, tabLabel: null, kicker: null, promoDescriptionOverride: null, isDefaultFeatured: true });
     expect(linkedA.isDefaultFeatured).toBe(true);
 
-    const linkedB = await addPerfectMatchProduct(admin.id, { productId: productB.id, kicker: null, promoDescriptionOverride: null, isDefaultFeatured: true });
+    const linkedB = await addPerfectMatchProduct(admin.id, { productId: productB.id, tabLabel: null, kicker: null, promoDescriptionOverride: null, isDefaultFeatured: true });
     expect(linkedB.isDefaultFeatured).toBe(true);
 
     const refreshedA = await prisma.perfectMatchProduct.findUniqueOrThrow({ where: { id: linkedA.id } });
     expect(refreshedA.isDefaultFeatured).toBe(false);
 
-    await updatePerfectMatchProductAdmin(admin.id, linkedA.id, { productId: productA.id, kicker: null, promoDescriptionOverride: null, isDefaultFeatured: true });
+    await updatePerfectMatchProductAdmin(admin.id, linkedA.id, { productId: productA.id, tabLabel: null, kicker: null, promoDescriptionOverride: null, isDefaultFeatured: true });
     const refreshedB = await prisma.perfectMatchProduct.findUniqueOrThrow({ where: { id: linkedB.id } });
     expect(refreshedB.isDefaultFeatured).toBe(false);
   });
@@ -129,14 +129,14 @@ describe("perfect-match-admin.service — products", () => {
   it("update rejects when the id doesn't exist", async () => {
     const admin = await makeFullAccessAdmin();
     await expect(
-      updatePerfectMatchProductAdmin(admin.id, "does-not-exist", { productId: "irrelevant", kicker: null, promoDescriptionOverride: null, isDefaultFeatured: false }),
+      updatePerfectMatchProductAdmin(admin.id, "does-not-exist", { productId: "irrelevant", tabLabel: null, kicker: null, promoDescriptionOverride: null, isDefaultFeatured: false }),
     ).rejects.toBeInstanceOf(PerfectMatchProductNotFoundError);
   });
 
   it("removes a product and writes an audit log entry", async () => {
     const admin = await makeFullAccessAdmin();
     const product = await makeProduct();
-    const linked = await addPerfectMatchProduct(admin.id, { productId: product.id, kicker: null, promoDescriptionOverride: null, isDefaultFeatured: false });
+    const linked = await addPerfectMatchProduct(admin.id, { productId: product.id, tabLabel: null, kicker: null, promoDescriptionOverride: null, isDefaultFeatured: false });
 
     await removePerfectMatchProduct(admin.id, linked.id);
     await expect(prisma.perfectMatchProduct.findUniqueOrThrow({ where: { id: linked.id } })).rejects.toThrow();
@@ -148,8 +148,8 @@ describe("perfect-match-admin.service — products", () => {
     const admin = await makeFullAccessAdmin();
     const productA = await makeProduct();
     const productB = await makeProduct();
-    const a = await addPerfectMatchProduct(admin.id, { productId: productA.id, kicker: null, promoDescriptionOverride: null, isDefaultFeatured: false });
-    const b = await addPerfectMatchProduct(admin.id, { productId: productB.id, kicker: null, promoDescriptionOverride: null, isDefaultFeatured: false });
+    const a = await addPerfectMatchProduct(admin.id, { productId: productA.id, tabLabel: null, kicker: null, promoDescriptionOverride: null, isDefaultFeatured: false });
+    const b = await addPerfectMatchProduct(admin.id, { productId: productB.id, tabLabel: null, kicker: null, promoDescriptionOverride: null, isDefaultFeatured: false });
 
     await reorderPerfectMatchProductsAdmin(admin.id, [b.id, a.id]);
 
@@ -164,7 +164,7 @@ describe("perfect-match-admin.service — products", () => {
 describe("perfect-match-admin.service — pairings", () => {
   async function makeLinkedProduct(admin: { id: string }) {
     const product = await makeProduct();
-    return addPerfectMatchProduct(admin.id, { productId: product.id, kicker: null, promoDescriptionOverride: null, isDefaultFeatured: false });
+    return addPerfectMatchProduct(admin.id, { productId: product.id, tabLabel: null, kicker: null, promoDescriptionOverride: null, isDefaultFeatured: false });
   }
 
   it("adds a Draft pairing without touching the published-count limit", async () => {
