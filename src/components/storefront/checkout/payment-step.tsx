@@ -4,18 +4,22 @@ import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
+import { PayHereCheckoutButton } from "@/components/storefront/checkout/payhere-checkout-button";
 import { ApiError } from "@/lib/api/api-error";
 import { confirmPayment, createPaymentIntent, fetchCheckoutBankAccounts, fetchEligiblePaymentMethods } from "@/lib/api/checkout-client";
 import { useCheckoutStore } from "@/lib/stores/checkout-store";
 import type { PaymentMethod } from "@/types/checkout";
 
 /**
- * Story 4 (Payment Restriction). Until the real gateway decision
- * (blueprint Section 10), Card is simulated via the mock provider's
- * success/decline outcomes — exercising the same confirm/decline path a
- * real hosted checkout will use. Bank Transfer and Cash on Delivery have
- * no gateway to call at all: both write a Pending Payment row and let the
- * customer continue straight to Review — see
+ * Story 4 (Payment Restriction) + the PayHere integration prep. Card is
+ * processed by whichever provider is active server-side
+ * (`PAYMENT_PROVIDER`) — the intent's own `provider` field says which:
+ * "mock" renders the dev/test success/decline radio UI below (unchanged
+ * synchronous confirm flow); "payhere" renders `PayHereCheckoutButton`
+ * instead (its own onsite-SDK flow, confirmed only via the async notify
+ * webhook, never this component). Bank Transfer and Cash on Delivery
+ * have no gateway to call at all: both write a Pending Payment row and
+ * let the customer continue straight to Review — see
  * payment.service.ts::createManualPaymentIntent and checkout.service.ts's
  * own comments for why neither is ever marked paid here.
  */
@@ -81,6 +85,16 @@ export function PaymentStep() {
     }
   }
 
+  function handlePayHereSucceeded() {
+    setPaymentError(null);
+    markPaymentConfirmed();
+    goToStep(5);
+  }
+
+  function handlePayHereFailed(reason: string) {
+    setPaymentError(reason);
+  }
+
   function handleContinueManualMethod() {
     // BankTransfer/CashOnDelivery: nothing to confirm here — the Payment
     // row stays Pending through order placement (see
@@ -130,7 +144,7 @@ export function PaymentStep() {
         </fieldset>
       )}
 
-      {paymentMethod && intent && paymentMethod === "Card" && (
+      {paymentMethod && intent && paymentMethod === "Card" && intent.provider === "mock" && (
         <fieldset className="mt-6">
           <legend className="text-small font-semibold text-charcoal">Simulated card outcome</legend>
           <div className="mt-2 flex flex-col gap-2">
@@ -206,10 +220,13 @@ export function PaymentStep() {
         <Button type="button" variant="outline" onClick={() => goToStep(isPickup ? 1 : 3)} disabled={isProcessing}>
           {isPickup ? "Back" : "Back to Delivery"}
         </Button>
-        {paymentMethod && intent && paymentMethod === "Card" && (
+        {paymentMethod && intent && paymentMethod === "Card" && intent.provider === "mock" && (
           <Button type="button" onClick={handlePayCard} disabled={isProcessing}>
             {isProcessing ? "Processing…" : "Pay now"}
           </Button>
+        )}
+        {paymentMethod && intent && paymentMethod === "Card" && intent.provider === "payhere" && (
+          <PayHereCheckoutButton disabled={isProcessing} onSucceeded={handlePayHereSucceeded} onFailed={handlePayHereFailed} />
         )}
         {paymentMethod && intent && paymentMethod !== "Card" && (
           <Button type="button" onClick={handleContinueManualMethod} disabled={isProcessing}>

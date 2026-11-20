@@ -70,6 +70,10 @@ export class PayHereProvider implements PaymentProvider {
         return_url: requiredEnv("PAYHERE_RETURN_URL"),
         cancel_url: requiredEnv("PAYHERE_CANCEL_URL"),
         notify_url: requiredEnv("PAYHERE_NOTIFY_URL"),
+        // The onsite SDK's own sandbox/live switch — server-decided
+        // (PAYHERE_ENV), never left to the client. Defaults to sandbox
+        // (safer default) unless explicitly "live".
+        sandbox: process.env.PAYHERE_ENV !== "live",
       },
     };
   }

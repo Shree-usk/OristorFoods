@@ -4,7 +4,7 @@ import { PaymentRefundNotImplementedError, PaymentSyncConfirmNotSupportedError, 
 import { PayHereProvider } from "@/services/payment/payhere-payment.provider";
 import { computeNotifySignature, generateCheckoutHash } from "@/services/payment/payhere-signature";
 
-const ENV_KEYS = ["PAYHERE_MERCHANT_ID", "PAYHERE_MERCHANT_SECRET", "PAYHERE_RETURN_URL", "PAYHERE_CANCEL_URL", "PAYHERE_NOTIFY_URL"] as const;
+const ENV_KEYS = ["PAYHERE_MERCHANT_ID", "PAYHERE_MERCHANT_SECRET", "PAYHERE_RETURN_URL", "PAYHERE_CANCEL_URL", "PAYHERE_NOTIFY_URL", "PAYHERE_ENV"] as const;
 const MERCHANT_ID = "1211149";
 const MERCHANT_SECRET = "test-secret-value";
 
@@ -43,6 +43,19 @@ describe("PayHereProvider.createIntent", () => {
 
     const expectedHash = generateCheckoutHash({ merchantId: MERCHANT_ID, orderId: result.providerReference, amount: 1000, currency: "LKR", merchantSecret: MERCHANT_SECRET });
     expect(result.clientPayload?.hash).toBe(expectedHash);
+  });
+
+  it("defaults the onsite SDK to sandbox mode when PAYHERE_ENV is unset", async () => {
+    const provider = new PayHereProvider();
+    const result = await provider.createIntent({ amount: 1000, currency: "LKR" });
+    expect(result.clientPayload?.sandbox).toBe(true);
+  });
+
+  it("switches the onsite SDK to live mode only when PAYHERE_ENV is exactly \"live\"", async () => {
+    process.env.PAYHERE_ENV = "live";
+    const provider = new PayHereProvider();
+    const result = await provider.createIntent({ amount: 1000, currency: "LKR" });
+    expect(result.clientPayload?.sandbox).toBe(false);
   });
 
   it("throws when a required PayHere env var is missing", async () => {
