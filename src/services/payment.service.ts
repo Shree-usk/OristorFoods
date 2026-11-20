@@ -7,24 +7,28 @@ import {
   PaymentRefundAmountInvalidError,
   PaymentRefundNotAllowedError,
 } from "@/services/payment.errors";
-import { MockPaymentProvider } from "@/services/payment/mock-payment.provider";
+import { createProviderByName } from "@/services/payment/provider-registry";
 import type { PaymentProvider, RefundResult } from "@/services/payment/payment-provider.interface";
 import type { PaymentIntentResult } from "@/types/checkout";
 
 /**
  * Provider-agnostic payment orchestration (STORY-026): create/confirm an
  * intent, apply an async webhook callback, and refund — all through the
- * PaymentProvider interface. getActiveProvider() below is the ONE place a
- * concrete provider may be imported. The concrete gateway is an open
- * business decision (blueprint Section 10, cross-referenced in
- * docs/architecture-decisions.md); "mock" is the only valid
- * PAYMENT_PROVIDER value until that decision is made — this is not a
- * technical gap, so don't "fix" it by guessing a provider.
+ * PaymentProvider interface. getActiveProvider() below is the ONE place
+ * PAYMENT_PROVIDER is read; the concrete provider it names is looked up
+ * via provider-registry.ts, never imported here directly, so this file
+ * stays free of any gateway-specific name or SDK import (see
+ * tests/unit/payment-service-boundary.test.ts). The concrete gateway for
+ * production is PayHere (confirmed — see docs/blueprint.md Section 10 and
+ * docs/architecture-decisions.md); "mock" remains the default everywhere
+ * except where a developer deliberately opts into a real/sandbox provider
+ * in their own local environment.
  */
 function getActiveProvider(): PaymentProvider {
   const configured = process.env.PAYMENT_PROVIDER ?? "mock";
-  if (configured === "mock") return new MockPaymentProvider();
-  throw new PaymentProviderUnconfiguredError(configured);
+  const provider = createProviderByName(configured);
+  if (!provider) throw new PaymentProviderUnconfiguredError(configured);
+  return provider;
 }
 
 export async function createPaymentIntent(amount: number, currency: string): Promise<PaymentIntentResult> {
@@ -77,7 +81,7 @@ async function applyOutcome(
   if (payment.status === "Succeeded") return { status: "Succeeded", failureReason: null };
   if (payment.status !== "Pending") return { status: "Failed", failureReason: "This payment can no longer be confirmed." };
 
-  await paymentRepository.updatePaymentStatus(payment.id, outcome.status);
+  await paymentRepository.updatePaymentStatus(payment.id, outcome.status, outcome.status === "Failed" ? (outcome.failureReason ?? null) : null);
   return { status: outcome.status, failureReason: outcome.failureReason ?? null };
 }
 
