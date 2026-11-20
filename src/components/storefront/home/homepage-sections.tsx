@@ -9,6 +9,7 @@ import { FoodAcademyExploreCards } from "@/components/storefront/home/food-acade
 import { FoodAcademyTeaser } from "@/components/storefront/home/food-academy-teaser";
 import { HeroBannerSlide } from "@/components/storefront/home/hero-banner-slide";
 import { InstagramGallery } from "@/components/storefront/home/instagram-gallery";
+import { PerfectMatch } from "@/components/storefront/home/perfect-match";
 import { ProductCollections } from "@/components/storefront/home/product-collections";
 import { RewardsClubTeaser } from "@/components/storefront/home/rewards-club-teaser";
 import { WhyChooseOristor } from "@/components/storefront/home/why-choose-oristor";
@@ -205,6 +206,12 @@ export async function HomepageSections({ layout }: { layout: HomepageLayoutDetai
             // by the real ExportHeroSetting model, same as HeroBanner's
             // case above.
             return <ExportSolutions key={section.id} />;
+          case "PerfectMatch":
+            // No titleOverride/descriptionOverride splice here either —
+            // superseded by PerfectMatchSetting, same cutover as
+            // ExportSolutions above. Renders nothing if no product has
+            // been published into the rail yet (see perfect-match.tsx).
+            return <PerfectMatch key={section.id} />;
           case "RewardsClub":
             return (
               <RewardsClubTeaser

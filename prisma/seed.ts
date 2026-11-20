@@ -17,6 +17,7 @@ import { seedDownloads } from "./seed-downloads";
 import { seedFoodAcademy } from "./seed-food-academy";
 import { seedHomepage } from "./seed-homepage";
 import { seedNotificationTemplates } from "./seed-notifications";
+import { seedPerfectMatch } from "./seed-perfect-match";
 import { seedRecipes } from "./seed-recipes";
 import { seedReferrals } from "./seed-referrals";
 import { seedRewards } from "./seed-rewards";
@@ -350,6 +351,12 @@ async function main() {
   // layout matching STORY-006's original fixture-driven default.
   const homepageSeed = await seedHomepage();
 
+  // Homepage "The Perfect Match" section — the 4 real confirmed products
+  // from the approved brief, find-or-created and linked (see
+  // seed-perfect-match.ts for why no pairings or 3 of the 4 products'
+  // photos are seeded yet).
+  const perfectMatchSeed = await seedPerfectMatch();
+
   // About page content blocks (STORY-074 — core scope): the real copy
   // that used to live in the now-deleted src/lib/story-content.ts.
   const storyPagesSeed = await seedStoryPages();
@@ -388,6 +395,7 @@ async function main() {
     notifications: notificationsSeed,
     admin: adminSeed,
     homepage: homepageSeed,
+    perfectMatch: perfectMatchSeed,
     storyPages: storyPagesSeed,
     recommendations: recommendationsSeed,
     embeddings: embeddingsSeed,

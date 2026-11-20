@@ -22,10 +22,22 @@ export function listPerfectMatchProducts() {
   });
 }
 
+/**
+ * Storefront read for the homepage rail (perfect-match.service.ts). Ordered
+ * default-featured-first so the Client Component's initial tab is exactly
+ * the admin's chosen default (falling back to plain sortOrder when none is
+ * set). `pairings` is capped at 4 defensively — the admin service already
+ * enforces the max at write time, this just guards against a direct DB
+ * edit bypassing it.
+ */
 export function listPublishedPerfectMatchProducts() {
   return prisma.perfectMatchProduct.findMany({
     where: { status: "Published" },
     orderBy: [{ isDefaultFeatured: "desc" }, { sortOrder: "asc" }],
+    include: {
+      product: { select: { name: true, slug: true, shortDescription: true, status: true, images: { where: { isPrimary: true }, take: 1 } } },
+      pairings: { where: { status: "Published" }, orderBy: { sortOrder: "asc" }, take: 4 },
+    },
   });
 }
 
