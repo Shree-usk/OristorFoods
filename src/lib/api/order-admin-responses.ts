@@ -26,8 +26,11 @@ const paymentStatusByCode: Record<PaymentErrorCode, number> = {
   provider_unconfigured: 500,
   webhook_invalid_signature: 401,
   webhook_invalid_payload: 400,
+  webhook_amount_mismatch: 400,
+  sync_confirm_not_supported: 500,
   refund_not_allowed: 409,
   refund_amount_invalid: 400,
+  refund_not_implemented: 501,
 };
 
 /** Every /api/admin/orders/* route handler's catch block goes through this. */
