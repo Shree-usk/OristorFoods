@@ -126,3 +126,48 @@ export interface ExportHeroData {
   statLine: { label: string; description: string }[] | null;
   badge: { eyebrow: string; headline: string; description: string; ctaLabel: string; ctaHref: string } | null;
 }
+
+export interface PerfectMatchPairingData {
+  id: string;
+  title: string;
+  description: string | null;
+  imageSrc: ImageSource;
+  imageAlt: string;
+  categoryLabel: string | null;
+  supportingTag: string | null;
+}
+
+/**
+ * One admin-selected catalogue Product linked into the homepage "Perfect
+ * Match" rail (PerfectMatchProduct), with its Published meal pairings
+ * resolved — see perfect-match.service.ts::getPerfectMatchForStorefront.
+ * `id` is the PerfectMatchProduct link's own id (the tab key); `productId`
+ * is the real catalogue Product it points at, for building the PDP href.
+ */
+export interface PerfectMatchProductData {
+  id: string;
+  productId: string;
+  name: string;
+  href: string;
+  /** Editorial label shown above the product name (e.g. "A traditional favourite") — not the product's real category. */
+  kicker: string | null;
+  description: string;
+  /** Null when the linked product has no primary image yet — render ImagePlaceholder, never an empty src. */
+  imageSrc: ImageSource | null;
+  imageAlt: string;
+  pairings: PerfectMatchPairingData[];
+}
+
+/**
+ * Homepage "The Perfect Match" section — admin-controllable intro copy
+ * (PerfectMatchSetting, same singleton "never blank" merge as
+ * ExportHeroData) plus the ordered list of Published products. An empty
+ * `products` array means nothing renders (see perfect-match.tsx) — no
+ * fabricated product/pairing fallback, same policy as CustomerReviews.
+ */
+export interface PerfectMatchData {
+  eyebrow: string | null;
+  heading: string | null;
+  description: string | null;
+  products: PerfectMatchProductData[];
+}

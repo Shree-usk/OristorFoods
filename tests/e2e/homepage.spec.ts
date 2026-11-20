@@ -19,6 +19,7 @@ const sectionHeadings = [
   { level: 2, name: "Product Collections" },
   { level: 2, name: "Know your ingredients. Discover your flavour." }, // Food Academy
   { level: 2, name: "Partner with Oristor for Global Distribution" }, // Export Solutions
+  { level: 2, name: "Ordinary Meals. Extraordinary Flavours." }, // The Perfect Match
   { level: 2, name: "Earn Points on Every Order" }, // Rewards Club
   { level: 2, name: "Follow @oristorfoods" }, // Instagram Gallery
 ];

@@ -11,6 +11,7 @@ import { FoodAcademyTeaser } from "@/components/storefront/home/food-academy-tea
 import { HeroBanner } from "@/components/storefront/home/hero-banner";
 import { HomepageSections } from "@/components/storefront/home/homepage-sections";
 import { InstagramGallery } from "@/components/storefront/home/instagram-gallery";
+import { PerfectMatch } from "@/components/storefront/home/perfect-match";
 import { ProductCollections } from "@/components/storefront/home/product-collections";
 import { RewardsClubTeaser } from "@/components/storefront/home/rewards-club-teaser";
 import { WhyChooseOristor } from "@/components/storefront/home/why-choose-oristor";
@@ -111,6 +112,7 @@ export default async function Home() {
         categories={foodAcademyCategories}
       />
       <ExportSolutions />
+      <PerfectMatch />
       <RewardsClubTeaser data={rewardsClubTeaser} />
       <InstagramGallery posts={instagramPosts} />
       {recipeAssistant}

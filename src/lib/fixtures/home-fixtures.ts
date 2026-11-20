@@ -6,6 +6,7 @@ import type {
   ExportHeroData,
   HeroBannerData,
   InstagramPostData,
+  PerfectMatchData,
   ReviewData,
   TeaserSectionData,
   WhyChooseFeatureData,
@@ -197,6 +198,20 @@ export const exportHeroDefaults: ExportHeroData = {
     ctaLabel: "View Export Collection",
     ctaHref: "/export",
   },
+};
+
+/**
+ * Default intro copy for the homepage "Perfect Match" section
+ * (PerfectMatchSetting) — the fallback for any individual field an admin
+ * hasn't configured yet, see perfect-match.service.ts::getPerfectMatchForStorefront.
+ * Deliberately no fallback `products` list here (unlike every other export
+ * in this file) — an empty catalogue selection renders nothing, same
+ * no-fabricated-content policy as customerReviews above.
+ */
+export const perfectMatchDefaults: Pick<PerfectMatchData, "eyebrow" | "heading" | "description"> = {
+  eyebrow: "A little inspiration from our kitchen",
+  heading: "Ordinary Meals. Extraordinary Flavours.",
+  description: "Discover how a spoonful of ORISTOR can transform the meals you already love. Choose a favourite and find its perfect match.",
 };
 
 export const rewardsClubTeaser: TeaserSectionData = {

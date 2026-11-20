@@ -2,7 +2,7 @@ import { prisma } from "../src/lib/db";
 
 /**
  * STORY-042 (Homepage Visual Builder — core scope). Creates and publishes
- * one initial HomepageLayout with the 11 default sections and a single
+ * one initial HomepageLayout with the 12 default sections and a single
  * Hero Banner slide matching STORY-006's original fixture-driven default
  * — so a fresh environment's storefront homepage reflects a real
  * published layout from day one, rather than relying on page.tsx's
@@ -80,12 +80,13 @@ export async function seedHomepage() {
           { type: "ProductCollections", sortOrder: 6 },
           { type: "FoodAcademy", sortOrder: 7 },
           { type: "ExportSolutions", sortOrder: 8 },
-          { type: "RewardsClub", sortOrder: 9 },
-          { type: "InstagramGallery", sortOrder: 10 },
+          { type: "PerfectMatch", sortOrder: 9 },
+          { type: "RewardsClub", sortOrder: 10 },
+          { type: "InstagramGallery", sortOrder: 11 },
         ],
       },
     },
   });
 
-  return { layoutId: layout.id, sections: 11 };
+  return { layoutId: layout.id, sections: 12 };
 }
