@@ -24,3 +24,10 @@ export const mockWebhookPayloadSchema = z.object({
 });
 
 export type MockWebhookPayload = z.infer<typeof mockWebhookPayloadSchema>;
+
+/** `GET /api/payments/status?providerReference=...` — the storefront polls this after a provider's onsite SDK reports completion, never trusting that report alone. */
+export const paymentStatusQuerySchema = z.object({
+  providerReference: z.string().trim().min(1).max(128),
+});
+
+export type PaymentStatusQuery = z.infer<typeof paymentStatusQuerySchema>;

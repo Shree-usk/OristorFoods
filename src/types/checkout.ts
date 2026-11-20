@@ -48,6 +48,10 @@ export interface PaymentIntentResult {
   providerReference: string;
   amount: number;
   currency: string;
+  /** Which provider created this intent ("mock", "payhere", "bank_transfer", "cod") — lets the Payment step render the right UI. */
+  provider: string;
+  /** Provider-specific extra data the client needs to start that provider's own checkout flow (e.g. PayHere's onsite SDK fields). Undefined for mock/manual methods. */
+  clientPayload?: Record<string, unknown>;
 }
 
 /** Story 4 (Payment Restriction). Mirrors the Prisma PaymentMethod enum's values exactly — kept as a plain string union here since this file stays free of server-only imports. */

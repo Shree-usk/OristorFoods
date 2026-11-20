@@ -35,7 +35,7 @@ export async function createPaymentIntent(amount: number, currency: string): Pro
   const provider = getActiveProvider();
   const intent = await provider.createIntent({ amount, currency });
   await paymentRepository.createPayment(provider.name, intent.providerReference, amount.toFixed(2), currency);
-  return { providerReference: intent.providerReference, amount, currency };
+  return { providerReference: intent.providerReference, amount, currency, provider: provider.name, clientPayload: intent.clientPayload };
 }
 
 /**
@@ -58,7 +58,7 @@ export async function createManualPaymentIntent(
 ): Promise<PaymentIntentResult> {
   const providerReference = `${provider}_${randomBytes(12).toString("hex")}`;
   await paymentRepository.createPayment(provider, providerReference, amount.toFixed(2), currency);
-  return { providerReference, amount, currency };
+  return { providerReference, amount, currency, provider };
 }
 
 export interface ConfirmPaymentResult {
