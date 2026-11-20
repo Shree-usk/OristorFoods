@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 
 import { PaymentRefundNotImplementedError, PaymentSyncConfirmNotSupportedError, PaymentWebhookPayloadError, PaymentWebhookSignatureError } from "@/services/payment.errors";
-import { formatPayHereAmount, generateCheckoutHash, verifyNotifySignature } from "@/services/payment/payhere-signature";
+import { formatPayHereAmount, generateCheckoutHash, parseNotifyBody, verifyNotifySignature } from "@/services/payment/payhere-signature";
 import type {
   PaymentConfirmation,
   PaymentIntentRequest,
@@ -80,28 +80,18 @@ export class PayHereProvider implements PaymentProvider {
 
   async handleWebhook(rawBody: string, signature: string | null): Promise<WebhookEvent> {
     const merchantSecret = requiredEnv("PAYHERE_MERCHANT_SECRET");
-    const params = new URLSearchParams(rawBody);
-
-    const merchantId = params.get("merchant_id");
-    const orderId = params.get("order_id");
-    const payhereAmount = params.get("payhere_amount");
-    const payhereCurrency = params.get("payhere_currency");
-    const statusCode = params.get("status_code");
-    const statusMessage = params.get("status_message");
-
-    if (!merchantId || !orderId || !payhereAmount || !payhereCurrency || !statusCode) {
-      throw new PaymentWebhookPayloadError("PayHere notify payload is missing required fields.");
-    }
-    if (!signature || !verifyNotifySignature({ merchantId, orderId, payhereAmount, payhereCurrency, statusCode }, merchantSecret, signature)) {
+    const payload = parseNotifyBody(rawBody);
+    if (!payload) throw new PaymentWebhookPayloadError("PayHere notify payload is missing required fields.");
+    if (!signature || !verifyNotifySignature(payload, merchantSecret, signature)) {
       throw new PaymentWebhookSignatureError();
     }
 
-    if (statusCode === "2") return { providerReference: orderId, status: "Succeeded" };
-    if (statusCode === "-1" || statusCode === "-2") {
-      return { providerReference: orderId, status: "Failed", failureReason: statusMessage ?? `PayHere declined with status_code ${statusCode}.` };
+    if (payload.statusCode === "2") return { providerReference: payload.orderId, status: "Succeeded" };
+    if (payload.statusCode === "-1" || payload.statusCode === "-2") {
+      return { providerReference: payload.orderId, status: "Failed", failureReason: payload.statusMessage ?? `PayHere declined with status_code ${payload.statusCode}.` };
     }
     throw new PaymentWebhookPayloadError(
-      `Unsupported PayHere status_code "${statusCode}" reached handleWebhook — only terminal codes (2, -1, -2) may; the notify route must filter 0 (pending) and -3 (chargeback) before calling in.`,
+      `Unsupported PayHere status_code "${payload.statusCode}" reached handleWebhook — only terminal codes (2, -1, -2) may; the notify route must filter 0 (pending) and -3 (chargeback) before calling in.`,
     );
   }
 

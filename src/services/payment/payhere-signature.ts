@@ -49,6 +49,33 @@ export interface PayHereNotifyFields {
   statusCode: string;
 }
 
+/** Every field the notify route needs — the signed fields plus the two it isn't signed over but still needs: the signature itself and the human-readable decline reason. */
+export interface PayHereNotifyPayload extends PayHereNotifyFields {
+  statusMessage: string | null;
+  md5sig: string | null;
+}
+
+/**
+ * Parses PayHere's `notify_url` POST body (`application/x-www-form-urlencoded`).
+ * Shared by the notify route (which needs the full payload to filter
+ * non-terminal status codes and cross-check amount/currency before ever
+ * calling into the PaymentProvider abstraction) and PayHereProvider.handleWebhook
+ * itself, so the two never parse the same raw body two different ways.
+ * Returns null if any field the signature formula needs is missing —
+ * never partially trusts a malformed payload.
+ */
+export function parseNotifyBody(rawBody: string): PayHereNotifyPayload | null {
+  const params = new URLSearchParams(rawBody);
+  const merchantId = params.get("merchant_id");
+  const orderId = params.get("order_id");
+  const payhereAmount = params.get("payhere_amount");
+  const payhereCurrency = params.get("payhere_currency");
+  const statusCode = params.get("status_code");
+  if (!merchantId || !orderId || !payhereAmount || !payhereCurrency || !statusCode) return null;
+
+  return { merchantId, orderId, payhereAmount, payhereCurrency, statusCode, statusMessage: params.get("status_message"), md5sig: params.get("md5sig") };
+}
+
 /**
  * The `md5sig` PayHere's notify_url callback sends:
  * MD5(merchant_id + order_id + payhere_amount + payhere_currency + status_code + MD5(merchant_secret).upper()).upper()

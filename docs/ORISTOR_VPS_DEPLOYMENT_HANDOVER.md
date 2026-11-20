@@ -129,6 +129,12 @@ Known environment variables used by the app include:
 - NEXT_RUNTIME
 - NODE_ENV
 - OPENAI_API_KEY
+- PAYHERE_ENV
+- PAYHERE_MERCHANT_ID
+- PAYHERE_MERCHANT_SECRET
+- PAYHERE_RETURN_URL
+- PAYHERE_CANCEL_URL
+- PAYHERE_NOTIFY_URL
 - PAYMENT_PROVIDER
 - SMTP_FROM
 - SMTP_HOST
@@ -141,7 +147,16 @@ Never print or expose secret VALUES. Never commit .env.
 
 ## 7. Payment and storage
 Current payment: `PAYMENT_PROVIDER=mock`.
-No live Stripe, PayHere, WebXPay or other gateway should be introduced during basic deployment.
+
+PayHere is the confirmed gateway (`docs/blueprint.md` Section 10) and a
+`PayHereProvider` adapter now exists in the codebase (prep only — see
+`docs/architecture-decisions.md`'s PayHere entry and
+`docs/PAYHERE_GO_LIVE_CHECKLIST.md` once added). **It stays registered
+but inactive here**: never set `PAYHERE_MERCHANT_ID`/`PAYHERE_MERCHANT_SECRET`
+to live production values on this staging server, and never flip
+`PAYMENT_PROVIDER` away from `mock` here without the user's separate,
+explicit go-live approval — staging must keep using mock/no real
+transactions regardless of what's merged to `master`.
 
 Current media: `MEDIA_STORAGE_PROVIDER=local`.
 No S3/Cloudinary provider has been selected for the current deployment.
