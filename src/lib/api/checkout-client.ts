@@ -91,6 +91,18 @@ export async function confirmPayment(
   return (await response.json()) as { status: "Succeeded" | "Failed"; failureReason: string | null };
 }
 
+/**
+ * Polls the database's own view of a payment's status — used after a
+ * provider's own onsite callback (e.g. PayHere's `onCompleted`) fires
+ * client-side, which is never treated as proof of payment on its own;
+ * only this (ultimately webhook-driven) status is.
+ */
+export async function fetchPaymentStatus(providerReference: string): Promise<{ status: "Pending" | "Succeeded" | "Failed" | "Refunded"; failureReason: string | null }> {
+  const response = await fetch(`/api/payments/status?providerReference=${encodeURIComponent(providerReference)}`, { credentials: "include" });
+  if (!response.ok) throw await readApiError(response);
+  return (await response.json()) as { status: "Pending" | "Succeeded" | "Failed" | "Refunded"; failureReason: string | null };
+}
+
 export async function placeOrder(input: PlaceOrderInput): Promise<{ orderNumber: string; replayed: boolean }> {
   const response = await fetch("/api/checkout/place-order", {
     method: "POST",
