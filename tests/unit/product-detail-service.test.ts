@@ -111,6 +111,44 @@ describe("getProductDetail", () => {
     ]);
   });
 
+  it("returns the story/export-spec fields off/empty by default — the general PDP's own opt-in gate relies on this for every pre-existing product", async () => {
+    const product = await createProduct({ sku: "PD-STORY-DEFAULT", slug: "pd-story-default", name: "Plain Product", status: "Published" });
+    await createStandardPrice({ product: { connect: { id: product.id } }, price: "500.00" });
+
+    const detail = await getProductDetail("pd-story-default");
+
+    expect(detail?.showStorySectionsOnStandardPdp).toBe(false);
+    expect(detail?.promiseAttributes).toEqual([]);
+    expect(detail?.preparationStages).toEqual([]);
+    expect(detail?.exportSpecItems).toEqual([]);
+  });
+
+  it("surfaces visible promise attributes, preparation stages, and export spec items, filtering out disabled ones", async () => {
+    const product = await createProduct({
+      sku: "PD-STORY-FULL",
+      slug: "pd-story-full",
+      name: "Story Product",
+      status: "Published",
+      showStorySectionsOnStandardPdp: true,
+    });
+    await createStandardPrice({ product: { connect: { id: product.id } }, price: "500.00" });
+    await prisma.productPromiseAttribute.create({
+      data: { product: { connect: { id: product.id } }, icon: "Leaf", heading: "Visible Claim", sortOrder: 0 },
+    });
+    await prisma.productPromiseAttribute.create({
+      data: { product: { connect: { id: product.id } }, icon: "Leaf", heading: "Hidden Claim", visible: false, sortOrder: 1 },
+    });
+    await prisma.productExportSpecItem.create({
+      data: { product: { connect: { id: product.id } }, specType: "PackSizes", value: "200 g | 350 g", sortOrder: 0 },
+    });
+
+    const detail = await getProductDetail("pd-story-full");
+
+    expect(detail?.showStorySectionsOnStandardPdp).toBe(true);
+    expect(detail?.promiseAttributes).toEqual([{ icon: "Leaf", iconImageUrl: null, heading: "Visible Claim", description: null }]);
+    expect(detail?.exportSpecItems).toEqual([{ specType: "PackSizes", value: "200 g | 350 g" }]);
+  });
+
   it("exposes the standard price as originalPrice when a discount tier applies", async () => {
     const product = await createProduct({ sku: "PD-4", slug: "pd-sale", name: "On Sale", status: "Published" });
     await createStandardPrice({ product: { connect: { id: product.id } }, price: "1000.00" });

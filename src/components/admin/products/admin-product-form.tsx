@@ -1,6 +1,7 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
+import type { ProductExportSpecType } from "@/generated/prisma/client";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { Controller, useFieldArray, useForm } from "react-hook-form";
@@ -30,6 +31,8 @@ import { ProductPricingPanel } from "@/components/admin/products/product-pricing
 import { ProductVariantsPanel } from "@/components/admin/products/product-variants-panel";
 import { SeoFieldsPanel } from "@/components/admin/seo/seo-fields-panel";
 import { toastManager } from "@/lib/toast";
+import { PRODUCT_PROMISE_ICON_OPTIONS } from "@/lib/product-promise-icons";
+import { PRODUCT_EXPORT_SPEC_TYPE_LABELS, PRODUCT_EXPORT_SPEC_TYPE_ORDER } from "@/lib/product-export-spec-types";
 import { productAdminSchema, type ProductAdminFormInput } from "@/validation/product-admin.schema";
 
 const NEXT_STATUSES: Record<string, string[]> = {
@@ -40,13 +43,14 @@ const NEXT_STATUSES: Record<string, string[]> = {
 
 const PRODUCT_TYPES = ["Standard", "Bundle", "GiftPack", "Seasonal", "LimitedEdition"] as const;
 
-const TAB_ORDER = ["general", "nutrition", "media", "rewards", "export"] as const;
+const TAB_ORDER = ["general", "nutrition", "media", "rewards", "export", "story"] as const;
 const TAB_LABELS: Record<(typeof TAB_ORDER)[number], string> = {
   general: "General",
   nutrition: "Nutrition & Ingredients",
   media: "Media",
   rewards: "Rewards & Stock",
   export: "Export & Wholesale",
+  story: "Product Story & Export Specifications",
 };
 /**
  * Every top-level productAdminSchema key that has a UI field, mapped to the
@@ -87,6 +91,17 @@ const TAB_BY_FIELD: Record<string, (typeof TAB_ORDER)[number]> = {
   exportDescription: "export",
   isExportFeatured: "export",
   exportDisplayOrder: "export",
+  promiseSectionEnabled: "story",
+  promiseSectionHeading: "story",
+  promiseAttributes: "story",
+  preparationSectionEnabled: "story",
+  preparationSectionHeading: "story",
+  preparationSectionSubtitle: "story",
+  preparationStages: "story",
+  exportSpecSectionEnabled: "story",
+  exportSpecSectionHeading: "story",
+  exportSpecItems: "story",
+  showStorySectionsOnStandardPdp: "story",
 };
 
 const EMPTY_VALUES: ProductAdminFormInput = {
@@ -127,6 +142,17 @@ const EMPTY_VALUES: ProductAdminFormInput = {
   ingredients: [],
   inspirationCards: [],
   featuredItems: [],
+  promiseSectionEnabled: true,
+  promiseSectionHeading: "",
+  promiseAttributes: [],
+  preparationSectionEnabled: true,
+  preparationSectionHeading: "",
+  preparationSectionSubtitle: "",
+  preparationStages: [],
+  exportSpecSectionEnabled: true,
+  exportSpecSectionHeading: "",
+  exportSpecItems: [],
+  showStorySectionsOnStandardPdp: false,
   allergenIds: [],
   certificationIds: [],
 };
@@ -138,6 +164,11 @@ export function AdminProductForm({ productId }: { productId?: string }) {
   const [serverError, setServerError] = useState<string | null>(null);
   const [duplicateOpen, setDuplicateOpen] = useState(false);
   const [pickerTarget, setPickerTarget] = useState<{ kind: "image" | "video" | "inspirationCard" | "featuredItem"; index: number } | null>(null);
+  // Separate from pickerTarget above (not just another `kind`) — that
+  // dialog instance lives inside the "media" TabsContent, which Base UI
+  // Tabs unmounts while inactive, so a trigger on the "story" tab needs its
+  // own dialog instance there instead; see the "story" TabsContent below.
+  const [storyPickerTarget, setStoryPickerTarget] = useState<{ kind: "promiseAttributeIcon" | "preparationStage"; index: number } | null>(null);
   // Controlled (not Tabs' own uncontrolled internal state) so it survives
   // opening AssetPickerDialog without reverting to the first tab —
   // uncontrolled state in a third-party component isn't reliably
@@ -266,6 +297,43 @@ export function AdminProductForm({ productId }: { productId?: string }) {
           sortOrder: item.sortOrder,
         }),
       ),
+      promiseSectionEnabled: existingProduct.promiseSectionEnabled,
+      promiseSectionHeading: existingProduct.promiseSectionHeading ?? "",
+      promiseAttributes: existingProduct.promiseAttributes.map(
+        (attribute: { icon: string; iconImageUrl: string | null; heading: string; description: string | null; visible: boolean; sortOrder: number }) => ({
+          icon: attribute.icon,
+          iconImageUrl: attribute.iconImageUrl ?? "",
+          heading: attribute.heading,
+          description: attribute.description ?? "",
+          visible: attribute.visible,
+          sortOrder: attribute.sortOrder,
+        }),
+      ),
+      preparationSectionEnabled: existingProduct.preparationSectionEnabled,
+      preparationSectionHeading: existingProduct.preparationSectionHeading ?? "",
+      preparationSectionSubtitle: existingProduct.preparationSectionSubtitle ?? "",
+      preparationStages: existingProduct.preparationStages.map(
+        (stage: { stageNumber: string; heading: string; description: string | null; imageUrl: string; imageAlt: string | null; visible: boolean; sortOrder: number }) => ({
+          stageNumber: stage.stageNumber,
+          heading: stage.heading,
+          description: stage.description ?? "",
+          imageUrl: stage.imageUrl,
+          imageAlt: stage.imageAlt ?? "",
+          visible: stage.visible,
+          sortOrder: stage.sortOrder,
+        }),
+      ),
+      exportSpecSectionEnabled: existingProduct.exportSpecSectionEnabled,
+      exportSpecSectionHeading: existingProduct.exportSpecSectionHeading ?? "",
+      exportSpecItems: existingProduct.exportSpecItems.map(
+        (item: { specType: ProductExportSpecType; value: string; visible: boolean; sortOrder: number }) => ({
+          specType: item.specType,
+          value: item.value,
+          visible: item.visible,
+          sortOrder: item.sortOrder,
+        }),
+      ),
+      showStorySectionsOnStandardPdp: existingProduct.showStorySectionsOnStandardPdp,
       allergenIds: existingProduct.allergens.map((allergen: { id: string }) => allergen.id),
       certificationIds: existingProduct.certifications.map((certification: { id: string }) => certification.id),
     });
@@ -276,6 +344,9 @@ export function AdminProductForm({ productId }: { productId?: string }) {
   const ingredients = useFieldArray({ control, name: "ingredients" });
   const inspirationCards = useFieldArray({ control, name: "inspirationCards" });
   const featuredItems = useFieldArray({ control, name: "featuredItems" });
+  const promiseAttributes = useFieldArray({ control, name: "promiseAttributes" });
+  const preparationStages = useFieldArray({ control, name: "preparationStages" });
+  const exportSpecItems = useFieldArray({ control, name: "exportSpecItems" });
 
   const categoryIds = watch("categoryIds") ?? [];
   const collectionIds = watch("collectionIds") ?? [];
@@ -393,6 +464,7 @@ export function AdminProductForm({ productId }: { productId?: string }) {
           <TabsTrigger value="seo">SEO</TabsTrigger>
           <TabsTrigger value="rewards">Rewards &amp; Stock</TabsTrigger>
           <TabsTrigger value="export">Export &amp; Wholesale</TabsTrigger>
+          <TabsTrigger value="story">Product Story &amp; Export Specs</TabsTrigger>
         </TabsList>
 
         <TabsContent value="general" className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -876,6 +948,306 @@ export function AdminProductForm({ productId }: { productId?: string }) {
             <Input id="product-export-order" type="number" {...register("exportDisplayOrder", { setValueAs: (value) => (value === "" ? 0 : Number(value)) })} />
             <p className="mt-1 text-caption text-charcoal/60">Lower numbers appear first among featured export products.</p>
           </div>
+        </TabsContent>
+
+        <TabsContent value="story" className="mt-4 space-y-8">
+          <p className="text-small text-charcoal/70">
+            These three sections always appear on the Export Catalogue page (/export/catalogue) when enabled with content below.
+            Showing them on the standard product page is a separate, optional choice — see the checkbox at the bottom.
+          </p>
+
+          {/* Product Promise */}
+          <div>
+            <Controller
+              control={control}
+              name="promiseSectionEnabled"
+              render={({ field }) => <CheckboxOption label="Enable &quot;Good Food. Thoughtfully Made.&quot;" checked={field.value ?? true} onCheckedChange={field.onChange} />}
+            />
+            <div className="mt-2">
+              <Label htmlFor="promise-section-heading">Section heading</Label>
+              <Input id="promise-section-heading" placeholder="Good Food. Thoughtfully Made." {...register("promiseSectionHeading")} />
+            </div>
+            <div className="mt-3 flex items-center justify-between">
+              <h2 className="text-h4 font-heading text-charcoal">Promise attributes</h2>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() =>
+                  promiseAttributes.append({ icon: "Leaf", iconImageUrl: "", heading: "", description: "", visible: true, sortOrder: promiseAttributes.fields.length })
+                }
+              >
+                Add promise attribute
+              </Button>
+            </div>
+            <div className="mt-2 flex flex-col gap-2">
+              {promiseAttributes.fields.map((field, index) => {
+                return (
+                  <div key={field.id} className="rounded-lg border border-input p-3">
+                    <div className="flex items-center gap-2">
+                      <Controller
+                        control={control}
+                        name={`promiseAttributes.${index}.icon`}
+                        render={({ field: iconField }) => {
+                          const IconPreview = PRODUCT_PROMISE_ICON_OPTIONS[iconField.value ?? ""];
+                          return (
+                            <Select value={iconField.value} onValueChange={iconField.onChange}>
+                              <SelectTrigger className="w-44 shrink-0">
+                                <SelectValue>{() => (
+                                  <span className="flex items-center gap-1.5">
+                                    {IconPreview && <IconPreview className="size-4" aria-hidden="true" />}
+                                    {iconField.value}
+                                  </span>
+                                )}</SelectValue>
+                              </SelectTrigger>
+                              <SelectContent>
+                                {Object.entries(PRODUCT_PROMISE_ICON_OPTIONS).map(([key, Icon]) => (
+                                  <SelectItem key={key} value={key}>
+                                    <span className="flex items-center gap-1.5">
+                                      <Icon className="size-4" aria-hidden="true" />
+                                      {key}
+                                    </span>
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          );
+                        }}
+                      />
+                      <Input {...register(`promiseAttributes.${index}.iconImageUrl`)} placeholder="Custom icon image URL (optional)" className="flex-1" />
+                      <Button type="button" size="sm" variant="outline" onClick={() => setStoryPickerTarget({ kind: "promiseAttributeIcon", index })}>
+                        Browse Library
+                      </Button>
+                      <Button type="button" size="sm" variant="ghost" disabled={index === 0} onClick={() => promiseAttributes.move(index, index - 1)}>
+                        Up
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        disabled={index === promiseAttributes.fields.length - 1}
+                        onClick={() => promiseAttributes.move(index, index + 1)}
+                      >
+                        Down
+                      </Button>
+                      <Button type="button" size="sm" variant="ghost" onClick={() => promiseAttributes.remove(index)}>
+                        Remove
+                      </Button>
+                    </div>
+                    <div className="mt-2 flex items-center gap-2">
+                      <Input {...register(`promiseAttributes.${index}.heading`)} placeholder="Heading (e.g. No Artificial Preservatives)" className="flex-1" />
+                      <Controller
+                        control={control}
+                        name={`promiseAttributes.${index}.visible`}
+                        render={({ field: visibleField }) => (
+                          <CheckboxOption label="Visible" checked={visibleField.value ?? true} onCheckedChange={visibleField.onChange} />
+                        )}
+                      />
+                    </div>
+                    {errors.promiseAttributes?.[index]?.heading && (
+                      <p className="mt-1 text-caption text-destructive">{errors.promiseAttributes[index]?.heading?.message}</p>
+                    )}
+                    <Textarea {...register(`promiseAttributes.${index}.description`)} placeholder="Supporting description (optional)" className="mt-2" rows={2} />
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Preparation Story */}
+          <div>
+            <Controller
+              control={control}
+              name="preparationSectionEnabled"
+              render={({ field }) => <CheckboxOption label="Enable &quot;Crafted with Care. Packed with Flavour.&quot;" checked={field.value ?? true} onCheckedChange={field.onChange} />}
+            />
+            <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
+              <div>
+                <Label htmlFor="preparation-section-heading">Section heading</Label>
+                <Input id="preparation-section-heading" placeholder="Crafted with Care. Packed with Flavour." {...register("preparationSectionHeading")} />
+              </div>
+              <div>
+                <Label htmlFor="preparation-section-subtitle">Section subtitle (optional)</Label>
+                <Input id="preparation-section-subtitle" {...register("preparationSectionSubtitle")} />
+              </div>
+            </div>
+            <div className="mt-3 flex items-center justify-between">
+              <h2 className="text-h4 font-heading text-charcoal">Preparation stages</h2>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() =>
+                  preparationStages.append({
+                    stageNumber: String(preparationStages.fields.length + 1).padStart(2, "0"),
+                    heading: "",
+                    description: "",
+                    imageUrl: "",
+                    imageAlt: "",
+                    visible: true,
+                    sortOrder: preparationStages.fields.length,
+                  })
+                }
+              >
+                Add preparation stage
+              </Button>
+            </div>
+            <div className="mt-2 flex flex-col gap-2">
+              {preparationStages.fields.map((field, index) => (
+                <div key={field.id} className="rounded-lg border border-input p-3">
+                  <div className="flex items-center gap-2">
+                    <Input {...register(`preparationStages.${index}.stageNumber`)} placeholder="01" className="w-16 shrink-0" />
+                    <Input {...register(`preparationStages.${index}.imageUrl`)} placeholder="Image URL" className="flex-1" />
+                    <Input {...register(`preparationStages.${index}.imageAlt`)} placeholder="Alt text" className="flex-1" />
+                    <Button type="button" size="sm" variant="outline" onClick={() => setStoryPickerTarget({ kind: "preparationStage", index })}>
+                      Browse Library
+                    </Button>
+                    <Button type="button" size="sm" variant="ghost" disabled={index === 0} onClick={() => preparationStages.move(index, index - 1)}>
+                      Up
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      disabled={index === preparationStages.fields.length - 1}
+                      onClick={() => preparationStages.move(index, index + 1)}
+                    >
+                      Down
+                    </Button>
+                    <Button type="button" size="sm" variant="ghost" onClick={() => preparationStages.remove(index)}>
+                      Remove
+                    </Button>
+                  </div>
+                  {errors.preparationStages?.[index]?.imageUrl && (
+                    <p className="mt-1 text-caption text-destructive">{errors.preparationStages[index]?.imageUrl?.message}</p>
+                  )}
+                  <div className="mt-2 flex items-center gap-2">
+                    <Input {...register(`preparationStages.${index}.heading`)} placeholder="Heading (e.g. Carefully Selected)" className="flex-1" />
+                    <Controller
+                      control={control}
+                      name={`preparationStages.${index}.visible`}
+                      render={({ field: visibleField }) => (
+                        <CheckboxOption label="Visible" checked={visibleField.value ?? true} onCheckedChange={visibleField.onChange} />
+                      )}
+                    />
+                  </div>
+                  {errors.preparationStages?.[index]?.heading && (
+                    <p className="mt-1 text-caption text-destructive">{errors.preparationStages[index]?.heading?.message}</p>
+                  )}
+                  <Textarea {...register(`preparationStages.${index}.description`)} placeholder="Description (optional)" className="mt-2" rows={2} />
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Packaging & Export Details */}
+          <div>
+            <Controller
+              control={control}
+              name="exportSpecSectionEnabled"
+              render={({ field }) => <CheckboxOption label="Enable &quot;Packaging &amp; Export Details&quot;" checked={field.value ?? true} onCheckedChange={field.onChange} />}
+            />
+            <div className="mt-2">
+              <Label htmlFor="export-spec-section-heading">Section heading</Label>
+              <Input id="export-spec-section-heading" placeholder="Packaging & Export Details" {...register("exportSpecSectionHeading")} />
+            </div>
+            <div className="mt-3 flex items-center justify-between">
+              <h2 className="text-h4 font-heading text-charcoal">Specification items</h2>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                disabled={exportSpecItems.fields.length >= PRODUCT_EXPORT_SPEC_TYPE_ORDER.length}
+                onClick={() => {
+                  const usedTypes = new Set((watch("exportSpecItems") ?? []).map((item) => item.specType));
+                  const nextType = PRODUCT_EXPORT_SPEC_TYPE_ORDER.find((type) => !usedTypes.has(type));
+                  if (!nextType) return;
+                  exportSpecItems.append({ specType: nextType, value: "", visible: true, sortOrder: exportSpecItems.fields.length });
+                }}
+              >
+                Add spec item
+              </Button>
+            </div>
+            <div className="mt-2 flex flex-col gap-2">
+              {exportSpecItems.fields.map((field, index) => (
+                <div key={field.id} className="flex items-center gap-2 rounded-lg border border-input p-3">
+                  <Controller
+                    control={control}
+                    name={`exportSpecItems.${index}.specType`}
+                    render={({ field: typeField }) => (
+                      <Select value={typeField.value} onValueChange={typeField.onChange}>
+                        <SelectTrigger className="w-48 shrink-0">
+                          <SelectValue>{(selected: string) => PRODUCT_EXPORT_SPEC_TYPE_LABELS[selected as keyof typeof PRODUCT_EXPORT_SPEC_TYPE_LABELS]}</SelectValue>
+                        </SelectTrigger>
+                        <SelectContent>
+                          {PRODUCT_EXPORT_SPEC_TYPE_ORDER.map((type) => (
+                            <SelectItem key={type} value={type}>
+                              {PRODUCT_EXPORT_SPEC_TYPE_LABELS[type]}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    )}
+                  />
+                  <div className="flex-1">
+                    <Input {...register(`exportSpecItems.${index}.value`)} placeholder="e.g. 200 g | 350 g" />
+                    {errors.exportSpecItems?.[index]?.value && <p className="mt-1 text-caption text-destructive">{errors.exportSpecItems[index]?.value?.message}</p>}
+                  </div>
+                  <Controller
+                    control={control}
+                    name={`exportSpecItems.${index}.visible`}
+                    render={({ field: visibleField }) => <CheckboxOption label="Visible" checked={visibleField.value ?? true} onCheckedChange={visibleField.onChange} />}
+                  />
+                  <Button type="button" size="sm" variant="ghost" disabled={index === 0} onClick={() => exportSpecItems.move(index, index - 1)}>
+                    Up
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    disabled={index === exportSpecItems.fields.length - 1}
+                    onClick={() => exportSpecItems.move(index, index + 1)}
+                  >
+                    Down
+                  </Button>
+                  <Button type="button" size="sm" variant="ghost" onClick={() => exportSpecItems.remove(index)}>
+                    Remove
+                  </Button>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="rounded-lg border border-input p-3">
+            <Controller
+              control={control}
+              name="showStorySectionsOnStandardPdp"
+              render={({ field }) => (
+                <CheckboxOption label="Also show these sections on the standard Product Detail Page" checked={field.value ?? false} onCheckedChange={field.onChange} />
+              )}
+            />
+            <p className="mt-1 text-caption text-charcoal/60">
+              Off by default. The Export Catalogue page always shows enabled sections with content above — this is an additional,
+              optional surface on the regular product page.
+            </p>
+          </div>
+
+          <AssetPickerDialog
+            open={storyPickerTarget !== null}
+            onOpenChange={(open) => {
+              if (!open) setStoryPickerTarget(null);
+            }}
+            onSelect={(asset) => {
+              if (!storyPickerTarget) return;
+              if (storyPickerTarget.kind === "promiseAttributeIcon") {
+                setValue(`promiseAttributes.${storyPickerTarget.index}.iconImageUrl`, asset.url);
+              } else {
+                setValue(`preparationStages.${storyPickerTarget.index}.imageUrl`, asset.url);
+                setValue(`preparationStages.${storyPickerTarget.index}.imageAlt`, asset.altText ?? "");
+              }
+              setStoryPickerTarget(null);
+            }}
+          />
         </TabsContent>
       </Tabs>
     </form>

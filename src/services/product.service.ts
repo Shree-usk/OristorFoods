@@ -1,4 +1,4 @@
-import { Prisma, type CustomerGroup, type ProductType } from "@/generated/prisma/client";
+import { Prisma, type CustomerGroup, type ProductExportSpecType, type ProductType } from "@/generated/prisma/client";
 import * as categoryRepository from "@/repositories/category.repository";
 import * as collectionService from "@/services/collection.service";
 import { computeBundleDiscountedTotal } from "@/services/bundle-pricing.service";
@@ -318,6 +318,23 @@ export interface ProductDetailFeaturedItem {
   title: string;
   description: string | null;
 }
+export interface ProductDetailPromiseAttribute {
+  icon: string;
+  iconImageUrl: string | null;
+  heading: string;
+  description: string | null;
+}
+export interface ProductDetailPreparationStage {
+  stageNumber: string;
+  heading: string;
+  description: string | null;
+  imageUrl: string;
+  imageAlt: string | null;
+}
+export interface ProductDetailExportSpecItem {
+  specType: ProductExportSpecType;
+  value: string;
+}
 export interface ProductDetailBundleItem {
   bundleItemId: string;
   productId: string;
@@ -421,6 +438,22 @@ export interface ProductDetail {
   ingredients: ProductDetailIngredient[];
   inspirationCards: ProductDetailInspirationCard[];
   featuredItems: ProductDetailFeaturedItem[];
+  // Product Story & Export Specifications. The general PDP only renders
+  // these when showStorySectionsOnStandardPdp is true — the Export
+  // Catalogue page (export-catalogue.service.ts) always shows them when a
+  // section is enabled with content; see prisma/schema.prisma's Product
+  // model comment for why.
+  promiseSectionEnabled: boolean;
+  promiseSectionHeading: string | null;
+  promiseAttributes: ProductDetailPromiseAttribute[];
+  preparationSectionEnabled: boolean;
+  preparationSectionHeading: string | null;
+  preparationSectionSubtitle: string | null;
+  preparationStages: ProductDetailPreparationStage[];
+  exportSpecSectionEnabled: boolean;
+  exportSpecSectionHeading: string | null;
+  exportSpecItems: ProductDetailExportSpecItem[];
+  showStorySectionsOnStandardPdp: boolean;
   allergenNames: string[];
   certificationNames: string[];
   /** Richer than allergenNames/certificationNames above (name + icon/badge image) — for the PDP's own badge display; compare-view.tsx uses the plain name arrays instead, so those are left as-is rather than reshaped. */
@@ -744,6 +777,28 @@ export async function getProductDetail(
       title: item.title,
       description: item.description,
     })),
+    promiseSectionEnabled: product.promiseSectionEnabled,
+    promiseSectionHeading: product.promiseSectionHeading,
+    promiseAttributes: product.promiseAttributes.map((attribute) => ({
+      icon: attribute.icon,
+      iconImageUrl: attribute.iconImageUrl,
+      heading: attribute.heading,
+      description: attribute.description,
+    })),
+    preparationSectionEnabled: product.preparationSectionEnabled,
+    preparationSectionHeading: product.preparationSectionHeading,
+    preparationSectionSubtitle: product.preparationSectionSubtitle,
+    preparationStages: product.preparationStages.map((stage) => ({
+      stageNumber: stage.stageNumber,
+      heading: stage.heading,
+      description: stage.description,
+      imageUrl: stage.imageUrl,
+      imageAlt: stage.imageAlt,
+    })),
+    exportSpecSectionEnabled: product.exportSpecSectionEnabled,
+    exportSpecSectionHeading: product.exportSpecSectionHeading,
+    exportSpecItems: product.exportSpecItems.map((item) => ({ specType: item.specType, value: item.value })),
+    showStorySectionsOnStandardPdp: product.showStorySectionsOnStandardPdp,
     allergenNames: product.allergens.map((allergen) => allergen.name),
     certificationNames: product.certifications.map((certification) => certification.name),
     allergens: product.allergens.map((allergen) => ({ name: allergen.name, icon: allergen.icon })),

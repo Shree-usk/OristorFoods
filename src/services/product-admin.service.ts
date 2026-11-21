@@ -1,4 +1,4 @@
-import { Prisma, type CustomerGroup, type MediaRole, type ProductStatus, type ProductType } from "@/generated/prisma/client";
+import { Prisma, type CustomerGroup, type MediaRole, type ProductExportSpecType, type ProductStatus, type ProductType } from "@/generated/prisma/client";
 import * as brandRepository from "@/repositories/brand.repository";
 import * as categoryRepository from "@/repositories/category.repository";
 import * as collectionRepository from "@/repositories/collection.repository";
@@ -80,6 +80,32 @@ export interface ProductFeaturedItemInput {
   sortOrder?: number;
 }
 
+export interface ProductPromiseAttributeInput {
+  icon: string;
+  iconImageUrl?: string | null;
+  heading: string;
+  description?: string | null;
+  visible?: boolean;
+  sortOrder?: number;
+}
+
+export interface ProductPreparationStageInput {
+  stageNumber: string;
+  heading: string;
+  description?: string | null;
+  imageUrl: string;
+  imageAlt?: string | null;
+  visible?: boolean;
+  sortOrder?: number;
+}
+
+export interface ProductExportSpecItemInput {
+  specType: ProductExportSpecType;
+  value: string;
+  visible?: boolean;
+  sortOrder?: number;
+}
+
 export interface ProductAdminInput {
   name: string;
   slug: string;
@@ -108,6 +134,17 @@ export interface ProductAdminInput {
   ingredients?: ProductIngredientInput[];
   inspirationCards?: ProductInspirationCardInput[];
   featuredItems?: ProductFeaturedItemInput[];
+  promiseSectionEnabled?: boolean;
+  promiseSectionHeading?: string | null;
+  promiseAttributes?: ProductPromiseAttributeInput[];
+  preparationSectionEnabled?: boolean;
+  preparationSectionHeading?: string | null;
+  preparationSectionSubtitle?: string | null;
+  preparationStages?: ProductPreparationStageInput[];
+  exportSpecSectionEnabled?: boolean;
+  exportSpecSectionHeading?: string | null;
+  exportSpecItems?: ProductExportSpecItemInput[];
+  showStorySectionsOnStandardPdp?: boolean;
   allergenIds?: string[];
   certificationIds?: string[];
 }
@@ -200,6 +237,38 @@ function toFeaturedItemCreate(item: ProductFeaturedItemInput, index: number): Pr
   };
 }
 
+function toPromiseAttributeCreate(attribute: ProductPromiseAttributeInput, index: number): Prisma.ProductPromiseAttributeCreateWithoutProductInput {
+  return {
+    icon: attribute.icon,
+    iconImageUrl: attribute.iconImageUrl,
+    heading: attribute.heading,
+    description: attribute.description,
+    visible: attribute.visible ?? true,
+    sortOrder: attribute.sortOrder ?? index,
+  };
+}
+
+function toPreparationStageCreate(stage: ProductPreparationStageInput, index: number): Prisma.ProductPreparationStageCreateWithoutProductInput {
+  return {
+    stageNumber: stage.stageNumber,
+    heading: stage.heading,
+    description: stage.description,
+    imageUrl: stage.imageUrl,
+    imageAlt: stage.imageAlt,
+    visible: stage.visible ?? true,
+    sortOrder: stage.sortOrder ?? index,
+  };
+}
+
+function toExportSpecItemCreate(item: ProductExportSpecItemInput, index: number): Prisma.ProductExportSpecItemCreateWithoutProductInput {
+  return {
+    specType: item.specType,
+    value: item.value,
+    visible: item.visible ?? true,
+    sortOrder: item.sortOrder ?? index,
+  };
+}
+
 function scalarFields(input: ProductAdminInput) {
   return {
     name: input.name,
@@ -226,6 +295,14 @@ function scalarFields(input: ProductAdminInput) {
     inStock: input.inStock ?? true,
     stockQuantity: input.stockQuantity ?? 0,
     weightGrams: input.weightGrams ?? null,
+    promiseSectionEnabled: input.promiseSectionEnabled ?? true,
+    promiseSectionHeading: input.promiseSectionHeading ?? null,
+    preparationSectionEnabled: input.preparationSectionEnabled ?? true,
+    preparationSectionHeading: input.preparationSectionHeading ?? null,
+    preparationSectionSubtitle: input.preparationSectionSubtitle ?? null,
+    exportSpecSectionEnabled: input.exportSpecSectionEnabled ?? true,
+    exportSpecSectionHeading: input.exportSpecSectionHeading ?? null,
+    showStorySectionsOnStandardPdp: input.showStorySectionsOnStandardPdp ?? false,
   };
 }
 
@@ -269,6 +346,9 @@ export async function createProduct(adminUserId: string, input: ProductAdminInpu
     ingredients: input.ingredients?.length ? { create: input.ingredients.map(toIngredientCreate) } : undefined,
     inspirationCards: input.inspirationCards?.length ? { create: input.inspirationCards.map(toInspirationCardCreate) } : undefined,
     featuredItems: input.featuredItems?.length ? { create: input.featuredItems.map(toFeaturedItemCreate) } : undefined,
+    promiseAttributes: input.promiseAttributes?.length ? { create: input.promiseAttributes.map(toPromiseAttributeCreate) } : undefined,
+    preparationStages: input.preparationStages?.length ? { create: input.preparationStages.map(toPreparationStageCreate) } : undefined,
+    exportSpecItems: input.exportSpecItems?.length ? { create: input.exportSpecItems.map(toExportSpecItemCreate) } : undefined,
     allergens: input.allergenIds?.length ? { connect: input.allergenIds.map((id) => ({ id })) } : undefined,
     certifications: input.certificationIds?.length ? { connect: input.certificationIds.map((id) => ({ id })) } : undefined,
     createdBy: { connect: { id: adminUserId } },
@@ -307,6 +387,9 @@ export async function updateProduct(adminUserId: string, id: string, input: Prod
     ingredients: { deleteMany: {}, create: (input.ingredients ?? []).map(toIngredientCreate) },
     inspirationCards: { deleteMany: {}, create: (input.inspirationCards ?? []).map(toInspirationCardCreate) },
     featuredItems: { deleteMany: {}, create: (input.featuredItems ?? []).map(toFeaturedItemCreate) },
+    promiseAttributes: { deleteMany: {}, create: (input.promiseAttributes ?? []).map(toPromiseAttributeCreate) },
+    preparationStages: { deleteMany: {}, create: (input.preparationStages ?? []).map(toPreparationStageCreate) },
+    exportSpecItems: { deleteMany: {}, create: (input.exportSpecItems ?? []).map(toExportSpecItemCreate) },
     allergens: { set: (input.allergenIds ?? []).map((allergenId) => ({ id: allergenId })) },
     certifications: { set: (input.certificationIds ?? []).map((certificationId) => ({ id: certificationId })) },
     updatedBy: { connect: { id: adminUserId } },
@@ -401,6 +484,49 @@ export async function duplicateProduct(adminUserId: string, id: string, newSlug:
             imageAlt: item.imageAlt,
             title: item.title,
             description: item.description,
+            sortOrder: item.sortOrder,
+          })),
+        }
+      : undefined,
+    promiseSectionEnabled: source.promiseSectionEnabled,
+    promiseSectionHeading: source.promiseSectionHeading,
+    preparationSectionEnabled: source.preparationSectionEnabled,
+    preparationSectionHeading: source.preparationSectionHeading,
+    preparationSectionSubtitle: source.preparationSectionSubtitle,
+    exportSpecSectionEnabled: source.exportSpecSectionEnabled,
+    exportSpecSectionHeading: source.exportSpecSectionHeading,
+    showStorySectionsOnStandardPdp: source.showStorySectionsOnStandardPdp,
+    promiseAttributes: source.promiseAttributes.length
+      ? {
+          create: source.promiseAttributes.map((attribute) => ({
+            icon: attribute.icon,
+            iconImageUrl: attribute.iconImageUrl,
+            heading: attribute.heading,
+            description: attribute.description,
+            visible: attribute.visible,
+            sortOrder: attribute.sortOrder,
+          })),
+        }
+      : undefined,
+    preparationStages: source.preparationStages.length
+      ? {
+          create: source.preparationStages.map((stage) => ({
+            stageNumber: stage.stageNumber,
+            heading: stage.heading,
+            description: stage.description,
+            imageUrl: stage.imageUrl,
+            imageAlt: stage.imageAlt,
+            visible: stage.visible,
+            sortOrder: stage.sortOrder,
+          })),
+        }
+      : undefined,
+    exportSpecItems: source.exportSpecItems.length
+      ? {
+          create: source.exportSpecItems.map((item) => ({
+            specType: item.specType,
+            value: item.value,
+            visible: item.visible,
             sortOrder: item.sortOrder,
           })),
         }

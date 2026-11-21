@@ -209,6 +209,40 @@ describe("export-catalogue.service — getExportCatalogueProductDetail (public)"
     expect(detail?.nutrition?.calories).toBe(120.5);
     expect(typeof detail?.nutrition?.calories).toBe("number");
   });
+
+  it("surfaces promise attributes, preparation stages, and export spec items unconditionally — this page has no opt-in gate, unlike the general PDP", async () => {
+    const product = await makeProduct({ isExportEnabled: true });
+    await prisma.productPromiseAttribute.create({
+      data: { product: { connect: { id: product.id } }, icon: "Leaf", heading: "Visible Claim", sortOrder: 0 },
+    });
+    await prisma.productPromiseAttribute.create({
+      data: { product: { connect: { id: product.id } }, icon: "Leaf", heading: "Hidden Claim", visible: false, sortOrder: 1 },
+    });
+    await prisma.productPreparationStage.create({
+      data: { product: { connect: { id: product.id } }, stageNumber: "01", heading: "Carefully Selected", imageUrl: "/stage.jpg", sortOrder: 0 },
+    });
+    await prisma.productExportSpecItem.create({
+      data: { product: { connect: { id: product.id } }, specType: "PackSizes", value: "200 g | 350 g", sortOrder: 0 },
+    });
+
+    const detail = await getExportCatalogueProductDetail(product.slug);
+
+    expect(detail?.promiseAttributes).toEqual([{ icon: "Leaf", iconImageUrl: null, heading: "Visible Claim", description: null }]);
+    expect(detail?.preparationStages).toEqual([{ stageNumber: "01", heading: "Carefully Selected", description: null, imageUrl: "/stage.jpg", imageAlt: null }]);
+    expect(detail?.exportSpecItems).toEqual([{ specType: "PackSizes", value: "200 g | 350 g" }]);
+  });
+
+  it("a second, untouched export-enabled product shows none of another product's story/export-spec content", async () => {
+    const withContent = await makeProduct({ isExportEnabled: true });
+    await prisma.productPromiseAttribute.create({
+      data: { product: { connect: { id: withContent.id } }, icon: "Leaf", heading: "Only On Product A", sortOrder: 0 },
+    });
+    const untouched = await makeProduct({ isExportEnabled: true });
+
+    const detail = await getExportCatalogueProductDetail(untouched.slug);
+
+    expect(detail?.promiseAttributes).toEqual([]);
+  });
 });
 
 describe("export-catalogue.service — generateExportCataloguePdf visibility (security boundary)", () => {
