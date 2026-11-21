@@ -10585,7 +10585,88 @@ gateway's own `status_message` on a decline. `updatePaymentStatus()` only
 writes it when transitioning to `Failed`; every other transition leaves
 it untouched.
 
-Stage-by-stage detail (PayHereProvider, notify-route signature
-verification, the onsite-JS-SDK checkout UI decision, the known
-chargeback/`status_code -3` gap, and the brief's full test-scenario
-coverage table) is added to this entry as each stage lands.
+**`PayHereProvider`** (`src/services/payment/payhere-payment.provider.ts`
++ `payhere-signature.ts`) implements the full interface against PayHere's
+documented Checkout API formula (MD5, uppercased — the gateway's own
+mandated scheme, not a locally-chosen weak primitive):
+- `createIntent` builds the checkout hash and an onsite-SDK `clientPayload`
+  (merchant id, our own `providerReference` as `order_id`, amount,
+  currency, hash, return/cancel/notify URLs, and a `sandbox` flag decided
+  server-side from `PAYHERE_ENV`, defaulting to sandbox).
+- `confirmPayment` always throws (`PaymentSyncConfirmNotSupportedError`)
+  — PayHere has no synchronous confirmation step at all, unlike the mock.
+- `handleWebhook` verifies `notify_url`'s MD5 signature over the raw
+  form body and maps only the two TERMINAL status codes (`2` Succeeded,
+  `-1`/`-2` Failed) onto `WebhookEvent` — it throws loudly on anything
+  else rather than silently misreporting it.
+- `refund` always throws (`PaymentRefundNotImplementedError`): PayHere's
+  Refund API needs a separate OAuth app-credential pair (an "Application
+  ID"/"Application Secret" from a different part of the merchant
+  dashboard) that the brief never named and no real account exists yet to
+  build/verify against. **Open item for a future story once credentials
+  exist.**
+
+**Two checks live in the notify ROUTE, not the provider, because neither
+fits the interface's binary Succeeded/Failed contract.**
+`/api/payments/payhere/notify` parses the raw body once (via
+`parseNotifyBody`, shared with the provider so the two never disagree on
+what a field means), then:
+1. Filters `status_code` `0` (still processing) and `-3` (chargeback) —
+   genuine no-ops acknowledged with 200 so PayHere doesn't retry, with no
+   state change. **Chargebacks are a documented gap**: `PaymentStatus`
+   has no chargeback state today, and modeling one (likely a new enum
+   value plus admin-visible flagging) is out of scope for this
+   prep-only phase.
+2. Cross-checks the reported `payhere_amount`/`payhere_currency` against
+   the `Payment` row's own stored values *before* ever calling the shared
+   `handlePaymentWebhook` — per the brief's explicit "never trust the
+   gateway's echoed amount" requirement. In practice tampering either
+   would already break the signature (both are signed fields), but this
+   is defense-in-depth, not reliance on that.
+
+**Checkout UI uses PayHere's onsite JS SDK, not the classic redirect
+Checkout API.** The existing wizard (`checkout-wizard.tsx` +
+`useCheckoutStore`) is a client-side SPA whose Zustand state is
+deliberately not persisted — a full-page redirect to PayHere and back
+would lose it. The onsite SDK (`payhere.js`, `startPayment()`,
+`onCompleted`/`onDismissed`/`onError`) keeps the customer in-page.
+Critically, `onCompleted` firing is **never** treated as proof of
+payment — `PayHereCheckoutButton` polls the new
+`GET /api/payments/status` (reading the database's own, webhook-driven
+status) for up to 20s, and fails safe into a "still confirming, check
+your email shortly" message on timeout rather than a false success. The
+`/checkout/payment/return` and `/checkout/payment/cancel` pages exist
+purely as PayHere's documented fallback for the rare case the onsite
+popup bounces to a full redirect (3DS challenge, JS disabled) — both
+read the database, never the query string, for the same reason.
+
+**Admin visibility**: `admin-order-detail-view.tsx`'s Payment block now
+shows the transaction reference, timestamp, and failure reason (new
+`AdminOrderPaymentSummary`, admin-only — the customer-facing
+`OrderPaymentSummary` is untouched). No new admin module/permission; the
+existing Orders module already gates this view.
+
+**Test-scenario coverage** (brief §8's 12 scenarios):
+
+| # | Scenario | Status | Where |
+|---|---|---|---|
+| 1 | Successful mock payment | ✅ Automated | `payment-service.test.ts`, `tests/e2e/checkout.spec.ts` |
+| 2 | Failed mock payment | ✅ Automated | `payment-service.test.ts` |
+| 3 | Cancelled payment | ✅ Automated | `payhere-checkout-button.test.tsx` (`onDismissed`) |
+| 4 | Pending payment | ✅ Automated | `payhere-notify-route.test.ts` (`status_code 0`), `payhere-checkout-button.test.tsx` (polling timeout) |
+| 5 | Invalid notification signature | ✅ Automated | `payhere-notify-route.test.ts`, `payhere-payment-provider.test.ts` |
+| 6 | Incorrect order amount | ✅ Automated | `payhere-notify-route.test.ts` |
+| 7 | Incorrect currency | ✅ Automated | `payhere-notify-route.test.ts` |
+| 8 | Unknown order ID | ✅ Automated | `payhere-notify-route.test.ts` |
+| 9 | Duplicate notification | ✅ Automated | `payhere-notify-route.test.ts`, `payment-webhook-route.test.ts` (shared `applyOutcome` idempotency) |
+| 10 | Customer closes the browser before returning | ✅ Automated (onsite path) / ⚠️ Manual (redirect fallback) | `onDismissed` test covers the normal popup case; the `/checkout/payment/return` page's "payment not found" branch handles the redirect-fallback case but has no dedicated unit test — verified by code review (pure read, no state mutation) |
+| 11 | Customer refreshes the payment return page | ✅ Safe by construction | The return page performs a read-only DB lookup with no side effects, so a refresh is idempotent by design — not separately unit-tested |
+| 12 | Payment notification arrives more than once | ✅ Automated | `payhere-notify-route.test.ts` (idempotent duplicate-notify test) |
+
+**Genuinely cannot be validated without a real PayHere sandbox
+transaction** (no credentials exist yet): the actual onsite popup's
+visual behavior and real 3D-Secure redirect flow, a real gateway timeout
+under load, and whether PayHere's live notify payload matches this
+implementation's field-name assumptions exactly. `docs/PAYHERE_GO_LIVE_CHECKLIST.md`
+calls out re-running the signature tests against a real sandbox
+transaction as the first step before any live activation.

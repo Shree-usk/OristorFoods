@@ -37,8 +37,15 @@ async function createRealIntent(amount = 1000) {
   return intent;
 }
 
-function signedFields(intent: { providerReference: string }, amount: string, statusCode: string, extra: Record<string, string> = {}) {
-  const base = { merchant_id: MERCHANT_ID, order_id: intent.providerReference, payhere_amount: amount, payhere_currency: "LKR", status_code: statusCode };
+function signedFields(intent: { providerReference: string }, amount: string, statusCode: string, extra: Record<string, string> = {}, currency = "LKR") {
+  const base = { merchant_id: MERCHANT_ID, order_id: intent.providerReference, payhere_amount: amount, payhere_currency: currency, status_code: statusCode };
+  // Signed self-consistently over whatever is actually in `base` — this is
+  // what a correctly-signed-but-wrong notification looks like (the
+  // signature alone can't catch a wrong amount/currency; only the
+  // cross-check against the stored Payment can). `extra` applies AFTER
+  // signing, for fields that are genuinely outside the signature (e.g.
+  // status_message) — never use it to tamper a signed field, or the
+  // signature itself would (correctly) fail instead.
   const md5sig = computeNotifySignature(
     { merchantId: base.merchant_id, orderId: base.order_id, payhereAmount: base.payhere_amount, payhereCurrency: base.payhere_currency, statusCode: base.status_code },
     MERCHANT_SECRET,
@@ -105,6 +112,18 @@ describe("POST /api/payments/payhere/notify", () => {
     const intent = await createRealIntent(1000);
     // Signed over a tampered amount — this IS what a correctly-signed-but-wrong notification looks like.
     const response = await postNotify(notifyRequest(signedFields(intent, "1.00", "2")));
+    expect(response.status).toBe(400);
+
+    const row = await prisma.payment.findUnique({ where: { providerReference: intent.providerReference } });
+    expect(row?.status).toBe("Pending");
+  });
+
+  it("rejects a notify whose reported currency does not match the original payment, even if internally consistent", async () => {
+    const intent = await createRealIntent(1000);
+    // Correctly signed over USD — the signature alone can't catch this;
+    // only the cross-check against the stored Payment's own currency
+    // does (brief §8 scenario 7, distinct from the amount check above).
+    const response = await postNotify(notifyRequest(signedFields(intent, "1000.00", "2", {}, "USD")));
     expect(response.status).toBe(400);
 
     const row = await prisma.payment.findUnique({ where: { providerReference: intent.providerReference } });
