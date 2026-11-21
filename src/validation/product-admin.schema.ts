@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { mediaUrlSchema, optionalMediaUrlSchema } from "@/validation/media-url.schema";
+import { mediaUrlSchema } from "@/validation/media-url.schema";
 import { customerGroupPriceSchema, standardPriceSchema } from "@/validation/pricing.schema";
 
 const productTypeEnum = z.enum(["Standard", "Bundle", "GiftPack", "Seasonal", "LimitedEdition"]);
@@ -57,10 +57,13 @@ const featuredItemSchema = z.object({
   sortOrder: z.number().int().min(0).optional(),
 });
 
-// Product Story & Export Specifications (PDP visual brief).
+// Product Story & Export Specifications (PDP visual brief). Every
+// image here is a required, admin-uploaded small image (Media Library) —
+// no curated icon library, matching the reference mockup's own
+// product-specific imagery.
 const promiseAttributeSchema = z.object({
-  icon: z.string().trim().min(1, "Icon is required."),
-  iconImageUrl: optionalMediaUrlSchema,
+  imageUrl: mediaUrlSchema,
+  imageAlt: z.string().trim().max(200).optional().nullable(),
   heading: z.string().trim().min(1, "Heading is required.").max(80),
   description: z.string().trim().max(200).optional().nullable(),
   visible: z.boolean().optional(),
@@ -93,6 +96,8 @@ const productExportSpecTypeEnum = z.enum([
 const exportSpecItemSchema = z.object({
   specType: productExportSpecTypeEnum,
   value: z.string().trim().min(1, "Value is required.").max(200),
+  imageUrl: mediaUrlSchema,
+  imageAlt: z.string().trim().max(200).optional().nullable(),
   visible: z.boolean().optional(),
   sortOrder: z.number().int().min(0).optional(),
 });

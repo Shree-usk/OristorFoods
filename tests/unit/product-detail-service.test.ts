@@ -133,20 +133,20 @@ describe("getProductDetail", () => {
     });
     await createStandardPrice({ product: { connect: { id: product.id } }, price: "500.00" });
     await prisma.productPromiseAttribute.create({
-      data: { product: { connect: { id: product.id } }, icon: "Leaf", heading: "Visible Claim", sortOrder: 0 },
+      data: { product: { connect: { id: product.id } }, imageUrl: "/promise.jpg", heading: "Visible Claim", sortOrder: 0 },
     });
     await prisma.productPromiseAttribute.create({
-      data: { product: { connect: { id: product.id } }, icon: "Leaf", heading: "Hidden Claim", visible: false, sortOrder: 1 },
+      data: { product: { connect: { id: product.id } }, imageUrl: "/promise.jpg", heading: "Hidden Claim", visible: false, sortOrder: 1 },
     });
     await prisma.productExportSpecItem.create({
-      data: { product: { connect: { id: product.id } }, specType: "PackSizes", value: "200 g | 350 g", sortOrder: 0 },
+      data: { product: { connect: { id: product.id } }, specType: "PackSizes", value: "200 g | 350 g", imageUrl: "/spec.jpg", sortOrder: 0 },
     });
 
     const detail = await getProductDetail("pd-story-full");
 
     expect(detail?.showStorySectionsOnStandardPdp).toBe(true);
-    expect(detail?.promiseAttributes).toEqual([{ icon: "Leaf", iconImageUrl: null, heading: "Visible Claim", description: null }]);
-    expect(detail?.exportSpecItems).toEqual([{ specType: "PackSizes", value: "200 g | 350 g" }]);
+    expect(detail?.promiseAttributes).toEqual([{ imageUrl: "/promise.jpg", imageAlt: null, heading: "Visible Claim", description: null }]);
+    expect(detail?.exportSpecItems).toEqual([{ specType: "PackSizes", value: "200 g | 350 g", imageUrl: "/spec.jpg", imageAlt: null }]);
   });
 
   it("exposes the standard price as originalPrice when a discount tier applies", async () => {

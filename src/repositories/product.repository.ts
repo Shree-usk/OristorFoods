@@ -433,14 +433,14 @@ export interface ExportCatalogueProductDetailRow {
   certifications: { name: string; certificateImage: string | null }[];
   promiseSectionEnabled: boolean;
   promiseSectionHeading: string | null;
-  promiseAttributes: { icon: string; iconImageUrl: string | null; heading: string; description: string | null }[];
+  promiseAttributes: { imageUrl: string; imageAlt: string | null; heading: string; description: string | null }[];
   preparationSectionEnabled: boolean;
   preparationSectionHeading: string | null;
   preparationSectionSubtitle: string | null;
   preparationStages: { stageNumber: string; heading: string; description: string | null; imageUrl: string; imageAlt: string | null }[];
   exportSpecSectionEnabled: boolean;
   exportSpecSectionHeading: string | null;
-  exportSpecItems: { specType: ProductExportSpecType; value: string }[];
+  exportSpecItems: { specType: ProductExportSpecType; value: string; imageUrl: string; imageAlt: string | null }[];
 }
 
 /**
@@ -476,7 +476,7 @@ export function findExportCatalogueProductBySlug(slug: string): Promise<ExportCa
       promiseAttributes: {
         where: { visible: true },
         orderBy: { sortOrder: "asc" },
-        select: { icon: true, iconImageUrl: true, heading: true, description: true },
+        select: { imageUrl: true, imageAlt: true, heading: true, description: true },
       },
       preparationSectionEnabled: true,
       preparationSectionHeading: true,
@@ -491,7 +491,7 @@ export function findExportCatalogueProductBySlug(slug: string): Promise<ExportCa
       exportSpecItems: {
         where: { visible: true },
         orderBy: { sortOrder: "asc" },
-        select: { specType: true, value: true },
+        select: { specType: true, value: true, imageUrl: true, imageAlt: true },
       },
     },
   });

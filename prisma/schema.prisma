@@ -557,17 +557,20 @@ model ProductFeaturedItem {
 // key (src/lib/product-promise-icons.ts), iconImageUrl an optional
 // admin-uploaded override shown in its place when set.
 model ProductPromiseAttribute {
-  id           String   @id @default(cuid())
-  productId    String
-  product      Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
-  icon         String
-  iconImageUrl String?
-  heading      String
-  description  String?
-  visible      Boolean  @default(true)
-  sortOrder    Int      @default(0)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id          String   @id @default(cuid())
+  productId   String
+  product     Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  // Admin-uploaded small image (Media Library) — required, no curated
+  // icon-library fallback. Matches the reference mockup's own small
+  // product-specific images rather than a generic icon set.
+  imageUrl    String
+  imageAlt    String?
+  heading     String
+  description String?
+  visible     Boolean  @default(true)
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
   @@index([productId])
 }
@@ -616,6 +619,10 @@ model ProductExportSpecItem {
   product   Product               @relation(fields: [productId], references: [id], onDelete: Cascade)
   specType  ProductExportSpecType
   value     String
+  // Admin-uploaded small image (Media Library), required — replaces the
+  // old fixed per-specType icon so every item's image is product-specific.
+  imageUrl  String
+  imageAlt  String?
   visible   Boolean               @default(true)
   sortOrder Int                   @default(0)
   createdAt DateTime              @default(now())

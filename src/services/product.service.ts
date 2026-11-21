@@ -319,8 +319,8 @@ export interface ProductDetailFeaturedItem {
   description: string | null;
 }
 export interface ProductDetailPromiseAttribute {
-  icon: string;
-  iconImageUrl: string | null;
+  imageUrl: string;
+  imageAlt: string | null;
   heading: string;
   description: string | null;
 }
@@ -334,6 +334,8 @@ export interface ProductDetailPreparationStage {
 export interface ProductDetailExportSpecItem {
   specType: ProductExportSpecType;
   value: string;
+  imageUrl: string;
+  imageAlt: string | null;
 }
 export interface ProductDetailBundleItem {
   bundleItemId: string;
@@ -780,8 +782,8 @@ export async function getProductDetail(
     promiseSectionEnabled: product.promiseSectionEnabled,
     promiseSectionHeading: product.promiseSectionHeading,
     promiseAttributes: product.promiseAttributes.map((attribute) => ({
-      icon: attribute.icon,
-      iconImageUrl: attribute.iconImageUrl,
+      imageUrl: attribute.imageUrl,
+      imageAlt: attribute.imageAlt,
       heading: attribute.heading,
       description: attribute.description,
     })),
@@ -797,7 +799,7 @@ export async function getProductDetail(
     })),
     exportSpecSectionEnabled: product.exportSpecSectionEnabled,
     exportSpecSectionHeading: product.exportSpecSectionHeading,
-    exportSpecItems: product.exportSpecItems.map((item) => ({ specType: item.specType, value: item.value })),
+    exportSpecItems: product.exportSpecItems.map((item) => ({ specType: item.specType, value: item.value, imageUrl: item.imageUrl, imageAlt: item.imageAlt })),
     showStorySectionsOnStandardPdp: product.showStorySectionsOnStandardPdp,
     allergenNames: product.allergens.map((allergen) => allergen.name),
     certificationNames: product.certifications.map((certification) => certification.name),

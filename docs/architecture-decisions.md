@@ -10759,3 +10759,24 @@ Save when the on-screen status text doesn't change (e.g. editing a field
 on an already-Published product) means asserting on that status text
 never actually waits for the save — wait on the PATCH response itself
 (`page.waitForResponse`) instead of a toast or unchanged label.
+
+**Follow-up same day: icons replaced with required admin-uploaded small
+images.** The user's reference mockup showed product-specific small
+images where the initial build had used curated Lucide icons (promise
+attributes) or fixed per-type icons (export spec items). Changed both to
+match: `ProductPromiseAttribute.icon`/`iconImageUrl` → a single required
+`imageUrl` (+`imageAlt`), with the curated icon picker and
+`product-promise-icons.ts` removed entirely (no icon-library fallback —
+the user explicitly chose "image required, remove icon picker" over
+keeping a fallback); `ProductExportSpecItem` gained a required
+`imageUrl`/`imageAlt` pair, and `PRODUCT_EXPORT_SPEC_TYPE_ICONS` (the
+fixed per-type Lucide map) was deleted from
+`product-export-spec-types.ts`, keeping only the label map (still needed
+for the admin Select and the storefront's text label under each image).
+Preparation stages were explicitly confirmed unchanged — their one big
+photo per stage already was the admin-controllable image this request
+asked for. Second migration
+(`20261121010000_product_story_images_instead_of_icons`), not a rewrite
+of the first — nothing had been pushed or deployed yet, but migrations
+already applied locally (even to a throwaway dev DB) are treated as
+immutable, same as the git-commit convention of never amending.

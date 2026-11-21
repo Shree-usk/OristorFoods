@@ -1,13 +1,12 @@
-import type { LucideIcon } from "lucide-react";
-import { Box, Globe2, Layers, Package, Ruler, Snowflake, Tag, Timer, Truck } from "lucide-react";
-
 import type { ProductExportSpecType } from "@/generated/prisma/client";
 
 /**
- * "Packaging & Export Details" spec rows. One label/icon per
+ * "Packaging & Export Details" spec rows. One human label per
  * ProductExportSpecType, shared between the admin picker (Select needs a
- * human label distinct from the stored enum value — Base UI SelectValue
- * shows the raw value without a render prop) and the storefront tiles.
+ * label distinct from the stored enum value — Base UI SelectValue shows
+ * the raw value without a render prop) and the storefront tiles. Each
+ * item's image is an admin-uploaded Media Library image now, not a fixed
+ * icon per type — see ProductExportSpecItem.imageUrl.
  */
 export const PRODUCT_EXPORT_SPEC_TYPE_LABELS: Record<ProductExportSpecType, string> = {
   PackSizes: "Pack Sizes",
@@ -20,19 +19,6 @@ export const PRODUCT_EXPORT_SPEC_TYPE_LABELS: Record<ProductExportSpecType, stri
   PackagingType: "Packaging Type",
   ExportAvailability: "Export",
   ShippingTerms: "Shipping Terms",
-};
-
-export const PRODUCT_EXPORT_SPEC_TYPE_ICONS: Record<ProductExportSpecType, LucideIcon> = {
-  PackSizes: Package,
-  CartonPacking: Box,
-  Moq: Layers,
-  CartonDimensions: Ruler,
-  GrossCartonWeight: Package,
-  ShelfLife: Timer,
-  StorageConditions: Snowflake,
-  PackagingType: Tag,
-  ExportAvailability: Globe2,
-  ShippingTerms: Truck,
 };
 
 export const PRODUCT_EXPORT_SPEC_TYPE_ORDER: ProductExportSpecType[] = [

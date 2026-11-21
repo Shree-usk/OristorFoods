@@ -105,6 +105,7 @@ test.describe("Admin Product Story & Export Specifications", () => {
     await page.getByRole("tab", { name: "Product Story & Export Specs" }).click();
 
     await page.getByRole("button", { name: "Add promise attribute" }).click();
+    await page.getByPlaceholder("Small image URL").fill("https://example.com/e2e-promise.jpg");
     await page.getByPlaceholder("Heading (e.g. No Artificial Preservatives)").fill("No Artificial Preservatives");
 
     await page.getByRole("button", { name: "Add preparation stage" }).click();
@@ -114,6 +115,7 @@ test.describe("Admin Product Story & Export Specifications", () => {
 
     await page.getByRole("button", { name: "Add spec item" }).click();
     await page.getByPlaceholder("e.g. 200 g | 350 g").fill("200 g | 350 g");
+    await page.getByPlaceholder("Small image URL").last().fill("https://example.com/e2e-spec.jpg");
 
     await page.getByRole("button", { name: "Save" }).click();
     await expect(page).toHaveURL(/\/admin\/products\/(?!new$)[^/]+$/);

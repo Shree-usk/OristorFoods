@@ -51,15 +51,22 @@ describe("productAdminSchema — images/videos url", () => {
 
 describe("productAdminSchema — Product Story & Export Specifications", () => {
   it("accepts a valid promise attribute and rejects a blank heading", () => {
-    const valid = productAdminSchema.safeParse(baseProduct({ promiseAttributes: [{ icon: "Leaf", heading: "Carefully Cleaned Ingredients" }] }));
+    const valid = productAdminSchema.safeParse(
+      baseProduct({ promiseAttributes: [{ imageUrl: "https://example.com/promise.jpg", heading: "Carefully Cleaned Ingredients" }] }),
+    );
     expect(valid.success).toBe(true);
 
-    const blank = productAdminSchema.safeParse(baseProduct({ promiseAttributes: [{ icon: "Leaf", heading: "" }] }));
+    const blank = productAdminSchema.safeParse(baseProduct({ promiseAttributes: [{ imageUrl: "https://example.com/promise.jpg", heading: "" }] }));
     expect(blank.success).toBe(false);
   });
 
+  it("requires an image for every promise attribute — no curated icon fallback", () => {
+    const noImage = productAdminSchema.safeParse(baseProduct({ promiseAttributes: [{ imageUrl: "", heading: "Carefully Cleaned Ingredients" }] }));
+    expect(noImage.success).toBe(false);
+  });
+
   it("caps promise attributes at 8", () => {
-    const nineAttributes = Array.from({ length: 9 }, (_, i) => ({ icon: "Leaf", heading: `Attribute ${i}` }));
+    const nineAttributes = Array.from({ length: 9 }, (_, i) => ({ imageUrl: "https://example.com/promise.jpg", heading: `Attribute ${i}` }));
     expect(productAdminSchema.safeParse(baseProduct({ promiseAttributes: nineAttributes })).success).toBe(false);
     expect(productAdminSchema.safeParse(baseProduct({ promiseAttributes: nineAttributes.slice(0, 8) })).success).toBe(true);
   });
@@ -81,19 +88,28 @@ describe("productAdminSchema — Product Story & Export Specifications", () => {
   });
 
   it("accepts a known export spec type and rejects an unknown one", () => {
-    const valid = productAdminSchema.safeParse(baseProduct({ exportSpecItems: [{ specType: "PackSizes", value: "200 g | 350 g" }] }));
+    const valid = productAdminSchema.safeParse(
+      baseProduct({ exportSpecItems: [{ specType: "PackSizes", value: "200 g | 350 g", imageUrl: "https://example.com/spec.jpg" }] }),
+    );
     expect(valid.success).toBe(true);
 
-    const unknown = productAdminSchema.safeParse(baseProduct({ exportSpecItems: [{ specType: "NotARealType", value: "x" }] }));
+    const unknown = productAdminSchema.safeParse(
+      baseProduct({ exportSpecItems: [{ specType: "NotARealType", value: "x", imageUrl: "https://example.com/spec.jpg" }] }),
+    );
     expect(unknown.success).toBe(false);
+  });
+
+  it("requires an image for every export spec item", () => {
+    const noImage = productAdminSchema.safeParse(baseProduct({ exportSpecItems: [{ specType: "PackSizes", value: "200 g | 350 g", imageUrl: "" }] }));
+    expect(noImage.success).toBe(false);
   });
 
   it("rejects two export spec items of the same type, matching the DB's @@unique([productId, specType])", () => {
     const result = productAdminSchema.safeParse(
       baseProduct({
         exportSpecItems: [
-          { specType: "PackSizes", value: "200 g" },
-          { specType: "PackSizes", value: "350 g" },
+          { specType: "PackSizes", value: "200 g", imageUrl: "https://example.com/spec.jpg" },
+          { specType: "PackSizes", value: "350 g", imageUrl: "https://example.com/spec.jpg" },
         ],
       }),
     );
@@ -113,7 +129,7 @@ describe("productAdminSchema — Product Story & Export Specifications", () => {
       "ExportAvailability",
       "ShippingTerms",
     ];
-    const tenItems = allTenTypes.map((specType) => ({ specType, value: "x" }));
+    const tenItems = allTenTypes.map((specType) => ({ specType, value: "x", imageUrl: "https://example.com/spec.jpg" }));
     expect(productAdminSchema.safeParse(baseProduct({ exportSpecItems: tenItems })).success).toBe(true);
   });
 });

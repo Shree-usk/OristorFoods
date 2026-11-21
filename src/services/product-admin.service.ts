@@ -81,8 +81,8 @@ export interface ProductFeaturedItemInput {
 }
 
 export interface ProductPromiseAttributeInput {
-  icon: string;
-  iconImageUrl?: string | null;
+  imageUrl: string;
+  imageAlt?: string | null;
   heading: string;
   description?: string | null;
   visible?: boolean;
@@ -102,6 +102,8 @@ export interface ProductPreparationStageInput {
 export interface ProductExportSpecItemInput {
   specType: ProductExportSpecType;
   value: string;
+  imageUrl: string;
+  imageAlt?: string | null;
   visible?: boolean;
   sortOrder?: number;
 }
@@ -239,8 +241,8 @@ function toFeaturedItemCreate(item: ProductFeaturedItemInput, index: number): Pr
 
 function toPromiseAttributeCreate(attribute: ProductPromiseAttributeInput, index: number): Prisma.ProductPromiseAttributeCreateWithoutProductInput {
   return {
-    icon: attribute.icon,
-    iconImageUrl: attribute.iconImageUrl,
+    imageUrl: attribute.imageUrl,
+    imageAlt: attribute.imageAlt,
     heading: attribute.heading,
     description: attribute.description,
     visible: attribute.visible ?? true,
@@ -264,6 +266,8 @@ function toExportSpecItemCreate(item: ProductExportSpecItemInput, index: number)
   return {
     specType: item.specType,
     value: item.value,
+    imageUrl: item.imageUrl,
+    imageAlt: item.imageAlt,
     visible: item.visible ?? true,
     sortOrder: item.sortOrder ?? index,
   };
@@ -499,8 +503,8 @@ export async function duplicateProduct(adminUserId: string, id: string, newSlug:
     promiseAttributes: source.promiseAttributes.length
       ? {
           create: source.promiseAttributes.map((attribute) => ({
-            icon: attribute.icon,
-            iconImageUrl: attribute.iconImageUrl,
+            imageUrl: attribute.imageUrl,
+            imageAlt: attribute.imageAlt,
             heading: attribute.heading,
             description: attribute.description,
             visible: attribute.visible,
@@ -526,6 +530,8 @@ export async function duplicateProduct(adminUserId: string, id: string, newSlug:
           create: source.exportSpecItems.map((item) => ({
             specType: item.specType,
             value: item.value,
+            imageUrl: item.imageUrl,
+            imageAlt: item.imageAlt,
             visible: item.visible,
             sortOrder: item.sortOrder,
           })),

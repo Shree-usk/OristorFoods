@@ -8,7 +8,7 @@ import { ProductExportDetailsSection } from "@/components/storefront/product/exp
 describe("ProductPromiseSection", () => {
   it("renders nothing when disabled, even with attributes present", () => {
     const { container } = render(
-      <ProductPromiseSection enabled={false} heading={null} attributes={[{ icon: "Leaf", iconImageUrl: null, heading: "Clean Label", description: null }]} />,
+      <ProductPromiseSection enabled={false} heading={null} attributes={[{ imageUrl: "/promise.jpg", imageAlt: null, heading: "Clean Label", description: null }]} />,
     );
     expect(container).toBeEmptyDOMElement();
   });
@@ -18,30 +18,33 @@ describe("ProductPromiseSection", () => {
     expect(container).toBeEmptyDOMElement();
   });
 
-  it("renders attributes with a fallback heading, and a custom heading when set", () => {
+  it("renders attributes with their admin-uploaded image, and a fallback heading or a custom one", () => {
     render(
       <ProductPromiseSection
         enabled={true}
         heading={null}
-        attributes={[{ icon: "Leaf", iconImageUrl: null, heading: "Carefully Cleaned Ingredients", description: "Selected by hand" }]}
+        attributes={[{ imageUrl: "/promise.jpg", imageAlt: "No preservatives", heading: "Carefully Cleaned Ingredients", description: "Selected by hand" }]}
       />,
     );
     expect(screen.getByText("Good Food. Thoughtfully Made.")).toBeInTheDocument();
     expect(screen.getByText("Carefully Cleaned Ingredients")).toBeInTheDocument();
     expect(screen.getByText("Selected by hand")).toBeInTheDocument();
+    expect(screen.getByAltText("No preservatives")).toBeInTheDocument();
 
     render(
       <ProductPromiseSection
         enabled={true}
         heading="A Custom Promise Heading"
-        attributes={[{ icon: "Leaf", iconImageUrl: null, heading: "Clean Label", description: null }]}
+        attributes={[{ imageUrl: "/promise.jpg", imageAlt: null, heading: "Clean Label", description: null }]}
       />,
     );
     expect(screen.getByText("A Custom Promise Heading")).toBeInTheDocument();
   });
 
   it("isolates one product's attributes from another's — rendering product A's data never shows product B's", () => {
-    render(<ProductPromiseSection enabled={true} heading={null} attributes={[{ icon: "Leaf", iconImageUrl: null, heading: "Product A Claim", description: null }]} />);
+    render(
+      <ProductPromiseSection enabled={true} heading={null} attributes={[{ imageUrl: "/promise.jpg", imageAlt: null, heading: "Product A Claim", description: null }]} />,
+    );
     expect(screen.getByText("Product A Claim")).toBeInTheDocument();
     expect(screen.queryByText("Product B Claim")).not.toBeInTheDocument();
   });
@@ -89,24 +92,25 @@ describe("ProductPreparationStorySection", () => {
 
 describe("ProductExportDetailsSection", () => {
   it("renders nothing when disabled or when items are empty", () => {
-    const item = { specType: "PackSizes" as const, value: "200 g | 350 g" };
+    const item = { specType: "PackSizes" as const, value: "200 g | 350 g", imageUrl: "/spec.jpg", imageAlt: null };
     expect(render(<ProductExportDetailsSection enabled={false} heading={null} items={[item]} />).container).toBeEmptyDOMElement();
     expect(render(<ProductExportDetailsSection enabled={true} heading={null} items={[]} />).container).toBeEmptyDOMElement();
   });
 
-  it("renders each item with its mapped label and the admin-entered value", () => {
+  it("renders each item with its mapped label, admin-entered value, and admin-uploaded image", () => {
     render(
       <ProductExportDetailsSection
         enabled={true}
         heading={null}
         items={[
-          { specType: "PackSizes", value: "200 g | 350 g" },
-          { specType: "Moq", value: "100 cartons" },
+          { specType: "PackSizes", value: "200 g | 350 g", imageUrl: "/pack-sizes.jpg", imageAlt: "Pack sizes" },
+          { specType: "Moq", value: "100 cartons", imageUrl: "/moq.jpg", imageAlt: null },
         ]}
       />,
     );
     expect(screen.getByText("Packaging & Export Details")).toBeInTheDocument();
     expect(screen.getByText("200 g | 350 g")).toBeInTheDocument();
     expect(screen.getByText("100 cartons")).toBeInTheDocument();
+    expect(screen.getByAltText("Pack sizes")).toBeInTheDocument();
   });
 });
