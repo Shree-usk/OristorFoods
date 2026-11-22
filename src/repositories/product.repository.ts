@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/db";
-import type { Prisma, ProductStatus } from "@/generated/prisma/client";
+import type { Prisma, ProductExportSpecType, ProductStatus } from "@/generated/prisma/client";
 import { escapeLikePattern } from "@/lib/escape-like-pattern";
 import { EXPORT_CATALOGUE_UNCATEGORIZED_SLUG } from "@/lib/export-catalogue-constants";
 
@@ -59,6 +59,12 @@ export function findProductDetailBySlug(slug: string) {
       ingredients: { orderBy: { sortOrder: "asc" } },
       inspirationCards: { orderBy: { sortOrder: "asc" } },
       featuredItems: { orderBy: { sortOrder: "asc" } },
+      // Product Story & Export Specifications — storefront reads only ever
+      // need the visible rows; the admin's own include (adminDetailInclude,
+      // below) is unfiltered so disabled rows stay editable.
+      promiseAttributes: { where: { visible: true }, orderBy: { sortOrder: "asc" } },
+      preparationStages: { where: { visible: true }, orderBy: { sortOrder: "asc" } },
+      exportSpecItems: { where: { visible: true }, orderBy: { sortOrder: "asc" } },
       allergens: true,
       certifications: true,
       bundle: {
@@ -425,6 +431,16 @@ export interface ExportCatalogueProductDetailRow {
   ingredients: { name: string; isAllergen: boolean }[];
   allergens: { name: string; icon: string | null }[];
   certifications: { name: string; certificateImage: string | null }[];
+  promiseSectionEnabled: boolean;
+  promiseSectionHeading: string | null;
+  promiseAttributes: { imageUrl: string; imageAlt: string | null; heading: string; description: string | null }[];
+  preparationSectionEnabled: boolean;
+  preparationSectionHeading: string | null;
+  preparationSectionSubtitle: string | null;
+  preparationStages: { stageNumber: string; heading: string; description: string | null; imageUrl: string; imageAlt: string | null }[];
+  exportSpecSectionEnabled: boolean;
+  exportSpecSectionHeading: string | null;
+  exportSpecItems: { specType: ProductExportSpecType; value: string; imageUrl: string; imageAlt: string | null }[];
 }
 
 /**
@@ -455,6 +471,28 @@ export function findExportCatalogueProductBySlug(slug: string): Promise<ExportCa
       ingredients: { orderBy: { sortOrder: "asc" }, select: { name: true, isAllergen: true } },
       allergens: { select: { name: true, icon: true } },
       certifications: { select: { name: true, certificateImage: true } },
+      promiseSectionEnabled: true,
+      promiseSectionHeading: true,
+      promiseAttributes: {
+        where: { visible: true },
+        orderBy: { sortOrder: "asc" },
+        select: { imageUrl: true, imageAlt: true, heading: true, description: true },
+      },
+      preparationSectionEnabled: true,
+      preparationSectionHeading: true,
+      preparationSectionSubtitle: true,
+      preparationStages: {
+        where: { visible: true },
+        orderBy: { sortOrder: "asc" },
+        select: { stageNumber: true, heading: true, description: true, imageUrl: true, imageAlt: true },
+      },
+      exportSpecSectionEnabled: true,
+      exportSpecSectionHeading: true,
+      exportSpecItems: {
+        where: { visible: true },
+        orderBy: { sortOrder: "asc" },
+        select: { specType: true, value: true, imageUrl: true, imageAlt: true },
+      },
     },
   });
 }
@@ -499,6 +537,11 @@ const adminDetailInclude = {
   ingredients: { orderBy: { sortOrder: "asc" } },
   inspirationCards: { orderBy: { sortOrder: "asc" } },
   featuredItems: { orderBy: { sortOrder: "asc" } },
+  // Unfiltered by `visible` here — the admin form needs to see and edit
+  // disabled rows too, unlike the storefront-read includes below.
+  promiseAttributes: { orderBy: { sortOrder: "asc" } },
+  preparationStages: { orderBy: { sortOrder: "asc" } },
+  exportSpecItems: { orderBy: { sortOrder: "asc" } },
   allergens: true,
   certifications: true,
   bundle: { include: { items: { include: { componentProduct: true, componentVariant: true }, orderBy: { sortOrder: "asc" } }, images: { orderBy: [{ isPrimary: "desc" }, { sortOrder: "asc" }] } } },

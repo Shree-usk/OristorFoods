@@ -255,4 +255,81 @@ describe("product-admin.service", () => {
     expect(wholesaleRows).toHaveLength(1);
     expect(wholesaleRows[0].price.toString()).toBe("85");
   });
+
+  it("creates a product with promise attributes, preparation stages, and export spec items", async () => {
+    const admin = await makeFullAccessAdmin();
+
+    const created = await createProduct(
+      admin.id,
+      baseInput({
+        promiseSectionHeading: "Good Food. Thoughtfully Made.",
+        promiseAttributes: [{ imageUrl: "https://example.com/promise.jpg", heading: "Carefully Cleaned Ingredients", description: "Selected by hand" }],
+        preparationSectionSubtitle: "From farm to jar",
+        preparationStages: [{ stageNumber: "01", heading: "Carefully Selected", imageUrl: "https://example.com/stage-1.jpg" }],
+        exportSpecItems: [{ specType: "PackSizes", value: "200 g | 350 g", imageUrl: "https://example.com/spec.jpg" }],
+      }),
+    );
+
+    expect(created.promiseSectionHeading).toBe("Good Food. Thoughtfully Made.");
+    expect(created.promiseAttributes).toHaveLength(1);
+    expect(created.promiseAttributes[0]).toMatchObject({ imageUrl: "https://example.com/promise.jpg", heading: "Carefully Cleaned Ingredients", visible: true });
+    expect(created.preparationStages).toHaveLength(1);
+    expect(created.preparationStages[0]).toMatchObject({ stageNumber: "01", heading: "Carefully Selected" });
+    expect(created.exportSpecItems).toHaveLength(1);
+    expect(created.exportSpecItems[0]).toMatchObject({ specType: "PackSizes", value: "200 g | 350 g", imageUrl: "https://example.com/spec.jpg" });
+  });
+
+  it("updateProduct wholesale-replaces promise attributes, preparation stages, and export spec items", async () => {
+    const admin = await makeFullAccessAdmin();
+    const created = await createProduct(
+      admin.id,
+      baseInput({
+        promiseAttributes: [{ imageUrl: "https://example.com/original-promise.jpg", heading: "Original heading" }],
+        preparationStages: [{ stageNumber: "01", heading: "Original stage", imageUrl: "https://example.com/original.jpg" }],
+        exportSpecItems: [{ specType: "PackSizes", value: "Original value", imageUrl: "https://example.com/original-spec.jpg" }],
+      }),
+    );
+
+    const updated = await updateProduct(admin.id, created.id, {
+      ...baseInput({ slug: created.slug, sku: created.sku }),
+      promiseAttributes: [{ imageUrl: "https://example.com/replaced-promise.jpg", heading: "Replaced heading", visible: false }],
+      preparationStages: [{ stageNumber: "02", heading: "Replaced stage", imageUrl: "https://example.com/replaced.jpg" }],
+      exportSpecItems: [{ specType: "Moq", value: "Replaced value", imageUrl: "https://example.com/replaced-spec.jpg" }],
+    });
+
+    expect(updated.promiseAttributes).toHaveLength(1);
+    expect(updated.promiseAttributes[0]).toMatchObject({ imageUrl: "https://example.com/replaced-promise.jpg", heading: "Replaced heading", visible: false });
+    expect(updated.preparationStages).toHaveLength(1);
+    expect(updated.preparationStages[0]).toMatchObject({ stageNumber: "02", heading: "Replaced stage" });
+    expect(updated.exportSpecItems).toHaveLength(1);
+    expect(updated.exportSpecItems[0]).toMatchObject({ specType: "Moq", value: "Replaced value", imageUrl: "https://example.com/replaced-spec.jpg" });
+  });
+
+  it("duplicateProduct clones promise attributes, preparation stages, export spec items, and the section-level fields", async () => {
+    const admin = await makeFullAccessAdmin();
+    const source = await createProduct(
+      admin.id,
+      baseInput({
+        showStorySectionsOnStandardPdp: true,
+        promiseSectionHeading: "Good Food. Thoughtfully Made.",
+        promiseAttributes: [{ imageUrl: "https://example.com/promise.jpg", heading: "Carefully Cleaned Ingredients" }],
+        preparationStages: [{ stageNumber: "01", heading: "Carefully Selected", imageUrl: "https://example.com/stage-1.jpg" }],
+        exportSpecItems: [{ specType: "PackSizes", value: "200 g | 350 g", imageUrl: "https://example.com/spec.jpg" }],
+      }),
+    );
+
+    sequence += 1;
+    const duplicate = await duplicateProduct(admin.id, source.id, `product-admin-svc-dup-${sequence}`, `${SKU_PREFIX}DUP-${sequence}`);
+
+    expect(duplicate.showStorySectionsOnStandardPdp).toBe(true);
+    expect(duplicate.promiseSectionHeading).toBe("Good Food. Thoughtfully Made.");
+    expect(duplicate.promiseAttributes).toHaveLength(1);
+    expect(duplicate.promiseAttributes[0]).toMatchObject({ imageUrl: "https://example.com/promise.jpg", heading: "Carefully Cleaned Ingredients" });
+    expect(duplicate.preparationStages).toHaveLength(1);
+    expect(duplicate.preparationStages[0]).toMatchObject({ stageNumber: "01", heading: "Carefully Selected" });
+    expect(duplicate.exportSpecItems).toHaveLength(1);
+    expect(duplicate.exportSpecItems[0]).toMatchObject({ specType: "PackSizes", value: "200 g | 350 g", imageUrl: "https://example.com/spec.jpg" });
+    // Cloned rows are independent — not the same child rows as the source's.
+    expect(duplicate.promiseAttributes[0].id).not.toBe(source.promiseAttributes[0].id);
+  });
 });

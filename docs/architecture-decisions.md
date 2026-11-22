@@ -10670,3 +10670,113 @@ under load, and whether PayHere's live notify payload matches this
 implementation's field-name assumptions exactly. `docs/PAYHERE_GO_LIVE_CHECKLIST.md`
 calls out re-running the signature tests against a real sandbox
 transaction as the first step before any live activation.
+
+## 2026-11-21 — Product Story & Export Specifications (promise attributes, preparation story, export specs)
+
+Three new PDP sections from a design brief with a visual mockup: "Good
+Food. Thoughtfully Made." (promise attribute cards), "Crafted with Care.
+Packed with Flavour." (a preparation story, stage-by-stage), and
+"Packaging & Export Details" (export specs — pack sizes, carton packing,
+MOQ, dimensions, weight, shelf life, storage, packaging type, export
+availability, shipping terms). Fully admin-managed, per-product, reusing
+the existing product admin form and Media Library rather than a new CMS.
+
+**Two storefront templates, one content model.** The mockup's breadcrumb
+("Export Catalogue") identified it as `/export/catalogue/[slug]`
+(`ExportCatalogueProductPage`), not the general `/products/[slug]` PDP —
+confirmed with the user mid-build after an initial wrong assumption. Both
+pages share one `Product` row, but the user's explicit instruction was
+"do not change anything in the general PDP" plus "make sure admin has an
+optional selection for whether this shows on the PDP." This produced a
+single boolean, `showStorySectionsOnStandardPdp` (`@default(false)`): the
+Export Catalogue page always renders an enabled, non-empty section
+unconditionally (it's the primary surface — matches the mockup directly);
+the general PDP only renders the same three components when this flag is
+explicitly switched on per product. Every pre-existing product defaults to
+`false` with empty child relations, so its PDP output is byte-for-byte
+unchanged — verified both by a dedicated unit test
+(`product-detail-service.test.ts`, "returns the story/export-spec fields
+off/empty by default") and by the Playwright e2e test's own opt-in
+scenario.
+
+**Three new child models**, mirroring `ExportSolutionCard`'s icon/visible
+shape and `ProductInspirationCard`'s `productId` FK pattern:
+`ProductPromiseAttribute`, `ProductPreparationStage`,
+`ProductExportSpecItem`. Each has its own `visible Boolean @default(true)`
+(disable one item without deleting it) alongside a section-level
+`*SectionEnabled` boolean on `Product` (disable the whole section). Admin
+writes use the same replace-on-save pattern as every other child
+collection on this form (`{ deleteMany: {}, create: [...] }`), not
+incremental diffing.
+
+**`specType` is a fixed Prisma enum** (`ProductExportSpecType`, 10 values
+matching the brief's own fixed field list), not a freeform label — this
+keeps icon/label mapping predictable (`product-export-spec-types.ts`)
+while the admin still freely adds/removes/reorders/toggles which of the 10
+types appear per product. The DB enforces one row per type per product
+(`@@unique([productId, specType])`); the Zod schema enforces the same rule
+client-side before the DB ever sees a conflict.
+
+**No new draft/publish mechanism.** Product has no shadow/revision system
+(that pattern, `createDraftLayout`/`publishLayout`, is Homepage
+Builder-only) — any edit to a Published product is instantly live. The
+brief's own CMS acceptance test's "save as draft, verify not public"
+scenario is satisfied by this pre-existing behavior: the new sections are
+exactly as invisible on a Draft product as every other tab's content
+already is, with no new staging concept built.
+
+**Base UI's `Tabs.Panel` unmounts inactive tabs by default**
+(`keepMounted` defaults to `false`, confirmed from
+`node_modules/@base-ui/react/tabs/panel/TabsPanel.js`) — a single shared
+`AssetPickerDialog` instance in one tab's panel is unreachable from
+another tab. The new "Product Story & Export Specs" tab therefore has its
+own dedicated `AssetPickerDialog` instance (`storyPickerTarget` state),
+separate from the Media tab's existing one.
+
+**Found and fixed while building this, unrelated to the feature itself:**
+`duplicateProduct()` was missing the 3 new relations and 8 new scalar
+fields entirely — a duplicated product would have silently lost its Story
+& Export Specifications content. Now clones all of it, matching how
+`inspirationCards`/`featuredItems` are already cloned.
+
+**Test coverage**: unit tests for the 3 new Zod schemas (caps, enum
+constraint, duplicate-spec-type rejection), the service's create/update
+replace-on-save and `duplicateProduct` cloning, the 3 storefront
+components' empty/disabled/populated rendering and per-product isolation,
+and both page-level services' (`product.service.ts`,
+`export-catalogue.service.ts`) field mapping including the opt-in
+default. One Playwright e2e test (`admin-product-story-sections.spec.ts`)
+exercises the brief's own 8-scenario CMS acceptance test end-to-end
+against the Export Catalogue page, plus the PDP opt-in gate and
+cross-product isolation.
+
+Two reusable gotchas surfaced while getting that e2e test green (now also
+in memory, not just here): a product's `getProductDetail` 404s on the
+general PDP if it has no resolvable price, even when Published — any e2e
+test that visits the general PDP needs a price set via the Pricing tab
+first, the same way `admin-seo-fields.spec.ts` already does; and clicking
+Save when the on-screen status text doesn't change (e.g. editing a field
+on an already-Published product) means asserting on that status text
+never actually waits for the save — wait on the PATCH response itself
+(`page.waitForResponse`) instead of a toast or unchanged label.
+
+**Follow-up same day: icons replaced with required admin-uploaded small
+images.** The user's reference mockup showed product-specific small
+images where the initial build had used curated Lucide icons (promise
+attributes) or fixed per-type icons (export spec items). Changed both to
+match: `ProductPromiseAttribute.icon`/`iconImageUrl` → a single required
+`imageUrl` (+`imageAlt`), with the curated icon picker and
+`product-promise-icons.ts` removed entirely (no icon-library fallback —
+the user explicitly chose "image required, remove icon picker" over
+keeping a fallback); `ProductExportSpecItem` gained a required
+`imageUrl`/`imageAlt` pair, and `PRODUCT_EXPORT_SPEC_TYPE_ICONS` (the
+fixed per-type Lucide map) was deleted from
+`product-export-spec-types.ts`, keeping only the label map (still needed
+for the admin Select and the storefront's text label under each image).
+Preparation stages were explicitly confirmed unchanged — their one big
+photo per stage already was the admin-controllable image this request
+asked for. Second migration
+(`20261121010000_product_story_images_instead_of_icons`), not a rewrite
+of the first — nothing had been pushed or deployed yet, but migrations
+already applied locally (even to a throwaway dev DB) are treated as
+immutable, same as the git-commit convention of never amending.

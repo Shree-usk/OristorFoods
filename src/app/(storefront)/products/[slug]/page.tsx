@@ -15,6 +15,9 @@ import { IngredientsList } from "@/components/storefront/product/ingredients-lis
 import { InspirationCards } from "@/components/storefront/product/inspiration-cards";
 import { NutritionDisclosure } from "@/components/storefront/product/nutrition-disclosure";
 import { ProductGallery } from "@/components/storefront/product/product-gallery";
+import { ProductPromiseSection } from "@/components/storefront/product/promise-section";
+import { ProductPreparationStorySection } from "@/components/storefront/product/preparation-story-section";
+import { ProductExportDetailsSection } from "@/components/storefront/product/export-details-section";
 import { PromotionSelector } from "@/components/storefront/product/promotion-selector";
 import { VariantSelectionProvider } from "@/components/storefront/product/variant-selection-context";
 import { JsonLdScript } from "@/components/storefront/product/json-ld-script";
@@ -244,6 +247,27 @@ export default async function ProductDetailPage({ params }: ProductDetailPagePro
           </div>
         </div>
       </VariantSelectionProvider>
+
+      {product.showStorySectionsOnStandardPdp && (
+        <>
+          <div className="mt-12">
+            <ProductPromiseSection enabled={product.promiseSectionEnabled} heading={product.promiseSectionHeading} attributes={product.promiseAttributes} />
+          </div>
+
+          <div className="mt-12">
+            <ProductPreparationStorySection
+              enabled={product.preparationSectionEnabled}
+              heading={product.preparationSectionHeading}
+              subtitle={product.preparationSectionSubtitle}
+              stages={product.preparationStages}
+            />
+          </div>
+
+          <div className="mt-12">
+            <ProductExportDetailsSection enabled={product.exportSpecSectionEnabled} heading={product.exportSpecSectionHeading} items={product.exportSpecItems} />
+          </div>
+        </>
+      )}
 
       <div className="mt-12">
         <FeaturedItems items={product.featuredItems} />

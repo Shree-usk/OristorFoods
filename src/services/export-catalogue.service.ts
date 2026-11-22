@@ -6,7 +6,12 @@ import { EXPORT_CATALOGUE_UNCATEGORIZED_SLUG } from "@/lib/export-catalogue-cons
 import { writeAuditLog } from "@/services/audit-log.service";
 import { renderExportCataloguePdf } from "@/services/export-catalogue-pdf.service";
 import { requirePermission } from "@/services/permission.service";
-import type { ProductDetailNutrition } from "@/services/product.service";
+import type {
+  ProductDetailExportSpecItem,
+  ProductDetailNutrition,
+  ProductDetailPreparationStage,
+  ProductDetailPromiseAttribute,
+} from "@/services/product.service";
 import type { ExportCatalogueSettingInput } from "@/validation/export-catalogue-admin.schema";
 
 /** Export & Wholesale page — public, no permission gate, same pattern as collection.service.ts::getFeaturedCollectionsForStorefront. */
@@ -81,6 +86,16 @@ export interface ExportCatalogueProductDetail {
   ingredients: { name: string; isAllergen: boolean }[];
   allergens: { name: string; icon: string | null }[];
   certifications: { name: string; certificateImage: string | null }[];
+  promiseSectionEnabled: boolean;
+  promiseSectionHeading: string | null;
+  promiseAttributes: ProductDetailPromiseAttribute[];
+  preparationSectionEnabled: boolean;
+  preparationSectionHeading: string | null;
+  preparationSectionSubtitle: string | null;
+  preparationStages: ProductDetailPreparationStage[];
+  exportSpecSectionEnabled: boolean;
+  exportSpecSectionHeading: string | null;
+  exportSpecItems: ProductDetailExportSpecItem[];
 }
 
 /**

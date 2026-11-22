@@ -57,6 +57,56 @@ const featuredItemSchema = z.object({
   sortOrder: z.number().int().min(0).optional(),
 });
 
+// Product Story & Export Specifications (PDP visual brief). Every
+// image here is a required, admin-uploaded small image (Media Library) —
+// no curated icon library, matching the reference mockup's own
+// product-specific imagery.
+const promiseAttributeSchema = z.object({
+  imageUrl: mediaUrlSchema,
+  imageAlt: z.string().trim().max(200).optional().nullable(),
+  heading: z.string().trim().min(1, "Heading is required.").max(80),
+  description: z.string().trim().max(200).optional().nullable(),
+  visible: z.boolean().optional(),
+  sortOrder: z.number().int().min(0).optional(),
+});
+
+const preparationStageSchema = z.object({
+  stageNumber: z.string().trim().min(1, "Stage number is required.").max(10),
+  heading: z.string().trim().min(1, "Heading is required.").max(80),
+  description: z.string().trim().max(300).optional().nullable(),
+  imageUrl: mediaUrlSchema,
+  imageAlt: z.string().trim().max(200).optional().nullable(),
+  visible: z.boolean().optional(),
+  sortOrder: z.number().int().min(0).optional(),
+});
+
+const productExportSpecTypeEnum = z.enum([
+  "PackSizes",
+  "CartonPacking",
+  "Moq",
+  "CartonDimensions",
+  "GrossCartonWeight",
+  "ShelfLife",
+  "StorageConditions",
+  "PackagingType",
+  "ExportAvailability",
+  "ShippingTerms",
+]);
+
+const exportSpecItemSchema = z.object({
+  specType: productExportSpecTypeEnum,
+  value: z.string().trim().min(1, "Value is required.").max(200),
+  imageUrl: mediaUrlSchema,
+  imageAlt: z.string().trim().max(200).optional().nullable(),
+  visible: z.boolean().optional(),
+  sortOrder: z.number().int().min(0).optional(),
+});
+
+// Matches the DB's @@unique([productId, specType]) — one row per type per product.
+function noDuplicateSpecTypes(items: { specType: string }[]) {
+  return new Set(items.map((item) => item.specType)).size === items.length;
+}
+
 /** Create and update share one shape — every field group editable at once (AC). */
 export const productAdminSchema = z.object({
   name: z.string().trim().min(1, "Name is required.").max(200),
@@ -88,6 +138,21 @@ export const productAdminSchema = z.object({
   ingredients: z.array(ingredientSchema).optional(),
   inspirationCards: z.array(inspirationCardSchema).max(6, "Up to 6 inspiration cards.").optional(),
   featuredItems: z.array(featuredItemSchema).max(8, "Up to 8 featured items.").optional(),
+  promiseSectionEnabled: z.boolean().optional(),
+  promiseSectionHeading: z.string().trim().max(100).optional().nullable(),
+  promiseAttributes: z.array(promiseAttributeSchema).max(8, "Up to 8 promise attributes.").optional(),
+  preparationSectionEnabled: z.boolean().optional(),
+  preparationSectionHeading: z.string().trim().max(100).optional().nullable(),
+  preparationSectionSubtitle: z.string().trim().max(200).optional().nullable(),
+  preparationStages: z.array(preparationStageSchema).max(6, "Up to 6 preparation stages.").optional(),
+  exportSpecSectionEnabled: z.boolean().optional(),
+  exportSpecSectionHeading: z.string().trim().max(100).optional().nullable(),
+  exportSpecItems: z
+    .array(exportSpecItemSchema)
+    .max(10, "Up to 10 export spec items.")
+    .refine(noDuplicateSpecTypes, { message: "Each spec type can only be added once." })
+    .optional(),
+  showStorySectionsOnStandardPdp: z.boolean().optional(),
   allergenIds: z.array(z.string().min(1)).optional(),
   certificationIds: z.array(z.string().min(1)).optional(),
 });

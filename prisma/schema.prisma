@@ -286,6 +286,22 @@ model Product {
   isExportFeatured   Boolean @default(false)
   exportDisplayOrder Int     @default(0)
 
+  // Product Story & Export Specifications (PDP visual brief). The three
+  // sections always render on the Export Catalogue page
+  // (/export/catalogue/[slug]) when enabled with content — that page is
+  // this feature's primary surface. showStorySectionsOnStandardPdp is a
+  // separate, off-by-default opt-in: the general /products/[slug] PDP must
+  // render unchanged for every existing product unless an admin explicitly
+  // switches this on for that product.
+  promiseSectionEnabled          Boolean @default(true)
+  promiseSectionHeading          String?
+  preparationSectionEnabled      Boolean @default(true)
+  preparationSectionHeading      String?
+  preparationSectionSubtitle     String?
+  exportSpecSectionEnabled       Boolean @default(true)
+  exportSpecSectionHeading       String?
+  showStorySectionsOnStandardPdp Boolean @default(false)
+
   brandId String?
   brand   Brand?  @relation(fields: [brandId], references: [id], onDelete: SetNull)
 
@@ -310,6 +326,9 @@ model Product {
   ingredients          ProductIngredient[]
   inspirationCards     ProductInspirationCard[]
   featuredItems        ProductFeaturedItem[]
+  promiseAttributes    ProductPromiseAttribute[]
+  preparationStages    ProductPreparationStage[]
+  exportSpecItems      ProductExportSpecItem[]
   allergens            Allergen[]
   certifications       Certification[]
   bundle               ProductBundle?
@@ -529,6 +548,87 @@ model ProductFeaturedItem {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
+  @@index([productId])
+}
+
+// Product Story & Export Specifications — PDP visual brief. "Good Food.
+// Thoughtfully Made." promise cards. icon/iconImageUrl follows
+// ExportSolutionCard's exact pattern: icon is a curated, required fallback
+// key (src/lib/product-promise-icons.ts), iconImageUrl an optional
+// admin-uploaded override shown in its place when set.
+model ProductPromiseAttribute {
+  id          String   @id @default(cuid())
+  productId   String
+  product     Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  // Admin-uploaded small image (Media Library) — required, no curated
+  // icon-library fallback. Matches the reference mockup's own small
+  // product-specific images rather than a generic icon set.
+  imageUrl    String
+  imageAlt    String?
+  heading     String
+  description String?
+  visible     Boolean  @default(true)
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([productId])
+}
+
+// "Crafted with Care. Packed with Flavour." preparation story stages.
+// stageNumber is free text (e.g. "01"), not an int — the brief has the
+// admin edit the displayed stage number directly, independent of sortOrder.
+model ProductPreparationStage {
+  id          String   @id @default(cuid())
+  productId   String
+  product     Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  stageNumber String
+  heading     String
+  description String?
+  imageUrl    String
+  imageAlt    String?
+  visible     Boolean  @default(true)
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([productId])
+}
+
+// "Packaging & Export Details" spec rows. specType is a fixed enum
+// (matching the brief's own fixed field list) rather than a freeform label,
+// so icons/formatting stay predictable; the admin still freely
+// adds/removes/reorders/toggles which types appear per product. One row
+// per type per product (@@unique) — "add" means picking an unused type.
+enum ProductExportSpecType {
+  PackSizes
+  CartonPacking
+  Moq
+  CartonDimensions
+  GrossCartonWeight
+  ShelfLife
+  StorageConditions
+  PackagingType
+  ExportAvailability
+  ShippingTerms
+}
+
+model ProductExportSpecItem {
+  id        String                @id @default(cuid())
+  productId String
+  product   Product               @relation(fields: [productId], references: [id], onDelete: Cascade)
+  specType  ProductExportSpecType
+  value     String
+  // Admin-uploaded small image (Media Library), required — replaces the
+  // old fixed per-specType icon so every item's image is product-specific.
+  imageUrl  String
+  imageAlt  String?
+  visible   Boolean               @default(true)
+  sortOrder Int                   @default(0)
+  createdAt DateTime              @default(now())
+  updatedAt DateTime              @updatedAt
+
+  @@unique([productId, specType])
   @@index([productId])
 }
 

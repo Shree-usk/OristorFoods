@@ -48,3 +48,88 @@ describe("productAdminSchema — images/videos url", () => {
     expect(bare.success).toBe(false);
   });
 });
+
+describe("productAdminSchema — Product Story & Export Specifications", () => {
+  it("accepts a valid promise attribute and rejects a blank heading", () => {
+    const valid = productAdminSchema.safeParse(
+      baseProduct({ promiseAttributes: [{ imageUrl: "https://example.com/promise.jpg", heading: "Carefully Cleaned Ingredients" }] }),
+    );
+    expect(valid.success).toBe(true);
+
+    const blank = productAdminSchema.safeParse(baseProduct({ promiseAttributes: [{ imageUrl: "https://example.com/promise.jpg", heading: "" }] }));
+    expect(blank.success).toBe(false);
+  });
+
+  it("requires an image for every promise attribute — no curated icon fallback", () => {
+    const noImage = productAdminSchema.safeParse(baseProduct({ promiseAttributes: [{ imageUrl: "", heading: "Carefully Cleaned Ingredients" }] }));
+    expect(noImage.success).toBe(false);
+  });
+
+  it("caps promise attributes at 8", () => {
+    const nineAttributes = Array.from({ length: 9 }, (_, i) => ({ imageUrl: "https://example.com/promise.jpg", heading: `Attribute ${i}` }));
+    expect(productAdminSchema.safeParse(baseProduct({ promiseAttributes: nineAttributes })).success).toBe(false);
+    expect(productAdminSchema.safeParse(baseProduct({ promiseAttributes: nineAttributes.slice(0, 8) })).success).toBe(true);
+  });
+
+  it("accepts a valid preparation stage and rejects a missing image URL", () => {
+    const valid = productAdminSchema.safeParse(
+      baseProduct({ preparationStages: [{ stageNumber: "01", heading: "Carefully Selected", imageUrl: "https://example.com/stage-1.jpg" }] }),
+    );
+    expect(valid.success).toBe(true);
+
+    const noImage = productAdminSchema.safeParse(baseProduct({ preparationStages: [{ stageNumber: "01", heading: "Carefully Selected" }] }));
+    expect(noImage.success).toBe(false);
+  });
+
+  it("caps preparation stages at 6", () => {
+    const sevenStages = Array.from({ length: 7 }, (_, i) => ({ stageNumber: `0${i}`, heading: `Stage ${i}`, imageUrl: "https://example.com/stage.jpg" }));
+    expect(productAdminSchema.safeParse(baseProduct({ preparationStages: sevenStages })).success).toBe(false);
+    expect(productAdminSchema.safeParse(baseProduct({ preparationStages: sevenStages.slice(0, 6) })).success).toBe(true);
+  });
+
+  it("accepts a known export spec type and rejects an unknown one", () => {
+    const valid = productAdminSchema.safeParse(
+      baseProduct({ exportSpecItems: [{ specType: "PackSizes", value: "200 g | 350 g", imageUrl: "https://example.com/spec.jpg" }] }),
+    );
+    expect(valid.success).toBe(true);
+
+    const unknown = productAdminSchema.safeParse(
+      baseProduct({ exportSpecItems: [{ specType: "NotARealType", value: "x", imageUrl: "https://example.com/spec.jpg" }] }),
+    );
+    expect(unknown.success).toBe(false);
+  });
+
+  it("requires an image for every export spec item", () => {
+    const noImage = productAdminSchema.safeParse(baseProduct({ exportSpecItems: [{ specType: "PackSizes", value: "200 g | 350 g", imageUrl: "" }] }));
+    expect(noImage.success).toBe(false);
+  });
+
+  it("rejects two export spec items of the same type, matching the DB's @@unique([productId, specType])", () => {
+    const result = productAdminSchema.safeParse(
+      baseProduct({
+        exportSpecItems: [
+          { specType: "PackSizes", value: "200 g", imageUrl: "https://example.com/spec.jpg" },
+          { specType: "PackSizes", value: "350 g", imageUrl: "https://example.com/spec.jpg" },
+        ],
+      }),
+    );
+    expect(result.success).toBe(false);
+  });
+
+  it("caps export spec items at 10 — one per enum value", () => {
+    const allTenTypes = [
+      "PackSizes",
+      "CartonPacking",
+      "Moq",
+      "CartonDimensions",
+      "GrossCartonWeight",
+      "ShelfLife",
+      "StorageConditions",
+      "PackagingType",
+      "ExportAvailability",
+      "ShippingTerms",
+    ];
+    const tenItems = allTenTypes.map((specType) => ({ specType, value: "x", imageUrl: "https://example.com/spec.jpg" }));
+    expect(productAdminSchema.safeParse(baseProduct({ exportSpecItems: tenItems })).success).toBe(true);
+  });
+});

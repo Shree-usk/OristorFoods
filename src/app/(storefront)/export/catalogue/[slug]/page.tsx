@@ -9,6 +9,9 @@ import { IngredientsList } from "@/components/storefront/product/ingredients-lis
 import { NutritionDisclosure } from "@/components/storefront/product/nutrition-disclosure";
 import { ExportProductGallery } from "@/components/storefront/export/export-product-gallery";
 import { ExportProductSelectionAction } from "@/components/storefront/export/export-product-selection-action";
+import { ProductPromiseSection } from "@/components/storefront/product/promise-section";
+import { ProductPreparationStorySection } from "@/components/storefront/product/preparation-story-section";
+import { ProductExportDetailsSection } from "@/components/storefront/product/export-details-section";
 import { getExportCatalogueProductDetail } from "@/services/export-catalogue.service";
 
 const getCachedExportCatalogueProductDetail = cache(getExportCatalogueProductDetail);
@@ -93,6 +96,23 @@ export default async function ExportCatalogueProductPage({ params }: ExportCatal
             </div>
           ) : null}
         </div>
+      </div>
+
+      <div className="mt-10">
+        <ProductPromiseSection enabled={product.promiseSectionEnabled} heading={product.promiseSectionHeading} attributes={product.promiseAttributes} />
+      </div>
+
+      <div className="mt-10">
+        <ProductPreparationStorySection
+          enabled={product.preparationSectionEnabled}
+          heading={product.preparationSectionHeading}
+          subtitle={product.preparationSectionSubtitle}
+          stages={product.preparationStages}
+        />
+      </div>
+
+      <div className="mt-10">
+        <ProductExportDetailsSection enabled={product.exportSpecSectionEnabled} heading={product.exportSpecSectionHeading} items={product.exportSpecItems} />
       </div>
     </Section>
   );
